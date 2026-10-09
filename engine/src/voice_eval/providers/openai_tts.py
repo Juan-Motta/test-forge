@@ -12,8 +12,11 @@ class OpenAISpeechSynthesizer:
         self.voice = voice
 
     @classmethod
-    def for_openai(cls, api_key: str, model: str, voice: str) -> "OpenAISpeechSynthesizer":
-        return cls(AsyncOpenAI(api_key=api_key), model, voice)
+    def for_openai(
+        cls, api_key: str, model: str, voice: str, *, base_url: str | None = None
+    ) -> "OpenAISpeechSynthesizer":
+        # base_url None keeps the SDK default (OPENAI_BASE_URL or api.openai.com).
+        return cls(AsyncOpenAI(api_key=api_key, base_url=base_url), model, voice)
 
     @classmethod
     def for_azure(

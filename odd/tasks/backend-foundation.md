@@ -42,7 +42,7 @@ piece of UI state persisted through the backend.
 - [x] T2b — Auth hardening from review (authorized 2026-10-09): login throttling, fail-closed
   ENVIRONMENT, single email canonicalization, argon2 off the event loop and outside DB transactions,
   rehash-on-login test. Route: delegated (writer, 3+ files).
-- [ ] T3 — Connections: model/migration, crypto, CRUD API with write-only secrets, per-kind config
+- [x] T3 — Connections: model/migration, crypto, CRUD API with write-only secrets, per-kind config
   validation, `POST /test` (stored and draft), runtime resolver feeding the TTS factory. Route: delegated.
 
 ## Delivery
@@ -106,5 +106,19 @@ user 2026-10-09: `feature-branch-chain` (each PR targets the previous branch; me
   Advisory: docs-gating test doesn't clear ambient ENVIRONMENT (test_health.py:41-46); no test that a
   successful login leaves the per-IP counter intact (test_login_hardening.py). Both folded into T3.
 
+- T3 done by delegated writer (~2,070 authored lines, split for review). RED: 7 collection errors + 2
+  failed/38 errors on existing suite (missing table); GREEN 203 passed x2 (parent re-run 203 passed).
+  Mutation check: removing the sanitized 422 handler makes the leakage test fail (FastAPI echoes input).
+  Parent added the connections models import to `migrations/env.py` (autogenerate visibility).
+- Commits: `9cf6964` A — secret box (MultiFernet, token bound to owner+kind), domain, migration 0003,
+  persistence, review test fixes (156 tests green at that commit; create_app master-key test moved to B).
+  Reviewed: medium, APPROVED + acknowledged (lineage review-f9680fe7ede735ca). Advisory: to_domain
+  branches untested; SecretBox.open doesn't guard envelope shape. Next commit B — API, testers, runtime
+  resolver, global sanitized 422 handler, factory refactor, README, this document.
+- Open risks: SSRF via test endpoints (fixed paths, https only, no redirects, no body read; private-IP
+  resolution not blocked — consider egress allow-list before multi-tenant); no re-encrypt command for
+  key rotation; `create_app` now requires `VOICE_EVAL_MASTER_KEY` (dev `.env` must set it; parent cannot
+  read `.env.example` to confirm it has a placeholder); testers honor proxy env (`trust_env`).
+
 ## Next step
-T3 — connections module via one bounded writer (plus the two test fixes above).
+Review commit B; then decide next module (agents/scenarios or Next.js shell).

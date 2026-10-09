@@ -7,6 +7,10 @@ from openai import AsyncAzureOpenAI, AsyncOpenAI
 from voice_eval.config import ConfigError, TtsSettings
 from voice_eval.ports.tts import SynthesisError
 from voice_eval.providers import build_synthesizer
+from voice_eval.providers.factory import (
+    build_azure_openai_synthesizer,
+    build_openai_synthesizer,
+)
 from voice_eval.providers.openai_tts import OpenAISpeechSynthesizer
 
 PCM = b"\x01\x00" * 100
@@ -77,3 +81,21 @@ async def test_adapter_rejects_empty_or_odd_pcm(content):
     _mock_speech(synth, content)
     with pytest.raises(SynthesisError):
         await synth.synthesize("hola")
+
+
+def test_synthesizers_can_be_built_from_explicit_values(monkeypatch):
+    monkeypatch.setenv("OPENAI_BASE_URL", "https://ambient.example.com/v1")
+    synth = build_openai_synthesizer(
+        api_key="k1", model="tts-1", voice="nova", base_url="https://proxy.example.com/v1"
+    )
+    assert (synth.model, synth.voice, synth.client.api_key) == ("tts-1", "nova", "k1")
+    assert str(synth.client.base_url) == "https://proxy.example.com/v1/"
+    azure = build_azure_openai_synthesizer(
+        api_key="k2",
+        endpoint="https://res.openai.azure.com",
+        api_version="2025-03-01-preview",
+        deployment="dep",
+        voice="alloy",
+    )
+    assert isinstance(azure.client, AsyncAzureOpenAI)
+    assert (azure.model, azure.voice, azure.client.api_key) == ("dep", "alloy", "k2")

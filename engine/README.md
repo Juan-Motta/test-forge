@@ -127,7 +127,7 @@ Speech is requested as `response_format="pcm"` (raw 24 kHz 16-bit mono), the tar
 
 FastAPI app over PostgreSQL 17 (SQLAlchemy 2 async + asyncpg, Alembic migrations). Layout:
 `voice_eval/platform/` (settings, database, app factory, migrations) and one package per
-business module under `voice_eval/modules/` (`users` so far).
+business module under `voice_eval/modules/` (`users`, `connections`).
 
 ### Running locally
 
@@ -135,6 +135,8 @@ business module under `voice_eval/modules/` (`users` so far).
 cd engine
 cp .env.example .env                 # placeholders; adjust as needed
 docker compose up -d postgres        # dev database on 127.0.0.1:5432
+# put a master key in .env as VOICE_EVAL_MASTER_KEY (see Provider connections)
+uv run python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'
 uv run voice-eval migrate            # alembic upgrade head
 uv run voice-eval create-user --email you@example.com --display-name "You"
 uv run uvicorn voice_eval.platform.app:create_app --factory --reload
@@ -188,6 +190,50 @@ curl -s -H "Authorization: Bearer $TOKEN" http://localhost:8000/api/auth/me
 
 `GET /api/health` returns `{"status": "ok"}` after a database ping, or `503
 {"status": "unavailable"}`.
+
+Request validation errors are `422 {"detail": [{type, loc, msg}]}`: the submitted value is
+never echoed back (it may be a password or an API key).
+
+### Provider connections
+
+Provider credentials (OpenAI, Azure OpenAI, Azure AI Speech, Langfuse) are managed through the
+API, stored in PostgreSQL with the secret part encrypted, and read again by every run, so an
+edit applies to the next run without restarting anything.
+
+| Kind | `config` (camelCase) | `secrets` |
+| --- | --- | --- |
+| `openai` | `baseUrl` (default `https://api.openai.com/v1`), `ttsModel` (`gpt-4o-mini-tts`), `ttsVoice` (`alloy`) | `apiKey` |
+| `azure_openai` | `endpoint`, `apiVersion`, `ttsDeployment`, `ttsVoice` (`alloy`) | `apiKey` |
+| `azure_speech` | exactly one of `region` (e.g. `eastus`) or `endpoint`; `voice` (e.g. `es-MX-DaliaNeural`) | `key` |
+| `langfuse` | `host`, `publicKey` | `secretKey` |
+
+- `GET /api/connections`, `GET /api/connections/{id}`, `POST /api/connections`
+  `{name, kind, config, secrets}` (201), `PATCH /api/connections/{id}` `{name?, config?,
+  secrets?}`, `DELETE /api/connections/{id}` (204). A PATCH `config` or `secrets` replaces the
+  whole object; omitting `secrets` keeps the stored ones; `kind` cannot change. Names are unique
+  (409). Unknown ids are 404.
+- Responses are `{id, name, kind, config, secretHint, hasSecret, lastTest, createdAt,
+  updatedAt}`. Secrets are write-only: no response, log line or error message contains them;
+  `secretHint` is `••••` plus the last 4 characters (only for secrets of 12+ characters).
+- `POST /api/connections/{id}/test` tests the stored credentials and records `lastTest`
+  `{at, ok, detail}`; `POST /api/connections/test` `{kind, config, secrets}` tests a draft and
+  stores nothing. Each test is one authenticated request (OpenAI `GET {baseUrl}/models`, Azure
+  OpenAI `GET {endpoint}/openai/models`, Azure AI Speech `POST .../sts/v1.0/issueToken`, Langfuse
+  `GET {host}/api/public/projects`) with a 10 s timeout. Redirects are not followed and the
+  response body is never read: `detail` is only the status code and a generic reason. Changing
+  `config` or `secrets` clears `lastTest`.
+- URLs must be `https`, without credentials, query string or fragment. `http://localhost` and
+  `http://127.0.0.1` are accepted only when `ENVIRONMENT=development`.
+- Runs build their provider with `voice_eval.modules.connections.runtime.build_synthesizer`,
+  which loads the current row on every call (no cache).
+
+**Master key.** `VOICE_EVAL_MASTER_KEY` holds one or more comma-separated Fernet keys; the API
+refuses to start without a valid one (the CLI does not need it). Generate one with
+`python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'`.
+The first key encrypts and every key decrypts, so to rotate: prepend a new key
+(`VOICE_EVAL_MASTER_KEY=<new>,<old>`), restart, re-save each connection's secrets, then drop the
+old key. Losing every key makes stored secrets unrecoverable (re-enter them). Each ciphertext
+is bound to its row id and kind, so it cannot be copied onto another connection.
 
 ### Tests
 
