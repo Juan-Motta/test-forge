@@ -64,5 +64,9 @@ commit gets its native review right after it is committed, to stay within the re
 - Local run needs backend `WEB_ORIGINS=http://localhost:3000` and `SESSION_COOKIE_SECURE=false`; web
   `BACKEND_URL` is baked at build time.
 
+- Shell commit `c031808` reviewed: medium, 688 lines, APPROVED + acknowledged. Full tree verified:
+  lint, typecheck, 71 tests, build. Reviewed boundary = c031808. Advisory: AppShell test doesn't reset
+  the redirectToLogin mock; mobile drawer stays open on non-link navigation (e.g. back button).
+
 ## Next step
 T2 — Connections screen via one bounded writer.
