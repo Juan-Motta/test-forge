@@ -7,3 +7,8 @@ __pycache__/
 
 # Local agent tooling
 .atl/
+
+# Local secrets (keep the committed templates)
+.env
+.env.*
+!.env.example
