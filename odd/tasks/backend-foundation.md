@@ -101,5 +101,10 @@ user 2026-10-09: `feature-branch-chain` (each PR targets the previous branch; me
 - Note: `engine/.env.example` (unreadable to the parent) may still lack `ENVIRONMENT=development` and the
   new LOGIN_* settings; local dev must set `ENVIRONMENT=development` to get /docs.
 
+- Native review of `57fb843` (base bfe90b2, medium, 665 lines): consent granted, reliability lens
+  APPROVED and acknowledged (lineage review-a9cadce63ec2b747). Reviewed boundary = 57fb843.
+  Advisory: docs-gating test doesn't clear ambient ENVIRONMENT (test_health.py:41-46); no test that a
+  successful login leaves the per-IP counter intact (test_login_hardening.py). Both folded into T3.
+
 ## Next step
-T3 — connections module via one bounded writer.
+T3 — connections module via one bounded writer (plus the two test fixes above).
