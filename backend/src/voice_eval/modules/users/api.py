@@ -11,7 +11,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from voice_eval.modules.users import service
 from voice_eval.modules.users.deps import Principal, current_principal, reject_foreign_origin
-from voice_eval.modules.users.domain import InvalidCredentials, LoginThrottled, User
+from voice_eval.modules.users.domain import (
+    MAX_EMAIL_LENGTH,
+    InvalidCredentials,
+    LoginThrottled,
+    User,
+)
 from voice_eval.modules.users.sessions import revoke_session
 from voice_eval.modules.users.throttle import ThrottlePolicy
 from voice_eval.platform.db import get_db_session
@@ -36,7 +41,7 @@ class UserOut(CamelModel):
 
 
 class LoginRequest(BaseModel):
-    email: str = Field(max_length=320)
+    email: str = Field(max_length=MAX_EMAIL_LENGTH)
     password: str = Field(max_length=1024)
 
 

@@ -1,20 +1,27 @@
 """Backend settings from the environment (and `backend/.env` when present).
 
+`backend/.env` is found from this file's location, not the working directory, so commands
+behave the same from the repository root or from `backend/`. Environment variables win over it.
+
 No secret is ever defaulted. `VOICE_EVAL_MASTER_KEY` is optional here so the CLI can migrate
 and create users without it; the HTTP app refuses to start without a valid one. Anything that
 loosens security is opt-in: `ENVIRONMENT` defaults to `production`.
 """
 
 from functools import lru_cache
+from pathlib import Path
 from typing import Annotated
 
 from fastapi import Request
 from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
+BACKEND_DIR = Path(__file__).resolve().parents[3]  # backend/src/voice_eval/platform/settings.py
+ENV_FILE = BACKEND_DIR / ".env"
+
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_file=ENV_FILE, extra="ignore")
 
     database_url: str
     voice_eval_master_key: SecretStr | None = None

@@ -3,6 +3,7 @@ import io
 
 import pytest
 from sqlalchemy import select
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from voice_eval import cli
@@ -90,3 +91,55 @@ def test_missing_settings_name_the_variable_without_values(monkeypatch, capsys):
     assert exit_info.value.code == 2
     err = capsys.readouterr().err
     assert "DATABASE_URL" in err and "hunter2" not in err
+
+
+UNREACHABLE = "postgresql+asyncpg://admin:hunter2-db-password@127.0.0.1:1/voice_eval"
+
+
+def _unreachable(monkeypatch) -> None:
+    settings = Settings(_env_file=None, database_url=UNREACHABLE)
+    monkeypatch.setattr(cli, "load_settings", lambda: settings)
+
+
+def _assert_concise(err: str) -> None:
+    assert err.startswith("error: ")
+    assert len(err.strip().splitlines()) == 1
+    assert "Traceback" not in err
+    assert "hunter2" not in err
+
+
+def test_migrate_reports_database_errors_without_traceback(monkeypatch, capsys):
+    def failing_upgrade(url: str) -> None:
+        raise OperationalError("SELECT 1", {}, Exception(f"could not connect to {url}"))
+
+    _unreachable(monkeypatch)
+    monkeypatch.setattr(cli, "upgrade", failing_upgrade)
+    with pytest.raises(SystemExit) as exit_info:
+        cli.main(["migrate"])
+    assert exit_info.value.code == cli.EXIT_DATABASE
+    _assert_concise(capsys.readouterr().err)
+
+
+def test_create_user_reports_an_unreachable_database_without_traceback(monkeypatch, capsys):
+    _unreachable(monkeypatch)
+    argv = ["create-user", "--email", "ada@example.com", "--display-name", "Ada"]
+    assert _run(monkeypatch, [*argv, "--password-stdin"], PASSWORD) == cli.EXIT_DATABASE
+    _assert_concise(capsys.readouterr().err)
+
+
+def test_exit_codes_are_distinct():
+    assert len({cli.EXIT_INVALID_INPUT, cli.EXIT_CONFIG, cli.EXIT_DATABASE}) == 3
+
+
+def test_raw_driver_errors_are_database_errors(monkeypatch, capsys):
+    import asyncpg
+
+    def failing_upgrade(url: str) -> None:
+        raise asyncpg.InvalidPasswordError("password authentication failed: hunter2")
+
+    _unreachable(monkeypatch)
+    monkeypatch.setattr(cli, "upgrade", failing_upgrade)
+    with pytest.raises(SystemExit) as exit_info:
+        cli.main(["migrate"])
+    assert exit_info.value.code == cli.EXIT_DATABASE
+    _assert_concise(capsys.readouterr().err)

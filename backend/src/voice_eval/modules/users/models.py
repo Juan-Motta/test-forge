@@ -6,7 +6,13 @@ from datetime import datetime
 from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, String, func, true
 from sqlalchemy.orm import Mapped, mapped_column
 
-from voice_eval.modules.users.domain import User
+from voice_eval.modules.users.domain import (
+    MAX_DISPLAY_NAME_LENGTH,
+    MAX_EMAIL_LENGTH,
+    MAX_IP_LENGTH,
+    MAX_USER_AGENT_LENGTH,
+    User,
+)
 from voice_eval.platform.db import Base
 
 
@@ -15,8 +21,8 @@ class UserRecord(Base):
     __table_args__ = (CheckConstraint("email = lower(email)", name="email_lowercase"),)
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
-    email: Mapped[str] = mapped_column(String(320), unique=True)
-    display_name: Mapped[str] = mapped_column(String(200))
+    email: Mapped[str] = mapped_column(String(MAX_EMAIL_LENGTH), unique=True)
+    display_name: Mapped[str] = mapped_column(String(MAX_DISPLAY_NAME_LENGTH))
     password_hash: Mapped[str] = mapped_column(String(255))
     is_active: Mapped[bool] = mapped_column(default=True, server_default=true())
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -46,8 +52,8 @@ class SessionRecord(Base):
     last_seen_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
-    user_agent: Mapped[str | None] = mapped_column(String(512))
-    ip: Mapped[str | None] = mapped_column(String(45))
+    user_agent: Mapped[str | None] = mapped_column(String(MAX_USER_AGENT_LENGTH))
+    ip: Mapped[str | None] = mapped_column(String(MAX_IP_LENGTH))
 
 
 class LoginAttemptRecord(Base):
@@ -60,8 +66,9 @@ class LoginAttemptRecord(Base):
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
-    email: Mapped[str | None] = mapped_column(String(320))  # canonical; NULL if input invalid
-    ip: Mapped[str | None] = mapped_column(String(45))
+    # canonical; NULL if the input was not a valid address
+    email: Mapped[str | None] = mapped_column(String(MAX_EMAIL_LENGTH))
+    ip: Mapped[str | None] = mapped_column(String(MAX_IP_LENGTH))
     succeeded: Mapped[bool]
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), index=True

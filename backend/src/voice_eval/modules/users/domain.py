@@ -7,6 +7,11 @@ from datetime import datetime
 from email_validator import EmailNotValidError, validate_email
 
 MIN_PASSWORD_LENGTH = 12
+# Column sizes shared by the models, the API schemas and the use cases (migrations keep literals).
+MAX_EMAIL_LENGTH = 320
+MAX_DISPLAY_NAME_LENGTH = 200
+MAX_USER_AGENT_LENGTH = 512
+MAX_IP_LENGTH = 45  # the longest textual IPv6 address
 
 
 @dataclass(frozen=True)

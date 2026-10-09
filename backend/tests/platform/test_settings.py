@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 from pydantic import ValidationError
 
@@ -46,3 +48,29 @@ def test_master_key_is_secret(monkeypatch):
 def test_database_url_must_use_asyncpg():
     with pytest.raises(ValidationError, match="postgresql\\+asyncpg"):
         Settings(_env_file=None, database_url="postgresql://u:p@localhost/db")
+
+
+def test_env_file_is_anchored_to_the_backend_directory():
+    env_file = Settings.model_config["env_file"]
+    assert Path(env_file).is_absolute()
+    assert Path(env_file).name == ".env"
+    assert (Path(env_file).parent / "pyproject.toml").is_file()
+    assert (Path(env_file).parent / "src" / "voice_eval").is_dir()
+
+
+def test_env_file_in_the_working_directory_is_ignored(tmp_path, monkeypatch):
+    (tmp_path / ".env").write_text("SESSION_COOKIE_NAME=from_cwd\n")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("DATABASE_URL", DB_URL)
+    monkeypatch.delenv("SESSION_COOKIE_NAME", raising=False)
+    assert Settings().session_cookie_name != "from_cwd"
+
+
+def test_environment_variables_win_over_the_env_file(tmp_path, monkeypatch):
+    env_file = tmp_path / ".env"
+    env_file.write_text(f"DATABASE_URL={DB_URL}\nSESSION_COOKIE_NAME=from_file\n")
+    monkeypatch.setenv("SESSION_COOKIE_NAME", "from_env")
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    settings = Settings(_env_file=env_file)
+    assert settings.session_cookie_name == "from_env"
+    assert settings.database_url == DB_URL

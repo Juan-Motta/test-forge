@@ -11,6 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from voice_eval.modules.users import throttle
 from voice_eval.modules.users.domain import (
+    MAX_DISPLAY_NAME_LENGTH,
+    MAX_IP_LENGTH,
     MIN_PASSWORD_LENGTH,
     InvalidCredentials,
     InvalidUserInput,
@@ -22,7 +24,7 @@ from voice_eval.modules.users.domain import (
 )
 from voice_eval.modules.users.models import UserRecord
 from voice_eval.modules.users.passwords import hash_password, verify_and_update
-from voice_eval.modules.users.sessions import create_session
+from voice_eval.modules.users.sessions import create_session, purge_expired_sessions
 from voice_eval.modules.users.throttle import ThrottlePolicy
 
 
@@ -48,8 +50,8 @@ async def warm_up() -> None:
 async def create_user(db: AsyncSession, email: str, display_name: str, password: str) -> User:
     normalized = canonical_email(email)
     display_name = display_name.strip()
-    if not display_name or len(display_name) > 200:
-        raise InvalidUserInput("display name must be 1 to 200 characters")
+    if not display_name or len(display_name) > MAX_DISPLAY_NAME_LENGTH:
+        raise InvalidUserInput(f"display name must be 1 to {MAX_DISPLAY_NAME_LENGTH} characters")
     if len(password) < MIN_PASSWORD_LENGTH:
         raise InvalidUserInput(f"password must be at least {MIN_PASSWORD_LENGTH} characters")
     if await db.scalar(select(UserRecord.id).where(UserRecord.email == normalized)):
@@ -89,7 +91,7 @@ async def login(
     never pins a pooled connection.
     """
     now = now or datetime.now(UTC)
-    ip = ip[:45] if ip else None
+    ip = ip[:MAX_IP_LENGTH] if ip else None
     try:
         canonical: str | None = canonical_email(email)
     except InvalidUserInput:
@@ -125,6 +127,7 @@ async def login(
             .returning(UserRecord)
         )
     await throttle.record_attempt(db, canonical, ip, succeeded=user is not None, now=now)
+    await purge_expired_sessions(db, now)
     if user is None:
         await db.commit()
         raise InvalidCredentials

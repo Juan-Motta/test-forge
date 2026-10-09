@@ -47,7 +47,7 @@ runs; they all count as one agent turn.
 ## Setup and tests
 
 ```bash
-cd engine
+cd backend
 uv sync
 uv run pytest -q          # probe: in-process fakes; backend: Postgres via Docker (see Backend API)
 uv run ruff check . && uv run ruff format --check .
@@ -132,7 +132,7 @@ business module under `voice_eval/modules/` (`users`, `connections`).
 ### Running locally
 
 ```bash
-cd engine
+cd backend
 cp .env.example .env                 # placeholders; adjust as needed
 docker compose up -d postgres        # dev database on 127.0.0.1:5432
 # put a master key in .env as VOICE_EVAL_MASTER_KEY (see Provider connections)
@@ -142,7 +142,13 @@ uv run voice-eval create-user --email you@example.com --display-name "You"
 uv run uvicorn voice_eval.platform.app:create_app --factory --reload
 ```
 
-Settings come from the environment or `backend/.env`; `.env.example` documents each one.
+`voice-eval` failures print a single `error: ...` line, never a traceback, URL or password, and
+exit with `1` (invalid input, e.g. a duplicate email), `2` (invalid or missing settings) or `3`
+(the database failed or is unreachable).
+
+Settings come from the environment or `backend/.env` (located from the package, so the working
+directory does not matter; environment variables win over the file); `.env.example` documents
+each one.
 `DATABASE_URL` must use `postgresql+asyncpg://`. `ENVIRONMENT` defaults to `production`
 (fail closed): `/docs` and `/openapi.json` are served only when it is exactly `development`, so
 set `ENVIRONMENT=development` in your local `.env` if you want them. `SESSION_COOKIE_SECURE`
@@ -175,6 +181,8 @@ stays `true` unless explicitly set to `false` (needed for plain-HTTP local devel
   `GET /api/auth/me` returns the current user.
 - Session tokens are 256-bit random values; only their SHA-256 hash is stored. Sessions expire
   after `SESSION_TTL_HOURS` (fixed, not sliding) and stop working when the user is deactivated.
+  Activity (`last_seen_at`) is recorded at most once a minute. Every login attempt that reaches
+  password verification also deletes up to 500 expired sessions.
 - Everything under `/api` requires a session except `/api/health` and `/api/auth/login`.
   The cookie is checked first, then `Authorization: Bearer <token>`. Failures are `401` with
   `WWW-Authenticate: Bearer`.
@@ -191,8 +199,9 @@ curl -s -H "Authorization: Bearer $TOKEN" http://localhost:8000/api/auth/me
 `GET /api/health` returns `{"status": "ok"}` after a database ping, or `503
 {"status": "unavailable"}`.
 
-Request validation errors are `422 {"detail": [{type, loc, msg}]}`: the submitted value is
-never echoed back (it may be a password or an API key).
+Validation errors are `422 {"detail": [{type, loc, msg}]}`, whether the request shape or a
+module's own rules rejected the input: the submitted value is never echoed back (it may be a
+password or an API key).
 
 ### Provider connections
 
@@ -211,17 +220,27 @@ edit applies to the next run without restarting anything.
   `{name, kind, config, secrets}` (201), `PATCH /api/connections/{id}` `{name?, config?,
   secrets?}`, `DELETE /api/connections/{id}` (204). A PATCH `config` or `secrets` replaces the
   whole object; omitting `secrets` keeps the stored ones; `kind` cannot change. Names are unique
-  (409). Unknown ids are 404.
+  (409 `Connection name already in use`); a write that lost a race with another change (e.g.
+  the creating user was deleted) is also 409 with a different message. Unknown ids are 404.
 - Responses are `{id, name, kind, config, secretHint, hasSecret, lastTest, createdAt,
   updatedAt}`. Secrets are write-only: no response, log line or error message contains them;
   `secretHint` is `••••` plus the last 4 characters (only for secrets of 12+ characters).
+  Secrets are sent as HTTP headers, so they must be printable ASCII without spaces or line
+  breaks (422 otherwise).
 - `POST /api/connections/{id}/test` tests the stored credentials and records `lastTest`
   `{at, ok, detail}`; `POST /api/connections/test` `{kind, config, secrets}` tests a draft and
   stores nothing. Each test is one authenticated request (OpenAI `GET {baseUrl}/models`, Azure
   OpenAI `GET {endpoint}/openai/models`, Azure AI Speech `POST .../sts/v1.0/issueToken`, Langfuse
   `GET {host}/api/public/projects`) with a 10 s timeout. Redirects are not followed and the
   response body is never read: `detail` is only the status code and a generic reason. Changing
-  `config` or `secrets` clears `lastTest`.
+  `config` or `secrets` clears `lastTest`. A test whose row is edited or deleted while the
+  provider call is in flight returns its result but does not record it.
+- Tests only reach public addresses (SSRF guard, `voice_eval.platform.egress`): the host is
+  resolved once, the request is refused (`Destination not allowed (not a public address)`) if
+  any resolved address is loopback, private, link-local, multicast, reserved, unspecified or
+  otherwise not globally routable (IPv4 and IPv6, IPv4-mapped included), and the connection then
+  goes to the vetted address, so DNS rebinding cannot swap it. `ENVIRONMENT=development` lifts
+  the guard to test local services. Proxy variables and `.netrc` are ignored.
 - URLs must be `https`, without credentials, query string or fragment. `http://localhost` and
   `http://127.0.0.1` are accepted only when `ENVIRONMENT=development`.
 - Runs build their provider with `voice_eval.modules.connections.runtime.build_synthesizer`,
