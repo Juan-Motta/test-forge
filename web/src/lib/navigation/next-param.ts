@@ -21,6 +21,8 @@ export function sanitizeNext(value: string | null | undefined): string {
   }
   const url = new URL(value, PLACEHOLDER_ORIGIN);
   if (url.origin !== PLACEHOLDER_ORIGIN) return HOME;
+  // Dot segments can normalize an accepted input into `//host`; re-check the path actually used.
+  if (url.pathname.startsWith("//") || url.pathname.includes("\\")) return HOME;
   if (url.pathname === LOGIN || url.pathname.startsWith(`${LOGIN}/`)) return HOME;
   return `${url.pathname}${url.search}${url.hash}`;
 }

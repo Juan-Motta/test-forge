@@ -26,6 +26,11 @@ describe("sanitizeNext", () => {
     "/runs\nLocation: x",
     "/login",
     "/login?next=/runs",
+    // Dot segments that only become protocol-relative after URL normalization.
+    "/.//evil.com",
+    "/a/..//evil.com",
+    "/%2e//evil.com",
+    "/a/%2e%2e//evil.com/path",
   ])("falls back to / for %j", (input) => {
     expect(sanitizeNext(input)).toBe("/");
   });
