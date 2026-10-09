@@ -54,7 +54,7 @@ def test_transcript_store_replaces_cumulative_captions_and_orders_by_start():
 
 
 @pytest.mark.parametrize("frame", [b"", b"\x00\x00\x00", b"\x00" * 100_000])
-async def test_send_audio_frame_validates_limits(frame):
+async def test_send_caller_audio_validates_limits(frame):
     client = ViviLiveClient("wss://h", "c", "u")
     with pytest.raises(ValueError):
-        await client.send_audio_frame(frame)
+        await client.send_caller_audio(frame)

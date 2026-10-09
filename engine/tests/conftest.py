@@ -1,15 +1,25 @@
-"""In-process fake of the target Live endpoint, implementing the documented protocol."""
+"""In-process fakes of the target endpoint: the Live protocol and the legacy realtime relay."""
 
 import asyncio
 import base64
 import json
+from collections.abc import Coroutine
+from contextlib import suppress
 from dataclasses import dataclass, field
+from typing import Any
 
 import pytest
 from websockets.asyncio.server import ServerConnection, serve
+from websockets.exceptions import ConnectionClosed
 
 REPLY_DELTAS = 4
 DELTA_BYTES = 4800
+
+
+async def _quietly(coro: Coroutine[Any, Any, None]) -> None:
+    """Run a fake's background send task; the client may close the socket at any point."""
+    with suppress(ConnectionClosed):
+        await coro
 
 
 @dataclass
@@ -64,7 +74,7 @@ class FakeLiveServer:
         self.origins.append(ws.request.headers.get("Origin"))
         await ws.send(json.dumps({"type": "voice.protocol", "protocol": "gpt_live"}))
         await ws.send(json.dumps({"type": "voice.ready", "sessionId": "sess-fake"}))
-        tasks = [asyncio.create_task(self._speak(ws, "a0", "hello I am the fake agent"))]
+        tasks = [asyncio.create_task(_quietly(self._speak(ws, "a0", "hello I am the fake agent")))]
         speech = silence = 0
         async for raw in ws:
             msg = json.loads(raw)
@@ -95,12 +105,210 @@ class FakeLiveServer:
             if speech >= self.speech_frames_to_answer and silence >= self.silence_frames_to_answer:
                 self.answers += 1
                 speech = silence = 0
-                tasks.append(asyncio.create_task(self._answer(ws, self.answers)))
+                tasks.append(asyncio.create_task(_quietly(self._answer(ws, self.answers))))
 
 
 @pytest.fixture
 async def fake_live_server():
     fake = FakeLiveServer()
+    async with serve(fake.handler, "127.0.0.1", 0) as server:
+        port = server.sockets[0].getsockname()[1]
+        fake.url = f"ws://127.0.0.1:{port}"
+        yield fake
+
+
+REALTIME_CLIENT_TYPES = frozenset(
+    {
+        "session.update",
+        "input_audio_buffer.append",
+        "input_audio_buffer.commit",
+        "input_audio_buffer.clear",
+        "conversation.item.create",
+        "conversation.item.delete",
+        "conversation.item.truncate",
+        "response.create",
+        "response.cancel",
+    }
+)
+
+
+@dataclass
+class FakeRealtimeServer:
+    """Legacy realtime relay: OpenAI Realtime GA events, allow-listed client events, no greeting.
+
+    A text turn whose text contains "tool" is answered with two responses: a
+    function-call response, `response.processing` ticks while the tool "runs", then speech.
+    """
+
+    speech_frames_to_answer: int = 2
+    silence_frames_to_answer: int = 3
+    tick_s: float = 0.15
+    ticks: int = 2
+    url: str = ""
+    paths: list[str] = field(default_factory=list)
+    received_types: list[str] = field(default_factory=list)
+    protocol_violations: list[str] = field(default_factory=list)
+    client_close_codes: list[int | None] = field(default_factory=list)
+    responses: int = 0
+    items: int = 0
+    allowed_types: frozenset[str] = REALTIME_CLIENT_TYPES
+    closed: asyncio.Event = field(default_factory=asyncio.Event)
+
+    async def _send(self, ws: ServerConnection, event: dict) -> None:
+        await ws.send(json.dumps({**event, "turn_id": f"turn-{self.responses}"}))
+
+    def _item_id(self) -> str:
+        self.items += 1
+        return f"item_{self.items}"
+
+    async def _response(self, ws: ServerConnection, kind: str) -> None:
+        self.responses += 1
+        rid = f"resp_{self.responses}"
+        await self._send(ws, {"type": "response.created", "response": {"id": rid}})
+        if kind == "tool":
+            call = {"id": self._item_id(), "type": "function_call", "name": "lookup"}
+            await self._send(ws, {"type": "response.output_item.added", "item": call})
+            await self._send(
+                ws,
+                {
+                    "type": "response.function_call_arguments.done",
+                    "item_id": call["id"],
+                    "arguments": "{}",
+                },
+            )
+            await self._send(ws, {"type": "response.done", "response": {"id": rid}})
+            for _ in range(self.ticks):
+                await asyncio.sleep(self.tick_s)
+                await self._send(ws, {"type": "response.processing"})
+            await asyncio.sleep(self.tick_s)
+            await self._send(ws, {"type": "response.processing.done"})
+            await asyncio.sleep(self.tick_s)
+            await self._response(ws, "speech")
+            return
+        item_id = self._item_id()
+        text = f"agent response number {self.responses}"
+        item = {"id": item_id, "type": "message", "role": "assistant", "content": []}
+        await self._send(ws, {"type": "conversation.item.added", "item": item})
+        for word in text.split():
+            delta = base64.b64encode(b"\x10\x00" * (DELTA_BYTES // 2)).decode()
+            await self._send(
+                ws,
+                {
+                    "type": "response.output_audio.delta",
+                    "item_id": item_id,
+                    "delta": delta,
+                    "playbackInterruptionSupported": True,
+                },
+            )
+            await self._send(
+                ws,
+                {
+                    "type": "response.output_audio_transcript.delta",
+                    "item_id": item_id,
+                    "delta": word + " ",
+                },
+            )
+            await asyncio.sleep(0.02)
+        await self._send(ws, {"type": "response.output_audio.done", "item_id": item_id})
+        await self._send(
+            ws,
+            {
+                "type": "response.output_audio_transcript.done",
+                "item_id": item_id,
+                "transcript": text,
+            },
+        )
+        await self._send(ws, {"type": "response.done", "response": {"id": rid}})
+
+    async def _answer_audio(self, ws: ServerConnection, text: str) -> None:
+        item_id = self._item_id()
+        item = {"id": item_id, "type": "message", "role": "user", "content": []}
+        await self._send(ws, {"type": "input_audio_buffer.committed", "item_id": item_id})
+        await self._send(ws, {"type": "conversation.item.added", "item": item})
+        response = asyncio.create_task(_quietly(self._response(ws, "")))
+        await asyncio.sleep(0.05)  # transcription lands after the response started
+        await self._send(
+            ws,
+            {
+                "type": "conversation.item.input_audio_transcription.completed",
+                "item_id": item_id,
+                "transcript": text,
+            },
+        )
+        await response
+
+    async def handler(self, ws: ServerConnection) -> None:
+        self.paths.append(ws.request.path)
+        session = {
+            "id": "sess_rt",
+            "model": "gpt-realtime-2.1",
+            "turn_detection": {"type": "server_vad", "silence_duration_ms": 500},
+        }
+        await self._send(ws, {"type": "session.created", "session": session})
+        await self._send(ws, {"type": "session.updated", "session": session})
+        system = {
+            "id": self._item_id(),
+            "type": "message",
+            "role": "system",
+            "content": [{"type": "input_text", "text": "Today is 2026-10-09."}],
+        }
+        await self._send(ws, {"type": "conversation.item.added", "item": system})
+        await self._send(ws, {"type": "conversation.item.done", "item": system})
+        await ws.send(b"\x00\x01\x02")  # stray binary frame: must be ignored
+        tasks: list[asyncio.Task[None]] = []
+        last_text = ""
+        speech = silence = audio_turns = 0
+        try:
+            async for raw in ws:
+                msg = json.loads(raw)
+                kind = msg.get("type")
+                self.received_types.append(kind)
+                if kind not in REALTIME_CLIENT_TYPES:
+                    self.protocol_violations.append(f"type={kind}")
+                    await ws.close(
+                        1011,
+                        f"Unsupported outgoing realtime event for openai: '{kind}'",
+                    )
+                    return
+                if kind == "conversation.item.create":
+                    item = {**msg["item"], "id": self._item_id()}
+                    last_text = item["content"][0]["text"]
+                    await self._send(ws, {"type": "conversation.item.added", "item": item})
+                elif kind == "response.create":
+                    kind = "tool" if "tool" in last_text else ""
+                    tasks.append(asyncio.create_task(_quietly(self._response(ws, kind))))
+                    last_text = ""
+                elif kind == "input_audio_buffer.append":
+                    pcm = base64.b64decode(msg.get("audio") or "")
+                    if not pcm:
+                        self.protocol_violations.append("empty audio append")
+                        await ws.close(1011, "empty audio")
+                        return
+                    if any(pcm):
+                        speech, silence = speech + 1, 0
+                    elif speech:
+                        silence += 1
+                    if (
+                        speech >= self.speech_frames_to_answer
+                        and silence >= self.silence_frames_to_answer
+                    ):
+                        speech = silence = 0
+                        audio_turns += 1
+                        text = f"caller audio turn {audio_turns}"
+                        answer = self._answer_audio(ws, text)
+                        tasks.append(asyncio.create_task(_quietly(answer)))
+        except ConnectionClosed:
+            pass
+        finally:
+            self.client_close_codes.append(ws.close_code)
+            self.closed.set()
+            for task in tasks:
+                task.cancel()
+
+
+@pytest.fixture
+async def fake_realtime_server():
+    fake = FakeRealtimeServer()
     async with serve(fake.handler, "127.0.0.1", 0) as server:
         port = server.sockets[0].getsockname()[1]
         fake.url = f"ws://127.0.0.1:{port}"

@@ -33,7 +33,13 @@ from the audio stream and caption updates.
 - [x] T1 — Scaffold `engine/` (pyproject, uv, pytest, ruff). Route: delegated (writer, 2+ non-trivial files).
 - [x] T2 — Audio helpers + end-of-turn detector, test-first. Route: delegated.
 - [x] T3 — Vivi Live client + `probe` CLI writing `events.jsonl`, `agent.wav`, `caller.wav`, `summary.json`. Route: delegated.
-- [ ] T4 — Run the probe against dev and record latency/turn findings. Pending user authorization.
+- [x] T3b — Legacy realtime adapter (OpenAI Realtime relay) + protocol auto-detection + text caller
+  turns + close with 1000. Reason: first dev run (2026-10-09, thread 04af6979…) showed this channel's
+  agent runs the legacy `RealtimeSessionManager` (gpt-realtime-2.1), not Live: no `voice.protocol`/
+  `voice.ready`, agent never speaks first, `voice.close` rejected with 1011. Route: delegated (writer).
+- [ ] T4 — Run the probe against dev and record latency/turn findings. Authorized by user 2026-10-09
+  (1–2 calls). Call 1 used (greeting-only, failed on protocol mismatch). Audio run blocked: no `.env`
+  with provider credentials found (`engine/.env`, `.env`).
 
 ## Acceptance criteria
 - `uv run pytest` green; `uv run ruff check` clean.
@@ -50,6 +56,16 @@ from the audio stream and caption updates.
   `ruff check` clean; `ruff format --check` clean; `python -m voice_eval.probe --help` OK.
 - Open risks: OpenAI `pcm` 24 kHz not confirmed in docs (verify in T4); end-of-turn gap heuristic
   (900 ms) can split turns during long tool calls; latency includes TTS trailing silence.
+- Work-unit commit: `f042862` (24 files, 2131 lines incl. 611 in generated uv.lock; over the ~400-line
+  heuristic because T1–T3 plus the TTS scope change landed as one unit).
+- Native review: assessed `medium` (`executable_change: .gitignore`), `review_due: slice_budget_reached`
+  (base = empty tree, root commit). Preflight STATUS stopped at `collect: intended_untracked_selection`
+  for the untracked `.atl/` files; submission refused as invalid JSON shape. Review PENDING, not approved.
+
+- T3b done by delegated writer: TargetSession port, connection base, auto-detect (first frame), legacy
+  adapter with allow-list guard, ResponseTurnTracker (settle 1200 ms, multi-response tool turns = 1 turn),
+  `--text`/`--agent-first`/`--protocol`/`--settle-ms`. RED observed (import errors + 4 e2e failures), GREEN
+  46 passed (parent re-run: 46 passed). Risk: legacy path proven only against the fake server.
 
 ## Next step
 T4 — run against dev, pending explicit authorization and provider credentials.

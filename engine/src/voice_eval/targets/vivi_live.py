@@ -1,31 +1,47 @@
-"""Adapter for the Vivi Live realtime WebSocket (`voiceCapability=live-v1`).
+"""Adapter for the Vivi Live realtime WebSocket (`voiceCapability=live-v1`, `voice.*` events).
 
 Wire contract: JSON text frames only, PCM16 mono 24 kHz base64 audio. The server rejects
 (closes the session on) any client message other than `voice.input.audio` and `voice.close`.
+The agent greets first and there is no response-done event: turn ends are inferred from audio.
 """
 
 import json
 import logging
-import uuid
 from collections.abc import AsyncIterator
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
-from urllib.parse import quote, urlencode
 
-from websockets.asyncio.client import ClientConnection, connect
-from websockets.exceptions import ConnectionClosed
+from voice_eval.audio import MAX_B64_CHARS, b64decode
+from voice_eval.ports.target import (
+    AudioDelta,
+    Closed,
+    NotSupportedError,
+    Ready,
+    ServerEvent,
+    TranscriptMessage,
+    TranscriptUpdate,
+    UnknownEvent,
+)
+from voice_eval.targets.connection import WebSocketTarget, encode_audio
 
-from voice_eval.audio import MAX_B64_CHARS, b64decode, b64encode
+__all__ = [
+    "AudioDelta",
+    "Closed",
+    "ProtocolInfo",
+    "Ready",
+    "ServerEvent",
+    "TaskStatus",
+    "TranscriptMessage",
+    "TranscriptStore",
+    "TranscriptUpdate",
+    "UnknownEvent",
+    "ViviLiveClient",
+    "parse_event",
+]
 
 log = logging.getLogger(__name__)
 
 MAX_FRAME_CHARS = 150_000
-MAX_INCOMING_BYTES = 8 * 1024 * 1024
-
-
-@dataclass(frozen=True, kw_only=True)
-class ServerEvent:
-    raw: dict[str, Any] = field(default_factory=dict, repr=False, compare=False)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -34,38 +50,8 @@ class ProtocolInfo(ServerEvent):
 
 
 @dataclass(frozen=True, kw_only=True)
-class Ready(ServerEvent):
-    session_id: str
-
-
-@dataclass(frozen=True, kw_only=True)
-class AudioDelta(ServerEvent):
-    pcm: bytes
-
-
-@dataclass(frozen=True, kw_only=True)
-class TranscriptUpdate(ServerEvent):
-    role: str
-    message_id: str
-    text: str
-    start_ms: int | None
-    end_ms: int | None
-
-
-@dataclass(frozen=True, kw_only=True)
 class TaskStatus(ServerEvent):
     pass
-
-
-@dataclass(frozen=True, kw_only=True)
-class Closed(ServerEvent):
-    usage_seconds: float | None
-    final_usage_confirmed: bool
-
-
-@dataclass(frozen=True, kw_only=True)
-class UnknownEvent(ServerEvent):
-    type: str
 
 
 def parse_event(raw: dict[str, Any]) -> ServerEvent:
@@ -95,16 +81,6 @@ def parse_event(raw: dict[str, Any]) -> ServerEvent:
             )
         case other:
             return UnknownEvent(type=str(other), raw=raw)
-
-
-@dataclass
-class TranscriptMessage:
-    message_id: str
-    role: str
-    text: str
-    start_ms: int | None
-    end_ms: int | None
-    order: int
 
 
 class TranscriptStore:
@@ -139,7 +115,12 @@ class TranscriptStore:
         return sorted(self._messages.values(), key=key)
 
 
-class ViviLiveClient:
+class ViviLiveClient(WebSocketTarget):
+    protocol = "live"
+    agent_speaks_first = True
+    explicit_turn_end = False
+    supports_text = False
+
     def __init__(
         self,
         base_url: str,
@@ -148,65 +129,27 @@ class ViviLiveClient:
         thread_id: str | None = None,
         origin: str | None = None,
     ) -> None:
-        self.base_url = base_url.rstrip("/")
-        self.channel_id = channel_id
-        self.user_id = user_id
-        self.thread_id = thread_id or str(uuid.uuid4())
-        self.origin = origin
-        self.session_id: str | None = None
+        super().__init__(base_url, channel_id, user_id, thread_id, origin)
         self.transcript = TranscriptStore()
-        self._ws: ClientConnection | None = None
-
-    @property
-    def url(self) -> str:
-        query = urlencode(
-            {"voiceCapability": "live-v1", "userId": self.user_id, "threadId": self.thread_id}
-        )
-        return f"{self.base_url}/channelApi/{quote(self.channel_id, safe='')}/realtime?{query}"
-
-    @property
-    def close_code(self) -> int | None:
-        return self._ws.close_code if self._ws else None
-
-    @property
-    def close_reason(self) -> str | None:
-        return self._ws.close_reason if self._ws else None
-
-    async def connect(self) -> None:
-        self._ws = await connect(self.url, origin=self.origin, max_size=MAX_INCOMING_BYTES)
 
     async def events(self) -> AsyncIterator[ServerEvent]:
         """Yield parsed server events until the socket closes."""
-        ws = self._require_ws()
-        try:
-            async for message in ws:
-                try:
-                    raw = json.loads(message)
-                except (TypeError, ValueError):
-                    log.warning("non-JSON frame ignored (%s)", type(message).__name__)
-                    continue
-                if not isinstance(raw, dict):
-                    log.warning("non-object JSON frame ignored")
-                    continue
-                try:
-                    event = parse_event(raw)
-                except (TypeError, ValueError) as exc:
-                    log.warning("malformed %r event kept as unknown: %s", raw.get("type"), exc)
-                    event = UnknownEvent(type=str(raw.get("type")), raw=raw)
-                if isinstance(event, Ready):
-                    self.session_id = event.session_id
-                elif isinstance(event, TranscriptUpdate):
-                    self.transcript.update(event)
-                elif isinstance(event, UnknownEvent):
-                    log.info("unknown server event type %r kept", event.type)
-                yield event
-        except ConnectionClosed:
-            return
+        async for raw in self._frames():
+            try:
+                event = parse_event(raw)
+            except (TypeError, ValueError) as exc:
+                log.warning("malformed %r event kept as unknown: %s", raw.get("type"), exc)
+                event = UnknownEvent(type=str(raw.get("type")), raw=raw)
+            if isinstance(event, Ready):
+                self.session_id = event.session_id
+            elif isinstance(event, TranscriptUpdate):
+                self.transcript.update(event)
+            elif isinstance(event, UnknownEvent):
+                log.info("unknown server event type %r kept", event.type)
+            yield event
 
-    async def send_audio_frame(self, pcm: bytes) -> None:
-        if not pcm or len(pcm) % 2:
-            raise ValueError(f"audio frame must be a non-empty even byte count, got {len(pcm)}")
-        encoded = b64encode(pcm)
+    async def send_caller_audio(self, pcm: bytes) -> None:
+        encoded = encode_audio(pcm)
         if len(encoded) > MAX_B64_CHARS:
             raise ValueError(f"audio frame too large: {len(encoded)} base64 chars")
         frame = json.dumps({"type": "voice.input.audio", "audio": encoded})
@@ -214,16 +157,17 @@ class ViviLiveClient:
             raise ValueError(f"audio message too large: {len(frame)} chars")
         await self._require_ws().send(frame)
 
-    async def close(self) -> None:
+    async def send_caller_text(self, text: str) -> None:
+        raise NotSupportedError("the Live protocol only accepts caller audio (no text turns)")
+
+    async def request_agent_turn(self) -> None:
+        raise NotSupportedError("the Live protocol has no way to request an agent turn")
+
+    async def close(self) -> dict[str, Any]:
         """Ask the server to end the session gracefully; it answers with `voice.closed`."""
-        if self._ws is not None:
-            await self._ws.send(json.dumps({"type": "voice.close"}))
+        record = {"type": "voice.close"}
+        await self._require_ws().send(json.dumps(record))
+        return record
 
-    async def disconnect(self) -> None:
-        if self._ws is not None:
-            await self._ws.close()
-
-    def _require_ws(self) -> ClientConnection:
-        if self._ws is None:
-            raise RuntimeError("not connected; call connect() first")
-        return self._ws
+    def transcript_messages(self) -> list[TranscriptMessage]:
+        return self.transcript.messages()
