@@ -2,9 +2,11 @@
 
 The response body is never read, redirects are never followed, and the detail never includes
 anything the provider sent back or any secret, only the status code and a generic reason.
+Requests only reach public addresses (see `platform.egress`), except in development.
 """
 
 import base64
+import logging
 from dataclasses import dataclass
 from typing import Any
 
@@ -12,6 +14,9 @@ import httpx
 from pydantic import BaseModel
 
 from voice_eval.modules.connections.domain import ConnectionKind, reveal
+from voice_eval.platform.egress import DestinationNotAllowed, Resolver, guarded_transport, resolve
+
+log = logging.getLogger(__name__)
 
 TIMEOUT_S = 10.0
 
@@ -73,26 +78,54 @@ def _describe(status: int) -> CheckResult:
 
 
 class ConnectionTester:
-    """Runs connection tests. `transport` replaces the network (tests use a mock)."""
+    """Runs connection tests.
+
+    `transport` replaces the network, egress guard included (tests use a mock); `resolver`
+    replaces DNS resolution for the guard. `allow_private_destinations` lifts the guard
+    (development only, to test local services).
+    """
 
     def __init__(
-        self, *, transport: httpx.AsyncBaseTransport | None = None, timeout_s: float = TIMEOUT_S
+        self,
+        *,
+        transport: httpx.AsyncBaseTransport | None = None,
+        timeout_s: float = TIMEOUT_S,
+        allow_private_destinations: bool = False,
+        resolver: Resolver = resolve,
     ) -> None:
         self.transport = transport
         self.timeout_s = timeout_s
+        self.allow_private_destinations = allow_private_destinations
+        self.resolver = resolver
+
+    def _transport(self) -> httpx.AsyncBaseTransport:
+        if self.transport is not None:
+            return self.transport
+        return guarded_transport(
+            resolver=self.resolver, allow_private=self.allow_private_destinations
+        )
 
     async def check(self, kind: ConnectionKind, config: Any, secrets: BaseModel) -> CheckResult:
-        probe = _probe(kind, config, secrets)
+        """Never raises: every failure is a `CheckResult` whose detail holds no secret."""
         try:
             async with httpx.AsyncClient(
-                transport=self.transport, timeout=self.timeout_s, follow_redirects=False
+                transport=self._transport(),
+                timeout=self.timeout_s,
+                follow_redirects=False,
+                trust_env=False,  # no proxy or .netrc from the environment
             ) as client:
-                response = await client.send(client.build_request(**probe), stream=True)
+                request = client.build_request(**_probe(kind, config, secrets))
+                response = await client.send(request, stream=True)
                 await response.aclose()  # the body is never read
+        except DestinationNotAllowed:
+            return CheckResult(False, "Destination not allowed (not a public address)")
         except httpx.TimeoutException:
             return CheckResult(False, f"Timed out after {self.timeout_s:g} s")
         except (httpx.ConnectError, httpx.UnsupportedProtocol):
             return CheckResult(False, "Could not connect (DNS, TLS or network error)")
         except httpx.HTTPError as exc:
             return CheckResult(False, f"Request failed ({type(exc).__name__})")
+        except Exception as exc:  # e.g. UnicodeEncodeError; its text may quote the secret
+            log.warning("connection test failed unexpectedly (%s)", type(exc).__name__)
+            return CheckResult(False, "Request failed (unexpected error)")
         return _describe(response.status_code)

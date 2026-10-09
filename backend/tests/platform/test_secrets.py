@@ -1,3 +1,4 @@
+import json
 import uuid
 
 import pytest
@@ -66,3 +67,22 @@ def test_invalid_master_key_message_has_no_key_material():
     assert "VOICE_EVAL_MASTER_KEY" in message and "#2" in message
     assert bad not in message and good not in message
     assert info.value.__cause__ is None and info.value.__suppress_context__
+
+
+@pytest.mark.parametrize(
+    "envelope",
+    [
+        ["not", "a", "mapping"],
+        {"v": 2, "owner": str(OWNER), "kind": "openai", "data": PAYLOAD},  # unknown version
+        {"owner": str(OWNER), "kind": "openai", "data": PAYLOAD},  # no version
+        {"v": 1, "owner": str(OWNER), "kind": "openai"},  # no data
+        {"v": 1, "owner": str(OWNER), "kind": "openai", "data": "sk-test-not-a-mapping"},
+        {"v": 1, "owner": str(OWNER), "kind": "openai", "data": {"api_key": 42}},
+    ],
+)
+def test_malformed_envelope_is_a_decryption_error(envelope):
+    key = _key()
+    token = Fernet(key).encrypt(json.dumps(envelope).encode()).decode()
+    with pytest.raises(SecretDecryptionError) as info:
+        SecretBox.from_master_key(key).open(token, owner=OWNER, kind="openai")
+    assert "sk-test" not in str(info.value)

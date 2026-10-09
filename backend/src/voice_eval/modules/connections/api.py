@@ -16,6 +16,7 @@ from voice_eval.modules.connections import service
 from voice_eval.modules.connections.domain import (
     MAX_NAME_LENGTH,
     Connection,
+    ConnectionConflict,
     ConnectionKind,
     ConnectionNameTaken,
     ConnectionNotFound,
@@ -37,9 +38,12 @@ Name = Annotated[
 ]
 
 
-def connection_tester() -> ConnectionTester:
-    """FastAPI dependency (overridden in tests to keep provider calls off the network)."""
-    return ConnectionTester()
+def connection_tester(settings: AppSettings) -> ConnectionTester:
+    """FastAPI dependency (overridden in tests to keep provider calls off the network).
+
+    Only development may test connections to private or local addresses.
+    """
+    return ConnectionTester(allow_private_destinations=settings.environment == "development")
 
 
 Tester = Annotated[ConnectionTester, Depends(connection_tester)]
@@ -106,8 +110,22 @@ class UpdateIn(StrictCamelModel):
 
 
 def _invalid(exc: InvalidConnectionInput) -> HTTPException:
-    detail = [{"loc": ["body", *error["loc"]], "msg": error["msg"]} for error in exc.errors]
+    """Same `{type, loc, msg}` items as request validation errors (see `platform.app`)."""
+    detail = [
+        {"type": error["type"], "loc": ["body", *error["loc"]], "msg": error["msg"]}
+        for error in exc.errors
+    ]
     return HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail)
+
+
+def _name_taken() -> HTTPException:
+    return HTTPException(status.HTTP_409_CONFLICT, "Connection name already in use")
+
+
+def _conflict() -> HTTPException:
+    return HTTPException(
+        status.HTTP_409_CONFLICT, "Connection conflicts with a concurrent change; try again"
+    )
 
 
 def _not_found() -> HTTPException:
@@ -148,7 +166,9 @@ async def create_connection(
     except InvalidConnectionInput as exc:
         raise _invalid(exc) from None
     except ConnectionNameTaken:
-        raise HTTPException(status.HTTP_409_CONFLICT, "Connection name already in use") from None
+        raise _name_taken() from None
+    except ConnectionConflict:
+        raise _conflict() from None
     return ConnectionOut.of(created)
 
 
@@ -194,7 +214,9 @@ async def update_connection(
     except InvalidConnectionInput as exc:
         raise _invalid(exc) from None
     except ConnectionNameTaken:
-        raise HTTPException(status.HTTP_409_CONFLICT, "Connection name already in use") from None
+        raise _name_taken() from None
+    except ConnectionConflict:
+        raise _conflict() from None
     return ConnectionOut.of(updated)
 
 

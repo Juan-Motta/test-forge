@@ -62,16 +62,24 @@ class SecretBox:
         envelope = {"v": ENVELOPE_VERSION, "owner": str(owner), "kind": kind, "data": payload}
         return self._fernet.encrypt(json.dumps(envelope).encode()).decode()
 
-    def open(self, token: str, *, owner: uuid.UUID, kind: str) -> dict[str, Any]:
+    def open(self, token: str, *, owner: uuid.UUID, kind: str) -> dict[str, str]:
+        """The sealed payload; `SecretDecryptionError` for any token that is not one of ours."""
         try:
             envelope = json.loads(self._fernet.decrypt(token.encode()))
         except (InvalidToken, ValueError):
             raise SecretDecryptionError(
                 "stored secret could not be decrypted (wrong VOICE_EVAL_MASTER_KEY?)"
             ) from None
+        if not isinstance(envelope, dict) or envelope.get("v") != ENVELOPE_VERSION:
+            raise SecretDecryptionError("stored secret has an unknown format")
         if envelope.get("owner") != str(owner) or envelope.get("kind") != kind:
             raise SecretDecryptionError("stored secret does not belong to this connection")
-        return envelope["data"]
+        data = envelope.get("data")
+        if not isinstance(data, dict) or not all(
+            isinstance(key, str) and isinstance(value, str) for key, value in data.items()
+        ):
+            raise SecretDecryptionError("stored secret has an unknown format")
+        return data
 
 
 def app_secret_box(request: Request) -> SecretBox:

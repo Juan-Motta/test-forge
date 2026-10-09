@@ -13,6 +13,7 @@ from typing import Annotated, Any
 from urllib.parse import urlsplit
 
 from pydantic import (
+    AfterValidator,
     BaseModel,
     ConfigDict,
     Field,
@@ -69,12 +70,20 @@ class ConnectionNameTaken(Exception):
     pass
 
 
+class ConnectionConflict(Exception):
+    """The write conflicts with a concurrent change (e.g. the creating user was deleted)."""
+
+
+class UnknownConnectionKind(ValueError):
+    """A stored row has a kind this version does not know (e.g. written by a newer version)."""
+
+
 class UnsupportedConnection(ValueError):
     """The connection exists but cannot serve the requested role (e.g. TTS)."""
 
 
 class InvalidConnectionInput(ValueError):
-    """`errors` is a list of `{"loc": [...], "msg": str}`; no submitted value is included."""
+    """`errors` is a list of `{"type", "loc", "msg"}` items; never the submitted value."""
 
     def __init__(self, errors: list[dict[str, Any]]) -> None:
         super().__init__("invalid connection input")
@@ -89,7 +98,20 @@ Identifier = Annotated[
         strip_whitespace=True, min_length=1, max_length=100, pattern=r"^[A-Za-z0-9._:-]+$"
     ),
 ]
-Secret = Annotated[SecretStr, Field(min_length=1, max_length=4096)]
+
+
+def check_header_safe(value: SecretStr) -> SecretStr:
+    """Secrets travel in HTTP headers: visible ASCII only (no spaces, line breaks or Unicode)."""
+    if not all("!" <= char <= "~" for char in value.get_secret_value()):
+        raise ValueError(
+            "must contain only printable ASCII characters, without spaces or line breaks"
+        )
+    return value
+
+
+Secret = Annotated[
+    SecretStr, Field(min_length=1, max_length=4096), AfterValidator(check_header_safe)
+]
 
 
 def check_url(value: str, info: ValidationInfo) -> str:
@@ -205,7 +227,11 @@ SECRET_MODELS: dict[ConnectionKind, type[_Model]] = {
 
 def _sanitized(exc: ValidationError, prefix: str) -> list[dict[str, Any]]:
     return [
-        {"loc": [prefix, *(str(part) for part in error["loc"])], "msg": error["msg"]}
+        {
+            "type": error["type"],
+            "loc": [prefix, *(str(part) for part in error["loc"])],
+            "msg": error["msg"],
+        }
         for error in exc.errors(include_url=False, include_input=False, include_context=False)
     ]
 

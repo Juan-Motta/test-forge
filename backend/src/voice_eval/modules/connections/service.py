@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from voice_eval.modules.connections.domain import (
     MAX_TEST_DETAIL_LENGTH,
     Connection,
+    ConnectionConflict,
     ConnectionKind,
     ConnectionNameTaken,
     ConnectionNotFound,
@@ -27,7 +28,7 @@ from voice_eval.modules.connections.domain import (
     reveal,
     secret_hint,
 )
-from voice_eval.modules.connections.models import ConnectionRecord
+from voice_eval.modules.connections.models import NAME_UNIQUE_CONSTRAINT, ConnectionRecord
 from voice_eval.modules.connections.testers import ConnectionTester
 from voice_eval.platform.secrets import SecretBox
 
@@ -43,12 +44,33 @@ async def _load(db: AsyncSession, connection_id: uuid.UUID) -> ConnectionRecord:
     return record
 
 
+FOREIGN_KEY_VIOLATION = "23503"
+
+
+def _violation(exc: IntegrityError) -> tuple[str | None, str | None]:
+    """(SQLSTATE, constraint name) of the database error behind `exc`, when the driver says."""
+    cause = exc.orig.__cause__ if exc.orig is not None else None  # asyncpg's own exception
+    return getattr(cause, "sqlstate", None), getattr(cause, "constraint_name", None)
+
+
 async def _commit(db: AsyncSession, name: str) -> None:
+    """Commit; a lost race on the unique name is a name clash, a missing referenced row a conflict.
+
+    Any other integrity error is a bug (validation should have caught it) and propagates as is,
+    which the API reports as a generic 500.
+    """
     try:
         await db.commit()
-    except IntegrityError:
+    except IntegrityError as exc:
         await db.rollback()
-        raise _name_taken(name) from None
+        sqlstate, constraint = _violation(exc)
+        if constraint == NAME_UNIQUE_CONSTRAINT:
+            raise _name_taken(name) from None
+        if sqlstate == FOREIGN_KEY_VIOLATION:
+            raise ConnectionConflict(
+                "the connection refers to a row that no longer exists"
+            ) from None
+        raise
 
 
 def _parse(

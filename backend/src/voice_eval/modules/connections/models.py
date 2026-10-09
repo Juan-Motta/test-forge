@@ -14,10 +14,12 @@ from voice_eval.modules.connections.domain import (
     Connection,
     ConnectionKind,
     LastTest,
+    UnknownConnectionKind,
 )
 from voice_eval.platform.db import Base
 
 KINDS_SQL = ", ".join(f"'{kind.value}'" for kind in ConnectionKind)
+NAME_UNIQUE_CONSTRAINT = "uq_provider_connections_name"  # from the metadata naming convention
 
 
 class ConnectionRecord(Base):
@@ -43,6 +45,16 @@ class ConnectionRecord(Base):
     last_test_detail: Mapped[str | None] = mapped_column(String(MAX_TEST_DETAIL_LENGTH))
 
     def to_domain(self) -> Connection:
+        """Raises `UnknownConnectionKind` for a kind this version does not know.
+
+        A last test counts only when both its time and its outcome were recorded.
+        """
+        try:
+            kind = ConnectionKind(self.kind)
+        except ValueError:
+            raise UnknownConnectionKind(
+                f"connection {self.id} has unknown kind {self.kind!r}"
+            ) from None
         last_test = None
         if self.last_tested_at is not None and self.last_test_ok is not None:
             last_test = LastTest(
@@ -51,7 +63,7 @@ class ConnectionRecord(Base):
         return Connection(
             id=self.id,
             name=self.name,
-            kind=ConnectionKind(self.kind),
+            kind=kind,
             config=dict(self.config),
             secret_hint=self.secret_hint,
             has_secret=bool(self.secret_ciphertext),
