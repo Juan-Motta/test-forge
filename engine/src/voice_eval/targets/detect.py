@@ -14,6 +14,7 @@ from voice_eval.targets.vivi_live import ViviLiveClient
 from voice_eval.targets.vivi_realtime import ViviRealtimeClient
 
 ProtocolName = Literal["auto", "live", "realtime"]
+DetectedProtocol = Literal["live", "realtime"]
 PROTOCOLS: tuple[ProtocolName, ...] = ("auto", "live", "realtime")
 MAX_DETECT_FRAMES = 10
 
@@ -33,26 +34,33 @@ class TargetSpec:
 
 
 async def open_target(spec: TargetSpec, detect_timeout_s: float = 15) -> TargetSession:
-    """Connect; in `auto` mode the first frame decides: `voice.*` is Live, `session.*` legacy."""
+    """Connect; the first frame decides the protocol: `voice.*` is Live, `session.*` legacy.
+
+    A forced `spec.protocol` is checked against that frame and fails fast on a mismatch: each
+    server closes the session on the other protocol's client events, so guessing is never safe.
+    """
     url = realtime_url(spec.base_url, spec.channel_id, spec.user_id, spec.thread_id)
     ws = await open_socket(url, spec.origin)
-    protocol, pending = spec.protocol, []
-    if protocol == "auto":
+    try:
         try:
             protocol, pending = await asyncio.wait_for(_detect(ws), detect_timeout_s)
         except TimeoutError:
-            await ws.close()
             raise ProtocolDetectionError("no protocol-identifying frame received in time") from None
-        except BaseException:
-            await ws.close()
-            raise
+        if spec.protocol not in ("auto", protocol):
+            raise ProtocolDetectionError(
+                f"--protocol {spec.protocol} was forced but the server speaks the {protocol} "
+                f"protocol (first identifying frame: {pending[-1].get('type')!r})"
+            )
+    except BaseException:
+        await ws.close()
+        raise
     adapter = ViviLiveClient if protocol == "live" else ViviRealtimeClient
     client = adapter(spec.base_url, spec.channel_id, spec.user_id, spec.thread_id, spec.origin)
     client.attach(ws, pending)
     return client
 
 
-async def _detect(ws: ClientConnection) -> tuple[ProtocolName, list[dict[str, Any]]]:
+async def _detect(ws: ClientConnection) -> tuple[DetectedProtocol, list[dict[str, Any]]]:
     pending: list[dict[str, Any]] = []
     while len(pending) < MAX_DETECT_FRAMES:
         try:

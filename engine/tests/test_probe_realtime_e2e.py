@@ -1,8 +1,11 @@
 import asyncio
 import json
 
+import pytest
+
 from voice_eval.audio import FRAME_BYTES, write_wav
-from voice_eval.probe import amain
+from voice_eval.probe import CallerTurn, ProbeOptions, ProbeRun, amain
+from voice_eval.targets.detect import TargetSpec
 
 
 def _args(url: str, out, *extra: str) -> list[str]:
@@ -123,3 +126,58 @@ async def test_text_turn_with_explicit_live_protocol_is_rejected_before_connecti
     assert code == 2
     assert fake_live_server.paths == []
     assert "--text" in capsys.readouterr().err
+
+
+class RecordingSynthesizer:
+    def __init__(self) -> None:
+        self.texts: list[str] = []
+
+    async def synthesize(self, text: str) -> bytes:
+        self.texts.append(text)
+        return b"\x20\x00" * FRAME_BYTES
+
+
+@pytest.mark.parametrize(
+    ("flag", "value"),
+    [("--text", ""), ("--text", "   "), ("--say", "\t\n"), ("--say", "")],
+)
+async def test_blank_caller_turn_is_rejected_before_connecting(
+    fake_realtime_server, tmp_path, capsys, flag, value
+):
+    synth = RecordingSynthesizer()
+    out = tmp_path / "run"
+    code = await amain(
+        _args(fake_realtime_server.url, out, "--text", "fine", flag, value), synthesizer=synth
+    )
+
+    assert code == 2
+    assert fake_realtime_server.paths == []  # no connection attempted
+    assert synth.texts == []  # nothing synthesized either
+    assert not out.exists()
+    err = capsys.readouterr().err
+    assert flag in err and "empty" in err
+
+
+async def test_probe_stops_cleanly_when_the_target_rejects_a_caller_turn(
+    fake_realtime_server, tmp_path
+):
+    out = tmp_path / "run"
+    spec = TargetSpec(fake_realtime_server.url, "chan", "user")
+    probe = ProbeRun(spec, out, ProbeOptions(settle_ms=300, turn_timeout_s=5, max_seconds=10))
+
+    summary = await probe.run([CallerTurn(text="hello"), CallerTurn(text="   ")])
+
+    assert summary["complete"] is False
+    assert any("caller turn 2" in w and "empty" in w for w in summary["warnings"])
+    for name in ("events.jsonl", "agent.wav", "caller.wav", "transcript.json", "summary.json"):
+        assert (out / name).is_file(), name
+    events = [json.loads(line) for line in (out / "events.jsonl").read_text().splitlines()]
+    sent = [e for e in events if e.get("dir") == "out"]
+    assert [(e["type"], e.get("text")) for e in sent] == [
+        ("caller.text", "hello"),
+        ("websocket.close", None),
+    ]
+    await asyncio.wait_for(fake_realtime_server.closed.wait(), 2)
+    assert fake_realtime_server.received_types.count("conversation.item.create") == 1
+    assert fake_realtime_server.protocol_violations == []
+    assert fake_realtime_server.client_close_codes == [1000]

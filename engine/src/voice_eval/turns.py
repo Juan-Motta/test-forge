@@ -93,13 +93,23 @@ class ResponseTurnTracker(AgentTurnDetector):
 
     A tool call makes the agent produce several responses in a row (function call, then
     speech) with "processing" ticks while the tool runs. The turn is over only when no response
-    is open and nothing new arrived for ``settle_ms`` after the last `response.done`. If the
-    response events go missing, an activity gap of ``fallback_gap_ms`` still ends the turn.
+    is open and nothing new arrived for ``settle_ms`` after the last `response.done`.
+
+    While a response is open the turn never ends on a plain activity gap (a slow tool may run
+    silently); only ``open_response_stall_ms`` without any activity ends it, as ``stalled``, so a
+    dead server cannot hold the turn forever. With no response open (the response events went
+    missing), an activity gap of ``fallback_gap_ms`` still ends the turn.
     """
 
-    def __init__(self, settle_ms: float = 1200, fallback_gap_ms: float = 5000) -> None:
+    def __init__(
+        self,
+        settle_ms: float = 1200,
+        fallback_gap_ms: float = 5000,
+        open_response_stall_ms: float = 20000,
+    ) -> None:
         super().__init__(silence_gap_ms=fallback_gap_ms)
         self.settle_ms = settle_ms
+        self.open_response_stall_ms = open_response_stall_ms
         self._open_responses = 0
         self._done_seen = False
 
@@ -145,7 +155,12 @@ class ResponseTurnTracker(AgentTurnDetector):
         if turn is None:
             return False
         idle_ms = now_ms - turn.last_activity_ms
-        if self._done_seen and self._open_responses == 0 and idle_ms >= self.settle_ms:
+        if self._open_responses > 0:
+            if idle_ms >= self.open_response_stall_ms:
+                self._close(turn, "stalled")
+                return True
+            return False
+        if self._done_seen and idle_ms >= self.settle_ms:
             self._close(turn, "response_done")
             return True
         if idle_ms >= self.silence_gap_ms:

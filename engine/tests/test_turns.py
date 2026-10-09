@@ -66,17 +66,18 @@ def test_response_turn_spans_created_to_done_and_settles():
     assert t.agent_speaking
     t.on_agent_audio(1400, nbytes=4800)
     t.on_agent_audio(1500, nbytes=4800)
-    assert not t.turn_ended(4000)  # response still open: no gap-based end
-    t.on_response_done(4100)
-    assert not t.turn_ended(5200)
-    assert t.turn_ended(5300)
+    # 5500 ms of silence, past the 5000 ms fallback gap: the open response keeps the turn alive.
+    assert not t.turn_ended(7000)
+    t.on_response_done(7100)
+    assert not t.turn_ended(8200)
+    assert t.turn_ended(8300)
     (turn,) = t.completed_turns
     assert turn.latency_ms == 400
     assert turn.audio_bytes == 9600
     assert turn.response_count == 1
     assert turn.tool_activity is False
     assert turn.end_reason == "response_done"
-    assert turn.end_ms == 4100
+    assert turn.end_ms == 7100
 
 
 def test_tool_call_responses_and_processing_ticks_form_one_turn():
@@ -110,14 +111,29 @@ def test_new_response_within_settle_window_keeps_turn_open():
     assert [turn.response_count for turn in t.completed_turns] == [2]
 
 
-def test_response_tracker_falls_back_to_activity_gap_without_response_done():
-    t = ResponseTurnTracker(settle_ms=1200, fallback_gap_ms=3000)
+def test_open_response_outlives_fallback_gap_until_the_stall_limit():
+    t = ResponseTurnTracker(settle_ms=1200, fallback_gap_ms=3000, open_response_stall_ms=20000)
     t.on_response_started(0)
     t.on_agent_audio(500, nbytes=4800)
-    assert not t.turn_ended(3400)
-    assert t.turn_ended(3500)
-    assert t.completed_turns[0].end_reason == "fallback_gap"
-    assert t.completed_turns[0].first_audio_ms == 500
+    for now in (3500, 10_000, 20_499):  # well past the fallback gap, still under the stall limit
+        assert not t.turn_ended(now), now
+    assert t.agent_speaking
+    assert t.turn_ended(20_500)  # a dead server cannot hold the turn open forever
+    (turn,) = t.completed_turns
+    assert turn.end_reason == "stalled"
+    assert turn.first_audio_ms == 500
+    assert turn.end_ms == 500
+
+
+def test_stall_limit_counts_from_the_last_activity_of_the_open_response():
+    t = ResponseTurnTracker(settle_ms=1200, fallback_gap_ms=3000, open_response_stall_ms=10000)
+    t.on_response_started(0)
+    for tick in range(1000, 30_000, 1000):  # tool still running: processing every second
+        assert not t.turn_ended(tick - 1)
+        t.on_busy(tick)
+    assert not t.turn_ended(38_999)
+    assert t.turn_ended(39_000)
+    assert t.completed_turns[0].end_reason == "stalled"
 
 
 def test_audio_without_response_events_still_opens_a_turn():
@@ -125,8 +141,10 @@ def test_audio_without_response_events_still_opens_a_turn():
     t.mark_caller_end(0)
     t.on_agent_audio(250)
     assert t.agent_speaking
+    assert not t.turn_ended(3249)
     assert t.turn_ended(3250)
     assert t.latencies_ms() == [250]
+    assert t.completed_turns[0].end_reason == "fallback_gap"
 
 
 def test_gap_detector_marks_end_reason_and_unknown_response_count():

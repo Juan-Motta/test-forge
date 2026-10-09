@@ -80,11 +80,19 @@ from the audio stream and caption updates.
   APPROVED, acknowledged (lineage review-1057a02986607db2, authority burned). Reviewed boundary = efd41c9.
   `f042862` (T1–T3) remains UNREVIEWED: the tool reviews only ranges ending at HEAD and that commit
   alone likely exceeds the budget.
-- Follow-ups from advisory (non-blocking) findings — not yet authorized as work:
+- [x] T5 — Fix the 4 advisory review findings below (authorized by user 2026-10-09). Route: delegated
+  (writer; source + tests across 3+ files).
+- Follow-ups from advisory (non-blocking) findings:
   - Empty/whitespace `--text` crashes with a traceback after connecting (vivi_realtime.py:191-193).
   - Protocol-detection failure paths untested (detect.py:55-74), incl. forced `--protocol` mismatch.
   - `ResponseTurnTracker` fallback ends a turn while a response is still open (turns.py:151-153).
   - Test name overclaims `request_agent_turn` coverage on Live (test_vivi_realtime.py:132-136).
+
+- T5 done by delegated writer: blank `--text`/`--say` rejected before connecting (exit 2); forced
+  `--protocol` now verified against the first frame and fails fast on mismatch; open responses end
+  only via `open_response_stall_ms` (20 s, `end_reason=stalled`); Live `request_agent_turn` asserted.
+  RED observed for findings 1, 3 and the forced-mismatch part of 2; detection failures already passed;
+  finding 4 assertion proven by temporary mutation. GREEN 58 passed x3 (parent re-run: 58 passed).
 
 ## Next step
 T4 — run against dev, pending explicit authorization and provider credentials.

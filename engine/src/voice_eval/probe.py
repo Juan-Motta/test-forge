@@ -51,6 +51,7 @@ class ProbeStop(Exception):
 class ProbeOptions:
     silence_gap_ms: int = 900
     settle_ms: int = 1200
+    open_response_stall_ms: int = 20000
     max_seconds: float = 180
     turn_timeout_s: float = 30
     ready_timeout_s: float = 15
@@ -129,7 +130,8 @@ class ProbeRun:
     def _make_detector(self, session: TargetSession) -> AgentTurnDetector:
         if session.explicit_turn_end:
             fallback = max(self.options.silence_gap_ms, FALLBACK_GAP_MIN_MS)
-            return ResponseTurnTracker(self.options.settle_ms, fallback)
+            stall = max(self.options.open_response_stall_ms, fallback)
+            return ResponseTurnTracker(self.options.settle_ms, fallback, stall)
         return AgentTurnDetector(self.options.silence_gap_ms)
 
     async def _wait_ready(self) -> None:
@@ -153,9 +155,13 @@ class ProbeRun:
         expected = len(self.detector.completed_turns) + 1
         self.caller_turns += 1
         if turn.text is not None:
-            self.detector.mark_caller_end(self._now_ms())
-            self._log_out({"type": "caller.text", "text": turn.text})
-            await session.send_caller_text(turn.text)
+            sent_ms = self._now_ms()
+            self.detector.mark_caller_end(sent_ms)  # before sending: the reply may come fast
+            try:
+                await session.send_caller_text(turn.text)
+            except ValueError as exc:  # rejected by the adapter: nothing reached the server
+                raise ProbeStop(f"caller turn {n} rejected: {exc}") from None
+            self._log_out({"type": "caller.text", "text": turn.text}, sent_ms)
             budget = 0.0
         else:
             pcm = turn.pcm or b""
@@ -163,8 +169,9 @@ class ProbeRun:
             budget = (duration_ms(pcm) + self.options.trailing_silence_ms) / 1000
         await self._wait_agent_turn(expected, f"reply {n}", budget + self.options.turn_timeout_s)
 
-    def _log_out(self, record: dict[str, Any]) -> None:
-        self.events.append({"t_ms": round(self._now_ms(), 1), "dir": "out", **record})
+    def _log_out(self, record: dict[str, Any], t_ms: float | None = None) -> None:
+        t = self._now_ms() if t_ms is None else t_ms
+        self.events.append({"t_ms": round(t, 1), "dir": "out", **record})
 
     async def _wait_agent_turn(self, expected: int, label: str, timeout_s: float) -> None:
         deadline = min(self._now_ms() + timeout_s * 1000, self.options.max_seconds * 1000)
@@ -338,7 +345,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--protocol",
         choices=PROTOCOLS,
         default="auto",
-        help="target protocol; auto detects it from the first server frame (default)",
+        help="target protocol; auto detects it from the first server frame (default); "
+        "live/realtime fail fast if the server speaks the other protocol",
     )
     p.add_argument(
         "--say",
@@ -380,10 +388,27 @@ def build_parser() -> argparse.ArgumentParser:
         help="legacy: quiet time after response.done before the agent turn counts as over",
     )
     p.add_argument("--turn-timeout-s", type=float, default=30)
+    p.add_argument(
+        "--ready-timeout-s",
+        type=float,
+        default=15,
+        help="max wait for the protocol-identifying frame and for the session ready event",
+    )
     p.add_argument("--max-seconds", type=float, default=180)
     p.add_argument("--out", type=Path, help="defaults to runs/<timestamp>-<threadId8>")
     p.add_argument("-v", "--verbose", action="store_true")
     return p
+
+
+def validate_utterances(specs: list[tuple[str, str]], protocol: str) -> str | None:
+    """Reject caller turns that can never be sent, before any TTS call or connection."""
+    flags = {"say": "--say", "text": "--text"}
+    for kind, value in specs:
+        if kind in flags and not value.strip():
+            return f"{flags[kind]} caller turns must not be empty"
+    if protocol == "live" and any(kind == "text" for kind, _ in specs):
+        return "--text caller turns need the legacy realtime protocol"
+    return None
 
 
 async def load_caller_turns(
@@ -409,8 +434,8 @@ async def load_caller_turns(
 async def amain(argv: list[str] | None = None, synthesizer: SpeechSynthesizer | None = None) -> int:
     args = build_parser().parse_args(argv)
     logging.basicConfig(level=logging.INFO if args.verbose else logging.WARNING)
-    if args.protocol == "live" and any(kind == "text" for kind, _ in args.utterances):
-        print("error: --text caller turns need the legacy realtime protocol", file=sys.stderr)
+    if error := validate_utterances(args.utterances, args.protocol):
+        print(f"error: {error}", file=sys.stderr)
         return 2
     try:
         # Prepare all caller audio before connecting: the agent would otherwise wait on TTS.
@@ -437,6 +462,7 @@ async def amain(argv: list[str] | None = None, synthesizer: SpeechSynthesizer | 
             settle_ms=args.settle_ms,
             max_seconds=args.max_seconds,
             turn_timeout_s=args.turn_timeout_s,
+            ready_timeout_s=args.ready_timeout_s,
             agent_first=args.agent_first,
         ),
     )

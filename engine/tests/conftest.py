@@ -4,7 +4,7 @@ import asyncio
 import base64
 import json
 from collections.abc import Coroutine
-from contextlib import suppress
+from contextlib import AsyncExitStack, suppress
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -313,3 +313,39 @@ async def fake_realtime_server():
         port = server.sockets[0].getsockname()[1]
         fake.url = f"ws://127.0.0.1:{port}"
         yield fake
+
+
+@dataclass
+class ScriptedServer:
+    """Sends fixed frames, then closes (`close_code`) or idles, recording what the client sends."""
+
+    frames: list[str] = field(default_factory=list)
+    close_code: int | None = None
+    url: str = ""
+    paths: list[str] = field(default_factory=list)
+    received: list[str | bytes] = field(default_factory=list)
+
+    async def handler(self, ws: ServerConnection) -> None:
+        self.paths.append(ws.request.path)
+        with suppress(ConnectionClosed):
+            for frame in self.frames:
+                await ws.send(frame)
+            if self.close_code is not None:
+                await ws.close(self.close_code, "scripted close")
+                return
+            async for raw in ws:
+                self.received.append(raw)
+
+
+@pytest.fixture
+async def scripted_server():
+    """Factory: `await scripted_server(frames, close_code=None)` starts one `ScriptedServer`."""
+    async with AsyncExitStack() as stack:
+
+        async def start(frames: list[str], close_code: int | None = None) -> ScriptedServer:
+            fake = ScriptedServer(list(frames), close_code)
+            server = await stack.enter_async_context(serve(fake.handler, "127.0.0.1", 0))
+            fake.url = f"ws://127.0.0.1:{server.sockets[0].getsockname()[1]}"
+            return fake
+
+        yield start

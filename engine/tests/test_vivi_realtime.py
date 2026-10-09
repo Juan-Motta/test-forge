@@ -129,11 +129,25 @@ async def test_client_sends_only_allow_listed_events():
     assert all(m["type"] in CLIENT_EVENT_TYPES for m in ws.sent)
 
 
+async def test_blank_caller_text_is_rejected_before_anything_is_sent_or_recorded():
+    client, ws = _client()
+    for text in ("", "   ", "\n\t "):
+        with pytest.raises(ValueError, match="empty"):
+            await client.send_caller_text(text)
+    assert ws.sent == []
+    assert client.transcript_messages() == []
+
+
 async def test_live_rejects_text_turns_and_agent_turn_requests():
     client = ViviLiveClient("wss://h", "c", "u")
+    ws = FakeSocket()
+    client.attach(ws)  # type: ignore[arg-type]
     assert not client.supports_text
     with pytest.raises(NotSupportedError):
         await client.send_caller_text("hola")
+    with pytest.raises(NotSupportedError):
+        await client.request_agent_turn()
+    assert ws.sent == []
 
 
 async def test_auto_detects_live(fake_live_server):
@@ -161,7 +175,7 @@ async def test_auto_detects_realtime(fake_realtime_server):
         await session.disconnect()
 
 
-async def test_explicit_protocol_skips_detection(fake_realtime_server):
+async def test_explicit_protocol_matching_the_server_is_accepted(fake_realtime_server):
     spec = TargetSpec(fake_realtime_server.url, "chan", "user", protocol="realtime")
     session = await open_target(spec, detect_timeout_s=5)
     try:
