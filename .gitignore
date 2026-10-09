@@ -1,5 +1,5 @@
-engine/.venv/
-engine/runs/
+backend/.venv/
+backend/runs/
 __pycache__/
 .pytest_cache/
 .ruff_cache/

@@ -11,7 +11,7 @@ cp .env.example .env.local   # adjust if the backend is not on 127.0.0.1:8000
 pnpm dev                     # http://localhost:3000
 ```
 
-The backend must be running (see `engine/README.md`, "Backend API") and configured for the web
+The backend must be running (see `backend/README.md`, "Backend API") and configured for the web
 origin:
 
 - `WEB_ORIGINS` must include the origin you open in the browser, e.g. `http://localhost:3000`.

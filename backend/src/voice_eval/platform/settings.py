@@ -1,4 +1,4 @@
-"""Backend settings from the environment (and `engine/.env` when present).
+"""Backend settings from the environment (and `backend/.env` when present).
 
 No secret is ever defaulted. `VOICE_EVAL_MASTER_KEY` is optional here so the CLI can migrate
 and create users without it; the HTTP app refuses to start without a valid one. Anything that

@@ -142,7 +142,7 @@ uv run voice-eval create-user --email you@example.com --display-name "You"
 uv run uvicorn voice_eval.platform.app:create_app --factory --reload
 ```
 
-Settings come from the environment or `engine/.env`; `.env.example` documents each one.
+Settings come from the environment or `backend/.env`; `.env.example` documents each one.
 `DATABASE_URL` must use `postgresql+asyncpg://`. `ENVIRONMENT` defaults to `production`
 (fail closed): `/docs` and `/openapi.json` are served only when it is exactly `development`, so
 set `ENVIRONMENT=development` in your local `.env` if you want them. `SESSION_COOKIE_SECURE`
