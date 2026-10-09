@@ -1,0 +1,93 @@
+@import "tailwindcss";
+
+/* Design tokens from the Duet design canvas. Dark console only: blue is the agent under test,
+   amber is the evaluator (and the primary action). */
+:root {
+  color-scheme: dark;
+
+  --ve-ground: #0d0e10;
+  --ve-sidebar: #111316;
+  --ve-panel: #16181c;
+  --ve-raised: #1b1e23;
+  --ve-active: #1f2227;
+  --ve-chip: #2a2e35;
+  --ve-line: #23262b;
+  --ve-line-soft: #202328;
+  --ve-line-strong: #30353c;
+  --ve-field: #111316;
+  --ve-field-line: #2a2e35;
+
+  --ve-fg: #eceae4;
+  --ve-muted: #a3a6ac;
+  --ve-dim: #8c9097;
+
+  --ve-agent: #6cb6f5;
+  --ve-evaluator: #f0b04a;
+  --ve-evaluator-hover: #f6c978;
+  --ve-evaluator-fg: #f3c06a;
+  --ve-on-evaluator: #1a1206;
+  --ve-success: #5fcb8a;
+  --ve-success-fg: #7fd9a2;
+  --ve-danger: #f07a6a;
+  --ve-danger-fg: #f59a8c;
+  --ve-on-danger: #1e0d0a;
+}
+
+@theme inline {
+  --color-ground: var(--ve-ground);
+  --color-sidebar: var(--ve-sidebar);
+  --color-panel: var(--ve-panel);
+  --color-raised: var(--ve-raised);
+  --color-active: var(--ve-active);
+  --color-chip: var(--ve-chip);
+  --color-line: var(--ve-line);
+  --color-line-soft: var(--ve-line-soft);
+  --color-line-strong: var(--ve-line-strong);
+  --color-field: var(--ve-field);
+  --color-field-line: var(--ve-field-line);
+  --color-fg: var(--ve-fg);
+  --color-muted: var(--ve-muted);
+  --color-dim: var(--ve-dim);
+  --color-agent: var(--ve-agent);
+  --color-evaluator: var(--ve-evaluator);
+  --color-evaluator-hover: var(--ve-evaluator-hover);
+  --color-evaluator-fg: var(--ve-evaluator-fg);
+  --color-on-evaluator: var(--ve-on-evaluator);
+  --color-success: var(--ve-success);
+  --color-success-fg: var(--ve-success-fg);
+  --color-danger: var(--ve-danger);
+  --color-danger-fg: var(--ve-danger-fg);
+  --color-on-danger: var(--ve-on-danger);
+
+  --font-sans: var(--font-schibsted), "Helvetica Neue", system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, monospace;
+}
+
+/* Base styles live in the base layer so Tailwind utilities can override them. */
+@layer base {
+  html,
+  body {
+    background: var(--ve-ground);
+    color: var(--ve-fg);
+  }
+
+  body {
+    font-family: var(--font-sans);
+  }
+
+  a {
+    color: var(--ve-evaluator);
+  }
+
+  a:hover {
+    color: var(--ve-evaluator-hover);
+  }
+
+  ::selection {
+    background: rgb(240 176 74 / 0.3);
+  }
+
+  dialog::backdrop {
+    background: rgb(5 6 8 / 0.7);
+  }
+}
