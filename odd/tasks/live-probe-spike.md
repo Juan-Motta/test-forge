@@ -75,5 +75,16 @@ from the audio stream and caption updates.
   (first audio + audio duration) before speaking, or it effectively interrupts the agent.
 - Still pending in T4: an audio (TTS) run — blocked on provider credentials in `engine/.env`.
 
+- Native review (2026-10-09): full branch (3466 lines) refused with `lens_context_budget_exceeded`.
+  Re-scoped to `f042862..efd41c9` (15 files, 1757 lines, medium): consent granted, reliability lens
+  APPROVED, acknowledged (lineage review-1057a02986607db2, authority burned). Reviewed boundary = efd41c9.
+  `f042862` (T1–T3) remains UNREVIEWED: the tool reviews only ranges ending at HEAD and that commit
+  alone likely exceeds the budget.
+- Follow-ups from advisory (non-blocking) findings — not yet authorized as work:
+  - Empty/whitespace `--text` crashes with a traceback after connecting (vivi_realtime.py:191-193).
+  - Protocol-detection failure paths untested (detect.py:55-74), incl. forced `--protocol` mismatch.
+  - `ResponseTurnTracker` fallback ends a turn while a response is still open (turns.py:151-153).
+  - Test name overclaims `request_agent_turn` coverage on Live (test_vivi_realtime.py:132-136).
+
 ## Next step
 T4 — run against dev, pending explicit authorization and provider credentials.
