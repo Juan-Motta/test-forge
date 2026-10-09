@@ -1,3 +1,4 @@
+import pytest
 from httpx import ASGITransport, AsyncClient
 
 from voice_eval.platform.app import create_app
@@ -34,3 +35,18 @@ async def test_cors_allows_only_configured_origins(client):
         headers={"Origin": "https://evil.example", "Access-Control-Request-Method": "POST"},
     )
     assert "access-control-allow-origin" not in denied.headers
+
+
+@pytest.mark.parametrize(
+    ("environment", "expected"),
+    [(None, 404), ("production", 404), ("test", 404), ("Development", 404), ("development", 200)],
+)
+async def test_api_docs_only_when_explicitly_development(environment, expected):
+    overrides = {"environment": environment} if environment else {}
+    settings = Settings(_env_file=None, database_url="postgresql+asyncpg://u:p@db/x", **overrides)
+    app = create_app(settings)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="https://t") as client:
+        docs = await client.get("/docs")
+        schema = await client.get("/openapi.json")
+    await app.state.engine.dispose()
+    assert docs.status_code == schema.status_code == expected

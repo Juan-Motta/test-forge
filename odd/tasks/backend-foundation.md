@@ -39,6 +39,9 @@ piece of UI state persisted through the backend.
   `/api/health`, testcontainers fixtures. Route: delegated (writer, 2+ non-trivial files).
 - [x] T2 — Users + auth: user + session models/migration, argon2, login/logout/me, auth dependency
   protecting `/api/**`, `create-user` CLI. Route: delegated (same writer as T1).
+- [x] T2b — Auth hardening from review (authorized 2026-10-09): login throttling, fail-closed
+  ENVIRONMENT, single email canonicalization, argon2 off the event loop and outside DB transactions,
+  rehash-on-login test. Route: delegated (writer, 3+ files).
 - [ ] T3 — Connections: model/migration, crypto, CRUD API with write-only secrets, per-kind config
   validation, `POST /test` (stored and draft), runtime resolver feeding the TTS factory. Route: delegated.
 
@@ -86,6 +89,17 @@ user 2026-10-09: `feature-branch-chain` (each PR targets the previous branch; me
     shared test DB; unused `current_user`; `_fail` should be NoReturn; duplicated length literals.
 - Open risks: no GC of expired sessions; client IP behind a proxy needs `--proxy-headers`; cookie-auth
   unsafe requests without `Origin` rely on SameSite=Lax.
+
+- T2b done by delegated writer: DB-backed login throttling (`login_attempts`, migration 0002; 5/email,
+  20/IP per 15 min, 429 + Retry-After before argon2, identical for unknown emails; success resets only
+  the per-email counter; 429s not recorded); ENVIRONMENT defaults to production; `canonical_email` used
+  by create/login/throttle; argon2 in worker threads with no DB transaction open (pool checked-out = 0
+  proven); dummy hash warmed at startup; rehash-on-login tested. RED: 15 behavior failures; GREEN 113
+  passed x2 (parent re-run 113 passed).
+- Open risks: check-then-record not atomic (concurrent overshoot ≤ N−1); per-email lockout DoS inherent;
+  client IP behind proxy needs `--proxy-headers`; Python vs Postgres `lower()` on exotic Unicode.
+- Note: `engine/.env.example` (unreadable to the parent) may still lack `ENVIRONMENT=development` and the
+  new LOGIN_* settings; local dev must set `ENVIRONMENT=development` to get /docs.
 
 ## Next step
 T3 — connections module via one bounded writer.

@@ -141,20 +141,34 @@ uv run uvicorn voice_eval.platform.app:create_app --factory --reload
 ```
 
 Settings come from the environment or `engine/.env`; `.env.example` documents each one.
-`DATABASE_URL` must use `postgresql+asyncpg://`. `ENVIRONMENT=development` serves `/docs`.
+`DATABASE_URL` must use `postgresql+asyncpg://`. `ENVIRONMENT` defaults to `production`
+(fail closed): `/docs` and `/openapi.json` are served only when it is exactly `development`, so
+set `ENVIRONMENT=development` in your local `.env` if you want them. `SESSION_COOKIE_SECURE`
+stays `true` unless explicitly set to `false` (needed for plain-HTTP local development).
 
 ### Authentication
 
 - No public sign-up. `voice-eval create-user` prompts for the password twice
   (`--password-stdin` reads one line from stdin for automation). Minimum 12 characters.
-  Emails are stored lowercased.
+  Emails are canonicalized once, the same way for sign-up, login and throttling:
+  email-validator's normalized form (NFC local part, IDN domain in Unicode) lowercased.
 - Passwords are hashed with argon2id; outdated parameters are re-hashed on the next login.
 - `POST /api/auth/login` `{email, password}` opens a server-side session and sets the
   `ve_session` cookie (HttpOnly, SameSite=Lax, Secure unless `SESSION_COOKIE_SECURE=false`,
   `Max-Age` = `SESSION_TTL_HOURS`). The body is `{user, expiresAt}`; the raw token is added as
   `token` only when the request carries `X-Client: cli`. Every failure (unknown email, wrong
   password, inactive user) is the same `401 Invalid email or password`, and a password hash is
-  verified on every path so timing does not reveal which emails exist.
+  verified on every path so timing does not reveal which emails exist (an address that is not
+  even valid behaves like an unknown one). Verification runs in a worker thread with no
+  database transaction open.
+- Login throttling (stored in PostgreSQL, so it holds across worker processes): after
+  `LOGIN_MAX_FAILURES_PER_EMAIL` (5) failures for an email, or `LOGIN_MAX_FAILURES_PER_IP` (20)
+  for a client IP, within `LOGIN_WINDOW_MINUTES` (15), login answers
+  `429 Too many login attempts, try again later` with `Retry-After` (seconds until the oldest
+  counted failure leaves the window), before any password is checked and identically for
+  known and unknown emails. A successful login resets the email counter (not the IP one).
+  Attempts are kept 24 h. Behind a reverse proxy, run uvicorn with `--proxy-headers` (and
+  `--forwarded-allow-ips`) or every client shares the proxy's IP counter.
 - `POST /api/auth/logout` revokes the current session and clears the cookie.
   `GET /api/auth/me` returns the current user.
 - Session tokens are 256-bit random values; only their SHA-256 hash is stored. Sessions expire

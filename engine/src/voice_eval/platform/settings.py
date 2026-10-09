@@ -1,7 +1,7 @@
 """Backend settings from the environment (and `engine/.env` when present).
 
 No secret is ever defaulted. `VOICE_EVAL_MASTER_KEY` is optional until stored connections
-need it.
+need it. Anything that loosens security is opt-in: `ENVIRONMENT` defaults to `production`.
 """
 
 from functools import lru_cache
@@ -21,7 +21,10 @@ class Settings(BaseSettings):
     session_cookie_name: str = "ve_session"
     session_cookie_secure: bool = True
     web_origins: Annotated[list[str], NoDecode] = Field(default_factory=list)
-    environment: str = "development"
+    environment: str = "production"  # only exactly `development` serves the API docs
+    login_max_failures_per_email: int = Field(default=5, gt=0)
+    login_max_failures_per_ip: int = Field(default=20, gt=0)
+    login_window_minutes: int = Field(default=15, gt=0)
 
     @field_validator("database_url")
     @classmethod

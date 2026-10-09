@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
 from voice_eval.modules.users import api as users_api
+from voice_eval.modules.users import service as users_service
 from voice_eval.modules.users.deps import current_principal
 from voice_eval.platform.db import create_engine, create_sessionmaker
 from voice_eval.platform.settings import Settings, get_settings
@@ -42,10 +43,11 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        await users_service.warm_up()
         yield
         await engine.dispose()
 
-    docs = settings.environment == "development"
+    docs = settings.environment == "development"  # fail closed: anything else hides the docs
     app = FastAPI(
         title="voice-eval",
         lifespan=lifespan,

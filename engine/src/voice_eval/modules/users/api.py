@@ -11,8 +11,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from voice_eval.modules.users import service
 from voice_eval.modules.users.deps import Principal, current_principal, reject_foreign_origin
-from voice_eval.modules.users.domain import InvalidCredentials, User
+from voice_eval.modules.users.domain import InvalidCredentials, LoginThrottled, User
 from voice_eval.modules.users.sessions import revoke_session
+from voice_eval.modules.users.throttle import ThrottlePolicy
 from voice_eval.platform.db import get_db_session
 from voice_eval.platform.settings import Settings, app_settings
 
@@ -61,9 +62,16 @@ async def login(
             body.email,
             body.password,
             ttl=ttl,
+            policy=ThrottlePolicy.from_settings(settings),
             user_agent=request.headers.get("user-agent"),
             ip=request.client.host if request.client else None,
         )
+    except LoginThrottled as exc:  # same body whether or not the email exists
+        raise HTTPException(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            "Too many login attempts, try again later",
+            headers={"Retry-After": str(exc.retry_after_s)},
+        ) from None
     except InvalidCredentials:
         raise HTTPException(
             status.HTTP_401_UNAUTHORIZED,

@@ -4,6 +4,8 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime
 
+from email_validator import EmailNotValidError, validate_email
+
 MIN_PASSWORD_LENGTH = 12
 
 
@@ -34,9 +36,25 @@ class UserAlreadyExists(Exception):
     pass
 
 
+class LoginThrottled(Exception):
+    """Too many failed logins recently; says nothing about whether the account exists."""
+
+    def __init__(self, retry_after_s: int) -> None:
+        super().__init__(f"retry after {retry_after_s}s")
+        self.retry_after_s = retry_after_s
+
+
 class InvalidUserInput(ValueError):
     pass
 
 
-def normalize_email(email: str) -> str:
-    return email.strip().lower()
+def canonical_email(raw: str) -> str:
+    """The single spelling an email is stored, looked up and throttled by.
+
+    email-validator's normalized form (NFC local part, Unicode lowercase domain) lowercased.
+    Raises `InvalidUserInput` when the address is not valid.
+    """
+    try:
+        return validate_email(raw.strip(), check_deliverability=False).normalized.lower()
+    except EmailNotValidError as exc:
+        raise InvalidUserInput(f"invalid email address: {exc}") from None

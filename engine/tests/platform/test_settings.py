@@ -16,6 +16,24 @@ def test_defaults_and_comma_separated_origins(monkeypatch):
     assert settings.session_cookie_name == "ve_session"
     assert settings.session_cookie_secure is True
     assert settings.voice_eval_master_key is None
+    assert settings.environment == "production"
+    assert settings.login_max_failures_per_email == 5
+    assert settings.login_max_failures_per_ip == 20
+    assert settings.login_window_minutes == 15
+
+
+def test_login_throttle_is_configurable(monkeypatch):
+    monkeypatch.setenv("LOGIN_MAX_FAILURES_PER_EMAIL", "3")
+    monkeypatch.setenv("LOGIN_MAX_FAILURES_PER_IP", "50")
+    monkeypatch.setenv("LOGIN_WINDOW_MINUTES", "5")
+    settings = Settings(_env_file=None, database_url=DB_URL)
+    assert (
+        settings.login_max_failures_per_email,
+        settings.login_max_failures_per_ip,
+        settings.login_window_minutes,
+    ) == (3, 50, 5)
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, database_url=DB_URL, login_window_minutes=0)
 
 
 def test_master_key_is_secret(monkeypatch):

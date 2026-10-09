@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from voice_eval.platform.db import Base
 from voice_eval.platform.migrations import downgrade, upgrade
 
-TABLES = {"users", "user_sessions"}
+TABLES = {"users", "user_sessions", "login_attempts"}
 
 
 async def _tables(url: str) -> set[str]:

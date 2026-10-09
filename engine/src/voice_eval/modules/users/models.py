@@ -1,9 +1,9 @@
-"""Persistence models for users and their sessions."""
+"""Persistence models for users, their sessions and login attempts."""
 
 import uuid
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, String, func, true
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, String, func, true
 from sqlalchemy.orm import Mapped, mapped_column
 
 from voice_eval.modules.users.domain import User
@@ -48,3 +48,21 @@ class SessionRecord(Base):
     )
     user_agent: Mapped[str | None] = mapped_column(String(512))
     ip: Mapped[str | None] = mapped_column(String(45))
+
+
+class LoginAttemptRecord(Base):
+    """One verified login attempt, kept for a day to throttle password guessing."""
+
+    __tablename__ = "login_attempts"
+    __table_args__ = (
+        Index("ix_login_attempts_email_created_at", "email", "created_at"),
+        Index("ix_login_attempts_ip_created_at", "ip", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    email: Mapped[str | None] = mapped_column(String(320))  # canonical; NULL if input invalid
+    ip: Mapped[str | None] = mapped_column(String(45))
+    succeeded: Mapped[bool]
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), index=True
+    )

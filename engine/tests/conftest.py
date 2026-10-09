@@ -406,7 +406,9 @@ async def app(settings):
 
     application = create_app(settings)
     async with application.state.engine.begin() as conn:
-        await conn.execute(text("TRUNCATE users, user_sessions RESTART IDENTITY CASCADE"))
+        await conn.execute(
+            text("TRUNCATE users, user_sessions, login_attempts RESTART IDENTITY CASCADE")
+        )
     yield application
     await application.state.engine.dispose()
 
