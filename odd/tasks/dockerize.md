@@ -82,5 +82,10 @@ platform (requested 2026-10-09).
   from anyone block all browser logins; needs the frontend proxy to set the peer address. `:?` vars
   make every compose subcommand need the env; POSTGRES_PASSWORD must be URL-safe.
 
+- Docker commit reviewed: high (entrypoint shell), 4 lenses, APPROVED + acknowledged
+  (lineage review-8df3a17c07587451). Advisory: shared-IP login lockout (3 lenses agree); missing root
+  `.env.example` breaks the documented first step; stale `backend/.env.example`; standalone image
+  doesn't copy `public/` (none today); no automated container smoke test; minor README/dockerignore nits.
+
 ## Next step
 User creates root `.env.example`/`.env`; fix the shared-IP throttling follow-up; browser E2E.
