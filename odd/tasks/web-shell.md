@@ -82,6 +82,10 @@ commit gets its native review right after it is committed, to stay within the re
 - Open risks: phone card layout may drop table semantics in Safari; server field errors persist until
   next submit; focus returns to body after delete; relative times don't refresh.
 
+- Screen commit reviewed: medium, 1135 lines, APPROVED + acknowledged (lineage review-6fb0bcf1fd1c2757).
+  Advisory: delete has no double-submit guard; one shared test mutation loses the "Testing" state of
+  an earlier row; delete failure path and some container branches untested.
+
 ## Next step
 Manual end-to-end check in a browser against the real backend (login → create/test connection), then
 the voice run using a stored TTS connection.
