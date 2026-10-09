@@ -103,5 +103,10 @@ platform (requested 2026-10-09).
   (non-ephemeral) smoke mode untested; X-Forwarded-Proto always http behind a TLS terminator; WebSocket
   idle cap 300 s; smoke images not removed.
 
+- Edge commit reviewed: high, 4 lenses, APPROVED + acknowledged (lineage review-b9b3b5e19fbd566d).
+  Advisory: upstream keepalive without `keepalive_timeout` can race Node/uvicorn idle closes (sporadic
+  502s); operators who set FORWARDED_ALLOW_IPS to the frontend IP (old README) keep the bug; smoke
+  `usage()` prints a hard-coded line range; minor duplication/comment nits.
+
 ## Next step
 User creates root `.env.example`/`.env`; fix the shared-IP throttling follow-up; browser E2E.
