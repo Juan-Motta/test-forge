@@ -1,6 +1,6 @@
-# voice-eval engine
+# voice-eval backend
 
-Python engine for evaluating realtime voice agents. The first piece is `voice-probe`, which
+Python backend for evaluating realtime voice agents. The first piece is `voice-probe`, which
 holds one scripted conversation with a Vivi voice agent and records everything needed to
 inspect turn-taking and latency.
 
@@ -131,10 +131,26 @@ business module under `voice_eval/modules/` (`users`, `connections`).
 
 ### Running locally
 
+To run the whole platform in containers, use the root `compose.yaml` (see the root README). To
+run the backend from source, start only the database from the repository root and publish its
+port with a local, gitignored `compose.override.yaml`:
+
+```yaml
+# compose.override.yaml (repository root)
+services:
+  db:
+    ports:
+      - "127.0.0.1:5432:5432"
+```
+
 ```bash
+# repository root: the root .env must exist (cp .env.example .env, then fill it in)
+docker compose up -d db              # PostgreSQL 17 on 127.0.0.1:5432
+
 cd backend
 cp .env.example .env                 # placeholders; adjust as needed
-docker compose up -d postgres        # dev database on 127.0.0.1:5432
+# DATABASE_URL must use the root .env's POSTGRES_USER/POSTGRES_PASSWORD/POSTGRES_DB, e.g.
+#   postgresql+asyncpg://voice_eval:<POSTGRES_PASSWORD>@127.0.0.1:5432/voice_eval
 # put a master key in .env as VOICE_EVAL_MASTER_KEY (see Provider connections)
 uv run python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'
 uv run voice-eval migrate            # alembic upgrade head
@@ -142,13 +158,18 @@ uv run voice-eval create-user --email you@example.com --display-name "You"
 uv run uvicorn voice_eval.platform.app:create_app --factory --reload
 ```
 
+The previous `backend/docker-compose.yml` (service `postgres`, password `voice_eval`) is gone;
+its data stays in its old named volume (`docker volume ls`) until you remove it.
+
 `voice-eval` failures print a single `error: ...` line, never a traceback, URL or password, and
 exit with `1` (invalid input, e.g. a duplicate email), `2` (invalid or missing settings) or `3`
 (the database failed or is unreachable).
 
 Settings come from the environment or `backend/.env` (located from the package, so the working
 directory does not matter; environment variables win over the file); `.env.example` documents
-each one.
+each one. The file is optional: the container image has none and is configured only through
+environment variables. The project must stay installed from its source tree (editable, uv's
+default), because `.env` and `alembic.ini` are found relative to it.
 `DATABASE_URL` must use `postgresql+asyncpg://`. `ENVIRONMENT` defaults to `production`
 (fail closed): `/docs` and `/openapi.json` are served only when it is exactly `development`, so
 set `ENVIRONMENT=development` in your local `.env` if you want them. `SESSION_COOKIE_SECURE`
@@ -176,7 +197,9 @@ stays `true` unless explicitly set to `false` (needed for plain-HTTP local devel
   counted failure leaves the window), before any password is checked and identically for
   known and unknown emails. A successful login resets the email counter (not the IP one).
   Attempts are kept 24 h. Behind a reverse proxy, run uvicorn with `--proxy-headers` (and
-  `--forwarded-allow-ips`) or every client shares the proxy's IP counter.
+  `--forwarded-allow-ips`) or every client shares the proxy's IP counter. In the root compose
+  stack, the backend trusts no forwarded headers by default, so every browser login counts
+  against the frontend container's IP (see "Client IPs" in the root README).
 - `POST /api/auth/logout` revokes the current session and clears the cookie.
   `GET /api/auth/me` returns the current user.
 - Session tokens are 256-bit random values; only their SHA-256 hash is stored. Sessions expire
@@ -253,6 +276,16 @@ The first key encrypts and every key decrypts, so to rotate: prepend a new key
 (`VOICE_EVAL_MASTER_KEY=<new>,<old>`), restart, re-save each connection's secrets, then drop the
 old key. Losing every key makes stored secrets unrecoverable (re-enter them). Each ciphertext
 is bound to its row id and kind, so it cannot be copied onto another connection.
+
+### Container image
+
+`backend/Dockerfile` builds a multi-stage image (uv, Python 3.13 slim): dependencies are synced
+from `uv.lock` without dev packages in a cached layer, then the project is installed editable at
+`/app`. The runtime stage has no uv or build tools and runs as the unprivileged user `app`
+(uid 10001). `docker-entrypoint.sh` runs `voice-eval migrate`, then
+`uvicorn voice_eval.platform.app:create_app --factory` on `0.0.0.0:8000` with `--proxy-headers`,
+trusting `X-Forwarded-*` only from `FORWARDED_ALLOW_IPS` (default `127.0.0.1`). The health check
+calls `/api/health` with the Python standard library.
 
 ### Tests
 

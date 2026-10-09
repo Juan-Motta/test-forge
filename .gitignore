@@ -12,3 +12,6 @@ __pycache__/
 .env
 .env.*
 !.env.example
+
+# Local compose overrides (e.g. publishing the database or backend ports)
+compose.override.yaml

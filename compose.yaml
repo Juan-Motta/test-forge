@@ -1,0 +1,75 @@
+# voice-eval platform: PostgreSQL, backend (FastAPI) and frontend (Next.js).
+#
+#   cp .env.example .env        # then fill in POSTGRES_PASSWORD and VOICE_EVAL_MASTER_KEY
+#   docker compose up --build
+#
+# Only the frontend is published, on 127.0.0.1:${FRONTEND_PORT:-3000}. The browser calls the
+# same-origin `/api/*`, which the frontend proxies to the backend over the compose network.
+# Publish the database or the backend for debugging with a local compose.override.yaml (see the
+# root README).
+
+name: voice-eval
+
+services:
+  db:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-voice_eval}
+      POSTGRES_DB: ${POSTGRES_DB:-voice_eval}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env (see .env.example)}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks: [platform]
+
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    environment:
+      # POSTGRES_PASSWORD is embedded in a URL: keep it URL-safe (see .env.example).
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-voice_eval}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env (see .env.example)}@db:5432/${POSTGRES_DB:-voice_eval}
+      VOICE_EVAL_MASTER_KEY: ${VOICE_EVAL_MASTER_KEY:?set VOICE_EVAL_MASTER_KEY in .env (see .env.example)}
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      WEB_ORIGINS: ${WEB_ORIGINS:-http://localhost:${FRONTEND_PORT:-3000}}
+      # `false` only because the frontend is served over plain HTTP; set it to `true` behind TLS.
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
+      # Peers whose X-Forwarded-For uvicorn trusts. The default trusts nobody (see the README).
+      FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-127.0.0.1}
+    depends_on:
+      db:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    networks: [platform]
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        BACKEND_URL: http://backend:8000
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${FRONTEND_PORT:-3000}:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+    networks: [platform]
+
+networks:
+  platform:
+    name: voice-eval
+
+volumes:
+  db-data:

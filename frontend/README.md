@@ -1,11 +1,11 @@
 # Duet web
 
-Next.js (App Router) console for the voice-eval backend in `../engine`.
+Next.js (App Router) console for the voice-eval backend in `../backend`.
 
 ## Run locally
 
 ```bash
-cd web
+cd frontend
 pnpm install
 cp .env.example .env.local   # adjust if the backend is not on 127.0.0.1:8000
 pnpm dev                     # http://localhost:3000
@@ -59,6 +59,20 @@ origin:
 - Saving and deleting ignore repeated clicks while a request is in flight. After a delete, focus
   moves to the page title. On phones the table restyles into cards and keeps explicit table
   roles.
+
+## Container image
+
+`next.config.ts` sets `output: "standalone"`, so `pnpm build` also writes `.next/standalone`
+(a minimal `server.js` with only the traced dependencies). Run a local production build with
+`node .next/standalone/server.js` after copying `.next/static` into `.next/standalone/.next/`;
+`pnpm start` still works but warns that it is not meant for standalone output.
+
+`frontend/Dockerfile` (Node 24 alpine, pnpm pinned by `packageManager` through corepack) installs
+with `--frozen-lockfile`, builds, and ships only the standalone server and `.next/static`, run by
+the unprivileged `node` user with telemetry disabled. `BACKEND_URL` is a build argument (default
+`http://backend:8000`, the compose service) because the rewrite is baked in at build time.
+`next/font/google` downloads the fonts during `next build`, so the build needs network access.
+The root `compose.yaml` builds and runs it; see the root README.
 
 ## Scripts
 

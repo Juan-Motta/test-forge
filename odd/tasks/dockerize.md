@@ -27,7 +27,7 @@ platform (requested 2026-10-09).
 - [x] T1 — Rename `engine/` → `backend/`, `web/` → `frontend/` and references. Route: inline (mechanical).
 - [x] T2 — Backend advisory fixes. Route: delegated writer.
 - [x] T3 — Frontend advisory fixes. Route: delegated writer.
-- [ ] T4 — Dockerfiles + root compose + docs. Route: delegated writer.
+- [x] T4 — Dockerfiles + root compose + docs. Route: delegated writer.
 
 ## Acceptance criteria
 - Backend: pytest, ruff check/format green. Frontend: lint, typecheck, tests, build green.
@@ -67,5 +67,20 @@ platform (requested 2026-10-09).
 - Open risks: SSRF guard covers connection checks only (runtime TTS clients unguarded); stored
   non-ASCII secrets must be re-entered; frontend 409 split depends on backend message text.
 
+- T4 done by delegated writer: backend image (uv 0.12, python 3.13-slim, editable install at /app,
+  non-root uid 10001, read-only rootfs, entrypoint migrate → uvicorn, stdlib healthcheck, 389 MB);
+  frontend image (node 24 alpine, pnpm via corepack, Next standalone, non-root, 295 MB); root
+  `compose.yaml` (db not published, backend not published, frontend on 127.0.0.1:3000, required
+  POSTGRES_PASSWORD / VOICE_EVAL_MASTER_KEY, healthcheck-chained startup); root README; old
+  `backend/docker-compose.yml` removed. Smoke (writer): all healthy in ~18 s, health ok through the
+  frontend, create-user, login cookie, /me 200, unauthenticated /api/connections 401, down -v clean.
+  Parent re-check: `docker compose config` ok, no leftover containers, frontend 151 tests.
+- Root `.env.example` NOT created: permission rules deny writing `.env*`; draft placeholders in the
+  session scratchpad for the user to copy. `backend/.env.example` is stale (old compose, `engine/.env`).
+- Open risks: every browser login counts against the frontend container IP (Next rewrites forward a
+  client X-Forwarded-For unchanged, so trusting it would allow spoofing) → 20 failed logins in 15 min
+  from anyone block all browser logins; needs the frontend proxy to set the peer address. `:?` vars
+  make every compose subcommand need the env; POSTGRES_PASSWORD must be URL-safe.
+
 ## Next step
-T4 — Dockerfiles + root compose via one bounded writer.
+User creates root `.env.example`/`.env`; fix the shared-IP throttling follow-up; browser E2E.
