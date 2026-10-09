@@ -7,6 +7,7 @@ from alembic import context
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import create_async_engine
 
+import voice_eval.modules.connections.models  # noqa: F401 - registers tables on Base.metadata
 import voice_eval.modules.users.models  # noqa: F401 - registers tables on Base.metadata
 from voice_eval.platform.db import Base
 from voice_eval.platform.settings import get_settings

@@ -357,6 +357,14 @@ POSTGRES_IMAGE = "postgres:17"
 WEB_ORIGIN = "http://localhost:3000"
 
 
+@pytest.fixture(scope="session")
+def master_key() -> str:
+    """A fresh Fernet key for the encrypted connection secrets of this test session."""
+    from cryptography.fernet import Fernet
+
+    return Fernet.generate_key().decode()
+
+
 def _docker_unavailable_reason() -> str | None:
     try:
         import docker
@@ -384,12 +392,13 @@ def postgres_url():
 
 
 @pytest.fixture
-def settings(postgres_url):
+def settings(postgres_url, master_key):
     from voice_eval.platform.settings import Settings
 
     return Settings(
         _env_file=None,
         database_url=postgres_url,
+        voice_eval_master_key=master_key,
         web_origins=[WEB_ORIGIN],
         session_ttl_hours=12,
         session_cookie_secure=True,
@@ -407,7 +416,10 @@ async def app(settings):
     application = create_app(settings)
     async with application.state.engine.begin() as conn:
         await conn.execute(
-            text("TRUNCATE users, user_sessions, login_attempts RESTART IDENTITY CASCADE")
+            text(
+                "TRUNCATE users, user_sessions, login_attempts, provider_connections"
+                " RESTART IDENTITY CASCADE"
+            )
         )
     yield application
     await application.state.engine.dispose()
@@ -451,3 +463,15 @@ def make_user(db):
         return user
 
     return create
+
+
+@pytest.fixture
+async def user_client(client, make_user):
+    """`client` logged in with a session cookie (no Origin header, like a non-browser caller)."""
+    await make_user()
+    response = await client.post(
+        "/api/auth/login",
+        json={"email": "ada@example.com", "password": "correct horse battery staple"},
+    )
+    assert response.status_code == 200, response.text
+    return client

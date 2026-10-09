@@ -106,6 +106,18 @@ async def test_success_resets_the_per_email_counter(client, make_user):
     assert (await login(client)).status_code == 429
 
 
+async def test_success_does_not_reset_the_per_ip_counter(app_with, make_user):
+    await make_user()
+    async with await app_with(login_max_failures_per_ip=3) as client:
+        await fail(client, 1, email="eve@example.com")
+        await fail(client, 1, email="mallory@example.com")
+        assert (await login(client)).status_code == 200  # a valid account from the same IP
+        await fail(client, 1, email="trent@example.com")
+        response = await login(client)  # 3 IP failures in the window, success notwithstanding
+    assert response.status_code == 429
+    assert response.json() == THROTTLED
+
+
 async def test_failures_outside_the_window_do_not_count(client, make_user, db):
     await make_user()
     await add_attempts(db, 5, ago=timedelta(minutes=16))
@@ -279,7 +291,14 @@ def test_app_startup_warms_the_dummy_hash():
     from voice_eval.platform.settings import Settings
 
     service._dummy_hash.cache_clear()
-    app = create_app(Settings(_env_file=None, database_url="postgresql+asyncpg://u:p@db/x"))
+    from cryptography.fernet import Fernet
+
+    settings = Settings(
+        _env_file=None,
+        database_url="postgresql+asyncpg://u:p@db/x",
+        voice_eval_master_key=Fernet.generate_key().decode(),
+    )
+    app = create_app(settings)
     try:
         with TestClient(app):
             assert service._dummy_hash.cache_info().currsize == 1

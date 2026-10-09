@@ -1,8 +1,11 @@
 import pytest
+from cryptography.fernet import Fernet
 from httpx import ASGITransport, AsyncClient
 
 from voice_eval.platform.app import create_app
 from voice_eval.platform.settings import Settings
+
+KEY = Fernet.generate_key().decode()
 
 
 async def test_health_ok_with_database(client):
@@ -12,7 +15,11 @@ async def test_health_ok_with_database(client):
 
 
 async def test_health_reports_unavailable_database():
-    settings = Settings(_env_file=None, database_url="postgresql+asyncpg://u:p@127.0.0.1:9/nowhere")
+    settings = Settings(
+        _env_file=None,
+        database_url="postgresql+asyncpg://u:p@127.0.0.1:9/nowhere",
+        voice_eval_master_key=KEY,
+    )
     app = create_app(settings)
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="https://testserver") as client:
@@ -41,9 +48,15 @@ async def test_cors_allows_only_configured_origins(client):
     ("environment", "expected"),
     [(None, 404), ("production", 404), ("test", 404), ("Development", 404), ("development", 200)],
 )
-async def test_api_docs_only_when_explicitly_development(environment, expected):
+async def test_api_docs_only_when_explicitly_development(environment, expected, monkeypatch):
+    monkeypatch.delenv("ENVIRONMENT", raising=False)  # the unset case must not see the shell's
     overrides = {"environment": environment} if environment else {}
-    settings = Settings(_env_file=None, database_url="postgresql+asyncpg://u:p@db/x", **overrides)
+    settings = Settings(
+        _env_file=None,
+        database_url="postgresql+asyncpg://u:p@db/x",
+        voice_eval_master_key=KEY,
+        **overrides,
+    )
     app = create_app(settings)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="https://t") as client:
         docs = await client.get("/docs")
