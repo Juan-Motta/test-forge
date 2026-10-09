@@ -120,5 +120,10 @@ user 2026-10-09: `feature-branch-chain` (each PR targets the previous branch; me
   key rotation; `create_app` now requires `VOICE_EVAL_MASTER_KEY` (dev `.env` must set it; parent cannot
   read `.env.example` to confirm it has a placeholder); testers honor proxy env (`trust_env`).
 
+- Commit `5caa493` B reviewed: medium, 1380 lines, APPROVED + acknowledged. Reviewed boundary = 5caa493.
+  Advisory follow-ups: stale-test guard (row edited during check) untested; non-httpx exceptions
+  (e.g. UnicodeEncodeError from a non-ASCII secret in a header) escape the tester unsanitized; 422 shape
+  differs between domain and request validation; every IntegrityError reported as name conflict.
+
 ## Next step
-Review commit B; then decide next module (agents/scenarios or Next.js shell).
+Decide next module (agents/scenarios backend, or Next.js shell with login + connections screens).
