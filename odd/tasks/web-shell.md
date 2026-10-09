@@ -31,7 +31,7 @@ Configuring TTS credentials from the UI also unblocks the voice run against the 
 
 ## Tasks
 - [x] T1 — Scaffold + shell + auth + API client (route: delegated writer, 2+ non-trivial files).
-- [ ] T2 — Connections screen (route: delegated writer).
+- [x] T2 — Connections screen (route: delegated writer).
 
 ## Delivery
 Branch `feat/web-shell`, chained on `feat/backend-foundation` (feature-branch-chain). Each work-unit
@@ -68,5 +68,20 @@ commit gets its native review right after it is committed, to stay within the re
   lint, typecheck, 71 tests, build. Reviewed boundary = c031808. Advisory: AppShell test doesn't reset
   the redirectToLogin mock; mobile drawer stays open on non-link navigation (e.g. back button).
 
+- T2 done by delegated writer (~1,800 authored lines, split in two commits). RED: 3 suites failed to
+  import + 3 UI tests failed; GREEN 13 files / 102 tests (parent re-run 102); lint, typecheck, build pass.
+  Edit sends only changed parts (config/secrets PATCH clears lastTest); secrets never pre-filled.
+- Commit 1 (Dialog `actions`/`size` API, PasswordInput `subject`, connections data layer): reviewed,
+  APPROVED + acknowledged (lineage review-d0c359e12e776260). Advisory: whitespace-only secret accepted as
+  typed (form-schema.ts:130-133) — real bug, follow-up; errors/queries mappers untested; mock id
+  collision after delete; Dialog test name mismatch. Commit 2: screen (containers, table, form, dialogs,
+  tests, routes, README) + this document.
+- Incident (2026-10-09): during visual-check cleanup the writer ran `lsof -ti tcp:3123 | xargs kill`,
+  which also killed a Claude desktop network helper connected to that port (macOS restarted it). Rule:
+  kill only the server PID. The Connections screen has NOT been checked in a real browser yet.
+- Open risks: phone card layout may drop table semantics in Safari; server field errors persist until
+  next submit; focus returns to body after delete; relative times don't refresh.
+
 ## Next step
-T2 — Connections screen via one bounded writer.
+Manual end-to-end check in a browser against the real backend (login → create/test connection), then
+the voice run using a stored TTS connection.
