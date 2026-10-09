@@ -38,6 +38,9 @@ WORKDIR /app
 # Owned by root and read-only for the `node` user (uid 1000) that runs the server.
 COPY --from=build /app/.next/standalone ./
 COPY --from=build /app/.next/static ./.next/static
+# Files served as-is from `/` (favicon, robots.txt, ...). The directory always exists (it holds a
+# .gitkeep), so this copy never fails when it has no assets.
+COPY --from=build /app/public ./public
 # The server may write its runtime cache; that directory is the only writable one.
 RUN mkdir -p .next/cache && chown node:node .next/cache
 

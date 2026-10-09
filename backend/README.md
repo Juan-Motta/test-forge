@@ -198,8 +198,9 @@ stays `true` unless explicitly set to `false` (needed for plain-HTTP local devel
   known and unknown emails. A successful login resets the email counter (not the IP one).
   Attempts are kept 24 h. Behind a reverse proxy, run uvicorn with `--proxy-headers` (and
   `--forwarded-allow-ips`) or every client shares the proxy's IP counter. In the root compose
-  stack, the backend trusts no forwarded headers by default, so every browser login counts
-  against the frontend container's IP (see "Client IPs" in the root README).
+  stack, browsers reach the backend through the edge (NGINX), which overwrites
+  `X-Forwarded-For` with the peer it sees; the backend trusts that header only from the edge's
+  fixed address (see "Client IPs" in the root README).
 - `POST /api/auth/logout` revokes the current session and clears the cookie.
   `GET /api/auth/me` returns the current user.
 - Session tokens are 256-bit random values; only their SHA-256 hash is stored. Sessions expire
@@ -284,7 +285,8 @@ from `uv.lock` without dev packages in a cached layer, then the project is insta
 `/app`. The runtime stage has no uv or build tools and runs as the unprivileged user `app`
 (uid 10001). `docker-entrypoint.sh` runs `voice-eval migrate`, then
 `uvicorn voice_eval.platform.app:create_app --factory` on `0.0.0.0:8000` with `--proxy-headers`,
-trusting `X-Forwarded-*` only from `FORWARDED_ALLOW_IPS` (default `127.0.0.1`). The health check
+trusting `X-Forwarded-*` only from `FORWARDED_ALLOW_IPS` (default `127.0.0.1`; the root compose
+stack sets it to the edge's address, `EDGE_IPV4`). The health check
 calls `/api/health` with the Python standard library.
 
 ### Tests

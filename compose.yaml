@@ -1,10 +1,11 @@
-# voice-eval platform: PostgreSQL, backend (FastAPI) and frontend (Next.js).
+# voice-eval platform: PostgreSQL, backend (FastAPI), frontend (Next.js) and edge (NGINX).
 #
 #   cp .env.example .env        # then fill in POSTGRES_PASSWORD and VOICE_EVAL_MASTER_KEY
 #   docker compose up --build
 #
-# Only the frontend is published, on 127.0.0.1:${FRONTEND_PORT:-3000}. The browser calls the
-# same-origin `/api/*`, which the frontend proxies to the backend over the compose network.
+# Only the edge is published, on 127.0.0.1:${FRONTEND_PORT:-3000}. It routes `/api/` straight to
+# the backend and everything else to the frontend, overwriting X-Forwarded-For with the address
+# it sees. The backend trusts forwarded headers only from the edge's fixed address (EDGE_IPV4).
 # Publish the database or the backend for debugging with a local compose.override.yaml (see the
 # root README).
 
@@ -37,11 +38,13 @@ services:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-voice_eval}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env (see .env.example)}@db:5432/${POSTGRES_DB:-voice_eval}
       VOICE_EVAL_MASTER_KEY: ${VOICE_EVAL_MASTER_KEY:?set VOICE_EVAL_MASTER_KEY in .env (see .env.example)}
       ENVIRONMENT: ${ENVIRONMENT:-production}
+      # The browser's origin is the edge's.
       WEB_ORIGINS: ${WEB_ORIGINS:-http://localhost:${FRONTEND_PORT:-3000}}
-      # `false` only because the frontend is served over plain HTTP; set it to `true` behind TLS.
+      # `false` only because the edge serves plain HTTP; set it to `true` behind TLS.
       SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
-      # Peers whose X-Forwarded-For uvicorn trusts. The default trusts nobody (see the README).
-      FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-127.0.0.1}
+      # Peers whose X-Forwarded-For uvicorn trusts: exactly the edge (see "Client IPs" in the
+      # root README). Never widen it to the subnet: the frontend would become trusted too.
+      FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-${EDGE_IPV4:-172.29.53.10}}
     depends_on:
       db:
         condition: service_healthy
@@ -56,10 +59,10 @@ services:
     build:
       context: ./frontend
       args:
+        # Target of the frontend's own `/api/*` rewrite. In this stack the edge routes `/api/`
+        # to the backend first, so browsers never use it.
         BACKEND_URL: http://backend:8000
     restart: unless-stopped
-    ports:
-      - "127.0.0.1:${FRONTEND_PORT:-3000}:3000"
     depends_on:
       backend:
         condition: service_healthy
@@ -67,9 +70,38 @@ services:
       - no-new-privileges:true
     networks: [platform]
 
+  edge:
+    build:
+      context: ./edge
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${FRONTEND_PORT:-3000}:8080"
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      platform:
+        # Fixed so the backend can trust exactly this address (FORWARDED_ALLOW_IPS).
+        ipv4_address: ${EDGE_IPV4:-172.29.53.10}
+
 networks:
   platform:
-    name: voice-eval
+    ipam:
+      config:
+        # If this range collides with another network on the host, change PLATFORM_SUBNET,
+        # PLATFORM_IP_RANGE and EDGE_IPV4 together. Containers other than the edge get addresses
+        # only from PLATFORM_IP_RANGE, so none of them can take the edge's address first.
+        - subnet: ${PLATFORM_SUBNET:-172.29.53.0/24}
+          ip_range: ${PLATFORM_IP_RANGE:-172.29.53.128/25}
 
 volumes:
   db-data:

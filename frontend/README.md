@@ -29,7 +29,9 @@ origin:
 
 - The browser only calls same-origin `/api/*`; `next.config.ts` rewrites it to `BACKEND_URL`.
   The session cookie (HttpOnly, SameSite=Lax) therefore stays first-party, and the backend's
-  Origin check sees the web origin.
+  Origin check sees the web origin. In the root compose stack the edge (NGINX) serves that
+  origin and routes `/api/` to the backend itself, so the rewrite is only used without Docker:
+  it forwards a client's `X-Forwarded-For` unchanged, which the backend must not trust.
 - `src/proxy.ts` redirects page requests without a session cookie to `/login?next=…`. That is UX
   only: a present cookie is never trusted, the backend authorizes every call.
 - `apiFetch` (`src/lib/api`) normalizes failures into `ApiError` (`status`, `message`,
@@ -68,11 +70,13 @@ origin:
 `pnpm start` still works but warns that it is not meant for standalone output.
 
 `frontend/Dockerfile` (Node 24 alpine, pnpm pinned by `packageManager` through corepack) installs
-with `--frozen-lockfile`, builds, and ships only the standalone server and `.next/static`, run by
-the unprivileged `node` user with telemetry disabled. `BACKEND_URL` is a build argument (default
+with `--frozen-lockfile`, builds, and ships only the standalone server, `.next/static` and
+`public/` (kept in git by a `.gitkeep`), run by the unprivileged `node` user with telemetry
+disabled. `BACKEND_URL` is a build argument (default
 `http://backend:8000`, the compose service) because the rewrite is baked in at build time.
 `next/font/google` downloads the fonts during `next build`, so the build needs network access.
-The root `compose.yaml` builds and runs it; see the root README.
+The root `compose.yaml` builds and runs it behind the edge, without publishing it to the host;
+see the root README.
 
 ## Scripts
 

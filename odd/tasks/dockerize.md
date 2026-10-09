@@ -29,6 +29,11 @@ platform (requested 2026-10-09).
 - [x] T3 — Frontend advisory fixes. Route: delegated writer.
 - [x] T4 — Dockerfiles + root compose + docs. Route: delegated writer.
 
+- [x] T5 — Fix shared-IP login lockout (authorized 2026-10-09): edge reverse proxy as the only published
+  service, overwriting X-Forwarded-For with the real peer, routing `/api` straight to the backend; backend
+  trusts only the edge's fixed address. Plus compose smoke script and standalone `public/` copy.
+  Route: delegated writer.
+
 ## Acceptance criteria
 - Backend: pytest, ruff check/format green. Frontend: lint, typecheck, tests, build green.
 - `docker compose up --build` starts db, backend (migrated, healthy) and frontend; `/api/health` is ok
@@ -86,6 +91,17 @@ platform (requested 2026-10-09).
   (lineage review-8df3a17c07587451). Advisory: shared-IP login lockout (3 lenses agree); missing root
   `.env.example` breaks the documented first step; stale `backend/.env.example`; standalone image
   doesn't copy `public/` (none today); no automated container smoke test; minor README/dockerignore nits.
+
+- T5 done by delegated writer: `edge` nginx-unprivileged service is the only published one
+  (127.0.0.1:${FRONTEND_PORT:-3000}); overwrites X-Forwarded-For/X-Real-IP with `$remote_addr`, routes
+  `/api` → backend, rest → frontend (WebSocket upgrade passed); fixed subnet + `ip_range` reserve the
+  edge address; backend `FORWARDED_ALLOW_IPS` = edge IP only. Frontend image copies `public/`.
+  `scripts/compose-smoke.sh --ephemeral` (isolated project/port/subnet, throwaway secrets, `down -v`):
+  parent re-run all PASS — forged XFF ignored (recorded = edge-seen peer), direct backend call with
+  forged XFF recorded as caller, client B locked out while client A still logs in; no leftovers.
+- Open risks: all host browsers share the Docker gateway IP as one throttle key (documented); regular
+  (non-ephemeral) smoke mode untested; X-Forwarded-Proto always http behind a TLS terminator; WebSocket
+  idle cap 300 s; smoke images not removed.
 
 ## Next step
 User creates root `.env.example`/`.env`; fix the shared-IP throttling follow-up; browser E2E.
