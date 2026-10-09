@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useMemo, useRef } from "react";
 import { formErrorView } from "./errors";
 import { ConnectionForm, type TestOutcome, type TestTarget } from "./ConnectionForm";
 import { toChanges, toDraft, toNewConnection, type ConnectionFormValues } from "./form-schema";
@@ -73,7 +73,8 @@ export function ConnectionFormContainer({ connection, onCancel, onSaved }: Conne
       : undefined;
   // Every save or test resets the others first, so at most one of these holds an error.
   const failure = save.error ?? testDraft.error ?? testStored.error;
-  const view = failure ? formErrorView(failure) : undefined;
+  // Memoized per failure: a new `fieldErrors` object tells the form to show a new set of errors.
+  const view = useMemo(() => (failure ? formErrorView(failure) : undefined), [failure]);
 
   return (
     <ConnectionForm

@@ -38,6 +38,7 @@ function hint(secrets: unknown): string {
  */
 export function mockConnectionsApi(initial: Connection[] = [], options: MockOptions = {}) {
   const state = { items: [...initial], requests: [] as RecordedRequest[] };
+  let created = 0; // ids are never reused, even after a delete
   const record = async (request: Request, path: string) => {
     const text = await request.text();
     const body = text ? (JSON.parse(text) as unknown) : undefined;
@@ -51,8 +52,9 @@ export function mockConnectionsApi(initial: Connection[] = [], options: MockOpti
     http.post(apiUrl("/connections"), async ({ request }) => {
       const body = (await record(request, "/connections")) ?? {};
       const now = new Date().toISOString();
-      const created: Connection = {
-        id: `c-${state.items.length + 1}-new`,
+      created += 1;
+      const connection: Connection = {
+        id: `c-new-${created}`,
         name: String(body.name),
         kind: body.kind as ConnectionKind,
         config: (body.config ?? {}) as Record<string, unknown>,
@@ -62,8 +64,8 @@ export function mockConnectionsApi(initial: Connection[] = [], options: MockOpti
         createdAt: now,
         updatedAt: now,
       };
-      state.items.push(created);
-      return HttpResponse.json(created, { status: 201 });
+      state.items.push(connection);
+      return HttpResponse.json(connection, { status: 201 });
     }),
     http.post(apiUrl("/connections/test"), async ({ request }) => {
       await record(request, "/connections/test");
@@ -87,6 +89,9 @@ export function mockConnectionsApi(initial: Connection[] = [], options: MockOpti
     }),
     http.delete(apiUrl("/connections/:id"), async ({ request, params }) => {
       await record(request, `/connections/${String(params.id)}`);
+      if (!state.items.some((item) => item.id === params.id)) {
+        return HttpResponse.json({ detail: "Connection not found" }, { status: 404 });
+      }
       state.items = state.items.filter((item) => item.id !== params.id);
       return new HttpResponse(null, { status: 204 });
     }),

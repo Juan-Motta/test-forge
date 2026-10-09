@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { PageHeader } from "@/features/shell/PageHeader";
 import { Alert, Button, ConnectionsIcon, Dialog, EmptyState, PlusIcon, Spinner } from "@/ui";
 import { ConnectionFormContainer } from "./ConnectionFormContainer";
@@ -21,22 +21,57 @@ export function ConnectionsContainer() {
   const [deleting, setDeleting] = useState<Connection | undefined>(undefined);
   // Persistent polite live region: announces outcomes that otherwise only change the list.
   const [notice, setNotice] = useState("");
+  // One mutation serves every row, but its state only tracks the latest call: keep our own.
+  const [testingIds, setTestingIds] = useState<ReadonlySet<string>>(() => new Set());
+  const [rowTestError, setRowTestError] = useState<string | undefined>(undefined);
+  // A ref, not mutation state: two clicks can land before React re-renders the disabled button.
+  const deletingNow = useRef(false);
+  // The deleted row's button had focus; once the dialog is gone, hand focus to the page title.
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  const focusTitle = useRef(false);
+
+  useEffect(() => {
+    if (!focusTitle.current || deleting) return;
+    focusTitle.current = false;
+    titleRef.current?.focus();
+  });
 
   const openCreate = () => setEditing({ type: "create" });
 
-  function testRow(connection: Connection) {
-    setNotice("");
-    rowTest.mutate(connection, {
-      onSuccess: (result) => setNotice(`${connection.name}: test ${result.ok ? "passed" : "failed"}.`),
+  function setTesting(id: string, testing: boolean) {
+    setTestingIds((ids) => {
+      const next = new Set(ids);
+      if (testing) next.add(id);
+      else next.delete(id);
+      return next;
     });
   }
 
+  async function testRow(connection: Connection) {
+    if (testingIds.has(connection.id)) return;
+    setNotice("");
+    setRowTestError(undefined);
+    setTesting(connection.id, true);
+    try {
+      const result = await rowTest.mutateAsync(connection);
+      setNotice(`${connection.name}: test ${result.ok ? "passed" : "failed"}.`);
+    } catch (error) {
+      setRowTestError(`Could not test ${connection.name}: ${errorMessage(error)}`);
+    } finally {
+      setTesting(connection.id, false);
+    }
+  }
+
   function confirmDelete(connection: Connection) {
+    if (deletingNow.current) return;
+    deletingNow.current = true;
     remove.mutate(connection, {
       onSuccess: () => {
+        focusTitle.current = true;
         setDeleting(undefined);
         setNotice(`Deleted ${connection.name}.`);
       },
+      onSettled: () => (deletingNow.current = false),
     });
   }
 
@@ -76,12 +111,12 @@ export function ConnectionsContainer() {
       <ConnectionsTable
         connections={list}
         onEdit={(connection) => setEditing({ type: "edit", connection })}
-        onTest={testRow}
+        onTest={(connection) => void testRow(connection)}
         onDelete={(connection) => {
           remove.reset();
           setDeleting(connection);
         }}
-        testingId={rowTest.isPending ? rowTest.variables?.id : undefined}
+        testingIds={testingIds}
       />
     );
   }
@@ -89,6 +124,7 @@ export function ConnectionsContainer() {
   return (
     <>
       <PageHeader
+        titleRef={titleRef}
         title="Connections"
         description="Credentials for the providers runs use. Secrets are write-only: only a hint is ever shown."
         actions={
@@ -100,9 +136,7 @@ export function ConnectionsContainer() {
       <p role="status" className="sr-only">
         {notice}
       </p>
-      {rowTest.isError && rowTest.variables ? (
-        <Alert>{`Could not test ${rowTest.variables.name}: ${errorMessage(rowTest.error)}`}</Alert>
-      ) : null}
+      {rowTestError ? <Alert>{rowTestError}</Alert> : null}
       {body}
 
       <Dialog

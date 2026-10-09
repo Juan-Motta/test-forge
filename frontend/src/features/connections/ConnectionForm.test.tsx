@@ -317,3 +317,113 @@ describe("Edit connection", () => {
     ]);
   });
 });
+
+describe("Form edge cases", () => {
+  it("treats a whitespace-only secret as missing on create and sends nothing", async () => {
+    const api = mockConnectionsApi([]);
+    const { user, dialog } = await openCreate();
+
+    await user.type(within(dialog).getByLabelText("Name"), "Blank key");
+    await user.type(within(dialog).getByLabelText("API key"), "   ");
+    await user.click(within(dialog).getByRole("button", { name: "Create connection" }));
+
+    await waitFor(() =>
+      expect(within(dialog).getByLabelText("API key")).toHaveAccessibleDescription(
+        expect.stringContaining("Enter the API key."),
+      ),
+    );
+    expect(api.requests).toEqual([]);
+  });
+
+  it("keeps the stored secret on edit when only whitespace was typed", async () => {
+    const api = mockConnectionsApi([connectionFixture()]);
+    const { user, dialog } = await openEdit();
+
+    await user.clear(within(dialog).getByLabelText("Name"));
+    await user.type(within(dialog).getByLabelText("Name"), "OpenAI main");
+    await user.type(within(dialog).getByLabelText("API key"), "  ");
+    await user.click(within(dialog).getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() => expect(api.requests).toHaveLength(1));
+    expect(api.requests[0]).toEqual({ method: "PATCH", path: "/connections/c-openai", body: { name: "OpenAI main" } });
+  });
+
+  it("rejects a secret with surrounding spaces instead of silently trimming it", async () => {
+    const api = mockConnectionsApi([]);
+    const { user, dialog } = await openCreate();
+
+    await user.type(within(dialog).getByLabelText("Name"), "Padded");
+    await user.type(within(dialog).getByLabelText("API key"), ` ${CANARY} `);
+    await user.click(within(dialog).getByRole("button", { name: "Create connection" }));
+
+    await waitFor(() =>
+      expect(within(dialog).getByLabelText("API key")).toHaveAccessibleDescription(
+        expect.stringContaining("must not start or end with spaces"),
+      ),
+    );
+    expect(api.requests).toEqual([]);
+  });
+
+  it("closes without a request when an edit changes nothing", async () => {
+    const api = mockConnectionsApi([connectionFixture()]);
+    const { user, dialog } = await openEdit();
+
+    await user.click(within(dialog).getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(api.requests).toEqual([]);
+  });
+
+  it("shows field errors and sends nothing when a draft test fails local validation", async () => {
+    const api = mockConnectionsApi([]);
+    const { user, dialog } = await openCreate();
+
+    await user.clear(within(dialog).getByLabelText("Base URL"));
+    await user.type(within(dialog).getByLabelText("Base URL"), "http://api.example.com/v1");
+    await user.click(within(dialog).getByRole("button", { name: "Test connection" }));
+
+    expect(within(dialog).getByLabelText("Base URL")).toHaveAccessibleDescription(
+      expect.stringContaining("URL must use https."),
+    );
+    expect(within(dialog).getByLabelText("API key")).toHaveAccessibleDescription(
+      expect.stringContaining("Enter the API key."),
+    );
+    expect(api.requests).toEqual([]);
+  });
+
+  it("clears a field's server error as soon as the user edits that field", async () => {
+    mockConnectionsApi([]);
+    server.use(
+      http.post(apiUrl("/connections"), () =>
+        HttpResponse.json(
+          {
+            detail: [
+              { type: "value_error", loc: ["body", "config", "baseUrl"], msg: "Server says the URL is wrong" },
+              { type: "value_error", loc: ["body", "secrets", "apiKey"], msg: "Server says the key is wrong" },
+            ],
+          },
+          { status: 422 },
+        ),
+      ),
+    );
+    const { user, dialog } = await openCreate();
+
+    await user.type(within(dialog).getByLabelText("Name"), "Main");
+    await user.type(within(dialog).getByLabelText("API key"), CANARY);
+    await user.click(within(dialog).getByRole("button", { name: "Create connection" }));
+    const baseUrl = within(dialog).getByLabelText("Base URL");
+    await waitFor(() =>
+      expect(baseUrl).toHaveAccessibleDescription(expect.stringContaining("Server says the URL is wrong")),
+    );
+
+    await user.type(baseUrl, "/v2");
+
+    expect(baseUrl).not.toHaveAccessibleDescription(expect.stringContaining("Server says the URL is wrong"));
+    expect(baseUrl).not.toHaveAttribute("aria-invalid");
+    // Fields the user has not touched keep their server error.
+    expect(within(dialog).getByLabelText("API key")).toHaveAccessibleDescription(
+      expect.stringContaining("Server says the key is wrong"),
+    );
+  });
+});
+

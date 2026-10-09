@@ -8,7 +8,9 @@ export type FormErrorView = { message?: string; fieldErrors: FieldErrors };
 
 export function formErrorView(error: unknown): FormErrorView {
   if (!(error instanceof ApiError)) return { message: GENERIC, fieldErrors: {} };
-  if (error.status === 409) return { fieldErrors: { name: DUPLICATE_NAME } };
+  // The backend answers 409 for a taken name and for other write conflicts; only the first
+  // belongs on the name field.
+  if (error.status === 409 && /\bname\b/i.test(error.message)) return { fieldErrors: { name: DUPLICATE_NAME } };
   if (error.status === 422) return { message: "Check the highlighted fields.", fieldErrors: error.fieldErrors };
   return { message: error.message, fieldErrors: {} };
 }

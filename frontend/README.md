@@ -43,20 +43,28 @@ origin:
 `/api/connections`:
 
 - Secrets are write-only. The form never pre-fills or displays one; the list shows only the
-  backend's `secretHint` (`••••3a1c`). On edit, a blank key field keeps the stored secret: the
-  PATCH carries only what changed (`name`, `config`, `secrets`), because a new `config` or
-  `secrets` clears the last test result.
+  backend's `secretHint` (`••••3a1c`). On edit, a blank (or whitespace-only) key field keeps the
+  stored secret: the PATCH carries only what changed (`name`, `config`, `secrets`), because a new
+  `config` or `secrets` clears the last test result. A typed key is sent exactly as typed, never
+  trimmed: surrounding whitespace or anything but printable ASCII is a field error (keys travel
+  in HTTP headers).
 - Field rules (https URLs, identifiers, Azure region, exactly one of region or endpoint) are
   mirrored client-side for fast feedback; the backend still validates, and its 422 locations
-  (`config.endpoint`, `secrets.apiKey`) map onto the same form fields. A 409 lands on the name.
+  (`config.endpoint`, `secrets.apiKey`) map onto the same form fields until the user edits that
+  field. A 409 about the name lands on the name; any other 409 is a form-level message.
 - "Test connection" in the form tests the draft values (`POST /api/connections/test`), or the
   saved connection when editing with a blank key (`POST /api/connections/{id}/test`). The row
-  action "Test" always tests the saved connection and refreshes its status.
+  action "Test" always tests the saved connection and refreshes its status; several rows can be
+  tested at once.
+- Saving and deleting ignore repeated clicks while a request is in flight. After a delete, focus
+  moves to the page title. On phones the table restyles into cards and keeps explicit table
+  roles.
 
 ## Scripts
 
 `pnpm dev`, `pnpm build`, `pnpm start`, `pnpm lint`, `pnpm typecheck`, `pnpm test` (Vitest;
-`pnpm test --run` for a single pass).
+`pnpm test --run` for a single pass). Type-level tests (`*.test-d.tsx`, `expectTypeOf` and
+`@ts-expect-error`) are checked by `pnpm typecheck`, not run by Vitest.
 
 ## Layout
 

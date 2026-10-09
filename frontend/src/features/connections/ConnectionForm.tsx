@@ -1,6 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useEffect } from "react";
 import { get, useForm, useWatch, type Path } from "react-hook-form";
 import { Alert, Badge, Button, Field, Input, PasswordInput, Select } from "@/ui";
 import type { FieldErrors } from "@/lib/api";
@@ -16,6 +17,8 @@ import { KINDS } from "./kinds";
 import { CONNECTION_KINDS, type Connection, type ConnectionKind, type LastTest } from "./types";
 
 export type TestTarget = "draft" | "stored";
+
+const NO_SERVER_ERRORS: FieldErrors = {};
 export type TestOutcome = { result: LastTest; target: TestTarget };
 
 type ConnectionFormProps = {
@@ -29,7 +32,10 @@ type ConnectionFormProps = {
   testOutcome?: TestOutcome;
   /** Form-level error from the last save or test. */
   error?: string;
-  /** Per-field errors from the server (409, 422), keyed by API location (`config.endpoint`). */
+  /**
+   * Per-field errors from the server (409, 422), keyed by API location (`config.endpoint`).
+   * Shown on their field until the user edits it; pass a new object only for a new failure.
+   */
   serverFieldErrors?: FieldErrors;
 };
 
@@ -43,7 +49,7 @@ export function ConnectionForm({
   testing,
   testOutcome,
   error,
-  serverFieldErrors = {},
+  serverFieldErrors = NO_SERVER_ERRORS,
 }: ConnectionFormProps) {
   const editing = connection !== undefined;
   const {
@@ -63,13 +69,25 @@ export function ConnectionForm({
   const definition = KINDS[kind];
   const secretPath = `secrets.${definition.secret.key}` as const;
 
-  const fieldError = (path: string): string | undefined =>
-    (get(errors, path) as { message?: string } | undefined)?.message ?? serverFieldErrors[path];
+  const fieldError = (path: string): string | undefined => (get(errors, path) as { message?: string } | undefined)?.message;
 
   const knownPaths = new Set(["name", "kind", secretPath, ...definition.config.map((f) => `config.${f.key}`)]);
   const otherServerErrors = Object.entries(serverFieldErrors)
     .filter(([path]) => !knownPaths.has(path))
     .map(([, message]) => message);
+
+  // Server field errors live in the form state, so editing a field clears its error (below).
+  useEffect(() => {
+    for (const [path, message] of Object.entries(serverFieldErrors)) {
+      if (path === "kind" || path === "name" || path.startsWith("config.") || path.startsWith("secrets.")) {
+        setError(path as Path<ConnectionFormValues>, { type: "server", message });
+      }
+    }
+  }, [serverFieldErrors, setError]);
+
+  /** `register` with the field's error cleared on every edit (validation may set it again). */
+  const registerField = (path: Path<ConnectionFormValues>) =>
+    register(path, { onChange: () => clearErrors(path) });
 
   function onKindChange(next: ConnectionKind) {
     const fresh = valuesForKind(next);
@@ -113,7 +131,12 @@ export function ConnectionForm({
           {(controlProps) => (
             <Select
               {...controlProps}
-              {...register("kind", { onChange: (event) => onKindChange(event.target.value as ConnectionKind) })}
+              {...register("kind", {
+                onChange: (event) => {
+                  clearErrors("kind");
+                  onKindChange(event.target.value as ConnectionKind);
+                },
+              })}
             >
               {CONNECTION_KINDS.map((option) => (
                 <option key={option} value={option}>
@@ -126,7 +149,7 @@ export function ConnectionForm({
       )}
 
       <Field label="Name" hint="Unique; runs refer to the connection by it." error={fieldError("name")}>
-        {(controlProps) => <Input autoComplete="off" {...controlProps} {...register("name")} />}
+        {(controlProps) => <Input autoComplete="off" {...controlProps} {...registerField("name")} />}
       </Field>
 
       {definition.config.map((field) => {
@@ -142,7 +165,7 @@ export function ConnectionForm({
                 spellCheck={false}
                 placeholder={field.placeholder}
                 {...controlProps}
-                {...register(path)}
+                {...registerField(path)}
               />
             )}
           </Field>
@@ -157,7 +180,7 @@ export function ConnectionForm({
             autoComplete="new-password"
             spellCheck={false}
             {...controlProps}
-            {...register(secretPath)}
+            {...registerField(secretPath)}
           />
         )}
       </Field>

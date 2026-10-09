@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw/http";
 import { describe, expect, it } from "vitest";
@@ -126,5 +126,113 @@ describe("Connections list", () => {
     await waitFor(() => expect(screen.queryByRole("row", { name: /OpenAI prod/ })).not.toBeInTheDocument());
     expect(api.requests).toEqual([{ method: "DELETE", path: "/connections/c-openai", body: undefined }]);
     expect(screen.getByRole("row", { name: /Backup/ })).toBeInTheDocument();
+  });
+
+  it("keeps table semantics explicit so the phone card layout cannot drop them", async () => {
+    mockConnectionsApi([connectionFixture(), connectionFixture({ id: "c-2", name: "Backup" })]);
+    renderWithClient(<ConnectionsContainer />);
+
+    const table = await screen.findByRole("table", { name: "Provider connections" });
+    expect(table).toHaveAttribute("role", "table");
+    for (const group of table.querySelectorAll("thead, tbody")) expect(group).toHaveAttribute("role", "rowgroup");
+    const headers = within(table).getAllByRole("columnheader");
+    expect(headers).toHaveLength(6);
+    for (const header of headers) expect(header).toHaveAttribute("role", "columnheader");
+    const row = within(table).getByRole("row", { name: /Backup/ });
+    expect(row).toHaveAttribute("role", "row");
+    expect(within(row).getByRole("rowheader", { name: "Backup" })).toHaveAttribute("role", "rowheader");
+    const cells = within(row).getAllByRole("cell");
+    expect(cells).toHaveLength(5);
+    for (const cell of cells) expect(cell).toHaveAttribute("role", "cell");
+  });
+
+  it("shows every row being tested while two tests run at once", async () => {
+    mockConnectionsApi([connectionFixture(), connectionFixture({ id: "c-2", name: "Backup" })]);
+    const releases: Array<() => void> = [];
+    server.use(
+      http.post(apiUrl("/connections/:id/test"), async () => {
+        await new Promise<void>((resolve) => releases.push(resolve));
+        return HttpResponse.json(passed);
+      }),
+    );
+    renderWithClient(<ConnectionsContainer />);
+    const user = userEvent.setup();
+
+    await user.click(within(await findRow("OpenAI prod")).getByRole("button", { name: "Test OpenAI prod" }));
+    await user.click(within(await findRow("Backup")).getByRole("button", { name: "Test Backup" }));
+
+    expect(await screen.findByRole("button", { name: "Testing OpenAI prod" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Testing Backup" })).toBeDisabled();
+    await waitFor(() => expect(releases).toHaveLength(2));
+
+    releases[0]();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Test OpenAI prod" })).toBeEnabled());
+    expect(screen.getByRole("button", { name: "Testing Backup" })).toBeDisabled();
+    releases[1]();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Test Backup" })).toBeEnabled());
+    expect(screen.getByRole("status")).toHaveTextContent("Backup: test passed.");
+  });
+
+  it("sends a single delete when Delete connection is clicked repeatedly", async () => {
+    mockConnectionsApi([connectionFixture(), connectionFixture({ id: "c-2", name: "Backup" })]);
+    let release: () => void = () => {};
+    let deletes = 0;
+    server.use(
+      http.delete(apiUrl("/connections/:id"), async () => {
+        deletes += 1;
+        await new Promise<void>((resolve) => (release = resolve));
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+    renderWithClient(<ConnectionsContainer />);
+    const user = userEvent.setup();
+
+    await user.click(within(await findRow("OpenAI prod")).getByRole("button", { name: "Delete OpenAI prod" }));
+    const confirm = within(screen.getByRole("dialog")).getByRole("button", { name: "Delete connection" });
+    // Two synchronous clicks: the second lands before React re-renders the disabled button.
+    fireEvent.click(confirm);
+    fireEvent.click(confirm);
+
+    expect(await screen.findByRole("button", { name: "Deleting…" })).toBeDisabled();
+    release();
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(deletes).toBe(1);
+  });
+
+  it("keeps the dialog open with the reason when a delete fails, and clears it when reopened", async () => {
+    mockConnectionsApi([connectionFixture()]);
+    server.use(
+      http.delete(apiUrl("/connections/:id"), () =>
+        HttpResponse.json({ detail: "Database unavailable" }, { status: 503 }),
+      ),
+    );
+    renderWithClient(<ConnectionsContainer />);
+    const user = userEvent.setup();
+
+    await user.click(within(await findRow("OpenAI prod")).getByRole("button", { name: "Delete OpenAI prod" }));
+    let dialog = screen.getByRole("dialog", { name: "Delete “OpenAI prod”?" });
+    await user.click(within(dialog).getByRole("button", { name: "Delete connection" }));
+
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent("Database unavailable");
+    expect(within(dialog).getByRole("button", { name: "Delete connection" })).toBeEnabled();
+    expect(screen.getByRole("row", { name: /OpenAI prod/ })).toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    await user.click(screen.getByRole("button", { name: "Delete OpenAI prod" }));
+    dialog = screen.getByRole("dialog", { name: "Delete “OpenAI prod”?" });
+    expect(within(dialog).queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("moves focus to the page heading after a delete instead of losing it", async () => {
+    mockConnectionsApi([connectionFixture(), connectionFixture({ id: "c-2", name: "Backup" })]);
+    renderWithClient(<ConnectionsContainer />);
+    const user = userEvent.setup();
+
+    await user.click(within(await findRow("OpenAI prod")).getByRole("button", { name: "Delete OpenAI prod" }));
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Delete connection" }));
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("heading", { level: 1, name: "Connections" })).toHaveFocus());
+    expect(document.activeElement).not.toBe(document.body);
   });
 });

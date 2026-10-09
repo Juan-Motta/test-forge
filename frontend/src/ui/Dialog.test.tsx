@@ -86,11 +86,35 @@ describe("Dialog", () => {
     expect(screen.getByLabelText("Name")).toHaveFocus();
   });
 
-  it("wraps children in an action row when used as a confirmation", async () => {
+  it("renders confirmation actions after the body, all reachable from the keyboard", async () => {
     render(
-      <Dialog open title="Delete connection?" onClose={() => {}} actions={<Button>Delete</Button>} />,
+      <Dialog
+        open
+        title="Delete connection?"
+        onClose={() => {}}
+        actions={
+          <>
+            <Button variant="secondary">Cancel</Button>
+            <Button>Delete</Button>
+          </>
+        }
+      >
+        <p>Runs that use it will fail.</p>
+        <a href="#details">Details</a>
+      </Dialog>,
     );
 
-    expect(screen.getByRole("button", { name: "Delete" }).parentElement).toHaveClass("justify-end");
+    const dialog = screen.getByRole("dialog", { name: "Delete connection?" });
+    const body = within(dialog).getByText("Runs that use it will fail.");
+    const cancel = within(dialog).getByRole("button", { name: "Cancel" });
+    const remove = within(dialog).getByRole("button", { name: "Delete" });
+    expect(body.compareDocumentPosition(cancel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(cancel.compareDocumentPosition(remove) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    expect(within(dialog).getByRole("link", { name: "Details" })).toHaveFocus();
+    await userEvent.tab();
+    expect(cancel).toHaveFocus();
+    await userEvent.tab();
+    expect(remove).toHaveFocus();
   });
 });

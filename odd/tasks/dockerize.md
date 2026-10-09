@@ -25,8 +25,8 @@ platform (requested 2026-10-09).
 
 ## Tasks
 - [x] T1 — Rename `engine/` → `backend/`, `web/` → `frontend/` and references. Route: inline (mechanical).
-- [ ] T2 — Backend advisory fixes. Route: delegated writer.
-- [ ] T3 — Frontend advisory fixes. Route: delegated writer.
+- [x] T2 — Backend advisory fixes. Route: delegated writer.
+- [x] T3 — Frontend advisory fixes. Route: delegated writer.
 - [ ] T4 — Dockerfiles + root compose + docs. Route: delegated writer.
 
 ## Acceptance criteria
@@ -46,5 +46,26 @@ platform (requested 2026-10-09).
   `backend/.env.example` still mentions `engine/.env` in a comment (parent can't edit `.env*`);
   `frontend/.env.example` remains uncommitted pending the user's check.
 
+- Rename commit `5d4e85d`: native assess counts the moves as delete+add (336 paths, 37,966 lines, high
+  because auth tests moved) — far beyond the reviewer budget; not started. Content is identical to the
+  already-reviewed commits at their old paths. Reviewed boundary for the next units = 5d4e85d.
+
+- `902f109`: `frontend/.env.example` committed after the user confirmed placeholders only.
+- T2 + T3 done by one delegated writer (28 items). Backend 203 → 274 tests; frontend 102 → 151 tests;
+  ruff, lint, typecheck, build green. Behaviour-level RED captured in a scratch worktree (32 failed);
+  items that already worked are marked as "passed immediately" in the writer report.
+- Backend A (SSRF guard `platform/egress.py` pinning connections to vetted public IPs, unsafe-secret
+  rule, tester catch-all, 422 shape, integrity mapping, envelope checks): reviewed, APPROVED
+  (lineage review-2ddbadeb0d139394). Advisory: resolution+connect share no time budget; dev-mode test
+  depends on loopback port 9; resolution-timeout branch untested.
+- Backend B (explicit session touch, CLI exit codes, anchored `.env`, expired-session purge, separate
+  migration DB, length constants): reviewed, APPROVED (lineage review-bc205000665342f3). Advisory:
+  purge in login path can contend (no SKIP LOCKED); `.env` anchor breaks for non-editable installs
+  (T4 must install editable or rely on env vars); CLI doesn't catch every migration error.
+- Frontend commit: whitespace secrets, delete guard, per-row testing state, drawer closes on route
+  change, focus after delete, explicit table roles, field errors clear on edit, type-level IconButton test.
+- Open risks: SSRF guard covers connection checks only (runtime TTS clients unguarded); stored
+  non-ASCII secrets must be re-entered; frontend 409 split depends on backend message text.
+
 ## Next step
-T2 + T3 advisory fixes.
+T4 — Dockerfiles + root compose via one bounded writer.

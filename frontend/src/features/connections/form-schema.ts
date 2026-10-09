@@ -31,6 +31,8 @@ const MAX_SECRET = 4096;
 const IDENTIFIER = /^[A-Za-z0-9._:-]{1,100}$/;
 const REGION = /^[a-z0-9]{1,40}$/;
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1"]);
+/** Secrets travel in HTTP headers: visible ASCII only, like the backend's `check_header_safe`. */
+const HEADER_SAFE = /^[\x21-\x7e]*$/;
 
 function hasUnsafeCharacter(value: string): boolean {
   return Array.from(value).some((char) => {
@@ -68,6 +70,19 @@ const FORMAT_CHECKS: Record<FieldFormat, (value: string) => string | undefined> 
   region: (value) => (REGION.test(value) ? undefined : "Use lowercase letters and digits only, like eastus."),
 };
 
+/**
+ * A blank (or whitespace-only) secret means "none typed": required on create, "keep the stored
+ * one" on edit. A typed secret is never trimmed: surrounding whitespace is reported instead of
+ * silently changing a key the user pasted.
+ */
+function secretProblem(secret: string, label: string, options: { secretRequired: boolean }): string | undefined {
+  if (!secret.trim()) return options.secretRequired ? `Enter the ${label}.` : undefined;
+  if (secret !== secret.trim()) return `The ${label} must not start or end with spaces or line breaks.`;
+  if (!HEADER_SAFE.test(secret)) return `The ${label} may contain only printable ASCII characters, without spaces.`;
+  if (secret.length > MAX_SECRET) return `Use at most ${MAX_SECRET} characters.`;
+  return undefined;
+}
+
 /** Problems with the kind-specific part of the form: config fields and, if required, the secret. */
 export function draftIssues(
   values: Pick<ConnectionFormValues, "kind" | "config" | "secrets">,
@@ -91,13 +106,8 @@ export function draftIssues(
     if (set.length === 0) issues.push({ path: `config.${first}`, message: "Set a region or an endpoint." });
     if (set.length === 2) issues.push({ path: `config.${second}`, message: "Set a region or an endpoint, not both." });
   }
-  const secret = values.secrets[kind.secret.key] ?? "";
-  const secretPath = `secrets.${kind.secret.key}`;
-  if (!secret && options.secretRequired) {
-    issues.push({ path: secretPath, message: `Enter the ${kind.secret.label}.` });
-  } else if (secret.length > MAX_SECRET) {
-    issues.push({ path: secretPath, message: `Use at most ${MAX_SECRET} characters.` });
-  }
+  const secretIssue = secretProblem(values.secrets[kind.secret.key] ?? "", kind.secret.label, options);
+  if (secretIssue) issues.push({ path: `secrets.${kind.secret.key}`, message: secretIssue });
   return issues;
 }
 
@@ -126,10 +136,10 @@ export function cleanConfig(kind: ConnectionKind, config: ConnectionConfig): Con
   return clean;
 }
 
-/** The typed secret, or `undefined` when the field was left blank. */
+/** The typed secret as is, or `undefined` when the field was left blank or holds only whitespace. */
 function typedSecrets(kind: ConnectionKind, secrets: ConnectionSecrets): ConnectionSecrets | undefined {
   const key = KINDS[kind].secret.key;
-  return secrets[key] ? { [key]: secrets[key] } : undefined;
+  return secrets[key]?.trim() ? { [key]: secrets[key] } : undefined;
 }
 
 export function hasTypedSecret(values: Pick<ConnectionFormValues, "kind" | "secrets">): boolean {

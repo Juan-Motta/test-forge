@@ -10,9 +10,18 @@ describe("IconButton", () => {
     expect(screen.getByRole("button", { name: "Open menu" })).toHaveAttribute("type", "button");
   });
 
-  it("requires a label at the type level", () => {
-    // @ts-expect-error -- an icon-only button without a label has no accessible name
-    const element = <IconButton icon={<MenuIcon />} />;
-    expect(element).toBeTruthy();
+  it("uses the label as the tooltip too and forwards other button props", () => {
+    render(<IconButton label="Close" icon={<MenuIcon />} disabled />);
+
+    const button = screen.getByRole("button", { name: "Close" });
+    expect(button).toHaveAttribute("title", "Close");
+    expect(button).toBeDisabled();
+  });
+
+  it("keeps its label as the name even if an aria-label slips through", () => {
+    const stray = { "aria-label": "Something else" };
+    render(<IconButton label="Open menu" icon={<MenuIcon />} {...stray} />);
+
+    expect(screen.getByRole("button", { name: "Open menu" })).toHaveAttribute("title", "Open menu");
   });
 });

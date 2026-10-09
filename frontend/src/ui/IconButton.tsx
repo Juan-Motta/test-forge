@@ -10,7 +10,10 @@ export type IconButtonProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, "ari
 export function IconButton({ label, icon, type = "button", className, ...props }: IconButtonProps) {
   return (
     <button
+      {...props}
       type={type}
+      // After the spread: TypeScript does not check hyphenated JSX attributes, so a stray
+      // `aria-label` could otherwise replace the label.
       aria-label={label}
       title={label}
       className={cn(
@@ -19,7 +22,6 @@ export function IconButton({ label, icon, type = "button", className, ...props }
         focusRing,
         className,
       )}
-      {...props}
     >
       {icon}
     </button>

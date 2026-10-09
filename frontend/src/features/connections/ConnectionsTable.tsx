@@ -10,8 +10,8 @@ type ConnectionsTableProps = {
   onEdit: (connection: Connection) => void;
   onTest: (connection: Connection) => void;
   onDelete: (connection: Connection) => void;
-  /** Id of the connection whose stored test is running. */
-  testingId?: string;
+  /** Ids of the connections whose stored test is running. */
+  testingIds: ReadonlySet<string>;
 };
 
 /** Repeats the column header inside each cell where rows become cards (phones). */
@@ -26,48 +26,52 @@ function CellLabel({ children }: { children: ReactNode }) {
 const HEAD = "px-4 py-3 text-left text-xs font-medium text-dim";
 const CELL = "align-top md:px-4 md:py-3.5";
 
-/** A table on wide screens; on phones every row restyles into a card (same DOM, same semantics). */
-export function ConnectionsTable({ connections, onEdit, onTest, onDelete, testingId }: ConnectionsTableProps) {
+/**
+ * A table on wide screens; on phones every row restyles into a card. Changing `display` makes
+ * some browsers (Safari) drop the implicit table roles, so every element states its role.
+ */
+export function ConnectionsTable({ connections, onEdit, onTest, onDelete, testingIds }: ConnectionsTableProps) {
   return (
     <div className="md:overflow-x-auto md:rounded-xl md:border md:border-line md:bg-panel">
-      <table className="w-full text-sm max-md:block">
+      <table role="table" className="w-full text-sm max-md:block">
         <caption className="sr-only">Provider connections</caption>
-        <thead className="border-b border-line max-md:sr-only">
-          <tr>
-            <th scope="col" className={HEAD}>Name</th>
-            <th scope="col" className={HEAD}>Provider</th>
-            <th scope="col" className={HEAD}>Key</th>
-            <th scope="col" className={HEAD}>Last test</th>
-            <th scope="col" className={HEAD}>Updated</th>
-            <th scope="col" className={HEAD}>
+        <thead role="rowgroup" className="border-b border-line max-md:sr-only">
+          <tr role="row">
+            <th scope="col" role="columnheader" className={HEAD}>Name</th>
+            <th scope="col" role="columnheader" className={HEAD}>Provider</th>
+            <th scope="col" role="columnheader" className={HEAD}>Key</th>
+            <th scope="col" role="columnheader" className={HEAD}>Last test</th>
+            <th scope="col" role="columnheader" className={HEAD}>Updated</th>
+            <th scope="col" role="columnheader" className={HEAD}>
               <span className="sr-only">Actions</span>
             </th>
           </tr>
         </thead>
-        <tbody className="max-md:flex max-md:flex-col max-md:gap-3">
+        <tbody role="rowgroup" className="max-md:flex max-md:flex-col max-md:gap-3">
           {connections.map((connection) => {
-            const testing = testingId === connection.id;
+            const testing = testingIds.has(connection.id);
             return (
               <tr
                 key={connection.id}
+                role="row"
                 className="border-line md:border-t md:first:border-t-0 max-md:grid max-md:grid-cols-2 max-md:gap-4 max-md:rounded-xl max-md:border max-md:bg-panel max-md:p-4"
               >
-                <th scope="row" className={`${CELL} text-left font-semibold break-words max-md:col-span-2`}>
+                <th scope="row" role="rowheader" className={`${CELL} text-left font-semibold break-words max-md:col-span-2`}>
                   {connection.name}
                 </th>
-                <td className={CELL}>
+                <td role="cell" className={CELL}>
                   <CellLabel>Provider</CellLabel>
                   <Badge>{kindLabel(connection.kind)}</Badge>
                 </td>
-                <td className={CELL}>
+                <td role="cell" className={CELL}>
                   <CellLabel>Key</CellLabel>
                   <span className="font-mono text-xs text-muted">{connection.hasSecret ? connection.secretHint : "None"}</span>
                 </td>
-                <td className={`${CELL} max-md:col-span-2`}>
+                <td role="cell" className={`${CELL} max-md:col-span-2`}>
                   <CellLabel>Last test</CellLabel>
                   <TestStatus lastTest={connection.lastTest} />
                 </td>
-                <td className={CELL}>
+                <td role="cell" className={CELL}>
                   <CellLabel>Updated</CellLabel>
                   <time
                     dateTime={connection.updatedAt}
@@ -77,7 +81,7 @@ export function ConnectionsTable({ connections, onEdit, onTest, onDelete, testin
                     {relativeTime(connection.updatedAt)}
                   </time>
                 </td>
-                <td className={`${CELL} max-md:col-span-2`}>
+                <td role="cell" className={`${CELL} max-md:col-span-2`}>
                   <div className="flex flex-wrap gap-2 md:justify-end">
                     <Button variant="secondary" aria-label={`Edit ${connection.name}`} onClick={() => onEdit(connection)}>
                       Edit

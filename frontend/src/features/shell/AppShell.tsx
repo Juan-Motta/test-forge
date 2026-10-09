@@ -16,7 +16,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const session = useSession();
   const signOut = useSignOut();
-  const [menuOpen, setMenuOpen] = useState(false);
+  // The drawer stays open only on the route it was opened on, so any navigation closes it
+  // (a link outside the drawer, browser back/forward, a redirect), not just its own links.
+  const [menuOpenOn, setMenuOpenOn] = useState<string | null>(null);
+  const menuOpen = menuOpenOn !== null && menuOpenOn === pathname;
 
   return (
     <div className="flex min-h-screen flex-col md:flex-row">
@@ -27,7 +30,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           aria-expanded={menuOpen}
           aria-controls={SIDEBAR_ID}
           icon={menuOpen ? <CloseIcon /> : <MenuIcon />}
-          onClick={() => setMenuOpen((open) => !open)}
+          onClick={() => setMenuOpenOn(menuOpen ? null : pathname)}
         />
       </header>
       <Sidebar
@@ -39,7 +42,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         signingOut={signOut.isPending || signOut.isSuccess}
         signOutError={signOut.isError ? "Could not sign out. Try again." : undefined}
         accountUnavailable={session.isError}
-        onNavigate={() => setMenuOpen(false)}
+        onNavigate={() => setMenuOpenOn(null)}
         className={cn(
           "border-line-soft md:sticky md:top-0 md:flex md:h-screen md:w-60 md:shrink-0 md:border-r",
           menuOpen ? "flex border-b" : "hidden",

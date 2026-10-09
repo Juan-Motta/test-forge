@@ -1,3 +1,4 @@
+import { QueryClientProvider } from "@tanstack/react-query";
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw/http";
@@ -30,6 +31,7 @@ function signedIn() {
 describe("AppShell", () => {
   beforeEach(() => {
     nav.replaceLocation.mockReset();
+    nav.redirectToLogin.mockReset();
     nav.pathname = "/";
   });
 
@@ -99,5 +101,22 @@ describe("AppShell", () => {
     await userEvent.click(toggle);
 
     expect(screen.getByRole("button", { name: "Close navigation" })).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("closes the mobile navigation when the route changes, however the navigation happened", async () => {
+    signedIn();
+    const shell = () => (
+      <AppShell>
+        <p>content</p>
+      </AppShell>
+    );
+    const { rerender, queryClient } = renderWithClient(shell());
+    await userEvent.click(screen.getByRole("button", { name: "Open navigation" }));
+    expect(screen.getByRole("button", { name: "Close navigation" })).toHaveAttribute("aria-expanded", "true");
+
+    nav.pathname = "/runs"; // e.g. browser back, or a link outside the drawer
+    rerender(<QueryClientProvider client={queryClient}>{shell()}</QueryClientProvider>);
+
+    expect(screen.getByRole("button", { name: "Open navigation" })).toHaveAttribute("aria-expanded", "false");
   });
 });
