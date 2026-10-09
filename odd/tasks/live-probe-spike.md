@@ -67,5 +67,13 @@ from the audio stream and caption updates.
   `--text`/`--agent-first`/`--protocol`/`--settle-ms`. RED observed (import errors + 4 e2e failures), GREEN
   46 passed (parent re-run: 46 passed). Risk: legacy path proven only against the fake server.
 
+- T4 call 2 (2026-10-09, text turns, thread 18979847-7b31-4ab5-8ad2-d1b79477618a): protocol auto-detected
+  `realtime` (gpt-realtime-2.1); 2 caller + 2 agent turns, both `end_reason=response_done`; latency
+  781.6 / 738.7 ms (text send → first agent audio); clean close 1000; agent audio 24 kHz confirmed.
+- Finding: agent audio arrives faster than real time (21.3 s of speech delivered in ~3.9 s), so
+  `response.done` marks DELIVERY, not playback. A realistic caller must wait for playback time
+  (first audio + audio duration) before speaking, or it effectively interrupts the agent.
+- Still pending in T4: an audio (TTS) run — blocked on provider credentials in `engine/.env`.
+
 ## Next step
 T4 — run against dev, pending explicit authorization and provider credentials.
