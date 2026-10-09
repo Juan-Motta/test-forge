@@ -70,7 +70,20 @@ user 2026-10-09: `feature-branch-chain` (each PR targets the previous branch; me
   holds placeholders only (2026-10-09) before it was committed.
 - Commits (split with user approval to fit the native review budget; local history rewritten before any
   push): `fcb82d0` build — dependencies, uv.lock, docker compose, Alembic env (58 tests green at that
-  commit); next commit — platform + users/auth code, migration, tests, env template, this document.
+  commit); `bfe90b2` feat — platform + users/auth code, migration, tests, env template, this document.
+- Native review of `bfe90b2` (base fcb82d0, high risk: auth, 1474 lines): consent granted, 4 lenses,
+  APPROVED and acknowledged (lineage review-6b63f4552cba2d01, burned). Reviewed boundary = bfe90b2.
+  `fcb82d0` (deps/infra) and `597a1e7` (spike fixes, 374 lines) remain unreviewed.
+- Advisory follow-ups (non-blocking, not yet authorized):
+  - WARNING security: no login throttling (online guessing + argon2 CPU cost) — api.py:53-67.
+  - WARNING security: ENVIRONMENT defaults to development → /docs public if unset — settings.py:24.
+  - WARNING: email normalization differs between create_user and login (IDN/Unicode) — service.py:76.
+  - WARNING: dummy hash computed on the event loop on first unknown-email login — service.py:77.
+  - WARNING: login holds a pooled DB connection idle-in-transaction during argon2 — service.py:76-78.
+  - WARNING: rehash-on-login path untested — service.py:81-82.
+  - Suggestions: `.env` path is CWD-relative; CLI DB errors give tracebacks; resolve_session commits
+    as a hidden side effect; session touch interval untested; migration round-trip test downgrades the
+    shared test DB; unused `current_user`; `_fail` should be NoReturn; duplicated length literals.
 - Open risks: no GC of expired sessions; client IP behind a proxy needs `--proxy-headers`; cookie-auth
   unsafe requests without `Origin` rely on SameSite=Lax.
 
