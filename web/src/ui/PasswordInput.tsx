@@ -5,15 +5,18 @@ import { IconButton } from "./IconButton";
 import { EyeIcon, EyeOffIcon } from "./icons";
 import { Input, type InputProps } from "./Input";
 
-export type PasswordInputProps = Omit<InputProps, "type">;
+export type PasswordInputProps = Omit<InputProps, "type"> & {
+  /** What the value is, for the reveal toggle's name ("Show API key"). */
+  subject?: string;
+};
 
-export function PasswordInput({ className, ...props }: PasswordInputProps) {
+export function PasswordInput({ className, subject = "password", ...props }: PasswordInputProps) {
   const [visible, setVisible] = useState(false);
   return (
     <div className="relative">
       <Input type={visible ? "text" : "password"} className={`pr-12 ${className ?? ""}`} {...props} />
       <IconButton
-        label={visible ? "Hide password" : "Show password"}
+        label={`${visible ? "Hide" : "Show"} ${subject}`}
         aria-pressed={visible}
         icon={visible ? <EyeOffIcon size={16} /> : <EyeIcon size={16} />}
         onClick={() => setVisible((v) => !v)}

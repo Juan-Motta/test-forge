@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
@@ -18,12 +18,15 @@ function Harness({ onClose = () => {} }: { onClose?: () => void }) {
           onClose();
           setOpen(false);
         }}
-      >
-        <Button variant="secondary" onClick={() => setOpen(false)}>
-          Cancel
-        </Button>
-        <Button variant="danger">Delete</Button>
-      </Dialog>
+        actions={
+          <>
+            <Button variant="secondary" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="danger">Delete</Button>
+          </>
+        }
+      />
     </>
   );
 }
@@ -66,5 +69,28 @@ describe("Dialog", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(trigger).toHaveFocus();
+  });
+
+  it("renders free-form content (like a form) when no actions are given", async () => {
+    render(
+      <Dialog open title="Add connection" onClose={() => {}}>
+        <form aria-label="Connection">
+          <label htmlFor="n">Name</label>
+          <input id="n" />
+        </form>
+      </Dialog>,
+    );
+
+    const dialog = screen.getByRole("dialog", { name: "Add connection" });
+    expect(within(dialog).getByRole("form", { name: "Connection" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Name")).toHaveFocus();
+  });
+
+  it("wraps children in an action row when used as a confirmation", async () => {
+    render(
+      <Dialog open title="Delete connection?" onClose={() => {}} actions={<Button>Delete</Button>} />,
+    );
+
+    expect(screen.getByRole("button", { name: "Delete" }).parentElement).toHaveClass("justify-end");
   });
 });

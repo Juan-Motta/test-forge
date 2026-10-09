@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, type KeyboardEvent, type ReactNode } from "react";
+import { cn } from "./cn";
 
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -10,8 +11,15 @@ type DialogProps = {
   title: string;
   description?: ReactNode;
   onClose: () => void;
-  children: ReactNode;
+  /** Free-form body, e.g. a form that renders its own buttons. */
+  children?: ReactNode;
+  /** Buttons for a confirmation, laid out as the dialog's action row. */
+  actions?: ReactNode;
+  /** `lg` fits forms; `md` fits confirmations. */
+  size?: "md" | "lg";
 };
+
+const SIZES = { md: "w-[min(28rem,calc(100vw-2rem))]", lg: "w-[min(36rem,calc(100vw-2rem))]" } as const;
 
 function focusables(root: HTMLElement): HTMLElement[] {
   return Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE));
@@ -25,7 +33,7 @@ export function Dialog({ open, ...props }: DialogProps) {
   return open ? <OpenDialog {...props} /> : null;
 }
 
-function OpenDialog({ title, description, onClose, children }: Omit<DialogProps, "open">) {
+function OpenDialog({ title, description, onClose, children, actions, size = "md" }: Omit<DialogProps, "open">) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
   const descriptionId = useId();
@@ -77,7 +85,10 @@ function OpenDialog({ title, description, onClose, children }: Omit<DialogProps,
         onClose();
       }}
       tabIndex={-1}
-      className="m-auto w-[min(28rem,calc(100vw-2rem))] rounded-xl border border-line bg-panel p-6 text-fg shadow-2xl"
+      className={cn(
+        "m-auto max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-xl border border-line bg-panel p-6 text-fg shadow-2xl",
+        SIZES[size],
+      )}
     >
       <div className="flex flex-col gap-5">
         <div className="flex flex-col gap-2">
@@ -90,7 +101,8 @@ function OpenDialog({ title, description, onClose, children }: Omit<DialogProps,
             </p>
           ) : null}
         </div>
-        <div className="flex flex-wrap justify-end gap-3">{children}</div>
+        {children}
+        {actions ? <div className="flex flex-wrap justify-end gap-3">{actions}</div> : null}
       </div>
     </dialog>
   );
