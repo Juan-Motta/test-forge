@@ -349,3 +349,103 @@ async def scripted_server():
             return fake
 
         yield start
+
+
+# --- Backend platform: real PostgreSQL via testcontainers -------------------------------------
+
+POSTGRES_IMAGE = "postgres:17"
+WEB_ORIGIN = "http://localhost:3000"
+
+
+def _docker_unavailable_reason() -> str | None:
+    try:
+        import docker
+
+        docker.from_env().ping()
+    except Exception as exc:  # any failure means "no usable Docker daemon"
+        return f"Docker is not available for PostgreSQL tests: {exc.__class__.__name__}: {exc}"
+    return None
+
+
+@pytest.fixture(scope="session")
+def postgres_url():
+    """A migrated PostgreSQL 17 database shared by the whole session (skipped without Docker)."""
+    reason = _docker_unavailable_reason()
+    if reason:
+        pytest.skip(reason)
+    from testcontainers.community.postgres import PostgresContainer
+
+    from voice_eval.platform.migrations import upgrade
+
+    with PostgresContainer(POSTGRES_IMAGE, driver="asyncpg") as container:
+        url = container.get_connection_url()
+        upgrade(url)
+        yield url
+
+
+@pytest.fixture
+def settings(postgres_url):
+    from voice_eval.platform.settings import Settings
+
+    return Settings(
+        _env_file=None,
+        database_url=postgres_url,
+        web_origins=[WEB_ORIGIN],
+        session_ttl_hours=12,
+        session_cookie_secure=True,
+        environment="test",
+    )
+
+
+@pytest.fixture
+async def app(settings):
+    """A fresh app (own engine) over emptied tables."""
+    from sqlalchemy import text
+
+    from voice_eval.platform.app import create_app
+
+    application = create_app(settings)
+    async with application.state.engine.begin() as conn:
+        await conn.execute(text("TRUNCATE users, user_sessions RESTART IDENTITY CASCADE"))
+    yield application
+    await application.state.engine.dispose()
+
+
+@pytest.fixture
+async def client(app):
+    from httpx import ASGITransport, AsyncClient
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="https://testserver") as c:
+        yield c
+
+
+@pytest.fixture
+def db(app):
+    """Factory for a database session bound to the test app's engine."""
+    return app.state.sessionmaker
+
+
+@pytest.fixture
+def make_user(db):
+    """`await make_user(email=..., password=..., is_active=...)` creates a user directly."""
+    from sqlalchemy import update
+
+    from voice_eval.modules.users import service
+    from voice_eval.modules.users.models import UserRecord
+
+    async def create(
+        email: str = "ada@example.com",
+        password: str = "correct horse battery staple",
+        display_name: str = "Ada Lovelace",
+        is_active: bool = True,
+    ):
+        async with db() as session:
+            user = await service.create_user(session, email, display_name, password)
+            if not is_active:
+                await session.execute(
+                    update(UserRecord).where(UserRecord.id == user.id).values(is_active=False)
+                )
+                await session.commit()
+        return user
+
+    return create

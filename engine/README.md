@@ -4,6 +4,9 @@ Python engine for evaluating realtime voice agents. The first piece is `voice-pr
 holds one scripted conversation with a Vivi voice agent and records everything needed to
 inspect turn-taking and latency.
 
+The same package also holds the platform backend (FastAPI + PostgreSQL), described in
+[Backend API](#backend-api) below.
+
 ## Target protocols
 
 One endpoint, `wss://<host>/channelApi/<channelId>/realtime?voiceCapability=live-v1&userId=&threadId=`,
@@ -46,7 +49,7 @@ runs; they all count as one agent turn.
 ```bash
 cd engine
 uv sync
-uv run pytest -q          # offline: fake Live and legacy servers in-process, fake TTS
+uv run pytest -q          # probe: in-process fakes; backend: Postgres via Docker (see Backend API)
 uv run ruff check . && uv run ruff format --check .
 ```
 
@@ -119,3 +122,61 @@ Speech is requested as `response_format="pcm"` (raw 24 kHz 16-bit mono), the tar
   sent to the first agent audio delta of the turn. Trailing silence inside the TTS output is counted as speech, and network
   transit is included.
 - Agent audio may arrive faster than real time, so turn end reflects delivery, not playback.
+
+## Backend API
+
+FastAPI app over PostgreSQL 17 (SQLAlchemy 2 async + asyncpg, Alembic migrations). Layout:
+`voice_eval/platform/` (settings, database, app factory, migrations) and one package per
+business module under `voice_eval/modules/` (`users` so far).
+
+### Running locally
+
+```bash
+cd engine
+cp .env.example .env                 # placeholders; adjust as needed
+docker compose up -d postgres        # dev database on 127.0.0.1:5432
+uv run voice-eval migrate            # alembic upgrade head
+uv run voice-eval create-user --email you@example.com --display-name "You"
+uv run uvicorn voice_eval.platform.app:create_app --factory --reload
+```
+
+Settings come from the environment or `engine/.env`; `.env.example` documents each one.
+`DATABASE_URL` must use `postgresql+asyncpg://`. `ENVIRONMENT=development` serves `/docs`.
+
+### Authentication
+
+- No public sign-up. `voice-eval create-user` prompts for the password twice
+  (`--password-stdin` reads one line from stdin for automation). Minimum 12 characters.
+  Emails are stored lowercased.
+- Passwords are hashed with argon2id; outdated parameters are re-hashed on the next login.
+- `POST /api/auth/login` `{email, password}` opens a server-side session and sets the
+  `ve_session` cookie (HttpOnly, SameSite=Lax, Secure unless `SESSION_COOKIE_SECURE=false`,
+  `Max-Age` = `SESSION_TTL_HOURS`). The body is `{user, expiresAt}`; the raw token is added as
+  `token` only when the request carries `X-Client: cli`. Every failure (unknown email, wrong
+  password, inactive user) is the same `401 Invalid email or password`, and a password hash is
+  verified on every path so timing does not reveal which emails exist.
+- `POST /api/auth/logout` revokes the current session and clears the cookie.
+  `GET /api/auth/me` returns the current user.
+- Session tokens are 256-bit random values; only their SHA-256 hash is stored. Sessions expire
+  after `SESSION_TTL_HOURS` (fixed, not sliding) and stop working when the user is deactivated.
+- Everything under `/api` requires a session except `/api/health` and `/api/auth/login`.
+  The cookie is checked first, then `Authorization: Bearer <token>`. Failures are `401` with
+  `WWW-Authenticate: Bearer`.
+- CSRF baseline: besides SameSite=Lax, a cookie-authenticated `POST/PUT/PATCH/DELETE` (and any
+  login) whose `Origin` header is present but not in `WEB_ORIGINS` gets `403`. Bearer requests
+  skip this check. CORS allows only `WEB_ORIGINS`, with credentials.
+
+```bash
+curl -s -H 'X-Client: cli' -H 'Content-Type: application/json' \
+  -d '{"email":"you@example.com","password":"..."}' http://localhost:8000/api/auth/login
+curl -s -H "Authorization: Bearer $TOKEN" http://localhost:8000/api/auth/me
+```
+
+`GET /api/health` returns `{"status": "ok"}` after a database ping, or `503
+{"status": "unavailable"}`.
+
+### Tests
+
+The backend tests start a throwaway `postgres:17` container with testcontainers (Docker must be
+running), migrate it once per session and empty the tables before each test. Without a Docker
+daemon they are skipped with the reason shown; the probe tests still run.
