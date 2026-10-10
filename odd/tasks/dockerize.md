@@ -112,5 +112,20 @@ platform (requested 2026-10-09).
   timeout of uvicorn and Node) to avoid reusing upstream sockets they already closed. `nginx -t` ok;
   ephemeral smoke all PASS.
 
+- `d2ca931`: `voice-probe --tts-connection NAME_OR_ID` builds TTS from a stored connection (resolver by
+  name or id; test-first: RED → 281 passed).
+- First VOICE run against dev (2026-10-10, authorized by user "pruébalo tú"; thread
+  5bfc57c9-e3cf-4efe-a3c8-b7b84bc697da; stored `OpenAI` connection, gpt-4o-mini-tts/alloy), run from the
+  backend container: protocol realtime (gpt-realtime-2.1); the agent's STT transcribed both synthesized
+  utterances word-for-word → OpenAI `pcm` output is 24 kHz PCM16 as assumed (open risk closed); server VAD
+  emitted speech_started/stopped for each turn; 2 agent turns, `response_done`; latency 1.62 s / 1.79 s
+  (last caller frame → first agent audio; includes server VAD 500 ms + TTS trailing silence); close 1000.
+- CONFIRMED turn-taking defect: agent turn 0 had 21.3 s of audio delivered by 12.96 s, and the caller
+  spoke again at ~17 s, i.e. while the agent would still be talking (until ~30.5 s) in a real call. The
+  simulated caller must wait for playback (first agent audio + audio duration), not `response.done`.
+- Ops notes: `/tmp` in the backend container is tmpfs (`docker cp` can't read it; stream with
+  `exec tar`); artifacts copied to `backend/runs/` (gitignored).
+
 ## Next step
+Fix playback-aware turn-taking in the probe, then build agents/scenarios/runs in the UI.
 User creates root `.env.example`/`.env`; fix the shared-IP throttling follow-up; browser E2E.
