@@ -126,6 +126,15 @@ platform (requested 2026-10-09).
 - Ops notes: `/tmp` in the backend container is tmpfs (`docker cp` can't read it; stream with
   `exec tar`); artifacts copied to `backend/runs/` (gitignored).
 
+- `b547c8c`: playback-aware turn-taking — before each caller turn the probe waits until the previous
+  agent turn's `first_audio_ms + audio duration + --playback-grace-ms` (default 400), bounded by
+  max-seconds and turn timeout; `--no-playback-wait` opt-out; summary gains playback fields. Test-first
+  (6 RED → GREEN), 287 backend tests pass (parent re-run).
+- Slice `d419b7a..b547c8c` (516 lines) reviewed: medium, APPROVED + acknowledged
+  (lineage review-bd5019825a280b12). Advisory: passphrase keys no longer fail fast on a mistyped Fernet
+  key (accepted tradeoff, user decision 2026-10-10); `--tts-connection` CLI wiring untested; playback
+  e2e tests use tight wall-clock tolerances. (Name lookup is safe: names are unique by constraint.)
+
 ## Next step
-Fix playback-aware turn-taking in the probe, then build agents/scenarios/runs in the UI.
+Build agents/scenarios/runs/live in the UI on top of the validated engine.
 User creates root `.env.example`/`.env`; fix the shared-IP throttling follow-up; browser E2E.
