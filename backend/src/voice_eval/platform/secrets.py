@@ -1,6 +1,7 @@
 """Encryption at rest for stored secrets, keyed by `VOICE_EVAL_MASTER_KEY`.
 
-The variable holds one or more comma-separated Fernet keys. The first key encrypts; every key
+The variable holds one or more comma-separated keys: Fernet keys, or any passphrase (derived into
+a Fernet key with scrypt). The first key encrypts; every key
 decrypts, so a key is rotated by prepending a new one and dropping the old one once every
 stored secret has been re-saved. Each token embeds the id and kind of the row that owns it, and
 opening it with another owner fails, so ciphertext cannot be swapped between rows.
@@ -8,6 +9,8 @@ opening it with another owner fails, so ciphertext cannot be swapped between row
 Error messages never include key material, tokens or plaintext.
 """
 
+import base64
+import hashlib
 import json
 import uuid
 from collections.abc import Mapping
@@ -19,6 +22,7 @@ from fastapi import Request
 from voice_eval.platform.settings import Settings
 
 ENVELOPE_VERSION = 1
+PASSPHRASE_SALT = b"voice-eval/master-key/v1"
 
 
 class MasterKeyError(RuntimeError):
@@ -27,6 +31,19 @@ class MasterKeyError(RuntimeError):
 
 class SecretDecryptionError(RuntimeError):
     """A stored secret cannot be opened (wrong key, tampered, or owned by another row)."""
+
+
+def _fernet_for(key: str) -> Fernet:
+    """A Fernet key is used as-is; any other value is a passphrase stretched into one with scrypt.
+
+    The salt is fixed so the same passphrase always yields the same key across restarts. Weak
+    passphrases are accepted by design; their strength is the operator's responsibility.
+    """
+    try:
+        return Fernet(key)
+    except (ValueError, TypeError):
+        derived = hashlib.scrypt(key.encode(), salt=PASSPHRASE_SALT, n=2**14, r=8, p=1, dklen=32)
+        return Fernet(base64.urlsafe_b64encode(derived))
 
 
 class SecretBox:
@@ -42,16 +59,7 @@ class SecretBox:
                 "`python -c 'from cryptography.fernet import Fernet; "
                 "print(Fernet.generate_key().decode())'`"
             )
-        fernets = []
-        for position, key in enumerate(keys, start=1):
-            try:
-                fernets.append(Fernet(key))
-            except (ValueError, TypeError):
-                raise MasterKeyError(
-                    f"VOICE_EVAL_MASTER_KEY key #{position} is not a valid Fernet key "
-                    "(32 url-safe base64-encoded bytes)"
-                ) from None
-        return cls(MultiFernet(fernets))
+        return cls(MultiFernet([_fernet_for(key) for key in keys]))
 
     @classmethod
     def from_settings(cls, settings: Settings) -> "SecretBox":

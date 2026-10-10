@@ -270,7 +270,7 @@ edit applies to the next run without restarting anything.
 - Runs build their provider with `voice_eval.modules.connections.runtime.build_synthesizer`,
   which loads the current row on every call (no cache).
 
-**Master key.** `VOICE_EVAL_MASTER_KEY` holds one or more comma-separated Fernet keys; the API
+**Master key.** `VOICE_EVAL_MASTER_KEY` holds one or more comma-separated keys (Fernet keys, or any passphrase derived into one with scrypt); the API
 refuses to start without a valid one (the CLI does not need it). Generate one with
 `python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'`.
 The first key encrypts and every key decrypts, so to rotate: prepend a new key

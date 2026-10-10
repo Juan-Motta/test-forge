@@ -58,15 +58,30 @@ def test_missing_master_key_is_rejected(raw):
         SecretBox.from_master_key(raw)
 
 
-def test_invalid_master_key_message_has_no_key_material():
-    good = _key()
-    bad = "this-is-not-a-fernet-key-but-a-secret"
-    with pytest.raises(MasterKeyError) as info:
-        SecretBox.from_master_key(f"{good},{bad}")
-    message = str(info.value)
-    assert "VOICE_EVAL_MASTER_KEY" in message and "#2" in message
-    assert bad not in message and good not in message
-    assert info.value.__cause__ is None and info.value.__suppress_context__
+@pytest.mark.parametrize("passphrase", ["short", "this-is-not-a-fernet-key", "spaces are fine"])
+def test_any_passphrase_is_accepted_and_derivation_is_stable(passphrase):
+    token = SecretBox.from_master_key(passphrase).seal(PAYLOAD, owner=OWNER, kind="openai")
+    reopened = SecretBox.from_master_key(passphrase).open(token, owner=OWNER, kind="openai")
+    assert reopened == PAYLOAD
+    assert passphrase not in token
+    with pytest.raises(SecretDecryptionError):
+        SecretBox.from_master_key(passphrase + "x").open(token, owner=OWNER, kind="openai")
+
+
+def test_valid_fernet_key_is_used_as_is():
+    key = _key()
+    token = Fernet(key).encrypt(
+        b'{"v": 1, "owner": "%s", "kind": "openai", "data": {"api_key": "k"}}' % str(OWNER).encode()
+    )
+    opened = SecretBox.from_master_key(key).open(token.decode(), owner=OWNER, kind="openai")
+    assert opened == {"api_key": "k"}
+
+
+def test_passphrase_and_fernet_keys_can_be_mixed_for_rotation():
+    old = _key()
+    token = SecretBox.from_master_key(old).seal(PAYLOAD, owner=OWNER, kind="openai")
+    rotated = SecretBox.from_master_key(f"my new passphrase,{old}")
+    assert rotated.open(token, owner=OWNER, kind="openai") == PAYLOAD
 
 
 @pytest.mark.parametrize(

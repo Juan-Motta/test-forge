@@ -32,7 +32,7 @@ Fill in the two required values in `.env`:
 
 - `POSTGRES_PASSWORD`: it is embedded in the backend's `DATABASE_URL`, so keep it URL-safe:
   `openssl rand -hex 24`.
-- `VOICE_EVAL_MASTER_KEY`: a Fernet key that encrypts stored provider secrets:
+- `VOICE_EVAL_MASTER_KEY`: any non-empty passphrase or Fernet key that encrypts stored provider secrets (passphrases are stretched with scrypt; a random key is recommended):
   `openssl rand -base64 32 | tr '+/' '-_'` (or, from `backend/`,
   `uv run python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'`).
 
@@ -78,7 +78,7 @@ services:
 | Variable (`.env`) | Default | Purpose |
 | --- | --- | --- |
 | `POSTGRES_PASSWORD` | required | Database password, also used in `DATABASE_URL`. |
-| `VOICE_EVAL_MASTER_KEY` | required | Fernet key(s) for provider secrets; comma-separated for rotation (see `backend/README.md`). |
+| `VOICE_EVAL_MASTER_KEY` | required | Passphrase(s) or Fernet key(s) for provider secrets; comma-separated for rotation (see `backend/README.md`). |
 | `FRONTEND_PORT` | `3000` | Host port of the edge (the web console), bound to 127.0.0.1. |
 | `ENVIRONMENT` | `production` | `development` serves `/docs`, lifts the SSRF guard for connection tests and accepts `http://localhost` URLs. |
 | `POSTGRES_USER`, `POSTGRES_DB` | `voice_eval` | Database user and name. |
