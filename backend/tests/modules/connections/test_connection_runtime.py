@@ -94,3 +94,17 @@ async def test_non_tts_kinds_are_rejected_clearly(app, user_client, payload, mes
 async def test_unknown_connection(app):
     with pytest.raises(ConnectionNotFound):
         await build(app, uuid.uuid4())
+
+
+async def test_resolve_by_name_or_id(app, user_client):
+    from voice_eval.modules.connections.runtime import resolve_connection_id
+
+    connection_id = await create(
+        user_client,
+        {"name": "Probe TTS", "kind": "openai", "config": {}, "secrets": {"apiKey": KEY}},
+    )
+    async with app.state.sessionmaker() as session:
+        assert await resolve_connection_id(session, "Probe TTS") == connection_id
+        assert await resolve_connection_id(session, str(connection_id)) == connection_id
+        with pytest.raises(ConnectionNotFound):
+            await resolve_connection_id(session, "missing")

@@ -358,6 +358,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="caller utterance synthesized with the configured TTS provider (repeatable)",
     )
     p.add_argument(
+        "--tts-connection",
+        metavar="NAME_OR_ID",
+        help="synthesize --say turns with a stored provider connection (needs DATABASE_URL and "
+        "VOICE_EVAL_MASTER_KEY) instead of the TTS environment variables",
+    )
+    p.add_argument(
         "--caller-wav",
         dest="utterances",
         action="append",
@@ -438,6 +444,11 @@ async def amain(argv: list[str] | None = None, synthesizer: SpeechSynthesizer | 
         print(f"error: {error}", file=sys.stderr)
         return 2
     try:
+        if synthesizer is None and args.tts_connection:
+            from voice_eval.modules.connections.runtime import synthesizer_for_ref
+            from voice_eval.platform.settings import Settings
+
+            synthesizer = await synthesizer_for_ref(args.tts_connection, Settings())
         # Prepare all caller audio before connecting: the agent would otherwise wait on TTS.
         turns = await load_caller_turns(args.utterances, synthesizer)
     except Exception as exc:
