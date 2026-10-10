@@ -71,8 +71,11 @@ is reviewed right after it is committed.
 - `fb5d805` Scenarios data layer + library: reviewed medium, APPROVED (lineage review-83d81d8d0909f0f8).
   Advisory: delete guard can stick if the dialog is closed mid-request; load/duplicate/delete error
   paths untested; schema rules untested at unit level.
-- Next commit: scenario editor (sections 1–6, criteria weight total, facts editor, unsaved-changes guard
-  without back/forward blocking, Suspense around navigation required by cacheComponents) + this doc.
+- `a2d3a84` scenario editor (sections 1–6, criteria weight total, facts editor, unsaved-changes guard
+  without back/forward blocking, Suspense around navigation required by cacheComponents): reviewed medium,
+  APPROVED (lineage review-90177e08048675d4). Advisory: a failed connections load is silent (editor
+  renders with an empty TTS list); stale focus flag for server errors on unrendered rows; nav guard and
+  bfcacheId keying untested.
 - Not yet checked in a real browser.
 
 ## Next step
