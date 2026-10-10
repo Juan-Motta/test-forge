@@ -78,6 +78,15 @@ origin:
 - Deleting asks for confirmation. While scenarios still use the agent the backend refuses with
   409 (`Agent is used by N scenario(s)`), shown in the dialog.
 
+## Scenarios
+
+`/scenarios` (`src/features/scenarios`) uses `/api/scenarios`:
+
+- The library loads every scenario once and filters by agent and tag in the browser, grouped by
+  agent. Duplicate calls `POST /api/scenarios/{id}/duplicate` and opens the copy. "New scenario"
+  is disabled, with a link to Agents, until an agent exists. `/agents` also shows how many
+  scenarios use each agent.
+
 ## Container image
 
 `next.config.ts` sets `output: "standalone"`, so `pnpm build` also writes `.next/standalone`
@@ -103,7 +112,7 @@ see the root README.
 ## Layout
 
 - `src/app/` routes: `login/` and the `(app)/` group (shell layout and section pages).
-- `src/features/<feature>/` screens by business area (`auth`, `shell`, `connections`, `agents`): containers fetch and hold
+- `src/features/<feature>/` screens by business area (`auth`, `shell`, `connections`, `agents`, `scenarios`): containers fetch and hold
   state, presentational components take props only.
 - `src/ui/` design system: tokens live in `src/app/globals.css` (CSS variables mapped into the
   Tailwind theme) and atomic primitives (`Button`, `Field`, `Dialog`, …) build on them.

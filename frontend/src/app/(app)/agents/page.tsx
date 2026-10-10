@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
-import { AgentsContainer } from "@/features/agents/AgentsContainer";
+import { AgentsWithScenarioCounts } from "@/features/scenarios/AgentsWithScenarioCounts";
 
 export const metadata: Metadata = { title: "Agents" };
 
 export default function Page() {
-  return <AgentsContainer />;
+  return <AgentsWithScenarioCounts />;
 }
