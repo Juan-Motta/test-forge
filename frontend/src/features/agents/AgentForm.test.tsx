@@ -198,3 +198,132 @@ describe("Edit agent", () => {
     expect(api.requests).toEqual([]);
   });
 });
+
+// Copied verbatim from Safari's "Copy as cURL" on a vivi.bot realtime socket.
+const CURL_SAMPLE = `curl 'wss://api-dev-95a8b1f8-0925-4b65-a078-75c0473d54d7.vivi.bot/channelApi/2a8204d3-bd82-4799-a8e8-8e669f318fec/realtime?voiceCapability=live-v1&userId=waad%7CKSG%7Cdef6b5db-b7ad-4888-bcb3-6ce1c16e2ead&threadId=1786f832-77e7-4b1b-9ea6-ecc7982ce73f' \\
+-X 'GET' \\
+-H 'Origin: https://portal-dev-95a8b1f8-0925-4b65-a078-75c0473d54d7.vivi.bot' \\
+-H 'Pragma: no-cache' \\
+-H 'Sec-WebSocket-Version: 13' \\
+-H 'User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.6.2 Safari/605.1.15'`;
+
+async function importCurl(user: ReturnType<typeof userEvent.setup>, dialog: HTMLElement, command: string) {
+  const toggle = within(dialog).getByRole("button", { name: "Import from cURL" });
+  await user.click(toggle);
+  expect(toggle).toHaveAttribute("aria-expanded", "true");
+  const textarea = within(dialog).getByLabelText("Paste the cURL command");
+  expect(textarea).toHaveFocus();
+  await user.paste(command);
+  await user.click(within(dialog).getByRole("button", { name: "Import" }));
+  return toggle;
+}
+
+describe("Import from cURL", () => {
+  it("fills only the connection fields it finds and creates the agent with them", async () => {
+    mockConnectionsApi([]);
+    const api = mockAgentsApi([]);
+    const { user, dialog } = await openCreate();
+
+    await user.type(within(dialog).getByLabelText("Name"), "Vivi dev");
+    await user.selectOptions(within(dialog).getByLabelText("Protocol"), "Live");
+    const toggle = await importCurl(user, dialog, CURL_SAMPLE);
+
+    expect(within(dialog).getByLabelText("WebSocket URL")).toHaveValue(
+      "wss://api-dev-95a8b1f8-0925-4b65-a078-75c0473d54d7.vivi.bot",
+    );
+    expect(within(dialog).getByLabelText("Channel ID")).toHaveValue("2a8204d3-bd82-4799-a8e8-8e669f318fec");
+    expect(within(dialog).getByLabelText("User ID")).toHaveValue("waad|KSG|def6b5db-b7ad-4888-bcb3-6ce1c16e2ead");
+    expect(within(dialog).getByLabelText("Origin (optional)")).toHaveValue(
+      "https://portal-dev-95a8b1f8-0925-4b65-a078-75c0473d54d7.vivi.bot",
+    );
+    expect(within(dialog).getByLabelText("Name")).toHaveValue("Vivi dev");
+    expect(within(dialog).getByLabelText("Protocol")).toHaveValue("live");
+    expect(within(dialog).queryByLabelText("Paste the cURL command")).not.toBeInTheDocument();
+    expect(toggle).toHaveFocus();
+    const summary = within(dialog).getByRole("status");
+    expect(summary).toHaveTextContent("Filled: WebSocket URL, channel ID, user ID, origin.");
+    expect(summary).toHaveTextContent("Ignored: voiceCapability, threadId.");
+
+    await user.click(within(dialog).getByRole("button", { name: "Create agent" }));
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(api.requests).toEqual([
+      {
+        method: "POST",
+        path: "/agents",
+        body: {
+          name: "Vivi dev",
+          context: "",
+          protocol: "live",
+          baseUrl: "wss://api-dev-95a8b1f8-0925-4b65-a078-75c0473d54d7.vivi.bot",
+          channelId: "2a8204d3-bd82-4799-a8e8-8e669f318fec",
+          userId: "waad|KSG|def6b5db-b7ad-4888-bcb3-6ce1c16e2ead",
+          origin: "https://portal-dev-95a8b1f8-0925-4b65-a078-75c0473d54d7.vivi.bot",
+          langfuseConnectionId: null,
+        },
+      },
+    ]);
+  });
+
+  it("keeps fields the command lacks when editing, warns about them and saves only the changes", async () => {
+    mockConnectionsApi([]);
+    const api = mockAgentsApi([agentFixture()]);
+    const { user, dialog } = await openEdit();
+
+    await importCurl(
+      user,
+      dialog,
+      `curl "https://agent.example.com/channelApi/hotel-prod/realtime" -H "Origin: https://app.example.com"`,
+    );
+
+    expect(within(dialog).getByLabelText("User ID")).toHaveValue("user|KSG|42");
+    const summary = within(dialog).getByRole("status");
+    expect(summary).toHaveTextContent("Filled: WebSocket URL, channel ID, origin.");
+    expect(summary).toHaveTextContent("No userId query parameter; enter the user ID yourself.");
+
+    await user.click(within(dialog).getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(api.requests).toEqual([
+      {
+        method: "PATCH",
+        path: "/agents/a-hotel",
+        body: { baseUrl: "wss://agent.example.com", channelId: "hotel-prod", origin: "https://app.example.com" },
+      },
+    ]);
+  });
+
+  it("explains a command without a URL and changes nothing", async () => {
+    mockConnectionsApi([]);
+    mockAgentsApi([agentFixture()]);
+    const { user, dialog } = await openEdit();
+
+    await importCurl(user, dialog, "curl -X GET -H 'Pragma: no-cache'");
+
+    const textarea = within(dialog).getByLabelText("Paste the cURL command");
+    expect(textarea).toHaveAccessibleDescription(
+      expect.stringContaining("No ws://, wss://, http:// or https:// URL found in the command."),
+    );
+    expect(textarea).toHaveFocus();
+    expect(within(dialog).getByLabelText("WebSocket URL")).toHaveValue("wss://agent.example.com/ws");
+  });
+
+  it("closes the panel with Cancel or Escape, keeping the dialog open and returning focus", async () => {
+    mockConnectionsApi([]);
+    mockAgentsApi([]);
+    const { user, dialog } = await openCreate();
+    const toggle = within(dialog).getByRole("button", { name: "Import from cURL" });
+
+    await user.click(toggle);
+    await user.click(within(dialog).getByRole("button", { name: "Cancel import" }));
+    expect(within(dialog).queryByLabelText("Paste the cURL command")).not.toBeInTheDocument();
+    expect(toggle).toHaveFocus();
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+
+    await user.click(toggle);
+    await user.keyboard("{Escape}");
+    expect(within(dialog).queryByLabelText("Paste the cURL command")).not.toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Add agent" })).toBeInTheDocument();
+    expect(toggle).toHaveFocus();
+  });
+});

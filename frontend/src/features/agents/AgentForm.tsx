@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useEffect } from "react";
+import { useEffect, useId, useState } from "react";
 import { get, useForm, type Path } from "react-hook-form";
 import type { FieldErrors } from "@/lib/api";
 import { Alert, Button, Field, Input, Select, Textarea } from "@/ui";
@@ -12,9 +12,20 @@ import {
   PROTOCOL_LABELS,
   type AgentFormValues,
 } from "./form-schema";
+import { CurlImportPanel, type CurlImportSuccess } from "./CurlImportPanel";
 import { AGENT_PROTOCOLS, type Agent } from "./types";
 
 const NO_SERVER_ERRORS: FieldErrors = {};
+
+/** How the import summary names each field it filled, in form order. */
+const IMPORTED_FIELD_LABELS = {
+  baseUrl: "WebSocket URL",
+  channelId: "channel ID",
+  userId: "user ID",
+  origin: "origin",
+} as const;
+
+type ImportSummary = { filled: string[]; ignored: string[]; warnings: string[] };
 
 export type LangfuseOption = { id: string; name: string };
 
@@ -54,9 +65,33 @@ export function AgentForm({
     handleSubmit,
     setError,
     setFocus,
+    setValue,
     clearErrors,
     formState: { errors },
   } = useForm<AgentFormValues>({ resolver: zodResolver(agentFormSchema), defaultValues: initialValues(agent) });
+
+  const importPanelId = useId();
+  const importToggleId = useId();
+  const [importOpen, setImportOpen] = useState(false);
+  const [importSummary, setImportSummary] = useState<ImportSummary>();
+
+  function closeImport() {
+    setImportOpen(false);
+    document.getElementById(importToggleId)?.focus();
+  }
+
+  // Fills only what the command provided, as user edits (dirty), so the rest of the form stays.
+  function applyImport({ values, ignored, warnings }: CurlImportSuccess) {
+    const fields = (Object.keys(IMPORTED_FIELD_LABELS) as (keyof typeof IMPORTED_FIELD_LABELS)[]).filter(
+      (field) => values[field] !== undefined,
+    );
+    for (const field of fields) {
+      setValue(field, values[field] ?? "", { shouldDirty: true });
+      clearErrors(field);
+    }
+    setImportSummary({ filled: fields.map((field) => IMPORTED_FIELD_LABELS[field]), ignored, warnings });
+    closeImport();
+  }
 
   const known = new Set<string>(AGENT_FIELDS);
   const otherServerErrors = Object.entries(serverFieldErrors)
@@ -84,6 +119,38 @@ export function AgentForm({
 
   return (
     <form noValidate aria-label="Agent" onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-5">
+      <div className="flex flex-col gap-3">
+        <div>
+          <Button
+            id={importToggleId}
+            variant="secondary"
+            aria-expanded={importOpen}
+            aria-controls={importOpen ? importPanelId : undefined}
+            onClick={() => {
+              if (importOpen) return closeImport();
+              setImportSummary(undefined);
+              setImportOpen(true);
+            }}
+          >
+            Import from cURL
+          </Button>
+        </div>
+        {importOpen ? <CurlImportPanel id={importPanelId} onImport={applyImport} onCancel={closeImport} /> : null}
+        {importSummary ? (
+          <Alert tone="info">
+            <span className="block">
+              {importSummary.filled.length > 0 ? `Filled: ${importSummary.filled.join(", ")}.` : "Nothing filled."}
+              {importSummary.ignored.length > 0 ? ` Ignored: ${importSummary.ignored.join(", ")}.` : null}
+            </span>
+            {importSummary.warnings.map((warning) => (
+              <span key={warning} className="block">
+                {warning}
+              </span>
+            ))}
+          </Alert>
+        ) : null}
+      </div>
+
       <Field label="Name" hint="Unique; scenarios and runs refer to the agent by it." error={fieldError("name")}>
         {(control) => <Input autoComplete="off" {...control} {...registerField("name")} />}
       </Field>

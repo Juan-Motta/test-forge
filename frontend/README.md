@@ -75,6 +75,15 @@ origin:
   for the server to judge, since it accepts one only in development; its 422 lands on the URL
   field. On edit, the PATCH carries only what changed, and a cleared Origin or Langfuse link is
   sent as `null`.
+- "Import from cURL" (create and edit) reads a command copied from the browser's devtools
+  (`curl 'wss://host/channelApi/{channelId}/realtime?userId=…' -H 'Origin: …'`) with the pure
+  parser in `curl-import.ts`; nothing is executed. It fills only the fields it finds: WebSocket
+  URL (scheme and host; `https`/`http` become `wss`/`ws`), channel ID, URL-decoded user ID and
+  Origin (scheme, host and port). Name, context, protocol and Langfuse are never touched.
+  `threadId` (generated per run), `voiceCapability` (added by the engine) and unknown query
+  parameters are listed as ignored; other headers are dropped. Only a command without a usable
+  URL is an error; a missing `userId` or a path other than `/channelApi/{channelId}/realtime`
+  still fills the rest and shows a warning.
 - Deleting asks for confirmation. While scenarios still use the agent the backend refuses with
   409 (`Agent is used by N scenario(s)`), shown in the dialog.
 
