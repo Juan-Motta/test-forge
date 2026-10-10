@@ -135,6 +135,12 @@ platform (requested 2026-10-09).
   key (accepted tradeoff, user decision 2026-10-10); `--tts-connection` CLI wiring untested; playback
   e2e tests use tight wall-clock tolerances. (Name lookup is safe: names are unique by constraint.)
 
+- Second VOICE run against dev (2026-10-10, user authorized; thread 094b9ba4-b54e-4f36-bb60-05b836543bda):
+  agent turn 0 delivered 23.65 s of audio by 11.8 s; playback end 31.19 s; caller resumed at 31.59 s
+  (= playback end + 400 ms grace) → interruption fixed on the real agent. Latency 1.24 s / 1.49 s, no
+  warnings, close 1000. Follow-up: the probe hangs up at the last turn's delivery end (~39 s) instead
+  of after its playback (~44 s) — should also wait for playback before closing.
+
 ## Next step
 Build agents/scenarios/runs/live in the UI on top of the validated engine.
 User creates root `.env.example`/`.env`; fix the shared-IP throttling follow-up; browser E2E.
