@@ -1,0 +1,210 @@
+"""Scenarios use cases: CRUD and duplication of the scenarios authored for each agent.
+
+The API validates each field's shape and the cross-item rules (unique fact keys, criteria
+weights totalling 100); the rules that need the database (the agent exists, the TTS connection
+has a speech-capable kind) live here and report all their errors at once.
+"""
+
+import uuid
+from typing import Any
+
+from pydantic import BaseModel
+from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from voice_eval.modules.agents.models import AgentRecord
+from voice_eval.modules.connections.domain import ConnectionKind
+from voice_eval.modules.connections.models import ConnectionRecord
+from voice_eval.modules.scenarios.domain import (
+    InvalidScenarioInput,
+    Scenario,
+    ScenarioConflict,
+    ScenarioNameTaken,
+    ScenarioNotFound,
+    copy_name,
+)
+from voice_eval.modules.scenarios.models import NAME_UNIQUE_CONSTRAINT, ScenarioRecord
+
+FOREIGN_KEY_VIOLATION = "23503"
+TTS_KINDS = frozenset({ConnectionKind.OPENAI, ConnectionKind.AZURE_OPENAI})
+WRITABLE = frozenset(
+    {
+        "agent_id",
+        "name",
+        "tags",
+        "context",
+        "persona",
+        "tts_connection_id",
+        "voice_override",
+        "goal",
+        "instructions",
+        "facts",
+        "criteria",
+        "end_conditions",
+    }
+)
+COPIED = WRITABLE - {"name"}
+
+
+def _name_taken(name: str) -> ScenarioNameTaken:
+    return ScenarioNameTaken(f"this agent already has a scenario named {name!r}")
+
+
+def _json(value: Any) -> Any:
+    """Structured parts as stored: pydantic models (or lists of them) become JSON data."""
+    if isinstance(value, BaseModel):
+        return value.model_dump(mode="json")
+    if isinstance(value, list):
+        return [_json(item) for item in value]
+    return value
+
+
+async def _fetch(db: AsyncSession, scenario_id: uuid.UUID) -> ScenarioRecord:
+    """The row and its agent, re-read from the database (fresh timestamps and agent name)."""
+    record = await db.scalar(
+        select(ScenarioRecord)
+        .where(ScenarioRecord.id == scenario_id)
+        .execution_options(populate_existing=True)
+    )
+    if record is None:
+        raise ScenarioNotFound(str(scenario_id))
+    return record
+
+
+def _violation(exc: IntegrityError) -> tuple[str | None, str | None]:
+    """(SQLSTATE, constraint name) of the database error behind `exc`, when the driver says."""
+    cause = exc.orig.__cause__ if exc.orig is not None else None  # asyncpg's own exception
+    return getattr(cause, "sqlstate", None), getattr(cause, "constraint_name", None)
+
+
+async def _commit(db: AsyncSession, name: str) -> None:
+    """Commit; a lost race on the unique name is a name clash, a vanished reference a conflict."""
+    try:
+        await db.commit()
+    except IntegrityError as exc:
+        await db.rollback()
+        sqlstate, constraint = _violation(exc)
+        if constraint == NAME_UNIQUE_CONSTRAINT:
+            raise _name_taken(name) from None
+        if sqlstate == FOREIGN_KEY_VIOLATION:
+            raise ScenarioConflict("the scenario refers to a row that no longer exists") from None
+        raise
+
+
+async def _validate(db: AsyncSession, fields: dict[str, Any]) -> None:
+    errors: list[dict[str, Any]] = []
+    agent_id = fields.get("agent_id")
+    if agent_id is not None and not await db.scalar(
+        select(AgentRecord.id).where(AgentRecord.id == agent_id)
+    ):
+        errors.append({"type": "value_error", "loc": ["agentId"], "msg": "agent not found"})
+    connection_id = fields.get("tts_connection_id")
+    if connection_id is not None:
+        kind = await db.scalar(
+            select(ConnectionRecord.kind).where(ConnectionRecord.id == connection_id)
+        )
+        if kind is None:
+            msg = "connection not found"
+        elif kind not in TTS_KINDS:
+            msg = "must reference an openai or azure_openai connection"
+        else:
+            msg = ""
+        if msg:
+            errors.append({"type": "value_error", "loc": ["ttsConnectionId"], "msg": msg})
+    if errors:
+        raise InvalidScenarioInput(errors)
+
+
+async def _ensure_name_free(
+    db: AsyncSession, agent_id: uuid.UUID, name: str, *, besides: uuid.UUID | None = None
+) -> None:
+    query = select(ScenarioRecord.id).where(
+        ScenarioRecord.agent_id == agent_id, ScenarioRecord.name == name
+    )
+    if besides is not None:
+        query = query.where(ScenarioRecord.id != besides)
+    if await db.scalar(query):
+        raise _name_taken(name)
+
+
+async def list_scenarios(
+    db: AsyncSession, *, agent_id: uuid.UUID | None = None, tag: str | None = None
+) -> list[Scenario]:
+    """Most recently updated first; optionally only one agent's, or only those with `tag`."""
+    query = select(ScenarioRecord).order_by(
+        ScenarioRecord.updated_at.desc(), ScenarioRecord.name, ScenarioRecord.id
+    )
+    if agent_id is not None:
+        query = query.where(ScenarioRecord.agent_id == agent_id)
+    if tag is not None:
+        query = query.where(ScenarioRecord.tags.contains([tag]))
+    return [record.to_domain() for record in await db.scalars(query)]
+
+
+async def get_scenario(db: AsyncSession, scenario_id: uuid.UUID) -> Scenario:
+    return (await _fetch(db, scenario_id)).to_domain()
+
+
+async def create_scenario(
+    db: AsyncSession, *, fields: dict[str, Any], created_by: uuid.UUID | None
+) -> Scenario:
+    """`fields` holds every writable field (snake_case), already shape-validated."""
+    fields = {key: _json(value) for key, value in fields.items() if key in WRITABLE}
+    await _validate(db, fields)
+    await _ensure_name_free(db, fields["agent_id"], fields["name"])
+    record = ScenarioRecord(id=uuid.uuid4(), created_by=created_by, **fields)
+    db.add(record)
+    await _commit(db, record.name)
+    return (await _fetch(db, record.id)).to_domain()
+
+
+async def update_scenario(
+    db: AsyncSession, scenario_id: uuid.UUID, *, changes: dict[str, Any]
+) -> Scenario:
+    """Apply the given fields only; structured parts given are replaced as a whole."""
+    record = await _fetch(db, scenario_id)
+    changes = {key: _json(value) for key, value in changes.items() if key in WRITABLE}
+    await _validate(db, changes)
+    agent_id = changes.get("agent_id", record.agent_id)
+    name = changes.get("name", record.name)
+    if (agent_id, name) != (record.agent_id, record.name):
+        await _ensure_name_free(db, agent_id, name, besides=record.id)
+    for key, value in changes.items():
+        setattr(record, key, value)
+    record.updated_at = func.now()
+    await _commit(db, name)
+    return (await _fetch(db, scenario_id)).to_domain()
+
+
+async def delete_scenario(db: AsyncSession, scenario_id: uuid.UUID) -> None:
+    record = await _fetch(db, scenario_id)
+    await db.delete(record)
+    await db.commit()
+
+
+async def duplicate_scenario(
+    db: AsyncSession, scenario_id: uuid.UUID, *, created_by: uuid.UUID | None
+) -> Scenario:
+    """A copy under the same agent named `<name> (copy)`, `(copy 2)`… (first free name)."""
+    source = await _fetch(db, scenario_id)
+    taken = set(
+        await db.scalars(
+            select(ScenarioRecord.name).where(ScenarioRecord.agent_id == source.agent_id)
+        )
+    )
+    record = ScenarioRecord(
+        id=uuid.uuid4(),
+        name=copy_name(source.name, taken),
+        created_by=created_by,
+        **{key: getattr(source, key) for key in COPIED},
+    )
+    db.add(record)
+    await _commit(db, record.name)
+    return (await _fetch(db, record.id)).to_domain()
+
+
+async def count_for_agent(db: AsyncSession, agent_id: uuid.UUID) -> int:
+    return await db.scalar(
+        select(func.count()).select_from(ScenarioRecord).where(ScenarioRecord.agent_id == agent_id)
+    )

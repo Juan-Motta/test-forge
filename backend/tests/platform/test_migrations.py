@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from voice_eval.platform.db import Base
 from voice_eval.platform.migrations import downgrade, upgrade
 
-TABLES = {"users", "user_sessions", "login_attempts", "provider_connections", "agents"}
+TABLES = {"users", "user_sessions", "login_attempts", "provider_connections", "agents", "scenarios"}
 
 
 async def _tables(url: str) -> set[str]:
@@ -24,6 +24,7 @@ async def _tables(url: str) -> set[str]:
 async def _schema_diff(url: str) -> list:
     import voice_eval.modules.agents.models  # noqa: F401 - registers the tables on Base
     import voice_eval.modules.connections.models  # noqa: F401
+    import voice_eval.modules.scenarios.models  # noqa: F401
     import voice_eval.modules.users.models  # noqa: F401
 
     engine = create_async_engine(url)

@@ -148,7 +148,8 @@ Speech is requested as `response_format="pcm"` (raw 24 kHz 16-bit mono), the tar
 
 FastAPI app over PostgreSQL 17 (SQLAlchemy 2 async + asyncpg, Alembic migrations). Layout:
 `voice_eval/platform/` (settings, database, app factory, migrations) and one package per
-business module under `voice_eval/modules/` (`users`, `connections`, `agents`).
+business module under `voice_eval/modules/` (`users`, `connections`, `agents`,
+`scenarios`).
 
 ### Running locally
 
@@ -320,6 +321,34 @@ a fresh UUID4 `threadId` (`voice_eval.modules.agents.domain.target_spec` builds 
   `http(s)` origin: scheme, host and port only.
 - `langfuseConnectionId` must reference a connection of kind `langfuse` (422 otherwise);
   deleting that connection clears the reference.
+- An agent that scenarios still reference cannot be deleted: 409 `Agent is used by N
+  scenario(s)`.
+
+### Scenarios
+
+What the simulated caller is, knows and wants, and how the call is judged. Context is
+two-level: the agent's `context` applies to all its scenarios, the scenario's adds to it.
+
+- `GET /api/scenarios?agentId=&tag=` (both filters optional; most recently updated first),
+  `GET /api/scenarios/{id}`, `POST /api/scenarios` (201), `PATCH /api/scenarios/{id}` (partial;
+  `persona`, `facts`, `criteria` and `endConditions` are replaced as whole objects, so omitted
+  inner fields take their defaults; `null` clears only `ttsConnectionId` and `voiceOverride`),
+  `DELETE /api/scenarios/{id}` (204), `POST /api/scenarios/{id}/duplicate` (201; same agent,
+  named `<name> (copy)`, then `(copy 2)`, `(copy 3)`...).
+- Names are unique per agent (409 `Scenario name already in use for this agent`); the same name
+  may exist under other agents. Unknown ids are 404; an unknown `agentId` in a body is 422.
+- Fields: `agentId`, `name` (1-160), `tags` (up to 20, each 1-40, trimmed and de-duplicated),
+  `context` (up to 20000), `persona` `{name (1-120), locale (BCP 47-like, e.g. es-MX),
+  temperament (polite|hurried|skeptical|confused|angry|friendly|calm|detailed), notes (up to
+  2000)}`, `ttsConnectionId` (the evaluator voice: an `openai` or `azure_openai` connection, 422
+  otherwise; deleting it clears the reference), `voiceOverride` (optional voice id),
+  `goal` (1-5000), `instructions` (up to 10000), `facts` (up to 50 `{key (1-80), value
+  (1-500)}`, keys unique; revealed only when asked), `criteria` (1-30 `{id, text (1-500),
+  kind (must|should), source (transcript|trace|timing), weight (1-100)}`, weights must total
+  exactly 100; `id` is generated when missing and kept afterwards), `endConditions`
+  `{maxDurationS (30-1800, default 360), maxSilenceS (5-120, default 15), hangUpWhen
+  (goal_or_goodbye default, goodbye, max_duration)}`. Responses add `id`, `agent: {id, name}`,
+  `createdAt`, `updatedAt`.
 
 ### Container image
 

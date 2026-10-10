@@ -452,8 +452,8 @@ async def app(settings):
     async with application.state.engine.begin() as conn:
         await conn.execute(
             text(
-                "TRUNCATE users, user_sessions, login_attempts, provider_connections, agents"
-                " RESTART IDENTITY CASCADE"
+                "TRUNCATE users, user_sessions, login_attempts, provider_connections, agents,"
+                " scenarios RESTART IDENTITY CASCADE"
             )
         )
     yield application

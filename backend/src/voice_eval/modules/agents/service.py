@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from voice_eval.modules.agents.domain import (
     Agent,
     AgentConflict,
+    AgentInUse,
     AgentNameTaken,
     AgentNotFound,
     InvalidAgentInput,
@@ -23,6 +24,7 @@ from voice_eval.modules.agents.domain import (
 from voice_eval.modules.agents.models import NAME_UNIQUE_CONSTRAINT, AgentRecord
 from voice_eval.modules.connections.domain import ConnectionKind
 from voice_eval.modules.connections.models import ConnectionRecord
+from voice_eval.modules.scenarios.service import count_for_agent
 
 FOREIGN_KEY_VIOLATION = "23503"
 WRITABLE = frozenset(
@@ -150,6 +152,15 @@ async def update_agent(
 
 
 async def delete_agent(db: AsyncSession, agent_id: uuid.UUID) -> None:
+    """Refused (`AgentInUse`) while scenarios reference the agent, even one added meanwhile."""
     record = await _load(db, agent_id)
+    if scenarios := await count_for_agent(db, agent_id):
+        raise AgentInUse(scenarios)
     await db.delete(record)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError as exc:
+        await db.rollback()
+        if _violation(exc)[0] != FOREIGN_KEY_VIOLATION:
+            raise
+        raise AgentInUse(await count_for_agent(db, agent_id)) from None

@@ -1,0 +1,218 @@
+"""Scenarios domain: what the simulated caller is, knows, wants, and how the call is judged.
+
+The structured parts (persona, facts, criteria, end conditions) are pydantic models: the API
+validates requests with them and the database stores them as JSON (snake_case keys).
+Validation errors carry the field location and a message, never the submitted value.
+"""
+
+import uuid
+from dataclasses import dataclass
+from datetime import datetime
+from enum import StrEnum
+from typing import Annotated, Any
+
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
+from pydantic.alias_generators import to_camel
+
+# Column sizes shared by the models, the API schemas and the use cases (migrations keep literals).
+MAX_NAME_LENGTH = 160
+MAX_TAGS = 20
+MAX_TAG_LENGTH = 40
+MAX_CONTEXT_LENGTH = 20000
+MAX_GOAL_LENGTH = 5000
+MAX_INSTRUCTIONS_LENGTH = 10000
+MAX_PERSONA_NAME_LENGTH = 120
+MAX_PERSONA_NOTES_LENGTH = 2000
+MAX_FACTS = 50
+MAX_FACT_KEY_LENGTH = 80
+MAX_FACT_VALUE_LENGTH = 500
+MAX_CRITERIA = 30
+MAX_CRITERION_TEXT_LENGTH = 500
+CRITERIA_WEIGHT_TOTAL = 100
+COPY_SUFFIX = " (copy)"
+
+
+class Temperament(StrEnum):
+    POLITE = "polite"
+    HURRIED = "hurried"
+    SKEPTICAL = "skeptical"
+    CONFUSED = "confused"
+    ANGRY = "angry"
+    FRIENDLY = "friendly"
+    CALM = "calm"
+    DETAILED = "detailed"
+
+
+class CriterionKind(StrEnum):
+    MUST = "must"
+    SHOULD = "should"
+
+
+class EvidenceSource(StrEnum):
+    TRANSCRIPT = "transcript"
+    TRACE = "trace"
+    TIMING = "timing"
+
+
+class HangUpWhen(StrEnum):
+    GOAL_OR_GOODBYE = "goal_or_goodbye"
+    GOODBYE = "goodbye"
+    MAX_DURATION = "max_duration"
+
+
+def _text(max_length: int, *, min_length: int = 0) -> StringConstraints:
+    return StringConstraints(strip_whitespace=True, min_length=min_length, max_length=max_length)
+
+
+Tag = Annotated[str, _text(MAX_TAG_LENGTH, min_length=1)]
+PersonaName = Annotated[str, _text(MAX_PERSONA_NAME_LENGTH, min_length=1)]
+PersonaNotes = Annotated[str, _text(MAX_PERSONA_NOTES_LENGTH)]
+FactKey = Annotated[str, _text(MAX_FACT_KEY_LENGTH, min_length=1)]
+FactValue = Annotated[str, _text(MAX_FACT_VALUE_LENGTH, min_length=1)]
+CriterionText = Annotated[str, _text(MAX_CRITERION_TEXT_LENGTH, min_length=1)]
+Locale = Annotated[  # BCP 47-like: es, es-MX, zh-Hant-TW
+    str,
+    StringConstraints(
+        strip_whitespace=True, max_length=35, pattern=r"^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$"
+    ),
+]
+
+
+class _Model(BaseModel):
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        populate_by_name=True,
+        extra="forbid",
+        hide_input_in_errors=True,
+    )
+
+
+class Persona(_Model):
+    name: PersonaName
+    locale: Locale
+    temperament: Temperament
+    notes: PersonaNotes = ""
+
+
+class Fact(_Model):
+    """Something the caller knows and reveals only when asked."""
+
+    key: FactKey
+    value: FactValue
+
+
+class Criterion(_Model):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4)  # stable once stored
+    text: CriterionText
+    kind: CriterionKind
+    source: EvidenceSource
+    weight: int = Field(ge=1, le=CRITERIA_WEIGHT_TOTAL)
+
+
+class EndConditions(_Model):
+    max_duration_s: int = Field(default=360, ge=30, le=1800)
+    max_silence_s: int = Field(default=15, ge=5, le=120)
+    hang_up_when: HangUpWhen = HangUpWhen.GOAL_OR_GOODBYE
+
+
+Tags = Annotated[list[Tag], Field(max_length=MAX_TAGS)]
+Facts = Annotated[list[Fact], Field(max_length=MAX_FACTS)]
+Criteria = Annotated[list[Criterion], Field(min_length=1, max_length=MAX_CRITERIA)]
+
+
+def unique_tags(tags: list[str]) -> list[str]:
+    """Tags in their first order, without repeats."""
+    return list(dict.fromkeys(tags))
+
+
+def check_facts(facts: list[Fact]) -> list[Fact]:
+    keys = [fact.key.casefold() for fact in facts]
+    if len(set(keys)) != len(keys):
+        raise ValueError("fact keys must be unique")
+    return facts
+
+
+def check_criteria(criteria: list[Criterion]) -> list[Criterion]:
+    if len({criterion.id for criterion in criteria}) != len(criteria):
+        raise ValueError("criterion ids must be unique")
+    total = sum(criterion.weight for criterion in criteria)
+    if total != CRITERIA_WEIGHT_TOTAL:
+        raise ValueError(
+            f"criteria weights must total {CRITERIA_WEIGHT_TOTAL} (they total {total})"
+        )
+    return criteria
+
+
+class ScenarioRules(BaseModel):
+    """Mixin of the cross-item rules, for any request model that has these fields."""
+
+    @field_validator("tags", check_fields=False)
+    @classmethod
+    def _unique_tags(cls, value: list[str] | None) -> list[str] | None:
+        return None if value is None else unique_tags(value)
+
+    @field_validator("facts", check_fields=False)
+    @classmethod
+    def _check_facts(cls, value: list[Fact] | None) -> list[Fact] | None:
+        return None if value is None else check_facts(value)
+
+    @field_validator("criteria", check_fields=False)
+    @classmethod
+    def _check_criteria(cls, value: list[Criterion] | None) -> list[Criterion] | None:
+        return None if value is None else check_criteria(value)
+
+
+@dataclass(frozen=True)
+class AgentSummary:
+    id: uuid.UUID
+    name: str
+
+
+@dataclass(frozen=True)
+class Scenario:
+    id: uuid.UUID
+    agent: AgentSummary
+    name: str
+    tags: list[str]
+    context: str
+    persona: Persona
+    tts_connection_id: uuid.UUID | None
+    voice_override: str | None
+    goal: str
+    instructions: str
+    facts: list[Fact]
+    criteria: list[Criterion]
+    end_conditions: EndConditions
+    created_at: datetime
+    updated_at: datetime
+
+
+class ScenarioNotFound(Exception):
+    pass
+
+
+class ScenarioNameTaken(Exception):
+    pass
+
+
+class ScenarioConflict(Exception):
+    """The write conflicts with a concurrent change (e.g. a referenced row was deleted)."""
+
+
+class InvalidScenarioInput(ValueError):
+    """`errors` is a list of `{"type", "loc", "msg"}` items; never the submitted value."""
+
+    def __init__(self, errors: list[dict[str, Any]]) -> None:
+        super().__init__("invalid scenario input")
+        self.errors = errors
+
+
+def copy_name(name: str, taken: set[str]) -> str:
+    """`<name> (copy)`, then `(copy 2)`, `(copy 3)`…: the first not in `taken`, within limits."""
+    n = 1
+    while True:
+        suffix = COPY_SUFFIX if n == 1 else f" (copy {n})"
+        candidate = name[: MAX_NAME_LENGTH - len(suffix)].rstrip() + suffix
+        if candidate not in taken:
+            return candidate
+        n += 1
