@@ -3,6 +3,7 @@
 import asyncio
 import base64
 import json
+import time
 from collections.abc import Coroutine
 from contextlib import AsyncExitStack, suppress
 from dataclasses import dataclass, field
@@ -32,13 +33,23 @@ class FakeLiveServer:
     received_types: list[str] = field(default_factory=list)
     protocol_violations: list[str] = field(default_factory=list)
     answers: int = 0
+    # > 0: every agent turn is this much audio sent in one burst (faster than real time)
+    burst_audio_ms: int = 0
+    # monotonic seconds: first audio delta of each agent turn / first speech frame of each
+    # caller utterance, as seen by the server
+    agent_audio_started: list[float] = field(default_factory=list)
+    caller_speech_started: list[float] = field(default_factory=list)
 
     async def _speak(self, ws: ServerConnection, role_id: str, text: str) -> None:
         words = text.split()
-        for i in range(REPLY_DELTAS):
+        deltas = self.burst_audio_ms * 2 * 24 // DELTA_BYTES or REPLY_DELTAS
+        self.agent_audio_started.append(time.monotonic())
+        for i in range(deltas):
             delta = base64.b64encode(b"\x10\x00" * (DELTA_BYTES // 2)).decode()
             await ws.send(json.dumps({"type": "voice.audio.delta", "delta": delta}))
-            caption = " ".join(words[: max(1, (i + 1) * len(words) // REPLY_DELTAS)])
+            if self.burst_audio_ms and i < deltas - 1:
+                continue  # one caption at the end, no pacing
+            caption = " ".join(words[: max(1, (i + 1) * len(words) // deltas)])
             await ws.send(
                 json.dumps(
                     {
@@ -99,6 +110,8 @@ class FakeLiveServer:
                 await ws.close(1008, "invalid audio")
                 return
             if any(pcm):
+                if not speech:
+                    self.caller_speech_started.append(time.monotonic())
                 speech, silence = speech + 1, 0
             elif speech:
                 silence += 1
@@ -153,6 +166,11 @@ class FakeRealtimeServer:
     items: int = 0
     allowed_types: frozenset[str] = REALTIME_CLIENT_TYPES
     closed: asyncio.Event = field(default_factory=asyncio.Event)
+    # > 0: every spoken response is this much audio sent in one burst, then response.done
+    burst_audio_ms: int = 0
+    # monotonic seconds: first audio delta of each spoken response / each caller text item
+    agent_audio_started: list[float] = field(default_factory=list)
+    caller_text_received: list[float] = field(default_factory=list)
 
     async def _send(self, ws: ServerConnection, event: dict) -> None:
         await ws.send(json.dumps({**event, "turn_id": f"turn-{self.responses}"}))
@@ -189,7 +207,23 @@ class FakeRealtimeServer:
         text = f"agent response number {self.responses}"
         item = {"id": item_id, "type": "message", "role": "assistant", "content": []}
         await self._send(ws, {"type": "conversation.item.added", "item": item})
+        self.agent_audio_started.append(time.monotonic())
+        if self.burst_audio_ms:
+            delta = base64.b64encode(b"\x10\x00" * (DELTA_BYTES // 2)).decode()
+            for _ in range(self.burst_audio_ms * 2 * 24 // DELTA_BYTES):
+                audio = {"type": "response.output_audio.delta", "item_id": item_id, "delta": delta}
+                await self._send(ws, audio)
         for word in text.split():
+            if self.burst_audio_ms:
+                await self._send(
+                    ws,
+                    {
+                        "type": "response.output_audio_transcript.delta",
+                        "item_id": item_id,
+                        "delta": word + " ",
+                    },
+                )
+                continue
             delta = base64.b64encode(b"\x10\x00" * (DELTA_BYTES // 2)).decode()
             await self._send(
                 ws,
@@ -271,6 +305,7 @@ class FakeRealtimeServer:
                     )
                     return
                 if kind == "conversation.item.create":
+                    self.caller_text_received.append(time.monotonic())
                     item = {**msg["item"], "id": self._item_id()}
                     last_text = item["content"][0]["text"]
                     await self._send(ws, {"type": "conversation.item.added", "item": item})

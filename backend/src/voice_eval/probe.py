@@ -58,6 +58,8 @@ class ProbeOptions:
     close_timeout_s: float = 5
     trailing_silence_ms: int = 600
     agent_first: bool = False
+    playback_wait: bool = True
+    playback_grace_ms: int = 400
 
 
 @dataclass(frozen=True)
@@ -152,11 +154,18 @@ class ProbeRun:
     async def _caller_turn(
         self, session: TargetSession, stream: CallerAudioStream, n: int, turn: CallerTurn
     ) -> None:
+        previous = await self._wait_playback(n)
         expected = len(self.detector.completed_turns) + 1
         self.caller_turns += 1
+
+        def resumed(now_ms: float) -> None:
+            if previous is not None and previous.caller_resumed_ms is None:
+                previous.caller_resumed_ms = now_ms
+
         if turn.text is not None:
             sent_ms = self._now_ms()
             self.detector.mark_caller_end(sent_ms)  # before sending: the reply may come fast
+            resumed(sent_ms)
             try:
                 await session.send_caller_text(turn.text)
             except ValueError as exc:  # rejected by the adapter: nothing reached the server
@@ -165,9 +174,36 @@ class ProbeRun:
             budget = 0.0
         else:
             pcm = turn.pcm or b""
-            stream.enqueue(pcm, self.options.trailing_silence_ms, self.detector.mark_caller_end)
+            stream.enqueue(
+                pcm, self.options.trailing_silence_ms, self.detector.mark_caller_end, resumed
+            )
             budget = (duration_ms(pcm) + self.options.trailing_silence_ms) / 1000
         await self._wait_agent_turn(expected, f"reply {n}", budget + self.options.turn_timeout_s)
+
+    async def _wait_playback(self, n: int) -> AgentTurn | None:
+        """Hold caller turn `n` until the last agent turn would have finished playing.
+
+        Agents deliver audio faster than real time, so the turn end (`response.done` or an audio
+        gap) comes long before a real listener heard the reply. The caller stream keeps sending
+        silence meanwhile. Bounded by `turn_timeout_s` (warning) and `max_seconds` (stop).
+        """
+        completed = self.detector.completed_turns
+        previous = completed[-1] if completed else None
+        if previous is None or previous.playback_end_ms is None or not self.options.playback_wait:
+            return previous
+        target_ms = previous.playback_end_ms + self.options.playback_grace_ms
+        deadline_ms = self._now_ms() + self.options.turn_timeout_s * 1000
+        label = f"agent playback before caller turn {n}"
+        while (now := self._now_ms()) < target_ms:
+            if self._reader is not None and self._reader.done():
+                raise ProbeStop(f"connection closed while waiting for {label}")
+            if now >= self.options.max_seconds * 1000:
+                raise ProbeStop(f"max run time reached while waiting for {label}")
+            if now >= deadline_ms:
+                self.warnings.append(f"timed out waiting for {label} to end")
+                break
+            await asyncio.sleep(min(POLL_S, (target_ms - now) / 1000))
+        return previous
 
     def _log_out(self, record: dict[str, Any], t_ms: float | None = None) -> None:
         t = self._now_ms() if t_ms is None else t_ms
@@ -266,6 +302,8 @@ class ProbeRun:
             "ready_ms": self.ready_ms,
             "silence_gap_ms": self.options.silence_gap_ms,
             "settle_ms": self.options.settle_ms,
+            "playback_wait": self.options.playback_wait,
+            "playback_grace_ms": self.options.playback_grace_ms,
             "caller_turns": self.caller_turns,
             "agent_turns": len(self.detector.completed_turns),
             "turns": [_turn_record(i, t, self.expects_opening_turn) for i, t in enumerate(turns)],
@@ -315,6 +353,8 @@ def _turn_record(index: int, turn: AgentTurn, opening_expected: bool) -> dict[st
         "caller_end_ms": _round(turn.caller_end_ms),
         "first_audio_ms": _round(turn.first_audio_ms),
         "end_ms": _round(turn.end_ms),
+        "playback_end_ms": _round(turn.playback_end_ms),
+        "caller_resumed_ms": _round(turn.caller_resumed_ms),
         "latency_ms": _round(turn.latency_ms),
         "audio_ms": round(turn.audio_bytes / BYTES_PER_MS, 1),
         "response_count": turn.response_count,
@@ -392,6 +432,20 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=1200,
         help="legacy: quiet time after response.done before the agent turn counts as over",
+    )
+    p.add_argument(
+        "--playback-grace-ms",
+        type=int,
+        default=400,
+        help="extra pause after the agent's audio would have finished playing, before the "
+        "caller speaks again",
+    )
+    p.add_argument(
+        "--no-playback-wait",
+        dest="playback_wait",
+        action="store_false",
+        help="speak again as soon as the agent turn ends, even if its audio would still be "
+        "playing (agents send audio faster than real time)",
     )
     p.add_argument("--turn-timeout-s", type=float, default=30)
     p.add_argument(
@@ -475,6 +529,8 @@ async def amain(argv: list[str] | None = None, synthesizer: SpeechSynthesizer | 
             turn_timeout_s=args.turn_timeout_s,
             ready_timeout_s=args.ready_timeout_s,
             agent_first=args.agent_first,
+            playback_wait=args.playback_wait,
+            playback_grace_ms=args.playback_grace_ms,
         ),
     )
     try:

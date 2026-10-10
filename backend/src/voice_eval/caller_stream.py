@@ -33,13 +33,16 @@ class CallerAudioStream:
         pcm: bytes,
         trailing_silence_ms: int = 600,
         on_speech_end: SpeechEndCallback | None = None,
+        on_speech_start: SpeechEndCallback | None = None,
     ) -> None:
-        """Queue an utterance; `on_speech_end` fires when its last speech frame is sent."""
+        """Queue an utterance; the callbacks fire when its first / last speech frame is sent."""
         frames = chunk_pcm(pcm, FRAME_BYTES)
         if not frames:
             raise ValueError("cannot enqueue an empty utterance")
-        self._queue.extend((frame, None) for frame in frames[:-1])
-        self._queue.append((frames[-1], on_speech_end))
+        callbacks: list[SpeechEndCallback | None] = [None] * len(frames)
+        callbacks[0] = on_speech_start
+        callbacks[-1] = _both(callbacks[-1], on_speech_end)
+        self._queue.extend(zip(frames, callbacks, strict=True))
         self._queue.extend((frame, None) for frame in chunk_pcm(silence(trailing_silence_ms)))
 
     async def run(self) -> None:
@@ -58,3 +61,16 @@ class CallerAudioStream:
                 next_tick = loop.time()  # fell far behind: resync instead of bursting
             elif delay > 0:
                 await asyncio.sleep(delay)
+
+
+def _both(
+    first: SpeechEndCallback | None, second: SpeechEndCallback | None
+) -> SpeechEndCallback | None:
+    if first is None or second is None:
+        return first or second
+
+    def call(now_ms: float) -> None:
+        first(now_ms)
+        second(now_ms)
+
+    return call

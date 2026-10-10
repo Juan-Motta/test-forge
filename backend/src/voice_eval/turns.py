@@ -9,6 +9,8 @@ deterministic.
 
 from dataclasses import dataclass
 
+from voice_eval.audio import BYTES_PER_MS
+
 
 @dataclass
 class AgentTurn:
@@ -20,6 +22,14 @@ class AgentTurn:
     response_count: int | None = None  # None: the protocol does not report responses
     tool_activity: bool | None = None
     end_reason: str | None = None
+    caller_resumed_ms: float | None = None  # when the next caller turn actually started
+
+    @property
+    def playback_end_ms(self) -> float | None:
+        """When the agent audio would finish playing: it plays back-to-back from the first delta."""
+        if self.first_audio_ms is None:
+            return None
+        return self.first_audio_ms + self.audio_bytes / BYTES_PER_MS
 
     @property
     def latency_ms(self) -> float | None:

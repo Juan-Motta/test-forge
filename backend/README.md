@@ -39,8 +39,9 @@ runs; they all count as one agent turn.
    silence when idle (the server runs its own VAD on this stream).
 3. Live: waits for the agent's greeting. Legacy: the caller starts, unless `--agent-first`
    asks for an opening agent turn (one `response.create`).
-4. For each caller turn, in command-line order: sends the speech plus 600 ms of silence, or the
-   text message, then waits for the agent's reply to end.
+4. For each caller turn, in command-line order: waits until the previous agent turn would have
+   finished playing (see below), sends the speech plus 600 ms of silence, or the text message,
+   then waits for the agent's reply to end.
 5. Ends the session (see the table) and writes artifacts. Ctrl-C also ends the session
    gracefully and writes artifacts.
 
@@ -74,7 +75,23 @@ uv run voice-probe --base-url wss://<host> --channel-id <channel-id> --user-id <
 
 Useful options: `--protocol auto|live|realtime`, `--agent-first`, `--origin <url>`,
 `--thread-id <uuid>`, `--silence-gap-ms 900` (Live), `--settle-ms 1200` (legacy),
-`--turn-timeout-s 30`, `--max-seconds 180`, `--out <dir>`, `-v`.
+`--turn-timeout-s 30`, `--max-seconds 180`, `--playback-grace-ms 400`, `--no-playback-wait`,
+`--out <dir>`, `-v`.
+
+### Waiting for agent playback
+
+Agents send reply audio much faster than real time. On the first real call against dev, a
+21.3 s reply arrived within about 3.8 s; the turn ended on `response.done` and the probe spoke
+again at about 17 s, while a real listener would still have heard the agent until about 30.5 s.
+That is an interruption a phone caller would never make.
+
+So before each caller turn the probe waits until the previous agent turn would have finished
+playing: playback end = `first_audio_ms` + `audio_ms` (the audio plays back-to-back from its
+first delta), plus `--playback-grace-ms` (default 400). It waits for whichever is later, the turn
+end as detected today or that playback end, and keeps streaming silence meanwhile. Both protocols
+behave the same. The wait is bounded: after `--turn-timeout-s` the caller speaks anyway (with a
+warning), and `--max-seconds` stops the run. `--no-playback-wait` restores the old behavior
+(speak right after the turn end), for fast runs.
 
 `--text` against a Live target fails: with `--protocol live` before connecting (exit 2), with
 `auto` right after detection, before any caller input is sent (exit 1, warning in the summary).
@@ -105,7 +122,9 @@ Speech is requested as `response_format="pcm"` (raw 24 kHz 16-bit mono), the tar
   conversation-item order; assistant text from `response.output_audio_transcript.done` (deltas
   as fallback), user text from `conversation.item.input_audio_transcription.completed`, and
   `--text` turns as sent.
-- `summary.json`: `protocol`, `model` (legacy), thread/session ids, per-turn timings, latency,
+- `summary.json`: `protocol`, `model` (legacy), thread/session ids, `playback_wait`,
+  `playback_grace_ms`, per-turn timings (`first_audio_ms`, `end_ms`, `audio_ms`,
+  `playback_end_ms`, `caller_resumed_ms`: when the next caller turn actually started), latency,
   `response_count`, `tool_activity`, `end_reason` (legacy fields are `null` on Live), close
   code, usage (Live only).
 
@@ -121,7 +140,9 @@ Speech is requested as `response_format="pcm"` (raw 24 kHz 16-bit mono), the tar
 - Latency is measured from the moment the caller's last speech frame (or the text message) is
   sent to the first agent audio delta of the turn. Trailing silence inside the TTS output is counted as speech, and network
   transit is included.
-- Agent audio may arrive faster than real time, so turn end reflects delivery, not playback.
+- Agent audio may arrive faster than real time, so turn end reflects delivery, not playback;
+  the caller's playback wait accounts for that, but it assumes the agent never pauses
+  mid-turn (a pause would push the real playback end later than the estimate).
 
 ## Backend API
 
