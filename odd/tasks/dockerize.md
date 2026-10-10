@@ -108,5 +108,9 @@ platform (requested 2026-10-09).
   502s); operators who set FORWARDED_ALLOW_IPS to the frontend IP (old README) keep the bug; smoke
   `usage()` prints a hard-coded line range; minor duplication/comment nits.
 
+- Follow-up (authorized 2026-10-09): `keepalive_timeout 4s` on both nginx upstreams (below the 5 s idle
+  timeout of uvicorn and Node) to avoid reusing upstream sockets they already closed. `nginx -t` ok;
+  ephemeral smoke all PASS.
+
 ## Next step
 User creates root `.env.example`/`.env`; fix the shared-IP throttling follow-up; browser E2E.
