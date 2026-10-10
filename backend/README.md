@@ -148,7 +148,7 @@ Speech is requested as `response_format="pcm"` (raw 24 kHz 16-bit mono), the tar
 
 FastAPI app over PostgreSQL 17 (SQLAlchemy 2 async + asyncpg, Alembic migrations). Layout:
 `voice_eval/platform/` (settings, database, app factory, migrations) and one package per
-business module under `voice_eval/modules/` (`users`, `connections`).
+business module under `voice_eval/modules/` (`users`, `connections`, `agents`).
 
 ### Running locally
 
@@ -298,6 +298,28 @@ The first key encrypts and every key decrypts, so to rotate: prepend a new key
 (`VOICE_EVAL_MASTER_KEY=<new>,<old>`), restart, re-save each connection's secrets, then drop the
 old key. Losing every key makes stored secrets unrecoverable (re-enter them). Each ciphertext
 is bound to its row id and kind, so it cannot be copied onto another connection.
+
+### Agents
+
+The voice agents under test. An agent stores how to reach it; every run opens the session with
+a fresh UUID4 `threadId` (`voice_eval.modules.agents.domain.target_spec` builds the probe's
+`TargetSpec`), so the thread id is never stored.
+
+- `GET /api/agents` (ordered by name), `GET /api/agents/{id}`, `POST /api/agents` (201),
+  `PATCH /api/agents/{id}` (partial: only the fields present change; `null` clears `origin` or
+  `langfuseConnectionId`), `DELETE /api/agents/{id}` (204). Names are unique (409
+  `Agent name already in use`); unknown ids are 404.
+- Body and response fields: `name` (1-120), `context` (what the agent does, applies to all its
+  scenarios; up to 20000 characters, may be empty), `protocol` (`auto` default, `live`,
+  `realtime`), `baseUrl`, `channelId`, `userId`, `origin`, `langfuseConnectionId`; responses add
+  `id`, `createdAt`, `updatedAt`.
+- `baseUrl` must be `wss://` with a host and no credentials, query string, fragment or spaces
+  (`ws://localhost` and `ws://127.0.0.1` only when `ENVIRONMENT=development`). `channelId`
+  (up to 200) allows only URL-path-safe characters (`A-Z a-z 0-9 . _ ~ -`); `userId` (up to 200)
+  is any printable text and is URL-encoded when used. `origin` is optional and must be an
+  `http(s)` origin: scheme, host and port only.
+- `langfuseConnectionId` must reference a connection of kind `langfuse` (422 otherwise);
+  deleting that connection clears the reference.
 
 ### Container image
 

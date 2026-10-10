@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
+from voice_eval.modules.agents import api as agents_api
 from voice_eval.modules.connections import api as connections_api
 from voice_eval.modules.users import api as users_api
 from voice_eval.modules.users import service as users_service
@@ -88,6 +89,7 @@ def create_app(
     protected = APIRouter(dependencies=[Depends(current_principal)])
     protected.include_router(users_api.protected_router)
     protected.include_router(connections_api.router)
+    protected.include_router(agents_api.router)
     for router in extra_routers:
         protected.include_router(router)
 
