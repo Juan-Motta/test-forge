@@ -62,6 +62,22 @@ origin:
   moves to the page title. On phones the table restyles into cards and keeps explicit table
   roles.
 
+## Agents
+
+`/agents` (`src/features/agents`) manages the voice agents under test through `/api/agents`:
+
+- The list shows the protocol, the WebSocket host and channel ID, and whether a Langfuse
+  connection is linked. Create and edit share one dialog: name, what the agent does (its shared
+  context, used by every scenario), protocol, WebSocket URL, channel ID, user ID, optional
+  Origin, and an optional Langfuse connection (only connections of kind `langfuse` are offered).
+- Field rules mirror the backend (`wss://` with a host and no credentials, query or fragment;
+  URL-path-safe channel IDs; an `http(s)` origin without a path). A `ws://localhost` URL is left
+  for the server to judge, since it accepts one only in development; its 422 lands on the URL
+  field. On edit, the PATCH carries only what changed, and a cleared Origin or Langfuse link is
+  sent as `null`.
+- Deleting asks for confirmation. While scenarios still use the agent the backend refuses with
+  409 (`Agent is used by N scenario(s)`), shown in the dialog.
+
 ## Container image
 
 `next.config.ts` sets `output: "standalone"`, so `pnpm build` also writes `.next/standalone`
@@ -87,7 +103,7 @@ see the root README.
 ## Layout
 
 - `src/app/` routes: `login/` and the `(app)/` group (shell layout and section pages).
-- `src/features/<feature>/` screens by business area (`auth`, `shell`, `connections`): containers fetch and hold
+- `src/features/<feature>/` screens by business area (`auth`, `shell`, `connections`, `agents`): containers fetch and hold
   state, presentational components take props only.
 - `src/ui/` design system: tokens live in `src/app/globals.css` (CSS variables mapped into the
   Tailwind theme) and atomic primitives (`Button`, `Field`, `Dialog`, …) build on them.
