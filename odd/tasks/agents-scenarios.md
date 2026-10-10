@@ -31,8 +31,8 @@ and scenarios still live in CLI flags. The platform needs them as managed, reusa
 ## Tasks
 - [x] T1 — Backend `agents` module. Route: delegated writer (backend).
 - [x] T2 — Backend `scenarios` module. Route: same backend writer.
-- [ ] T3 — Frontend Agents screen. Route: delegated writer (frontend).
-- [ ] T4 — Frontend Scenarios library + editor. Route: same frontend writer.
+- [x] T3 — Frontend Agents screen. Route: delegated writer (frontend).
+- [x] T4 — Frontend Scenarios library + editor. Route: same frontend writer.
 
 ## Delivery
 Branch `feat/agents-scenarios`, chained on `feat/dockerize` (feature-branch-chain). Each work-unit commit
@@ -63,5 +63,17 @@ is reviewed right after it is committed.
 - Decisions in brief: missing referenced agent/connection → 422 (not 404); PATCH null clears only
   optional references; scenarios can move between agents; duplicates keep criterion ids.
 
+- T3 + T4 done by one frontend writer, split into three commits via patches (each state lint/typecheck/
+  tests/build green). RED: suites failed to import containers; GREEN 208 tests (parent re-run 208), build ok.
+- `bacea28` Agents screen: reviewed medium, APPROVED (lineage review-9e63a92d89bddffa). Advisory: 404 on
+  delete leaves a stale row; server-error clearing, "Current connection" fallback and form-errors helper
+  untested; URL credential check misreads `@` in a query without path; duplicate alert keys.
+- `fb5d805` Scenarios data layer + library: reviewed medium, APPROVED (lineage review-83d81d8d0909f0f8).
+  Advisory: delete guard can stick if the dialog is closed mid-request; load/duplicate/delete error
+  paths untested; schema rules untested at unit level.
+- Next commit: scenario editor (sections 1–6, criteria weight total, facts editor, unsaved-changes guard
+  without back/forward blocking, Suspense around navigation required by cacheComponents) + this doc.
+- Not yet checked in a real browser.
+
 ## Next step
-T3 + T4 frontend screens via one writer.
+Browser check of Agents/Scenarios with the user; then runs orchestration + live.

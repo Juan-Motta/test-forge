@@ -80,12 +80,30 @@ origin:
 
 ## Scenarios
 
-`/scenarios` (`src/features/scenarios`) uses `/api/scenarios`:
+`/scenarios`, `/scenarios/new` and `/scenarios/[id]` (`src/features/scenarios`) use
+`/api/scenarios`:
 
 - The library loads every scenario once and filters by agent and tag in the browser, grouped by
   agent. Duplicate calls `POST /api/scenarios/{id}/duplicate` and opens the copy. "New scenario"
   is disabled, with a link to Agents, until an agent exists. `/agents` also shows how many
   scenarios use each agent.
+- Create and edit share one editor: target agent (with that agent's shared context shown
+  read-only) and the scenario's own context, persona and evaluator voice (only `openai` and
+  `azure_openai` connections), goal and behaviour, facts (keys unique, case-insensitive), weighted
+  success criteria with a live total that must be exactly 100 before saving, and end conditions.
+  Existing criterion ids are kept; new rows get theirs from the backend.
+- On edit, the PATCH carries only the changed top-level fields; persona, facts, criteria and end
+  conditions are sent whole because the backend replaces them whole. A cleared evaluator voice is
+  sent as `null`. Server 422 locations (`facts.2.key`, `criteria.1.text`, `criteria`) land on the
+  matching row or section, a 409 about the name on the name field, and focus moves to the first
+  error. An unknown id shows a not-found state.
+- Unsaved changes: the browser warns before closing or reloading the tab, and the sidebar links,
+  the breadcrumb and Cancel ask before discarding (`Link`'s `onNavigate`). The App Router has no
+  API to block browser back/forward between app pages, so that path is not guarded.
+- With Cache Components, Next keeps visited pages alive (Activity). `/scenarios/new` is keyed by
+  `useRouter().bfcacheId`, so a fresh visit starts blank while back/forward keeps the draft. The
+  pathname of `/scenarios/[id]` is runtime data, so the shell's navigation reads it behind a
+  Suspense boundary and the rest of the route is still prerendered.
 
 ## Container image
 

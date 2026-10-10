@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { confirmLeave } from "@/lib/navigation/unsaved-changes";
 import { cn, focusRing } from "@/ui";
 import { Brand } from "./Brand";
 import { EnvironmentBadge } from "./EnvironmentBadge";
@@ -65,6 +66,10 @@ function NavLink({ item, current, onNavigate }: { item: NavItem; current: boolea
         href={item.href}
         aria-current={current ? "page" : undefined}
         onClick={onNavigate}
+        // Asks before discarding an editor's unsaved changes (client-side navigations only).
+        onNavigate={(event) => {
+          if (!confirmLeave()) event.preventDefault();
+        }}
         className={cn(
           "flex min-h-11 items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm font-medium no-underline transition-colors",
           focusRing,
