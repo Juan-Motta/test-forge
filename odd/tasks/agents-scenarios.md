@@ -56,8 +56,10 @@ is reviewed right after it is committed.
 - `8bbbabb` T1 agents (migration 0004, CRUD, target_spec with fresh threadId, env-dependent URL rules in
   the service): reviewed medium, APPROVED + acknowledged (lineage review-70cc22037e8829cb). Advisory:
   IntegrityError race mapping untested; updatedAt assertion weak.
-- T2 scenarios (migration 0005, CRUD, filters, duplicate, criteria weights = 100, TTS kind check, agent
-  delete guard 409) — next commit with this document.
+- `3653866` T2 scenarios (migration 0005, CRUD, filters, duplicate, criteria weights = 100, TTS kind
+  check, agent delete guard 409): reviewed medium, APPROVED + acknowledged (lineage
+  review-777799524a81924f). Advisory: agent-delete FK race and scenario commit-race mappings untested;
+  `tag` filter not trimmed (empty/whitespace tag returns nothing).
 - Decisions in brief: missing referenced agent/connection → 422 (not 404); PATCH null clears only
   optional references; scenarios can move between agents; duplicates keep criterion ids.
 
