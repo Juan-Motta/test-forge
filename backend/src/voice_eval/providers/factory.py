@@ -1,4 +1,5 @@
 from voice_eval.config import ConfigError, TtsSettings, require
+from voice_eval.ports.policy import CallerPolicy
 from voice_eval.ports.tts import SpeechSynthesizer
 
 SUPPORTED_PROVIDERS = ("openai", "azure", "azure_speech")
@@ -18,6 +19,20 @@ def build_azure_openai_synthesizer(
     from voice_eval.providers.openai_tts import OpenAISpeechSynthesizer
 
     return OpenAISpeechSynthesizer.for_azure(api_key, endpoint, api_version, deployment, voice)
+
+
+def build_openai_policy(*, api_key: str, model: str, base_url: str | None = None) -> CallerPolicy:
+    from voice_eval.providers.openai_chat import OpenAIChatPolicy
+
+    return OpenAIChatPolicy.for_openai(api_key, model, base_url=base_url)
+
+
+def build_azure_openai_policy(
+    *, api_key: str, endpoint: str, api_version: str, deployment: str
+) -> CallerPolicy:
+    from voice_eval.providers.openai_chat import OpenAIChatPolicy
+
+    return OpenAIChatPolicy.for_azure(api_key, endpoint, api_version, deployment)
 
 
 def build_synthesizer(settings: TtsSettings) -> SpeechSynthesizer:

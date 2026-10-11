@@ -108,3 +108,60 @@ async def test_resolve_by_name_or_id(app, user_client):
         assert await resolve_connection_id(session, str(connection_id)) == connection_id
         with pytest.raises(ConnectionNotFound):
             await resolve_connection_id(session, "missing")
+
+
+async def build_policy(app, connection_id):
+    from voice_eval.modules.connections.runtime import build_caller_policy
+
+    async with app.state.sessionmaker() as session:
+        return await build_caller_policy(session, connection_id, secret_box=app.state.secret_box)
+
+
+async def test_caller_policy_uses_the_openai_chat_model(app, user_client):
+    connection_id = await create(
+        user_client,
+        {"name": "chat", "kind": "openai", "config": {}, "secrets": {"apiKey": KEY}},
+    )
+    policy = await build_policy(app, connection_id)
+    assert policy.model == "gpt-4.1-mini"
+    assert policy.client.api_key == KEY
+    await user_client.patch(
+        f"/api/connections/{connection_id}", json={"config": {"chatModel": "gpt-4.1"}}
+    )
+    assert (await build_policy(app, connection_id)).model == "gpt-4.1"
+
+
+async def test_caller_policy_uses_the_azure_chat_deployment(app, user_client):
+    config = {
+        "endpoint": "https://res.openai.azure.com",
+        "apiVersion": "2025-03-01-preview",
+        "ttsDeployment": "my-tts",
+    }
+    connection_id = await create(
+        user_client,
+        {"name": "azure", "kind": "azure_openai", "config": config, "secrets": {"apiKey": KEY}},
+    )
+    with pytest.raises(UnsupportedConnection, match="no chat deployment"):
+        await build_policy(app, connection_id)
+    await user_client.patch(
+        f"/api/connections/{connection_id}", json={"config": {**config, "chatDeployment": "chat"}}
+    )
+    policy = await build_policy(app, connection_id)
+    assert isinstance(policy.client, AsyncAzureOpenAI)
+    assert policy.model == "chat"
+
+
+async def test_caller_policy_rejects_kinds_without_chat(app, user_client):
+    connection_id = await create(
+        user_client,
+        {
+            "name": "lf",
+            "kind": "langfuse",
+            "config": {"host": "https://cloud.langfuse.com", "publicKey": "pk-lf-1"},
+            "secrets": {"secretKey": KEY},
+        },
+    )
+    with pytest.raises(UnsupportedConnection, match="cannot act as the evaluator"):
+        await build_policy(app, connection_id)
+    with pytest.raises(ConnectionNotFound):
+        await build_policy(app, uuid.uuid4())

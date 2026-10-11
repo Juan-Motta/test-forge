@@ -14,6 +14,8 @@ from typing import Annotated, Any
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
 from pydantic.alias_generators import to_camel
 
+from voice_eval.ports.policy import CallerBrief
+
 # Column sizes shared by the models, the API schemas and the use cases (migrations keep literals).
 MAX_NAME_LENGTH = 160
 MAX_TAGS = 20
@@ -249,6 +251,23 @@ def resolve_evaluator(
         )
     raise ScenarioNotRunnable(
         "choose an evaluator model connection (or a voice connection with a chat model)"
+    )
+
+
+def caller_brief(scenario: Scenario, *, agent_context: str) -> CallerBrief:
+    """What the evaluator plays in one run of `scenario` (its agent's shared context first)."""
+    return CallerBrief(
+        agent_context=agent_context,
+        scenario_context=scenario.context,
+        persona_name=scenario.persona.name,
+        locale=scenario.persona.locale,
+        temperament=scenario.persona.temperament.value,
+        persona_notes=scenario.persona.notes,
+        goal=scenario.goal,
+        instructions=scenario.instructions,
+        facts=tuple((fact.key, fact.value) for fact in scenario.facts),
+        hang_up_when=scenario.end_conditions.hang_up_when.value,
+        max_duration_s=scenario.end_conditions.max_duration_s,
     )
 
 

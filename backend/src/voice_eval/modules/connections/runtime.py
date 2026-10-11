@@ -21,9 +21,12 @@ from voice_eval.modules.connections.service import open_secrets
 from voice_eval.platform.db import create_engine, create_sessionmaker
 from voice_eval.platform.secrets import SecretBox
 from voice_eval.platform.settings import Settings
+from voice_eval.ports.policy import CallerPolicy
 from voice_eval.ports.tts import SpeechSynthesizer
 from voice_eval.providers.factory import (
+    build_azure_openai_policy,
     build_azure_openai_synthesizer,
+    build_openai_policy,
     build_openai_synthesizer,
 )
 
@@ -96,4 +99,41 @@ async def build_synthesizer(
         api_version=config.api_version,
         deployment=config.tts_deployment,
         voice=config.tts_voice,
+    )
+
+
+async def build_caller_policy(
+    db: AsyncSession,
+    connection_id: uuid.UUID,
+    *,
+    secret_box: SecretBox,
+    allow_local_http: bool = False,
+) -> CallerPolicy:
+    """The evaluator's chat policy for the stored connection `connection_id`.
+
+    Raises `ConnectionNotFound`, `UnsupportedConnection` when the connection has no chat model
+    (other kinds, or Azure OpenAI without a chat deployment), and `SecretDecryptionError`.
+    """
+    record = await db.get(ConnectionRecord, connection_id, populate_existing=True)
+    if record is None:
+        raise ConnectionNotFound(str(connection_id))
+    kind = ConnectionKind(record.kind)
+    if kind not in (ConnectionKind.OPENAI, ConnectionKind.AZURE_OPENAI):
+        raise UnsupportedConnection(f"{kind.value} connections cannot act as the evaluator")
+    config = parse_config(kind, record.config, allow_local_http=allow_local_http)
+    if kind is ConnectionKind.AZURE_OPENAI and config.chat_deployment is None:
+        raise UnsupportedConnection(
+            "this azure_openai connection has no chat deployment: "
+            "set one to use it as the evaluator"
+        )
+    secrets = reveal(open_secrets(secret_box, record))
+    if kind is ConnectionKind.OPENAI:
+        return build_openai_policy(
+            api_key=secrets["api_key"], model=config.chat_model, base_url=config.base_url
+        )
+    return build_azure_openai_policy(
+        api_key=secrets["api_key"],
+        endpoint=config.endpoint,
+        api_version=config.api_version,
+        deployment=config.chat_deployment,
     )

@@ -353,6 +353,19 @@ two-level: the agent's `context` applies to all its scenarios, the scenario's ad
   (goal_or_goodbye default, goodbye, max_duration)}`. Responses add `id`, `agent: {id, name}`,
   `createdAt`, `updatedAt`.
 
+### Evaluator (caller policy)
+
+The simulated caller decides each turn with a chat model (`voice_eval.ports.policy.CallerPolicy`).
+`voice_eval.evaluator.prompt` builds the prompt from the agent's shared context, the scenario's
+context, persona, goal, instructions, facts and hang-up rule plus the conversation so far, and
+asks for a strict structured answer `{say, hangUp, reason}`. The rules keep the caller in
+character, in the persona's locale, in short spoken sentences, revealing facts one at a time and
+only when asked, never mentioning being an AI or an evaluator. `providers/openai_chat.py` calls
+OpenAI (`chatModel`) or Azure OpenAI (`chatDeployment`) with structured outputs and a 20 s
+timeout; a malformed answer or a provider error is retried once, then the caller hangs up with
+the reason. `modules.connections.runtime.build_caller_policy` builds it from the stored
+connection, like the synthesizer.
+
 ### Container image
 
 `backend/Dockerfile` builds a multi-stage image (uv, Python 3.13 slim): dependencies are synced
