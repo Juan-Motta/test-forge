@@ -94,6 +94,17 @@ class AgentTurnDetector:
         self.completed_turns.append(turn)
         self._current = None
 
+    def discard(self, turn: AgentTurn) -> None:
+        """Forget a completed turn that said nothing; the caller end it held moves to the next."""
+        self.completed_turns.remove(turn)
+        if turn.caller_end_ms is None:
+            return
+        if self._current is not None:
+            if self._current.caller_end_ms is None:
+                self._current.caller_end_ms = turn.caller_end_ms
+        elif self._pending_caller_end is None:
+            self._pending_caller_end = turn.caller_end_ms
+
     def latencies_ms(self) -> list[float]:
         return [t.latency_ms for t in self.completed_turns if t.latency_ms is not None]
 

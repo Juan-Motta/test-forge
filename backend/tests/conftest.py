@@ -171,6 +171,11 @@ class FakeRealtimeServer:
     # monotonic seconds: first audio delta of each spoken response / each caller text item
     agent_audio_started: list[float] = field(default_factory=list)
     caller_text_received: list[float] = field(default_factory=list)
+    # caller audio turn -> an empty response (created + done, no output) first, then the real
+    # reply after this many seconds (None: no reply at all)
+    empty_before_reply: dict[int, float | None] = field(default_factory=dict)
+    # caller audio turn -> after the reply, another spoken response this many seconds later
+    follow_up_after: dict[int, float] = field(default_factory=dict)
 
     async def _send(self, ws: ServerConnection, event: dict) -> None:
         await ws.send(json.dumps({**event, "turn_id": f"turn-{self.responses}"}))
@@ -254,12 +259,31 @@ class FakeRealtimeServer:
         )
         await self._send(ws, {"type": "response.done", "response": {"id": rid}})
 
-    async def _answer_audio(self, ws: ServerConnection, text: str) -> None:
+    async def _empty_response(self, ws: ServerConnection) -> None:
+        self.responses += 1
+        rid = f"resp_{self.responses}"
+        await self._send(ws, {"type": "response.created", "response": {"id": rid}})
+        await self._send(ws, {"type": "response.done", "response": {"id": rid}})
+
+    async def _reply(self, ws: ServerConnection, turn: int) -> None:
+        if turn in self.empty_before_reply:
+            await self._empty_response(ws)
+            gap = self.empty_before_reply[turn]
+            if gap is None:
+                return
+            await asyncio.sleep(gap)
+        await self._response(ws, "")
+        if (delay := self.follow_up_after.get(turn)) is not None:
+            await asyncio.sleep(delay)
+            await self._response(ws, "")
+
+    async def _answer_audio(self, ws: ServerConnection, turn: int) -> None:
+        text = f"caller audio turn {turn}"
         item_id = self._item_id()
         item = {"id": item_id, "type": "message", "role": "user", "content": []}
         await self._send(ws, {"type": "input_audio_buffer.committed", "item_id": item_id})
         await self._send(ws, {"type": "conversation.item.added", "item": item})
-        response = asyncio.create_task(_quietly(self._response(ws, "")))
+        response = asyncio.create_task(_quietly(self._reply(ws, turn)))
         await asyncio.sleep(0.05)  # transcription lands after the response started
         await self._send(
             ws,
@@ -329,8 +353,7 @@ class FakeRealtimeServer:
                     ):
                         speech = silence = 0
                         audio_turns += 1
-                        text = f"caller audio turn {audio_turns}"
-                        answer = self._answer_audio(ws, text)
+                        answer = self._answer_audio(ws, audio_turns)
                         tasks.append(asyncio.create_task(_quietly(answer)))
         except ConnectionClosed:
             pass

@@ -1,7 +1,10 @@
 """In-process live hub: fans each running run's events out to its WebSocket subscribers.
 
 Text messages are JSON objects with a camelCase `type`: `snapshot` (first, always), `status`,
-`agentTranscript`, `callerDecision`, `turnEnded`, `warning`, `lagging`, and last `finished`.
+`agentTranscript`, `callerDecision`, `callerSpeaking`, `callerDecisionDiscarded`, `agentBargeIn`,
+`turnEnded`, `warning`, `lagging`, and last `finished`. A `callerDecision` is only the evaluator's
+intent: its words join the transcript once `callerSpeaking` confirms they are being said, and a
+`callerDecisionDiscarded` one is never said.
 Audio goes out as binary frames: one channel byte (`0` agent, `1` caller) followed by the raw
 PCM16 little-endian 24 kHz mono chunk.
 
@@ -160,22 +163,29 @@ class LiveHub:
                 )
                 text = message("agentTranscript", tMs=t_ms, turn=data["turn"], text=data["text"])
             case "caller_decision":
-                if data["say"]:
-                    run.transcript.append(
-                        {
-                            "role": "caller",
-                            "text": data["say"],
-                            "reason": data["reason"],
-                            "tMs": t_ms,
-                        }
-                    )
                 text = message(
                     "callerDecision",
                     tMs=t_ms,
+                    decisionId=data["decision_id"],
                     say=data["say"],
                     hangUp=data["hang_up"],
                     reason=data["reason"],
                 )
+            case "caller_speaking":
+                run.transcript.append(
+                    {"role": "caller", "text": data["say"], "reason": data["reason"], "tMs": t_ms}
+                )
+                text = message(
+                    "callerSpeaking",
+                    tMs=t_ms,
+                    decisionId=data["decision_id"],
+                    say=data["say"],
+                    reason=data["reason"],
+                )
+            case "caller_decision_discarded":
+                text = message("callerDecisionDiscarded", tMs=t_ms, decisionId=data["decision_id"])
+            case "agent_barge_in":
+                text = message("agentBargeIn", tMs=t_ms, callerTurn=data["caller_turn"])
             case "turn_ended":
                 run.turns.append(_camel(data))
                 text = message("turnEnded", tMs=t_ms, **_camel(data))

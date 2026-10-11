@@ -126,7 +126,7 @@ async def test_snapshot_then_ordered_events_then_finished(server, app, user_clie
             RunEvent(
                 "caller_decision",
                 40.0,
-                {"say": "I need a room", "hang_up": False, "reason": "opening"},
+                {"decision_id": 1, "say": "I need a room", "hang_up": False, "reason": "opening"},
             ),
             RunEvent("caller_audio", 50.0, {"chunk": 1, "bytes": len(CALLER_PCM)}, CALLER_PCM),
             RunEvent("warning", 60.0, {"message": "server error: slow"}),
@@ -173,6 +173,7 @@ async def test_snapshot_then_ordered_events_then_finished(server, app, user_clie
     assert decision == {
         "type": "callerDecision",
         "tMs": 40.0,
+        "decisionId": 1,
         "say": "I need a room",
         "hangUp": False,
         "reason": "opening",
@@ -278,6 +279,71 @@ async def test_a_slow_subscriber_loses_audio_but_never_text():
     assert [t["message"] for t in texts if t["type"] == "warning"] == [f"w{i}" for i in range(10)]
     assert texts[0]["type"] == "snapshot" and texts[-1]["type"] == "finished"
     assert len(audio) == 4
+
+
+async def test_only_spoken_caller_lines_reach_the_transcript():
+    hub = LiveHub()
+    run_id = uuid.uuid4()
+    hub.open(run_id, uuid.uuid4())
+    sub = hub.subscribe(run_id)
+    decide = {"hang_up": False, "reason": "why"}
+    for event in [
+        RunEvent("caller_decision", 1.0, {"decision_id": 1, "say": "Stale", **decide}),
+        RunEvent("agent_barge_in", 2.0, {"caller_turn": 0}),
+        RunEvent("caller_decision_discarded", 3.0, {"decision_id": 1, "say": "Stale", **decide}),
+        RunEvent("caller_decision", 4.0, {"decision_id": 2, "say": "Fresh", **decide}),
+        RunEvent("caller_speaking", 5.0, {"decision_id": 2, "say": "Fresh", "reason": "why"}),
+    ]:
+        hub.event(run_id, event)
+    hub.finish(run_id, "completed", "caller_hung_up")
+    texts = [json.loads(item) for item in await drain(sub) if isinstance(item, str)]
+
+    assert texts[1:-1] == [
+        {
+            "type": "callerDecision",
+            "tMs": 1.0,
+            "decisionId": 1,
+            "say": "Stale",
+            "hangUp": False,
+            "reason": "why",
+        },
+        {"type": "agentBargeIn", "tMs": 2.0, "callerTurn": 0},
+        {"type": "callerDecisionDiscarded", "tMs": 3.0, "decisionId": 1},
+        {
+            "type": "callerDecision",
+            "tMs": 4.0,
+            "decisionId": 2,
+            "say": "Fresh",
+            "hangUp": False,
+            "reason": "why",
+        },
+        {"type": "callerSpeaking", "tMs": 5.0, "decisionId": 2, "say": "Fresh", "reason": "why"},
+    ]
+
+
+async def test_a_snapshot_lists_only_spoken_caller_lines():
+    hub = LiveHub()
+    run_id = uuid.uuid4()
+    hub.open(run_id, uuid.uuid4())
+    decide = {"hang_up": False, "reason": "why"}
+    hub.event(
+        run_id, RunEvent("caller_decision", 1.0, {"decision_id": 1, "say": "Stale", **decide})
+    )
+    hub.event(
+        run_id, RunEvent("caller_decision_discarded", 3.0, {"decision_id": 1, "say": "Stale"})
+    )
+    hub.event(
+        run_id, RunEvent("caller_decision", 4.0, {"decision_id": 2, "say": "Fresh", **decide})
+    )
+    hub.event(
+        run_id,
+        RunEvent("caller_speaking", 5.0, {"decision_id": 2, "say": "Fresh", "reason": "why"}),
+    )
+    snapshot = json.loads(await hub.subscribe(run_id).get())
+
+    assert snapshot["transcript"] == [
+        {"role": "caller", "text": "Fresh", "reason": "why", "tMs": 5.0}
+    ]
 
 
 async def test_a_consumer_that_catches_up_is_told_again_when_it_lags_again():

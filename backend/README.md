@@ -377,7 +377,14 @@ connection, like the synthesizer.
 (protocol auto-detected), lets the agent greet first on Live and asks the policy for the opening
 caller turn on legacy, then for each agent turn waits for its end and its playback, feeds the
 agent's own transcript to the policy, synthesizes `say` with the TTS provider and streams it on
-the open-microphone caller stream. It ends on the caller's hang-up (after the agent's last reply
+the open-microphone caller stream. A response with no audio and no transcript (a cancelled or
+tool-only one) is not an agent turn: the policy is not asked, the caller stays quiet, and the
+runner keeps waiting for the real reply (bounded by `maxSilenceS`); it is dropped from the turn
+list with a warning. Right before the caller speaks (or hangs up) the runner checks again: if
+the agent started speaking since the decision, the caller waits until that reply has ended and
+played, the decision is discarded (`caller_decision_discarded`) and the policy decides again on
+the new text. An agent turn that starts while the caller is mid-utterance is recorded as
+`agent_barge_in`; the utterance is not cut. It ends on the caller's hang-up (after the agent's last reply
 has finished playing, and after a farewell has been spoken), when the agent closes the session,
 at `maxDurationS`, or after `maxSilenceS` without agent audio or caller speech (the
 `max_duration` rule ignores the caller's hang-up). Every run closes the session and writes
@@ -387,7 +394,7 @@ at `maxDurationS`, or after `maxSilenceS` without agent audio or caller speech (
 `evaluator_failed`, `caller_audio_failed`, plus `error` for failures) to an injected directory,
 even when the caller audio sender failed. Events (`run_started`, `protocol_detected`,
 `agent_audio`, `agent_transcript`, `turn_ended`, `caller_decision`, `caller_audio`, `warning`,
-`run_finished`) go in order to an injected async sink; audio events carry PCM chunks that never
+`caller_decision_discarded`, `agent_barge_in`, `run_finished`) go in order to an injected async sink; audio events carry PCM chunks that never
 reach `events.jsonl`. A sink that has not taken every event 10 s after the run ended
 (`sink_drain_timeout_s`) is abandoned with a warning, so it never holds the artifacts back. The probe shares its detector, close and artifact helpers
 (`voice_eval.runner.common`, `voice_eval.runner.artifacts`).
@@ -438,10 +445,13 @@ run started) where it applies:
 
 | `type` | Fields |
 | --- | --- |
-| `snapshot` | First message: `run {id, batchId, status, endReason}`, `transcript` so far, `turns` so far |
+| `snapshot` | First message: `run {id, batchId, status, endReason}`, `transcript` so far (only caller lines actually spoken), `turns` so far |
 | `status` | `status` (`connecting`, `running`) |
 | `agentTranscript` | `turn`, `text`: what the agent said in a finished turn |
-| `callerDecision` | `say` (null: stay silent), `hangUp`, `reason` (the evaluator's own reason) |
+| `callerDecision` | `decisionId`, `say` (null: stay silent), `hangUp`, `reason` (the evaluator's own reason): an intent, not yet said |
+| `callerSpeaking` | `decisionId`, `say`, `reason`: the caller started saying that decision; only now it joins the transcript |
+| `callerDecisionDiscarded` | `decisionId`: the agent spoke again first, so that decision is never said (a new one follows) |
+| `agentBargeIn` | `callerTurn`: an agent turn started while the caller was mid-utterance |
 | `turnEnded` | `turn`, `firstAudioMs`, `endMs`, `playbackEndMs`, `latencyMs`, `endReason` |
 | `warning` | `message` |
 | `lagging` | `message`: audio frames were dropped for this consumer (text never is) |

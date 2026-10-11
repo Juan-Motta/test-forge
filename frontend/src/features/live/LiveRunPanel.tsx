@@ -124,6 +124,24 @@ export function LiveRunPanel({ runId }: { runId: string }) {
         <Card aria-labelledby={`${headingId}-transcript`}>
           <CardHeader id={`${headingId}-transcript`} title="Live transcript" />
           <RunTranscript live entries={state.entries} emptyText="Nothing said yet." />
+          {state.pending ? (
+            <p
+              role="status"
+              aria-label="Evaluator is about to say"
+              className="rounded-lg border-l-2 border-dashed border-evaluator px-3.5 py-2.5 text-sm text-muted italic"
+            >
+              {`About to say… “${state.pending.say}”`}
+            </p>
+          ) : null}
+          {state.bargeIns.length > 0 ? (
+            <ul aria-label="Barge-ins" className="flex flex-col gap-0.5 text-xs text-dim">
+              {state.bargeIns.map((bargeIn, index) => (
+                <li key={index}>
+                  {`Agent talked over the evaluator · ${bargeIn.tMs === null ? "—" : clock(bargeIn.tMs)}`}
+                </li>
+              ))}
+            </ul>
+          ) : null}
         </Card>
         <div className="flex flex-col gap-4">
           <Card aria-labelledby={`${headingId}-turn`} className="gap-2">
@@ -135,6 +153,7 @@ export function LiveRunPanel({ runId }: { runId: string }) {
             {state.decision ? (
               <div className="flex flex-col gap-1.5 text-sm">
                 <p className="text-evaluator-fg">
+                  {state.decision.discarded ? "Discarded (the agent spoke again first): " : ""}
                   {state.decision.say ? `Says: “${state.decision.say}”` : state.decision.hangUp ? "Hangs up" : "Stays silent"}
                 </p>
                 <p className="text-muted">{state.decision.reason}</p>

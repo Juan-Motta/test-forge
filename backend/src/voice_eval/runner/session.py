@@ -3,7 +3,10 @@
 The agent's own transcript (legacy `response.output_audio_transcript.done`, Live captions) is
 what the policy hears; its decision is spoken with the TTS provider over the open-microphone
 caller stream. Turn-taking is playback-aware: the caller speaks, and hangs up, only once the
-agent's last reply would have finished playing. The run ends when the caller hangs up, the agent
+agent's last reply would have finished playing. A response with no audio and no transcript is no
+agent turn: the runner keeps waiting for the real reply. Right before the caller speaks it checks
+again: if the agent started speaking since the policy decided, the caller waits for it to finish
+and the policy decides again on the new text. The run ends when the caller hangs up, the agent
 ends the session, or an end condition (max duration, max silence) is reached; it always closes
 the session and writes its artifacts.
 """
@@ -132,6 +135,8 @@ class SessionRunner:
         self._last_activity_ms = 0.0
         self._agent_chunks = 0
         self._caller_chunks = 0
+        self._caller_speaking = False  # between the first and the last speech frame of a turn
+        self._decisions = 0  # ids of the policy's decisions, from 1
         self._t0 = time.monotonic()
         self._started_at = datetime.now(UTC)
         self._reader: asyncio.Task[None] | None = None
@@ -266,12 +271,16 @@ class SessionRunner:
                 decision = CallerDecision(decision.say, False, decision.reason)
             if decision.say is None:
                 if decision.hang_up:
-                    await self._wait_playback()
+                    if await self._agent_spoke_again():
+                        self._discard(decision)
+                        continue
                     raise Stop("completed", "caller_hung_up")
                 await self._agent_turn()  # nothing to say: listen
                 continue
             pcm = await self._synthesize(decision.say)
-            await self._wait_playback()
+            if await self._agent_spoke_again():
+                self._discard(decision)
+                continue
             said = self._speak(decision, pcm)
             if decision.hang_up:
                 await self._wait_until(said.is_set)
@@ -313,11 +322,17 @@ class SessionRunner:
             raise Stop(
                 "failed", "evaluator_failed", f"evaluator failed ({type(exc).__name__})"
             ) from None
-        self._publish(
-            "caller_decision",
-            {"say": decision.say, "hang_up": decision.hang_up, "reason": decision.reason},
-        )
+        self._decisions += 1
+        self._publish("caller_decision", self._decision_data(decision))
         return decision
+
+    def _decision_data(self, decision: CallerDecision) -> dict[str, Any]:
+        return {
+            "decision_id": self._decisions,
+            "say": decision.say,
+            "hang_up": decision.hang_up,
+            "reason": decision.reason,
+        }
 
     async def _synthesize(self, text: str) -> bytes:
         try:
@@ -345,12 +360,20 @@ class SessionRunner:
         completed = self.detector.completed_turns
         previous = completed[-1] if completed else None
 
+        decision_id = self._decisions
+
         def started(now_ms: float) -> None:
+            self._caller_speaking = True
+            self._publish(
+                "caller_speaking",
+                {"decision_id": decision_id, "say": decision.say, "reason": decision.reason},
+            )
             row["start_ms"] = rounded(now_ms)
             if previous is not None and previous.caller_resumed_ms is None:
                 previous.caller_resumed_ms = now_ms
 
         def ended(now_ms: float) -> None:
+            self._caller_speaking = False
             row["end_ms"] = rounded(now_ms)
             self.detector.mark_caller_end(now_ms)
             said.set()
@@ -362,7 +385,17 @@ class SessionRunner:
         return said
 
     async def _agent_turn(self) -> None:
-        """Wait for the agent's next turn (and any turn it chains) to end; report what it said."""
+        """Wait for the agent's next real turn, skipping empty responses (max silence bounds it)."""
+        while not await self._collect_agent_turn():
+            pass
+
+    async def _collect_agent_turn(self) -> bool:
+        """Wait for the agent's next turn (and any turn it chains) to end; report what it said.
+
+        False when it said nothing at all (a response with no audio and no transcript, e.g. a
+        cancelled or tool-only one): those turns are dropped, so the evaluator never hears them
+        and they never count as agent turns.
+        """
         await self._wait_until(
             lambda: (
                 len(self.detector.completed_turns) > self._reported_turns
@@ -370,8 +403,18 @@ class SessionRunner:
             ),
             check_silence=True,
         )
+        assert self.session is not None
+        text = self._text.take(self.session.transcript_messages())
         new_turns = self.detector.completed_turns[self._reported_turns :]
+        silent = [turn for turn in new_turns if not turn.audio_bytes]
+        if silent and (not text or len(silent) < len(new_turns)):
+            for turn in silent:
+                self.detector.discard(turn)
+            new_turns = [turn for turn in new_turns if turn.audio_bytes]
         self._reported_turns = len(self.detector.completed_turns)
+        if not new_turns:
+            self._warn("the agent response had no audio and no transcript; waiting for its reply")
+            return False
         for turn in new_turns:
             self._publish(
                 "turn_ended",
@@ -384,20 +427,41 @@ class SessionRunner:
                     "end_reason": turn.end_reason,
                 },
             )
-        assert self.session is not None
-        text = self._text.take(self.session.transcript_messages())
         last = new_turns[-1]
         if not text:
             self._warn("the agent turn had no transcript")
-            return
+            return True
         self.conversation.append(Utterance("agent", text))
         self.transcript.append(_agent_row(text, last, new_turns[0]))
         self._publish("agent_transcript", {"turn": self._reported_turns - 1, "text": text})
+        return True
+
+    async def _agent_spoke_again(self) -> bool:
+        """Hold until the agent is quiet and its audio has played; True if it said more meanwhile.
+
+        The policy decided on the conversation as it was. If the agent started another response
+        since (its real reply after an empty one, or a follow-up), speaking now would barge in
+        on it: the caller waits for it to end and play, and the decision is stale.
+        """
+        while True:
+            await self._wait_playback()
+            if not self._agent_active():
+                return False
+            if await self._collect_agent_turn():
+                return True
+
+    def _agent_active(self) -> bool:
+        self.detector.turn_ended(self._now_ms())
+        detector = self.detector
+        return detector.agent_speaking or len(detector.completed_turns) > self._reported_turns
+
+    def _discard(self, decision: CallerDecision) -> None:
+        self._publish("caller_decision_discarded", self._decision_data(decision))
 
     async def _wait_playback(self) -> None:
-        """Hold until the last agent turn would have finished playing (plus a short grace)."""
-        completed = self.detector.completed_turns
-        playback_end = completed[-1].playback_end_ms if completed else None
+        """Hold until every agent turn would have finished playing (plus a short grace)."""
+        ends = [t.playback_end_ms for t in self.detector.completed_turns]
+        playback_end = max((end for end in ends if end is not None), default=None)
         if playback_end is None:
             return
         target_ms = playback_end + self.options.playback_grace_ms
@@ -463,7 +527,10 @@ class SessionRunner:
         match event:
             case AudioDelta(pcm=pcm):
                 self.agent_pcm += pcm
+                opening = self.detector.current_turn is None
                 self.detector.on_agent_audio(t, len(pcm))
+                if opening:
+                    self._on_agent_turn_opened()
                 self._last_activity_ms = t
                 self._agent_chunks += 1
                 self._publish("agent_audio", {"chunk": self._agent_chunks, "bytes": len(pcm)}, pcm)
@@ -481,7 +548,10 @@ class SessionRunner:
             case TranscriptUpdate(role="assistant"):
                 self.detector.on_caption_change(t)
             case ResponseStarted():
+                opening = self.detector.current_turn is None
                 self.detector.on_response_started(t)
+                if opening:
+                    self._on_agent_turn_opened()
                 self._last_activity_ms = t
             case ResponseDone():
                 self.detector.on_response_done(t)
@@ -493,6 +563,14 @@ class SessionRunner:
                 self._warn(f"server error: {message}")
             case Closed():
                 self.closed = event
+
+    def _on_agent_turn_opened(self) -> None:
+        """The agent starting while the caller is mid-utterance barges in: record it.
+
+        The caller's utterance is not cut; the target decides what its own VAD does with it.
+        """
+        if self._caller_speaking:
+            self._publish("agent_barge_in", {"caller_turn": self.caller_turns})
 
     # --- results --------------------------------------------------------------------------
 

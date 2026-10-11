@@ -14,7 +14,19 @@ export const TURN_STATE_LABELS: Record<TurnState, string> = {
   ended: "Call ended",
 };
 
-export type Decision = { say: string | null; hangUp: boolean; reason: string; tMs: number | null };
+export type Decision = {
+  decisionId: number | null;
+  say: string | null;
+  hangUp: boolean;
+  reason: string;
+  tMs: number | null;
+  /** The agent spoke again before it was said: it never will be. */
+  discarded: boolean;
+};
+/** What the evaluator decided to say but has not started saying yet. */
+export type PendingLine = { decisionId: number | null; say: string; tMs: number | null };
+/** The agent started a turn while the evaluator was mid-utterance. */
+export type BargeIn = { tMs: number | null; callerTurn: number | null };
 type Turn = { turn: number; latencyMs: number | null };
 
 export type LiveRunState = {
@@ -24,6 +36,8 @@ export type LiveRunState = {
   entries: TranscriptEntry[];
   turns: Turn[];
   decision: Decision | null;
+  pending: PendingLine | null;
+  bargeIns: BargeIn[];
   turnState: TurnState;
   warnings: string[];
   /** Times (`Date.now()`) the server dropped audio for this consumer. */
@@ -38,6 +52,8 @@ export const INITIAL_LIVE_STATE: LiveRunState = {
   entries: [],
   turns: [],
   decision: null,
+  pending: null,
+  bargeIns: [],
   turnState: "waiting",
   warnings: [],
   laggingAt: null,
@@ -111,19 +127,38 @@ export function liveReducer(state: LiveRunState, action: LiveAction): LiveRunSta
       return { ...state, entries: [...state.entries, entry], seq: state.seq + 1 };
     }
     case "callerDecision": {
+      // Only an intent: the line joins the transcript on `callerSpeaking`.
       const say = typeof message.say === "string" && message.say ? message.say : null;
-      const decision: Decision = { say, hangUp: message.hangUp === true, reason: str(message.reason), tMs: num(message.tMs) };
-      const turnState: TurnState = say ? "evaluator" : decision.hangUp ? "hanging_up" : "waiting";
-      if (!say) return { ...state, decision, turnState };
+      const decision: Decision = {
+        decisionId: num(message.decisionId),
+        say,
+        hangUp: message.hangUp === true,
+        reason: str(message.reason),
+        tMs: num(message.tMs),
+        discarded: false,
+      };
+      if (say) return { ...state, decision, pending: { decisionId: decision.decisionId, say, tMs: decision.tMs } };
+      return { ...state, decision, pending: null, turnState: decision.hangUp ? "hanging_up" : "waiting" };
+    }
+    case "callerSpeaking": {
       const entry: TranscriptEntry = {
         key: `live-${state.seq}`,
         role: "caller",
-        text: say,
-        tMs: decision.tMs,
-        intent: decision.reason || undefined,
+        text: str(message.say),
+        tMs: num(message.tMs),
+        intent: str(message.reason) || undefined,
       };
-      return { ...state, decision, turnState, entries: [...state.entries, entry], seq: state.seq + 1 };
+      const pending = state.pending?.decisionId === num(message.decisionId) ? null : state.pending;
+      return { ...state, pending, turnState: "evaluator", entries: [...state.entries, entry], seq: state.seq + 1 };
     }
+    case "callerDecisionDiscarded": {
+      const id = num(message.decisionId);
+      const pending = state.pending?.decisionId === id ? null : state.pending;
+      const decision = state.decision?.decisionId === id ? { ...state.decision, discarded: true } : state.decision;
+      return { ...state, pending, decision };
+    }
+    case "agentBargeIn":
+      return { ...state, bargeIns: [...state.bargeIns, { tMs: num(message.tMs), callerTurn: num(message.callerTurn) }] };
     case "turnEnded":
       return {
         ...state,

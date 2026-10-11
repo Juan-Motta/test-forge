@@ -53,7 +53,8 @@ describe("Live run", () => {
 
     act(() => {
       socket.send(snapshot);
-      socket.send({ type: "callerDecision", tMs: 4000, say: "I need a room", hangUp: false, reason: "opening: state the goal" });
+      socket.send({ type: "callerDecision", tMs: 4000, decisionId: 1, say: "I need a room", hangUp: false, reason: "opening: state the goal" });
+      socket.send({ type: "callerSpeaking", tMs: 4200, decisionId: 1, say: "I need a room", reason: "opening: state the goal" });
       socket.send({ type: "turnEnded", tMs: 7000, turn: 1, latencyMs: 640, firstAudioMs: 5000, endMs: 6500, playbackEndMs: 7000, endReason: "silence" });
       socket.send({ type: "agentTranscript", tMs: 7100, turn: 1, text: "For which dates?" });
     });
@@ -69,6 +70,36 @@ describe("Live run", () => {
     expect(screen.getByText("Agent finished · waiting for its audio to play out")).toBeInTheDocument();
     const intent = screen.getByRole("region", { name: "Evaluator intent" });
     expect(intent).toHaveTextContent("opening: state the goal");
+  });
+
+  it("shows a decision as pending until the caller speaks, and drops a discarded one", async () => {
+    const { socket } = await renderPanel();
+    act(() => {
+      socket.send(snapshot);
+      socket.send({ type: "callerDecision", tMs: 4000, decisionId: 1, say: "Stale words", hangUp: false, reason: "too early" });
+    });
+    expect(transcriptLines()).toHaveLength(1);
+    expect(screen.getByRole("status", { name: "Evaluator is about to say" })).toHaveTextContent("Stale words");
+
+    act(() => {
+      socket.send({ type: "agentBargeIn", tMs: 4500, callerTurn: 0 });
+      socket.send({ type: "callerDecisionDiscarded", tMs: 5000, decisionId: 1 });
+    });
+    expect(screen.queryByRole("status", { name: "Evaluator is about to say" })).not.toBeInTheDocument();
+    expect(transcriptLines()).toHaveLength(1);
+    expect(screen.getByRole("region", { name: "Evaluator intent" })).toHaveTextContent("Discarded");
+    expect(screen.getByText(/Agent talked over the evaluator/)).toHaveTextContent("0:04");
+
+    act(() => {
+      socket.send({ type: "callerDecision", tMs: 6000, decisionId: 2, say: "Fresh words", hangUp: false, reason: "answer" });
+      socket.send({ type: "callerSpeaking", tMs: 6300, decisionId: 2, say: "Fresh words", reason: "answer" });
+    });
+    expect(screen.queryByRole("status", { name: "Evaluator is about to say" })).not.toBeInTheDocument();
+    const lines = transcriptLines();
+    expect(lines).toHaveLength(2);
+    expect(lines[1]).toContain("Fresh words");
+    expect(lines[1]).toContain("Evaluator intent: answer");
+    expect(lines.join(" ")).not.toContain("Stale words");
   });
 
   it("replaces what it showed with the snapshot of a new connection", async () => {

@@ -3,6 +3,7 @@
 The policy and the TTS are scripted fakes: no provider is ever contacted.
 """
 
+import asyncio
 import json
 from collections.abc import Callable
 
@@ -55,15 +56,18 @@ HANG_UP = CallerDecision(None, True, "goal met")
 
 
 class FakeTts:
-    def __init__(self, fail: bool = False) -> None:
+    def __init__(self, fail: bool = False, delay_s: float = 0, pcm: bytes = SPEECH) -> None:
         self.texts: list[str] = []
         self.fail = fail
+        self.delay_s = delay_s
+        self.pcm = pcm
 
     async def synthesize(self, text: str) -> bytes:
         self.texts.append(text)
+        await asyncio.sleep(self.delay_s)
         if self.fail:
             raise SynthesisError("no audio")
-        return SPEECH
+        return self.pcm
 
 
 class ListSink:
@@ -453,3 +457,110 @@ async def test_a_forced_protocol_mismatch_is_a_protocol_error(fake_live_server, 
     )
     summary = await runner.run()
     assert (summary["status"], summary["reason"]) == ("failed", "protocol_error")
+
+
+def spoken(rows: list[dict]) -> list[tuple[str, str]]:
+    return [(r["role"], r["text"]) for r in rows]
+
+
+async def test_an_empty_agent_response_is_not_a_turn(fake_realtime_server, tmp_path):
+    # the real-run bug: a response.done with no audio and no transcript, then the real reply;
+    # the caller must not speak (and barge in) between them
+    fake_realtime_server.empty_before_reply = {1: 0.8}
+    policy = ScriptedPolicy(by_turn(say("Hello there"), say("Are you there?"), HANG_UP))
+    summary, sink = await run(fake_realtime_server.url, tmp_path, policy)
+
+    assert (summary["status"], summary["reason"]) == ("completed", "caller_hung_up")
+    assert spoken(transcript(tmp_path)) == [
+        ("caller", "Hello there"),
+        ("agent", "agent response number 2"),
+        ("caller", "Are you there?"),
+        ("agent", "agent response number 3"),
+    ]
+    assert [(u.role, u.text) for u in policy.states[1].conversation] == [
+        ("caller", "Hello there"),
+        ("agent", "agent response number 2"),
+    ]
+    assert (summary["caller_turns"], summary["agent_turns"]) == (2, 2)
+    assert [t["kind"] for t in summary["turns"]] == ["reply", "reply"]
+    assert summary["turns"][0]["latency_ms"] > 0  # measured from the caller, not the empty one
+    assert [e.data["turn"] for e in sink.of("turn_ended")] == [0, 1]
+    assert any("no audio and no transcript" in w for w in summary["warnings"])
+    # no caller speech between the empty response and the real reply's audio
+    reply_audio = min(e.t_ms for e in sink.of("agent_audio"))
+    first_said = max(e.t_ms for e in sink.of("caller_audio") if e.t_ms < reply_audio)
+    second_said = min(e.t_ms for e in sink.of("caller_audio") if e.t_ms > reply_audio)
+    assert second_said >= sink.of("agent_transcript")[0].t_ms > first_said
+
+
+async def test_a_stale_decision_is_dropped_when_the_agent_speaks_again(
+    fake_realtime_server, tmp_path
+):
+    # the agent adds a follow-up after the policy decided but before the caller spoke
+    fake_realtime_server.follow_up_after = {1: 0.6}
+
+    def script(state: PolicyState) -> CallerDecision:
+        if state.caller_turns == 0:
+            return say("Hello there")
+        if state.conversation[-1].text == "agent response number 1":
+            return say("Stale answer")
+        return HANG_UP
+
+    policy = ScriptedPolicy(script)
+    tts = FakeTts(delay_s=0.8)  # the follow-up starts while the answer is being synthesized
+    summary, sink = await run(fake_realtime_server.url, tmp_path, policy, tts=tts)
+
+    assert (summary["status"], summary["reason"]) == ("completed", "caller_hung_up")
+    assert tts.texts == ["Hello there", "Stale answer"]
+    assert len(policy.states) == 3
+    assert [(u.role, u.text) for u in policy.states[2].conversation] == [
+        ("caller", "Hello there"),
+        ("agent", "agent response number 1"),
+        ("agent", "agent response number 2"),
+    ]
+    assert spoken(transcript(tmp_path)) == [
+        ("caller", "Hello there"),
+        ("agent", "agent response number 1"),
+        ("agent", "agent response number 2"),
+    ]
+    assert summary["caller_turns"] == 1
+    (discarded,) = sink.of("caller_decision_discarded")
+    assert discarded.data["say"] == "Stale answer"
+    # every decision has an id; only the spoken one is confirmed by `caller_speaking`
+    decisions = [(e.data["decision_id"], e.data["say"]) for e in sink.of("caller_decision")]
+    assert decisions == [(1, "Hello there"), (2, "Stale answer"), (3, None)]
+    assert discarded.data["decision_id"] == 2
+    (speaking,) = sink.of("caller_speaking")
+    assert speaking.data == {"decision_id": 1, "say": "Hello there", "reason": "said Hello there"}
+    assert speaking.t_ms < sink.of("agent_transcript")[0].t_ms
+    last_agent_audio = max(e.t_ms for e in sink.of("agent_audio"))
+    assert max(e.t_ms for e in sink.of("caller_audio")) < last_agent_audio
+
+
+async def test_an_empty_response_then_silence_ends_on_max_silence(fake_realtime_server, tmp_path):
+    fake_realtime_server.empty_before_reply = {1: None}
+    policy = ScriptedPolicy(by_turn(say("Hello there"), say("Still there?")))
+    summary, sink = await run(
+        fake_realtime_server.url, tmp_path, policy, opts=options(max_silence_s=1.0)
+    )
+
+    assert (summary["status"], summary["reason"]) == ("completed", "max_silence")
+    assert len(policy.states) == 1
+    assert (summary["caller_turns"], summary["agent_turns"]) == (1, 0)
+    assert summary["turns"] == []
+    assert spoken(transcript(tmp_path)) == [("caller", "Hello there")]
+
+
+async def test_an_agent_reply_during_the_caller_utterance_is_a_barge_in(
+    fake_realtime_server, tmp_path
+):
+    # a pause inside the caller's utterance lets the server VAD answer before it is over
+    paused = SPEECH + b"\x00\x00" * 2400 * 5 + SPEECH
+    policy = ScriptedPolicy(by_turn(say("Hello, um, there"), HANG_UP))
+    summary, sink = await run(fake_realtime_server.url, tmp_path, policy, tts=FakeTts(pcm=paused))
+
+    assert summary["status"] == "completed"
+    barge_ins = sink.of("agent_barge_in")
+    assert barge_ins and barge_ins[0].data["caller_turn"] == 1
+    caller_speech = [e.t_ms for e in sink.of("caller_audio")]
+    assert caller_speech[0] < barge_ins[0].t_ms < caller_speech[-1]

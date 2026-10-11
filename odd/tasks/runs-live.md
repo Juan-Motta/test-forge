@@ -117,5 +117,14 @@ Branch `feat/runs-live`, chained on `feat/agents-scenarios`. Each work-unit comm
   ("no unnecessary guardrails, generous limits"). Azure keeps `chatDeployment` (must be gpt-6-luna).
   550 backend / 282 frontend tests.
 
+- First full real run (2026-10-11, run 9d9e6de0, thread 19071d01…): completed, caller_hung_up, 245 s,
+  9+9 turns, latency 0.97–1.74 s; evaluator realistic. Bug found and fixed next commit: an empty agent
+  response (no audio, no transcript — opened while the caller was still speaking) was treated as a turn,
+  the evaluator spoke over the real reply and the agent's server VAD cut it. Fix: empty responses are
+  dropped (bounded by max silence); re-check right before speaking (stale decision discarded and policy
+  re-asked if the agent spoke again); agent barge-in recorded; live monitor shows only spoken caller
+  lines (pending intent until `callerSpeaking`, removed on `callerDecisionDiscarded`). RED reproduced
+  the real bug. 556 backend / 283 frontend tests.
+
 ## Next step
 Rebuild stack, user-authorized first real run from the UI; then judge + Langfuse feature.

@@ -155,6 +155,10 @@ origin:
   (agent blue, evaluator amber, announced politely with `aria-live`), the turn state (who is
   speaking, waiting for the agent's playback, hanging up), the evaluator's latest decision and
   reason, warnings, and the end reason once finished. "End call" cancels the run.
+- The transcript holds only what was actually said. A `callerDecision` shows below it as a
+  dashed "About to say…" line; `callerSpeaking` turns it into an evaluator line, and
+  `callerDecisionDiscarded` (the agent spoke again first) removes it and marks the decision as
+  discarded. Each `agentBargeIn` adds a small "Agent talked over the evaluator" note.
 - Every connection starts with a `snapshot` that replaces what is shown, so a reconnection never
   duplicates lines. An unexpected close (anything but 1000 and the 44xx refusals, including
   `1013` for a consumer too slow) reconnects after 1, 2, 4, 8 and 15 seconds, then gives up with a
