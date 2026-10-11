@@ -83,7 +83,10 @@ Branch `feat/runs-live`, chained on `feat/agents-scenarios`. Each work-unit comm
     race; shutdown 20 s then engine dispose; some failure paths untested.
   - T5 live stream (WebSocket `/api/runs/{id}/live` and `/api/runs/live?batchId=`, cookie auth 4401,
     Origin 4403, unknown 4404, snapshot + camelCase events, binary audio frames tagged 0 agent / 1
-    caller, backpressure drops audio and sends `lagging`; edge 1 h timeout on live routes) — next commit.
+    caller, backpressure drops audio and sends `lagging`; edge 1 h timeout on live routes): `b9b6cb4`,
+    APPROVED (review-67419c8cf7e40c20). Advisory (fold into T6/T7 hardening): batch overview can miss
+    its snapshot if the last run finishes during the DB read; an unguarded hub.event exception could
+    break persistence of that event; text-backlog 1013 path untested; one sleep-based test.
 - Compose smoke passed (after one transient Google Fonts failure during the frontend build).
 
 ## Next step
