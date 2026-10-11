@@ -110,5 +110,12 @@ Branch `feat/runs-live`, chained on `feat/agents-scenarios`. Each work-unit comm
 - Not yet exercised in a real browser nor against the real agent. Run list lacks persona/p50/turns
   (RunOut has no summary) — follow-up.
 
+- User decision (2026-10-11): the evaluator uses ONLY `gpt-6-luna` (verified: released 2026-09-22,
+  reasoning model, structured outputs on Chat Completions). Chat model no longer configurable; legacy
+  `chatModel` ignored; `reasoning_effort="low"` always; 4000 max completion tokens; 30 s timeout;
+  empty choices / length cut-off / empty content → one retry then safe hang-up. No new validation
+  ("no unnecessary guardrails, generous limits"). Azure keeps `chatDeployment` (must be gpt-6-luna).
+  550 backend / 282 frontend tests.
+
 ## Next step
 Rebuild stack, user-authorized first real run from the UI; then judge + Langfuse feature.

@@ -123,12 +123,8 @@ async def test_caller_policy_uses_the_openai_chat_model(app, user_client):
         {"name": "chat", "kind": "openai", "config": {}, "secrets": {"apiKey": KEY}},
     )
     policy = await build_policy(app, connection_id)
-    assert policy.model == "gpt-4.1-mini"
+    assert policy.model == "gpt-6-luna"
     assert policy.client.api_key == KEY
-    await user_client.patch(
-        f"/api/connections/{connection_id}", json={"config": {"chatModel": "gpt-4.1"}}
-    )
-    assert (await build_policy(app, connection_id)).model == "gpt-4.1"
 
 
 async def test_caller_policy_uses_the_azure_chat_deployment(app, user_client):

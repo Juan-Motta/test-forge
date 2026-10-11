@@ -394,7 +394,7 @@ async def test_resolves_the_evaluator_connection_of_a_stored_scenario(user_clien
         assert (str(found.id), found.name, found.chat_model) == (
             openai_id,
             "OpenAI",
-            "gpt-4.1-mini",
+            "gpt-6-luna",
         )
         for body, needle in [(azure_voice, "Azure"), (nothing, "evaluator model connection")]:
             with pytest.raises(ScenarioNotRunnable, match=needle):

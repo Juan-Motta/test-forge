@@ -36,7 +36,7 @@ export function snapshotFixture(overrides: Partial<RunSnapshot["scenario"]> = {}
     agent: { id: "a-hotel", name: "Hotel booking assistant", protocol: "live" },
     connections: {
       tts: { id: "c-openai", name: "OpenAI" },
-      evaluator: { id: "c-openai", name: "OpenAI", chatModel: "gpt-4.1-mini" },
+      evaluator: { id: "c-openai", name: "OpenAI", chatModel: "gpt-6-luna" },
     },
   };
 }

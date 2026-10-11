@@ -257,11 +257,15 @@ edit applies to the next run without restarting anything.
 
 | Kind | `config` (camelCase) | `secrets` |
 | --- | --- | --- |
-| `openai` | `baseUrl` (default `https://api.openai.com/v1`), `ttsModel` (`gpt-4o-mini-tts`), `ttsVoice` (`alloy`), `chatModel` (`gpt-4.1-mini`, the evaluator's model) | `apiKey` |
-| `azure_openai` | `endpoint`, `apiVersion`, `ttsDeployment`, `ttsVoice` (`alloy`), `chatDeployment` (optional; without it the connection cannot be the evaluator) | `apiKey` |
+| `openai` | `baseUrl` (default `https://api.openai.com/v1`), `ttsModel` (`gpt-4o-mini-tts`), `ttsVoice` (`alloy`) | `apiKey` |
+| `azure_openai` | `endpoint`, `apiVersion`, `ttsDeployment`, `ttsVoice` (`alloy`), `chatDeployment` (optional, a `gpt-6-luna` deployment; without it the connection cannot be the evaluator) | `apiKey` |
 | `azure_speech` | exactly one of `region` (e.g. `eastus`) or `endpoint`; `voice` (e.g. `es-MX-DaliaNeural`) | `key` |
 | `langfuse` | `host`, `publicKey` | `secretKey` |
 
+- The evaluator's chat model is always `gpt-6-luna` and is not configurable: an `openai`
+  connection uses it directly, an `azure_openai` one through its `chatDeployment`. A
+  `chatModel` value in older stored rows (or in a request) is ignored and dropped on the next
+  write.
 - `GET /api/connections`, `GET /api/connections/{id}`, `POST /api/connections`
   `{name, kind, config, secrets}` (201), `PATCH /api/connections/{id}` `{name?, config?,
   secrets?}`, `DELETE /api/connections/{id}` (204). A PATCH `config` or `secrets` replaces the
@@ -361,8 +365,9 @@ context, persona, goal, instructions, facts and hang-up rule plus the conversati
 asks for a strict structured answer `{say, hangUp, reason}`. The rules keep the caller in
 character, in the persona's locale, in short spoken sentences, revealing facts one at a time and
 only when asked, never mentioning being an AI or an evaluator. `providers/openai_chat.py` calls
-OpenAI (`chatModel`) or Azure OpenAI (`chatDeployment`) with structured outputs and a 20 s
-timeout; a malformed answer or a provider error is retried once, then the caller hangs up with
+OpenAI (`gpt-6-luna`) or Azure OpenAI (`chatDeployment`) with structured outputs,
+`reasoning_effort: low`, up to 4000 completion tokens (reasoning included) and a 30 s timeout;
+an empty or cut-off answer counts as malformed; a malformed answer or a provider error is retried once, then the caller hangs up with
 the reason. `modules.connections.runtime.build_caller_policy` builds it from the stored
 connection, like the synthesizer.
 

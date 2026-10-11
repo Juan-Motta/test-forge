@@ -39,15 +39,6 @@ export const KINDS: Record<ConnectionKind, KindDefinition> = {
       },
       { key: "ttsModel", label: "TTS model", format: "identifier", required: false, defaultValue: "gpt-4o-mini-tts" },
       { key: "ttsVoice", label: "TTS voice", format: "identifier", required: false, defaultValue: "alloy" },
-      {
-        key: "chatModel",
-        label: "Chat model",
-        format: "identifier",
-        required: false,
-        defaultValue: "gpt-4.1-mini",
-        placeholder: "gpt-4.1-mini",
-        hint: "Model the evaluator uses to decide what the caller says. Blank uses gpt-4.1-mini.",
-      },
     ],
     secret: { key: "apiKey", label: "API key" },
   },
@@ -70,7 +61,7 @@ export const KINDS: Record<ConnectionKind, KindDefinition> = {
         label: "Chat deployment",
         format: "identifier",
         required: false,
-        hint: "Chat model deployment the evaluator uses to decide what the caller says. Without it this connection cannot be the evaluator.",
+        hint: "A gpt-6-luna deployment the evaluator uses to decide what the caller says. Without it this connection cannot be the evaluator.",
       },
     ],
     secret: { key: "apiKey", label: "API key" },
@@ -117,7 +108,7 @@ export function kindLabel(kind: string): string {
 
 /**
  * Whether the connection can act as the evaluator's chat model (mirrors the backend's
- * `chat_model`): OpenAI always (a default model applies), Azure OpenAI only with a chat deployment.
+ * `chat_model`): OpenAI always (it uses gpt-6-luna), Azure OpenAI only with a chat deployment.
  */
 export function canChat(connection: Pick<Connection, "kind" | "config">): boolean {
   if (connection.kind === "openai") return true;

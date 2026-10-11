@@ -48,7 +48,6 @@ describe("Create connection", () => {
             baseUrl: "https://api.openai.com/v1",
             ttsModel: "gpt-4o-mini-tts",
             ttsVoice: "coral",
-            chatModel: "gpt-4.1-mini",
           },
           secrets: { apiKey: CANARY },
         },
@@ -249,7 +248,6 @@ describe("Create connection", () => {
             baseUrl: "https://api.openai.com/v1",
             ttsModel: "gpt-4o-mini-tts",
             ttsVoice: "alloy",
-            chatModel: "gpt-4.1-mini",
           },
           secrets: { apiKey: CANARY },
         },
@@ -376,25 +374,15 @@ describe("Form edge cases", () => {
     expect(api.requests).toEqual([]);
   });
 
-  it("edits the evaluator chat model of a connection stored before it existed", async () => {
-    const api = mockConnectionsApi([connectionFixture()]);
-    const { user, dialog } = await openEdit();
+  it("has no chat model field: the evaluator always uses gpt-6-luna", async () => {
+    mockConnectionsApi([]);
+    const { user, dialog } = await openCreate();
 
-    const chatModel = within(dialog).getByLabelText("Chat model");
-    expect(chatModel).toHaveValue("");
-    expect(chatModel).toHaveAccessibleDescription(expect.stringContaining("evaluator"));
-    await user.type(chatModel, "gpt-4.1");
-    await user.click(within(dialog).getByRole("button", { name: "Save changes" }));
-
-    await waitFor(() => expect(api.requests).toHaveLength(1));
-    expect(api.requests[0].body).toEqual({
-      config: {
-        baseUrl: "https://api.openai.com/v1",
-        ttsModel: "gpt-4o-mini-tts",
-        ttsVoice: "alloy",
-        chatModel: "gpt-4.1",
-      },
-    });
+    expect(within(dialog).queryByLabelText("Chat model")).not.toBeInTheDocument();
+    await user.selectOptions(within(dialog).getByLabelText("Provider"), "azure_openai");
+    expect(within(dialog).getByLabelText("Chat deployment")).toHaveAccessibleDescription(
+      expect.stringContaining("gpt-6-luna"),
+    );
   });
 
   it("blocks a chat deployment that is not an identifier", async () => {

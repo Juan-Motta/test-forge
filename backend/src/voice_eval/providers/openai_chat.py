@@ -1,5 +1,7 @@
 """OpenAI / Azure OpenAI chat adapter for the CallerPolicy port (structured outputs).
 
+gpt-6-luna is a reasoning model: every call asks for low effort, and the token budget leaves
+room for its reasoning plus the answer; an empty or cut-off answer counts as malformed.
 One bad answer or provider error is retried once; after that the policy hangs up safely with
 the reason, so a run always ends cleanly. Logs carry error types only, never the request,
 the answer or a secret.
@@ -22,8 +24,9 @@ from voice_eval.ports.policy import CallerDecision, PolicyState
 
 log = logging.getLogger(__name__)
 
-TIMEOUT_S = 20.0
-MAX_COMPLETION_TOKENS = 400
+TIMEOUT_S = 30.0
+MAX_COMPLETION_TOKENS = 4000  # reasoning tokens count against it too
+REASONING_EFFORT = "low"  # sent on every call, OpenAI and Azure alike
 ATTEMPTS = 2
 
 
@@ -63,11 +66,19 @@ class OpenAIChatPolicy:
                 messages=build_messages(state),
                 response_format={"type": "json_schema", "json_schema": DECISION_SCHEMA},
                 max_completion_tokens=MAX_COMPLETION_TOKENS,
+                reasoning_effort=REASONING_EFFORT,
                 timeout=self.timeout_s,
             )
-        message = completion.choices[0].message
+        if not completion.choices:
+            raise MalformedDecision("no answer")
+        choice = completion.choices[0]
+        message = choice.message
         if getattr(message, "refusal", None):
             raise MalformedDecision("the model refused")
+        if getattr(choice, "finish_reason", None) == "length":
+            raise MalformedDecision("the answer was cut off by the token limit")
+        if not (message.content or "").strip():
+            raise MalformedDecision("empty answer")
         return parse_decision(message.content)
 
     async def next_turn(self, state: PolicyState) -> CallerDecision:

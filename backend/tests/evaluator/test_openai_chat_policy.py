@@ -30,9 +30,9 @@ STATE = PolicyState(brief=BRIEF)
 SECRET = "sk-chat-secret-abcdefghijkl"
 
 
-def completion(content: str | None, refusal: str | None = None):
+def completion(content: str | None, refusal: str | None = None, finish_reason: str = "stop"):
     message = SimpleNamespace(content=content, refusal=refusal)
-    return SimpleNamespace(choices=[SimpleNamespace(message=message)])
+    return SimpleNamespace(choices=[SimpleNamespace(message=message, finish_reason=finish_reason)])
 
 
 class FakeCompletions:
@@ -65,16 +65,46 @@ async def test_sends_the_prompt_with_the_strict_schema_and_returns_the_decision(
         fake_client(
             completion('{"say": "Hi, a table for two?", "hangUp": false, "reason": "ask"}')
         ),
-        "gpt-4.1-mini",
+        "gpt-6-luna",
     )
     decision = await policy.next_turn(STATE)
     assert decision == CallerDecision("Hi, a table for two?", False, "ask")
     (call,) = calls(policy)
-    assert call["model"] == "gpt-4.1-mini"
+    assert call["model"] == "gpt-6-luna"
     assert call["messages"] == build_messages(STATE)
     assert call["response_format"] == {"type": "json_schema", "json_schema": DECISION_SCHEMA}
-    assert call["timeout"] == policy.timeout_s
-    assert call["max_completion_tokens"] > 0
+    assert call["timeout"] == policy.timeout_s == 30
+    assert call["max_completion_tokens"] == 4000  # room for reasoning tokens plus the answer
+    assert call["reasoning_effort"] == "low"  # always, for OpenAI and Azure alike
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        completion(None),  # no content at all
+        completion(""),
+        completion("   "),
+        completion('{"say": "Hi", "ha', finish_reason="length"),  # cut off by the token limit
+        SimpleNamespace(choices=[]),
+    ],
+)
+async def test_an_empty_or_truncated_answer_is_malformed_then_hangs_up_safely(bad):
+    policy = OpenAIChatPolicy(fake_client(bad, bad), "m")
+    decision = await policy.next_turn(STATE)
+    assert (decision.say, decision.hang_up) == (None, True)
+    assert "malformed" in decision.reason
+    assert len(calls(policy)) == 2
+
+
+async def test_a_truncated_answer_is_retried():
+    policy = OpenAIChatPolicy(
+        fake_client(
+            completion("", finish_reason="length"),
+            completion('{"say": "Hi", "hangUp": false, "reason": "r"}'),
+        ),
+        "m",
+    )
+    assert (await policy.next_turn(STATE)).say == "Hi"
 
 
 async def test_retries_once_on_malformed_output():
@@ -123,9 +153,11 @@ async def test_a_hung_call_is_bounded_by_the_policy_timeout():
 
 
 def test_openai_client_is_built_from_the_connection_values():
-    policy = OpenAIChatPolicy.for_openai(SECRET, "gpt-4.1", base_url="https://proxy.example.com/v1")
+    policy = OpenAIChatPolicy.for_openai(
+        SECRET, "gpt-6-luna", base_url="https://proxy.example.com/v1"
+    )
     assert isinstance(policy.client, AsyncOpenAI)
-    assert policy.model == "gpt-4.1"
+    assert policy.model == "gpt-6-luna"
     assert str(policy.client.base_url) == "https://proxy.example.com/v1/"
     assert SECRET not in repr(policy)
 

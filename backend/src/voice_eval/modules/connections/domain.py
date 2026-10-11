@@ -31,7 +31,8 @@ MAX_TEST_DETAIL_LENGTH = 500
 HINT_MASK = "••••"
 HINT_MIN_SECRET_LENGTH = 12
 LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1"})
-DEFAULT_CHAT_MODEL = "gpt-4.1-mini"
+CHAT_MODEL = "gpt-6-luna"  # the evaluator's only model (Azure: a deployment of it)
+LEGACY_CONFIG_KEYS = frozenset({"chat_model", "chatModel"})  # once configurable, now ignored
 
 
 class ConnectionKind(StrEnum):
@@ -160,9 +161,20 @@ class OpenAIConfig(_Model):
     base_url: str = "https://api.openai.com/v1"
     tts_model: Identifier = "gpt-4o-mini-tts"
     tts_voice: Identifier = "alloy"
-    chat_model: Identifier = DEFAULT_CHAT_MODEL  # the evaluator's model
 
     check_base_url = field_validator("base_url")(check_url)
+
+    @model_validator(mode="before")
+    @classmethod
+    def drop_legacy_keys(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            return {key: value for key, value in data.items() if key not in LEGACY_CONFIG_KEYS}
+        return data
+
+    @property
+    def chat_model(self) -> str:
+        """The evaluator's model: fixed, not configurable."""
+        return CHAT_MODEL
 
 
 class AzureOpenAIConfig(_Model):
@@ -170,7 +182,8 @@ class AzureOpenAIConfig(_Model):
     api_version: Identifier
     tts_deployment: Identifier
     tts_voice: Identifier = "alloy"
-    chat_deployment: Identifier | None = None  # without it the connection cannot evaluate
+    # A gpt-6-luna deployment; without it the connection cannot evaluate.
+    chat_deployment: Identifier | None = None
 
     check_endpoint = field_validator("endpoint")(check_url)
 
@@ -269,10 +282,10 @@ def secret_hint(secrets: BaseModel) -> str:
 def chat_model(kind: ConnectionKind, stored_config: dict[str, Any]) -> str | None:
     """The chat model (OpenAI) or deployment (Azure OpenAI) a stored config offers, if any.
 
-    Rows stored before the field existed get the OpenAI default; Azure has no default.
+    OpenAI always uses `CHAT_MODEL` (a legacy stored `chat_model` is ignored); Azure has no default.
     """
     if kind is ConnectionKind.OPENAI:
-        return stored_config.get("chat_model") or DEFAULT_CHAT_MODEL
+        return CHAT_MODEL
     if kind is ConnectionKind.AZURE_OPENAI:
         return stored_config.get("chat_deployment") or None
     return None

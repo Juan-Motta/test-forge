@@ -25,8 +25,8 @@ def test_openai_defaults():
         "base_url": "https://api.openai.com/v1",
         "tts_model": "gpt-4o-mini-tts",
         "tts_voice": "alloy",
-        "chat_model": "gpt-4.1-mini",
     }
+    assert parsed.chat_model == "gpt-6-luna"  # fixed: the only evaluator model
 
 
 def test_config_accepts_camel_case_and_strips_trailing_slash():
@@ -61,21 +61,26 @@ AZURE = {
 }
 
 
-def test_chat_model_is_configurable():
-    assert config("openai", {"chatModel": "gpt-4.1"}).chat_model == "gpt-4.1"
+def test_chat_deployment_is_configurable():
     assert config("azure_openai", {**AZURE, "chatDeployment": "chat"}).chat_deployment == "chat"
     for bad in ("../x", "a b", ""):
-        with pytest.raises(InvalidConnectionInput) as info:
-            config("openai", {"chatModel": bad})
-        assert error_locs(info) == [("config", "chatModel")]
         with pytest.raises(InvalidConnectionInput) as info:
             config("azure_openai", {**AZURE, "chatDeployment": bad})
         assert error_locs(info) == [("config", "chatDeployment")]
 
 
+def test_the_openai_chat_model_is_fixed_and_legacy_values_are_ignored():
+    # Rows stored while the model was configurable still parse; their value is not used.
+    stored = {"base_url": "https://api.openai.com/v1", "tts_model": "t", "chat_model": "gpt-4.1"}
+    parsed = config("openai", stored)
+    assert parsed.chat_model == "gpt-6-luna"
+    assert "chat_model" not in parsed.model_dump()
+    assert config("openai", {"chatModel": "gpt-4.1"}).chat_model == "gpt-6-luna"
+
+
 def test_stored_rows_without_chat_fields_still_parse():
     stored = {"base_url": "https://api.openai.com/v1", "tts_model": "t", "tts_voice": "alloy"}
-    assert config("openai", stored).chat_model == "gpt-4.1-mini"
+    assert config("openai", stored).chat_model == "gpt-6-luna"
     stored_azure = {"endpoint": AZURE["endpoint"], "api_version": "v", "tts_deployment": "t"}
     assert config("azure_openai", stored_azure).chat_deployment is None
 
@@ -83,8 +88,8 @@ def test_stored_rows_without_chat_fields_still_parse():
 @pytest.mark.parametrize(
     ("kind", "stored", "expected"),
     [
-        ("openai", {}, "gpt-4.1-mini"),  # older rows: the default model
-        ("openai", {"chat_model": "gpt-4.1"}, "gpt-4.1"),
+        ("openai", {}, "gpt-6-luna"),
+        ("openai", {"chat_model": "gpt-4.1"}, "gpt-6-luna"),  # a legacy value is ignored
         ("azure_openai", {"tts_deployment": "t"}, None),
         ("azure_openai", {"chat_deployment": None}, None),
         ("azure_openai", {"chat_deployment": "chat"}, "chat"),

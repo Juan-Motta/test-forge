@@ -52,7 +52,7 @@ async def test_create_batch_interleaves_runs_with_their_snapshot(db, factory):
     assert brief.goal == "Learn the current account balance."
     assert brief.facts == (("account_number", "123-456"),)
     assert brief.agent_context == "Answers balance questions for retail customers."
-    assert batch.runs[0].snapshot["connections"]["evaluator"]["chat_model"] == "gpt-4.1-mini"
+    assert batch.runs[0].snapshot["connections"]["evaluator"]["chat_model"] == "gpt-6-luna"
     assert "secrets" not in str(batch.runs[0].snapshot)
 
 

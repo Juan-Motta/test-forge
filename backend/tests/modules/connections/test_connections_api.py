@@ -80,7 +80,6 @@ async def test_create_returns_the_connection_without_secrets(user_client):
         "baseUrl": "https://api.openai.com/v1",
         "ttsModel": "gpt-4o-mini-tts",
         "ttsVoice": "coral",
-        "chatModel": "gpt-4.1-mini",
     }
     assert body["secretHint"] == "••••1234"
     assert body["hasSecret"] is True
@@ -97,7 +96,6 @@ async def test_secret_is_stored_encrypted_and_bound_to_the_row(user_client, db, 
         "base_url": "https://api.openai.com/v1",
         "tts_model": "gpt-4o-mini-tts",
         "tts_voice": "coral",
-        "chat_model": "gpt-4.1-mini",
     }
     assert row.created_by is not None
     box = app.state.secret_box
@@ -226,6 +224,12 @@ async def test_changing_credentials_clears_the_last_test(user_client, provider):
     assert renamed["lastTest"] is not None
     changed = (await user_client.patch(url, json={"config": {"ttsVoice": "nova"}})).json()
     assert changed["lastTest"] is None
+
+
+async def test_a_legacy_chat_model_is_dropped_on_the_next_write(user_client, db):
+    body = await create(user_client, config={"chatModel": "gpt-4.1"})
+    assert "chatModel" not in body["config"]
+    assert "chat_model" not in (await stored_row(db, body["id"])).config
 
 
 async def test_draft_test_persists_nothing(user_client, provider):
