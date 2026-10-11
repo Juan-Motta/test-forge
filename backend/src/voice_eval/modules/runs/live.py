@@ -58,7 +58,8 @@ class Subscriber:
         self._ready.set()
 
     def put_text(self, text: str, *, first: bool = False) -> None:
-        if self.ended:
+        """Queue a text message; `first` (the snapshot) goes ahead of everything, even the end."""
+        if self.ended and not first:
             return
         if self._text >= self._text_limit:
             self.too_slow = True

@@ -311,3 +311,105 @@ async def test_runs_are_isolated_and_finishing_closes_only_their_subscribers():
     hub.event(second, RunEvent("warning", 2.0, {"message": "only second"}))
     assert json.loads(await b.get())["message"] == "only second"
     assert hub.subscribe(first) is None  # finished runs are no longer live
+
+
+async def test_a_text_backlog_past_the_limit_disconnects_the_consumer():
+    hub = LiveHub(text_messages_per_subscriber=3)
+    run_id = uuid.uuid4()
+    hub.open(run_id, uuid.uuid4())
+    sub = hub.subscribe(run_id)  # the snapshot is the first queued text
+    for i in range(5):
+        hub.event(run_id, RunEvent("warning", float(i), {"message": f"w{i}"}))
+
+    items = [json.loads(item) for item in await drain(sub)]
+    assert sub.too_slow and sub.ended
+    assert [item["type"] for item in items] == ["snapshot", "warning", "warning"]
+    hub.event(run_id, RunEvent("warning", 9.0, {"message": "late"}))  # ignored once ended
+    assert sub.ended
+
+
+class FakeSocket:
+    """Just enough of a Starlette WebSocket for `_pump`."""
+
+    def __init__(self) -> None:
+        self.sent: list[str | bytes] = []
+        self.closed_with: int | None = None
+        self._left = asyncio.Event()
+
+    async def send_text(self, text: str) -> None:
+        self.sent.append(text)
+
+    async def send_bytes(self, data: bytes) -> None:
+        self.sent.append(data)
+
+    async def receive(self) -> dict:
+        await self._left.wait()
+        return {"type": "websocket.disconnect"}
+
+    async def close(self, code: int = 1000) -> None:
+        self.closed_with = code
+
+
+async def test_a_too_slow_consumer_is_closed_with_1013():
+    from voice_eval.modules.runs.live_api import CLOSE_TOO_SLOW, _pump
+
+    hub = LiveHub(text_messages_per_subscriber=2)
+    run_id = uuid.uuid4()
+    hub.open(run_id, uuid.uuid4())
+    sub = hub.subscribe(run_id)
+    for i in range(4):
+        hub.event(run_id, RunEvent("warning", float(i), {"message": f"w{i}"}))
+    socket = FakeSocket()
+
+    await asyncio.wait_for(_pump(socket, sub), 2)
+
+    assert socket.closed_with == CLOSE_TOO_SLOW == 1013
+    assert [json.loads(m)["type"] for m in socket.sent] == ["snapshot", "warning"]
+
+
+async def test_batch_overview_keeps_its_snapshot_when_the_batch_ends_during_the_read(
+    server, app, user_client, factory, monkeypatch
+):
+    from voice_eval.modules.runs import live_api
+
+    drive = ScriptedDrive(before=[], after=[])
+    batch = await launch_one(user_client, factory, app, drive)
+    run_id = batch["runs"][0]["id"]
+    await wait_for(status_is(user_client, run_id, "running"))
+    hub = app.state.runs.hub
+    real_get_batch = live_api.service.get_batch
+
+    async def get_batch_while_the_run_ends(db, batch_id, **kwargs):
+        loaded = await real_get_batch(db, batch_id, **kwargs)
+        hub.finish(uuid.UUID(run_id), "completed", "caller_hung_up")  # ends during the read
+        return loaded
+
+    monkeypatch.setattr(live_api.service, "get_batch", get_batch_while_the_run_ends)
+    headers = {"Origin": ORIGIN, "Cookie": cookie_of(user_client)}
+    url = f"{server}/api/runs/live?batchId={batch['id']}"
+    try:
+        async with connect(url, additional_headers=headers) as ws:
+            messages = decoded(await receive_all(ws))
+            code = ws.close_code
+    finally:
+        drive.go.set()
+        await wait_for(status_is(user_client, run_id, "completed"))
+
+    assert kinds(messages) == ["snapshot", "finished", "batchFinished"]
+    assert messages[0]["batch"]["id"] == batch["id"]
+    assert code == 1000
+
+
+async def test_a_failing_live_publish_never_breaks_the_run(app, user_client, factory, drive):
+    def broken_publish(*args, **kwargs):
+        raise RuntimeError("hub exploded")
+
+    app.state.runs.hub.event = broken_publish
+    app.state.runs.hub.status = broken_publish
+    scenario = await factory.scenario()
+    response = await user_client.post("/api/runs", json={"scenarioIds": [scenario["id"]]})
+    run_id = response.json()["runs"][0]["id"]
+
+    await wait_for(status_is(user_client, run_id, "running"))
+    drive.release.set()
+    await wait_for(status_is(user_client, run_id, "completed"))

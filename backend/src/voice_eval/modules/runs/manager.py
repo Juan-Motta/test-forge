@@ -72,6 +72,14 @@ def _provider_error(role: str, exc: Exception) -> RunSetupError:
     return RunSetupError(f"the {role} connection could not be used ({detail})")
 
 
+def publish(action: Callable[..., None], *args: Any) -> None:
+    """Call a live-hub method; a failure there is logged (type only) and never stops the run."""
+    try:
+        action(*args)
+    except Exception as exc:
+        log.warning("live publish failed (%s)", type(exc).__name__)
+
+
 class RunEventSink:
     """Publishes a run's events live and persists the status changes they imply."""
 
@@ -80,11 +88,12 @@ class RunEventSink:
         self.job = job
 
     async def emit(self, event: RunEvent) -> None:
-        self.manager.hub.event(self.job.run_id, event)
+        hub = self.manager.hub
+        publish(hub.event, self.job.run_id, event)
         if event.type == "protocol_detected":
             async with self.manager.sessionmaker() as db:
                 await service.mark_running(db, self.job.run_id)
-            self.manager.hub.status(self.job.run_id, RunStatus.RUNNING.value)
+            publish(hub.status, self.job.run_id, RunStatus.RUNNING.value)
 
 
 class RunManager:
@@ -208,7 +217,7 @@ class RunManager:
             async with self._batch_slots[job.batch_id], self._slots:
                 async with self.sessionmaker() as db:
                     await service.mark_started(db, job.run_id, job.batch_id)
-                self.hub.status(job.run_id, RunStatus.CONNECTING.value)
+                publish(self.hub.status, job.run_id, RunStatus.CONNECTING.value)
                 started = True
                 summary = await self.drive(job, RunEventSink(self, job))
                 outcome = _outcome(summary)
@@ -255,7 +264,7 @@ class RunManager:
                 )
         except Exception:
             log.exception("could not record the end of run %s", run_id)
-        self.hub.finish(run_id, status.value, reason)
+        publish(self.hub.finish, run_id, status.value, reason)
 
     async def drive_session(self, job: RunJob, sink: EventSink) -> dict[str, Any]:
         """The real conversation: providers from the stored connections, then the runner."""

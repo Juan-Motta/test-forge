@@ -105,7 +105,9 @@ async def batch_live(websocket: WebSocket) -> None:
     except ValueError:
         await websocket.close(CLOSE_NOT_FOUND, "Batch not found")
         return
-    subscriber = runs.hub.subscribe_batch(batch_id)  # first, so no change is missed
+    # Subscribe first, so no change is missed; the snapshot read below is then put ahead of
+    # everything queued meanwhile, even when the batch ended during the read.
+    subscriber = runs.hub.subscribe_batch(batch_id)
     try:
         async with websocket.app.state.sessionmaker() as db:
             try:
