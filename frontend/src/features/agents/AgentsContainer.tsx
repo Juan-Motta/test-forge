@@ -27,6 +27,9 @@ export function AgentsContainer({ scenarioCounts }: AgentsContainerProps = {}) {
   const [notice, setNotice] = useState("");
   // A ref, not mutation state: two clicks can land before React re-renders the disabled button.
   const deletingNow = useRef(false);
+  // Mirrors `deletingNow` for rendering: one delete at a time, even across dialogs.
+  const [deleteInFlight, setDeleteInFlight] = useState(false);
+  const shownDelete = useRef<Agent | undefined>(undefined);
   // The deleted row's button had focus; once the dialog is gone, hand focus to the page title.
   const titleRef = useRef<HTMLHeadingElement>(null);
   const focusTitle = useRef(false);
@@ -39,17 +42,31 @@ export function AgentsContainer({ scenarioCounts }: AgentsContainerProps = {}) {
 
   const openCreate = () => setEditing({ type: "create" });
 
-  function confirmDelete(agent: Agent) {
+  /** Opens or closes the dialog; the ref lets a settling delete see what the dialog shows now. */
+  function showDelete(agent: Agent | undefined) {
+    shownDelete.current = agent;
+    setDeleting(agent);
+  }
+
+  async function confirmDelete(agent: Agent) {
     if (deletingNow.current) return;
     deletingNow.current = true;
-    remove.mutate(agent, {
-      onSuccess: () => {
+    setDeleteInFlight(true);
+    try {
+      await remove.mutateAsync(agent);
+      setNotice(`Deleted ${agent.name}.`);
+      // The user may have cancelled and opened another agent's dialog meanwhile: leave that one open.
+      if (shownDelete.current?.id === agent.id) {
         focusTitle.current = true;
-        setDeleting(undefined);
-        setNotice(`Deleted ${agent.name}.`);
-      },
-      onSettled: () => (deletingNow.current = false),
-    });
+        showDelete(undefined);
+      }
+    } catch {
+      // Shown through the mutation's error state while its dialog is open.
+    } finally {
+      // mutateAsync, not mutate's onSettled: `remove.reset()` drops pending mutate callbacks.
+      deletingNow.current = false;
+      setDeleteInFlight(false);
+    }
   }
 
   function onSaved(agent: Agent) {
@@ -92,7 +109,7 @@ export function AgentsContainer({ scenarioCounts }: AgentsContainerProps = {}) {
         onEdit={(agent) => setEditing({ type: "edit", agent })}
         onDelete={(agent) => {
           remove.reset();
-          setDeleting(agent);
+          showDelete(agent);
         }}
       />
     );
@@ -133,9 +150,9 @@ export function AgentsContainer({ scenarioCounts }: AgentsContainerProps = {}) {
 
       <DeleteAgentDialog
         agent={deleting}
-        onCancel={() => setDeleting(undefined)}
+        onCancel={() => showDelete(undefined)}
         onConfirm={confirmDelete}
-        pending={remove.isPending}
+        pending={deleteInFlight}
         error={remove.isError ? errorMessage(remove.error) : undefined}
         errorHint={inUse ? "Delete or move its scenarios first." : undefined}
       />

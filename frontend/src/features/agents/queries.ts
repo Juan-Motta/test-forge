@@ -1,6 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ApiError } from "@/lib/api";
 import { createAgent, deleteAgent, listAgents, updateAgent } from "./api";
 import type { Agent, AgentChanges } from "./types";
 
@@ -36,7 +37,14 @@ export function useUpdateAgent() {
 export function useDeleteAgent() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (agent: Agent) => deleteAgent(agent.id),
+    mutationFn: async (agent: Agent) => {
+      try {
+        await deleteAgent(agent.id);
+      } catch (error) {
+        // Already gone (another tab, or a retried request): the outcome the user asked for.
+        if (!(error instanceof ApiError && error.status === 404)) throw error;
+      }
+    },
     onSuccess: (_, agent) => {
       queryClient.setQueryData<Agent[]>(agentsQueryKey, (list) => list?.filter((item) => item.id !== agent.id));
       return queryClient.invalidateQueries({ queryKey: agentsQueryKey });

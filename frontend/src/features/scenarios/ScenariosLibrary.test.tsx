@@ -1,9 +1,11 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { http, HttpResponse } from "msw/http";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { agentFixture, mockAgentsApi } from "@/features/agents/testing";
 import { mockRunsApi } from "@/features/runs/testing";
 import { renderWithClient } from "@/test/render";
+import { apiUrl, server } from "@/test/server";
 import { ScenariosContainer } from "./ScenariosContainer";
 import { mockScenariosApi, scenarioFixture } from "./testing";
 
@@ -140,6 +142,37 @@ describe("Scenarios library", () => {
     expect(screen.getByRole("heading", { name: "Scenarios", level: 1 })).toHaveFocus();
   });
 
+  it("still deletes another scenario after cancelling a dialog whose delete was in flight", async () => {
+    mockAgentsApi(agents);
+    const api = mockScenariosApi([booking, cancel], { agents });
+    let release: () => void = () => {};
+    server.use(
+      http.delete(apiUrl("/scenarios/s-booking"), async () => {
+        await new Promise<void>((resolve) => (release = resolve));
+        api.items = api.items.filter((scenario) => scenario.id !== "s-booking");
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+    renderWithClient(<ScenariosContainer />);
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: "Delete Booking with date change" }));
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Delete scenario" }));
+    await screen.findByRole("button", { name: "Deleting…" });
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Cancel" }));
+
+    await user.click(screen.getByRole("button", { name: "Delete Cancel within 24h" }));
+    release();
+    await waitFor(() =>
+      expect(screen.queryByRole("listitem", { name: "Booking with date change" })).not.toBeInTheDocument(),
+    );
+    const dialog = screen.getByRole("dialog", { name: "Delete “Cancel within 24h”?" });
+    await user.click(await within(dialog).findByRole("button", { name: "Delete scenario" }));
+
+    await waitFor(() => expect(screen.queryByRole("listitem", { name: "Cancel within 24h" })).not.toBeInTheDocument());
+    expect(api.requests).toEqual([{ method: "DELETE", path: "/scenarios/s-cancel", body: undefined }]);
+  });
+
   it("offers New scenario in the empty state when agents exist", async () => {
     mockAgentsApi(agents);
     mockScenariosApi([], { agents });
@@ -203,6 +236,44 @@ describe("Scenarios library: launch", () => {
     await waitFor(() => expect(runs.requests).toHaveLength(1));
     expect(runs.requests[0].body).toMatchObject({ scenarioIds: ["s-booking", "s-refund"] });
     await waitFor(() => expect(nav.push).toHaveBeenCalledWith("/live?batchId=b-new-1"));
+  });
+
+  it("launches only the selected scenarios the filters still show, and says how many are hidden", async () => {
+    mockAgentsApi(agents);
+    mockScenariosApi([booking, cancel, refund], { agents });
+    const runs = mockRunsApi();
+    renderWithClient(<ScenariosContainer />);
+    const user = userEvent.setup();
+    await screen.findByRole("region", { name: "Support triage" });
+
+    await user.click(screen.getByRole("checkbox", { name: "Select Cancel within 24h" }));
+    await user.click(screen.getByRole("checkbox", { name: "Select Refund dispute" }));
+    await user.click(screen.getByRole("button", { name: "cancellation" }));
+    expect(screen.queryByRole("listitem", { name: "Refund dispute" })).not.toBeInTheDocument();
+
+    expect(screen.getByText("1 scenario selected")).toBeInTheDocument();
+    expect(screen.getByText("1 more is hidden by the filters and will not launch.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Launch selected (1)" }));
+    await user.click(within(screen.getByRole("dialog", { name: "Launch Cancel within 24h" })).getByRole("button", { name: "Launch" }));
+
+    await waitFor(() => expect(runs.requests).toHaveLength(1));
+    expect(runs.requests[0].body).toMatchObject({ scenarioIds: ["s-cancel"] });
+  });
+
+  it("keeps a selection hidden by the filters and offers no launch while none is visible", async () => {
+    mockAgentsApi(agents);
+    mockScenariosApi([booking, cancel, refund], { agents });
+    renderWithClient(<ScenariosContainer />);
+    const user = userEvent.setup();
+    await screen.findByRole("region", { name: "Support triage" });
+
+    await user.click(screen.getByRole("checkbox", { name: "Select Refund dispute" }));
+    await user.click(screen.getByRole("button", { name: "cancellation" }));
+    expect(screen.queryByRole("button", { name: /Launch selected/ })).not.toBeInTheDocument();
+    expect(screen.getByText("1 selected scenario is hidden by the filters.")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "All tags" }));
+    expect(screen.getByRole("button", { name: "Launch selected (1)" })).toBeInTheDocument();
   });
 
   it("clears the selection", async () => {

@@ -26,6 +26,9 @@ export function ConnectionsContainer() {
   const [rowTestError, setRowTestError] = useState<string | undefined>(undefined);
   // A ref, not mutation state: two clicks can land before React re-renders the disabled button.
   const deletingNow = useRef(false);
+  // Mirrors `deletingNow` for rendering: one delete at a time, even across dialogs.
+  const [deleteInFlight, setDeleteInFlight] = useState(false);
+  const shownDelete = useRef<Connection | undefined>(undefined);
   // The deleted row's button had focus; once the dialog is gone, hand focus to the page title.
   const titleRef = useRef<HTMLHeadingElement>(null);
   const focusTitle = useRef(false);
@@ -62,17 +65,31 @@ export function ConnectionsContainer() {
     }
   }
 
-  function confirmDelete(connection: Connection) {
+  /** Opens or closes the dialog; the ref lets a settling delete see what the dialog shows now. */
+  function showDelete(connection: Connection | undefined) {
+    shownDelete.current = connection;
+    setDeleting(connection);
+  }
+
+  async function confirmDelete(connection: Connection) {
     if (deletingNow.current) return;
     deletingNow.current = true;
-    remove.mutate(connection, {
-      onSuccess: () => {
+    setDeleteInFlight(true);
+    try {
+      await remove.mutateAsync(connection);
+      setNotice(`Deleted ${connection.name}.`);
+      // The user may have cancelled and opened another connection's dialog meanwhile: leave that one open.
+      if (shownDelete.current?.id === connection.id) {
         focusTitle.current = true;
-        setDeleting(undefined);
-        setNotice(`Deleted ${connection.name}.`);
-      },
-      onSettled: () => (deletingNow.current = false),
-    });
+        showDelete(undefined);
+      }
+    } catch {
+      // Shown through the mutation's error state while its dialog is open.
+    } finally {
+      // mutateAsync, not mutate's onSettled: `remove.reset()` drops pending mutate callbacks.
+      deletingNow.current = false;
+      setDeleteInFlight(false);
+    }
   }
 
   function onSaved(connection: Connection) {
@@ -114,7 +131,7 @@ export function ConnectionsContainer() {
         onTest={(connection) => void testRow(connection)}
         onDelete={(connection) => {
           remove.reset();
-          setDeleting(connection);
+          showDelete(connection);
         }}
         testingIds={testingIds}
       />
@@ -157,9 +174,9 @@ export function ConnectionsContainer() {
 
       <DeleteConnectionDialog
         connection={deleting}
-        onCancel={() => setDeleting(undefined)}
+        onCancel={() => showDelete(undefined)}
         onConfirm={confirmDelete}
-        pending={remove.isPending}
+        pending={deleteInFlight}
         error={remove.isError ? errorMessage(remove.error) : undefined}
       />
     </>

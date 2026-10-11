@@ -223,6 +223,34 @@ describe("Connections list", () => {
     expect(within(dialog).queryByRole("alert")).not.toBeInTheDocument();
   });
 
+  it("still deletes another connection after cancelling a dialog whose delete was in flight", async () => {
+    const api = mockConnectionsApi([connectionFixture(), connectionFixture({ id: "c-2", name: "Backup" })]);
+    let release: () => void = () => {};
+    server.use(
+      http.delete(apiUrl("/connections/c-openai"), async () => {
+        await new Promise<void>((resolve) => (release = resolve));
+        api.items = api.items.filter((item) => item.id !== "c-openai");
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+    renderWithClient(<ConnectionsContainer />);
+    const user = userEvent.setup();
+
+    await user.click(within(await findRow("OpenAI prod")).getByRole("button", { name: "Delete OpenAI prod" }));
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Delete connection" }));
+    await screen.findByRole("button", { name: "Deleting…" });
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Cancel" }));
+
+    await user.click(screen.getByRole("button", { name: "Delete Backup" }));
+    release();
+    await waitFor(() => expect(screen.queryByRole("row", { name: /OpenAI prod/ })).not.toBeInTheDocument());
+    const dialog = screen.getByRole("dialog", { name: "Delete “Backup”?" });
+    await user.click(await within(dialog).findByRole("button", { name: "Delete connection" }));
+
+    await waitFor(() => expect(screen.queryByRole("row", { name: /Backup/ })).not.toBeInTheDocument());
+    expect(api.items).toEqual([]);
+  });
+
   it("moves focus to the page heading after a delete instead of losing it", async () => {
     mockConnectionsApi([connectionFixture(), connectionFixture({ id: "c-2", name: "Backup" })]);
     renderWithClient(<ConnectionsContainer />);

@@ -111,6 +111,54 @@ describe("Agents list", () => {
   });
 });
 
+describe("Agents list: deleting", () => {
+  it("still deletes another agent after cancelling a dialog whose delete was in flight", async () => {
+    mockConnectionsApi([]);
+    const api = mockAgentsApi([agentFixture(), agentFixture({ id: "a-2", name: "Backup agent" })]);
+    let release: () => void = () => {};
+    server.use(
+      http.delete(apiUrl("/agents/a-hotel"), async () => {
+        await new Promise<void>((resolve) => (release = resolve));
+        api.items = api.items.filter((item) => item.id !== "a-hotel");
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+    renderWithClient(<AgentsContainer />);
+    const user = userEvent.setup();
+
+    await user.click(within(await findRow("Hotel booking assistant")).getByRole("button", { name: "Delete Hotel booking assistant" }));
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Delete agent" }));
+    await screen.findByRole("button", { name: "Deleting…" });
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Cancel" }));
+
+    await user.click(screen.getByRole("button", { name: "Delete Backup agent" }));
+    release();
+    await waitFor(() => expect(screen.queryByRole("row", { name: /Hotel booking assistant/ })).not.toBeInTheDocument());
+    const dialog = screen.getByRole("dialog", { name: "Delete “Backup agent”?" });
+    await user.click(await within(dialog).findByRole("button", { name: "Delete agent" }));
+
+    await waitFor(() => expect(screen.queryByRole("row", { name: /Backup agent/ })).not.toBeInTheDocument());
+    expect(api.requests).toEqual([{ method: "DELETE", path: "/agents/a-2", body: undefined }]);
+  });
+
+  it("removes an agent that another tab already deleted", async () => {
+    mockConnectionsApi([]);
+    const api = mockAgentsApi([agentFixture(), agentFixture({ id: "a-2", name: "Backup agent" })]);
+    renderWithClient(<AgentsContainer />);
+    const user = userEvent.setup();
+    await findRow("Hotel booking assistant");
+    api.items = api.items.filter((item) => item.id !== "a-hotel"); // gone server-side, still listed here
+
+    await user.click(screen.getByRole("button", { name: "Delete Hotel booking assistant" }));
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Delete agent" }));
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(screen.queryByRole("row", { name: /Hotel booking assistant/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("row", { name: /Backup agent/ })).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Deleted Hotel booking assistant.");
+  });
+});
+
 describe("Langfuse connection select", () => {
   it("offers only Langfuse connections, plus None", async () => {
     mockConnectionsApi([

@@ -104,10 +104,12 @@ export function ScenarioEditorContainer({ scenarioId }: ScenarioEditorContainerP
         }
       />
     );
-  } else if (scenario.isError || agents.isError) {
-    const failed = scenario.isError ? scenario : agents;
+  } else if (scenario.isError || agents.isError || connections.isError) {
+    // Without connections the voice and model selects would silently offer nothing.
+    const failed = scenario.isError ? scenario : agents.isError ? agents : connections;
+    const what = scenario.isError ? "the scenario" : agents.isError ? "agents" : "connections";
     body = (
-      <Alert title={scenario.isError ? "Could not load the scenario" : "Could not load agents"}>
+      <Alert title={`Could not load ${what}`}>
         <span className="block">{errorMessage(failed.error)}</span>
         <Button variant="secondary" className="mt-3" onClick={() => failed.refetch()}>
           Try again

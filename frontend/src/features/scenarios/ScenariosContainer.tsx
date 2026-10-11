@@ -32,6 +32,9 @@ export function ScenariosContainer() {
   // Refs, not mutation state: two clicks can land before React re-renders the disabled button.
   const duplicatingNow = useRef(false);
   const deletingNow = useRef(false);
+  // Mirrors `deletingNow` for rendering: one delete at a time, even across dialogs.
+  const [deleteInFlight, setDeleteInFlight] = useState(false);
+  const shownDelete = useRef<Scenario | undefined>(undefined);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const focusTitle = useRef(false);
 
@@ -53,17 +56,31 @@ export function ScenariosContainer() {
     });
   }
 
-  function confirmDelete(scenario: Scenario) {
+  /** Opens or closes the dialog; the ref lets a settling delete see what the dialog shows now. */
+  function showDelete(scenario: Scenario | undefined) {
+    shownDelete.current = scenario;
+    setDeleting(scenario);
+  }
+
+  async function confirmDelete(scenario: Scenario) {
     if (deletingNow.current) return;
     deletingNow.current = true;
-    remove.mutate(scenario, {
-      onSuccess: () => {
+    setDeleteInFlight(true);
+    try {
+      await remove.mutateAsync(scenario);
+      setNotice(`Deleted ${scenario.name}.`);
+      // The user may have cancelled and opened another scenario's dialog meanwhile: leave that one open.
+      if (shownDelete.current?.id === scenario.id) {
         focusTitle.current = true;
-        setDeleting(undefined);
-        setNotice(`Deleted ${scenario.name}.`);
-      },
-      onSettled: () => (deletingNow.current = false),
-    });
+        showDelete(undefined);
+      }
+    } catch {
+      // Shown through the mutation's error state while its dialog is open.
+    } finally {
+      // mutateAsync, not mutate's onSettled: `remove.reset()` drops pending mutate callbacks.
+      deletingNow.current = false;
+      setDeleteInFlight(false);
+    }
   }
 
   const newScenario = noAgents ? (
@@ -78,9 +95,11 @@ export function ScenariosContainer() {
   );
 
   const list = scenarios.data ?? [];
-  // Library order (grouped by agent, unfiltered), so a launch follows what the user sees.
-  const ordered = groupScenarios(list, agentList, NO_FILTERS).flatMap((group) => group.scenarios);
-  const picked = ordered.filter((scenario) => selected.has(scenario.id));
+  const groups = groupScenarios(list, agentList, filters);
+  // Only what the filters show, in library order: each launched scenario is a paid run, so a
+  // selection hidden by the filters is kept (it comes back with them) but never launched.
+  const picked = groups.flatMap((group) => group.scenarios).filter((scenario) => selected.has(scenario.id));
+  const hiddenCount = list.filter((scenario) => selected.has(scenario.id)).length - picked.length;
 
   function toggleSelected(scenario: Scenario) {
     setSelected((current) => {
@@ -114,7 +133,6 @@ export function ScenariosContainer() {
       />
     );
   } else {
-    const groups = groupScenarios(list, agentList, filters);
     const tags = allTags(list);
     body = (
       <>
@@ -151,10 +169,15 @@ export function ScenariosContainer() {
             </div>
           ) : null}
         </div>
-        {picked.length > 0 ? (
+        {picked.length > 0 || hiddenCount > 0 ? (
           <div className="flex flex-wrap items-center gap-3 rounded-xl border border-line bg-raised px-4 py-3">
-            <p className="text-sm text-muted">{picked.length === 1 ? "1 scenario selected" : `${picked.length} scenarios selected`}</p>
-            <Button onClick={() => setLaunching(picked)}>{`Launch selected (${picked.length})`}</Button>
+            {picked.length > 0 ? (
+              <p className="text-sm text-muted">{picked.length === 1 ? "1 scenario selected" : `${picked.length} scenarios selected`}</p>
+            ) : null}
+            {hiddenCount > 0 ? <p className="text-sm text-muted">{hiddenSelectionText(hiddenCount, picked.length > 0)}</p> : null}
+            {picked.length > 0 ? (
+              <Button onClick={() => setLaunching(picked)}>{`Launch selected (${picked.length})`}</Button>
+            ) : null}
             <Button variant="ghost" onClick={() => setSelected(new Set())}>
               Clear selection
             </Button>
@@ -173,7 +196,7 @@ export function ScenariosContainer() {
             onDuplicate={onDuplicate}
             onDelete={(scenario) => {
               remove.reset();
-              setDeleting(scenario);
+              showDelete(scenario);
             }}
             onLaunch={(scenario) => setLaunching([scenario])}
             selected={selected}
@@ -209,9 +232,9 @@ export function ScenariosContainer() {
 
       <DeleteScenarioDialog
         scenario={deleting}
-        onCancel={() => setDeleting(undefined)}
+        onCancel={() => showDelete(undefined)}
         onConfirm={confirmDelete}
-        pending={remove.isPending}
+        pending={deleteInFlight}
         error={remove.isError ? errorMessage(remove.error) : undefined}
       />
       <LaunchRunsDialog
@@ -222,6 +245,12 @@ export function ScenariosContainer() {
       />
     </>
   );
+}
+
+/** Selected scenarios the filters hide: kept, but never launched while hidden. */
+function hiddenSelectionText(count: number, othersVisible: boolean): string {
+  if (othersVisible) return `${count} more ${count === 1 ? "is" : "are"} hidden by the filters and will not launch.`;
+  return count === 1 ? "1 selected scenario is hidden by the filters." : `${count} selected scenarios are hidden by the filters.`;
 }
 
 function TagChip({ label, pressed, onClick }: { label: string; pressed: boolean; onClick: () => void }) {

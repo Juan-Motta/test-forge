@@ -340,6 +340,28 @@ describe("Scenario editor: edit", () => {
     expect(field("Fact 2 Key")).toHaveFocus();
   });
 
+  it("says when connections cannot be loaded and retries instead of offering no voices", async () => {
+    setup();
+    let failing = true;
+    server.use(
+      http.get(apiUrl("/connections"), () =>
+        failing ? HttpResponse.json({ detail: "Database unavailable" }, { status: 503 }) : HttpResponse.json(connections),
+      ),
+    );
+    renderWithClient(<ScenarioEditorContainer scenarioId="s-booking" />);
+    const user = userEvent.setup();
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Could not load connections");
+    expect(alert).toHaveTextContent("Database unavailable");
+    expect(screen.queryByLabelText("Name")).not.toBeInTheDocument();
+
+    failing = false;
+    await user.click(within(alert).getByRole("button", { name: "Try again" }));
+    expect(await screen.findByLabelText("Name")).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
   it("shows a not-found state for an unknown scenario", async () => {
     setup([]);
     renderWithClient(<ScenarioEditorContainer scenarioId="missing" />);
