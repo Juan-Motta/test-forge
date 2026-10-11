@@ -1,0 +1,313 @@
+"""Live stream of runs over WebSocket: auth, Origin, snapshot, ordered events, audio, backpressure.
+
+The app is served by an in-process uvicorn on a free port; runs are driven by `ScriptedDrive`,
+so no agent or provider is ever contacted.
+"""
+
+import asyncio
+import json
+import uuid
+
+import pytest
+import uvicorn
+from runs_support import ScriptedDrive, wait_for
+from websockets.asyncio.client import connect
+from websockets.exceptions import ConnectionClosed
+
+from voice_eval.modules.runs.live import LiveHub, Subscriber
+from voice_eval.runner.events import RunEvent
+
+ORIGIN = "http://localhost:3000"  # the test settings' WEB_ORIGINS
+AGENT_PCM = b"\x10\x00" * 240
+CALLER_PCM = b"\x20\x00" * 240
+
+
+@pytest.fixture
+async def server(app):
+    """The test app served over a real socket (WebSockets need one); yields its ws:// base."""
+    config = uvicorn.Config(
+        app, host="127.0.0.1", port=0, lifespan="off", ws="websockets-sansio", log_level="warning"
+    )
+    instance = uvicorn.Server(config)
+    task = asyncio.create_task(instance.serve())
+    async with asyncio.timeout(10):
+        while not instance.started:  # noqa: ASYNC110 - uvicorn exposes only this flag
+            await asyncio.sleep(0.01)
+    port = instance.servers[0].sockets[0].getsockname()[1]
+    yield f"ws://127.0.0.1:{port}"
+    instance.should_exit = True
+    await task
+
+
+def cookie_of(client) -> str:
+    return f"ve_session={client.cookies.get('ve_session')}"
+
+
+async def close_code(url: str, headers: dict[str, str]) -> int | None:
+    async with connect(url, additional_headers=headers) as ws:
+        with pytest.raises(ConnectionClosed):
+            await asyncio.wait_for(ws.recv(), 5)
+        return ws.close_code
+
+
+async def receive_all(ws) -> list[str | bytes]:
+    """Every message until the server closes the stream."""
+    messages: list[str | bytes] = []
+    with pytest.raises(ConnectionClosed):
+        while True:
+            messages.append(await asyncio.wait_for(ws.recv(), 10))
+    return messages
+
+
+def decoded(messages):
+    return [m if isinstance(m, bytes) else json.loads(m) for m in messages]
+
+
+def kinds(messages) -> list[str]:
+    return [f"audio:{m[0]}" if isinstance(m, bytes) else m["type"] for m in messages]
+
+
+async def launch_one(user_client, factory, app, drive, *, repetitions=1) -> dict:
+    app.state.runs.drive = drive
+    scenario = await factory.scenario()
+    response = await user_client.post(
+        "/api/runs", json={"scenarioIds": [scenario["id"]], "repetitions": repetitions}
+    )
+    assert response.status_code == 201, response.text
+    return response.json()
+
+
+def status_is(user_client, run_id: str, status: str):
+    async def check() -> bool:
+        return (await user_client.get(f"/api/runs/{run_id}")).json()["status"] == status
+
+    return check
+
+
+async def test_requires_a_session_cookie(server, user_client):
+    url = f"{server}/api/runs/{uuid.uuid4()}/live"
+    assert await close_code(url, {"Origin": ORIGIN}) == 4401
+    assert await close_code(url, {"Origin": ORIGIN, "Cookie": "ve_session=forged"}) == 4401
+
+
+async def test_rejects_a_foreign_or_missing_origin(server, user_client):
+    url = f"{server}/api/runs/{uuid.uuid4()}/live"
+    cookie = cookie_of(user_client)
+    assert await close_code(url, {"Origin": "https://evil.example", "Cookie": cookie}) == 4403
+    assert await close_code(url, {"Cookie": cookie}) == 4403
+
+
+async def test_unknown_run_or_batch_is_4404(server, user_client):
+    headers = {"Origin": ORIGIN, "Cookie": cookie_of(user_client)}
+    assert await close_code(f"{server}/api/runs/{uuid.uuid4()}/live", headers) == 4404
+    assert await close_code(f"{server}/api/runs/live?batchId={uuid.uuid4()}", headers) == 4404
+    assert await close_code(f"{server}/api/runs/live?batchId=nope", headers) == 4404
+
+
+async def test_snapshot_then_ordered_events_then_finished(server, app, user_client, factory):
+    drive = ScriptedDrive(
+        before=[
+            RunEvent("agent_audio", 10.0, {"chunk": 1, "bytes": len(AGENT_PCM)}, AGENT_PCM),
+            RunEvent("agent_transcript", 20.0, {"turn": 0, "text": "Hello, how can I help?"}),
+        ],
+        after=[
+            RunEvent(
+                "turn_ended",
+                30.0,
+                {
+                    "turn": 0,
+                    "first_audio_ms": 10.0,
+                    "end_ms": 25.0,
+                    "playback_end_ms": 400.0,
+                    "latency_ms": None,
+                    "end_reason": "silence",
+                },
+            ),
+            RunEvent(
+                "caller_decision",
+                40.0,
+                {"say": "I need a room", "hang_up": False, "reason": "opening"},
+            ),
+            RunEvent("caller_audio", 50.0, {"chunk": 1, "bytes": len(CALLER_PCM)}, CALLER_PCM),
+            RunEvent("warning", 60.0, {"message": "server error: slow"}),
+            RunEvent("agent_transcript", 70.0, {"turn": 1, "text": "Sure."}),
+        ],
+    )
+    batch = await launch_one(user_client, factory, app, drive)
+    run_id = batch["runs"][0]["id"]
+    await wait_for(status_is(user_client, run_id, "running"))
+    await asyncio.sleep(0.1)  # the `before` events are published
+
+    headers = {"Origin": ORIGIN, "Cookie": cookie_of(user_client)}
+    async with connect(f"{server}/api/runs/{run_id}/live", additional_headers=headers) as ws:
+        snapshot = json.loads(await asyncio.wait_for(ws.recv(), 5))
+        drive.go.set()
+        messages = decoded(await receive_all(ws))
+        code = ws.close_code
+
+    assert snapshot["type"] == "snapshot"
+    assert snapshot["run"]["id"] == run_id
+    assert snapshot["run"]["status"] == "running"
+    assert snapshot["transcript"] == [
+        {"role": "agent", "text": "Hello, how can I help?", "turn": 0, "tMs": 20.0}
+    ]
+    assert kinds(messages) == [
+        "turnEnded",
+        "callerDecision",
+        "audio:1",
+        "warning",
+        "agentTranscript",
+        "finished",
+    ]
+    turn, decision, audio, warning, transcript, finished = messages
+    assert turn == {
+        "type": "turnEnded",
+        "tMs": 30.0,
+        "turn": 0,
+        "firstAudioMs": 10.0,
+        "endMs": 25.0,
+        "playbackEndMs": 400.0,
+        "latencyMs": None,
+        "endReason": "silence",
+    }
+    assert decision == {
+        "type": "callerDecision",
+        "tMs": 40.0,
+        "say": "I need a room",
+        "hangUp": False,
+        "reason": "opening",
+    }
+    assert audio == b"\x01" + CALLER_PCM
+    assert warning == {"type": "warning", "tMs": 60.0, "message": "server error: slow"}
+    assert transcript == {"type": "agentTranscript", "tMs": 70.0, "turn": 1, "text": "Sure."}
+    assert finished == {"type": "finished", "status": "completed", "reason": "caller_hung_up"}
+    assert code == 1000
+
+
+async def test_agent_audio_is_tagged_and_streams_live(server, app, user_client, factory):
+    drive = ScriptedDrive(
+        before=[],
+        after=[RunEvent("agent_audio", 10.0, {"chunk": 1, "bytes": 480}, AGENT_PCM)],
+    )
+    batch = await launch_one(user_client, factory, app, drive)
+    run_id = batch["runs"][0]["id"]
+    await wait_for(status_is(user_client, run_id, "running"))
+
+    headers = {"Origin": ORIGIN, "Cookie": cookie_of(user_client)}
+    async with connect(f"{server}/api/runs/{run_id}/live", additional_headers=headers) as ws:
+        assert json.loads(await ws.recv())["type"] == "snapshot"
+        drive.go.set()
+        messages = await receive_all(ws)
+
+    assert messages[0] == b"\x00" + AGENT_PCM
+    assert json.loads(messages[-1])["type"] == "finished"
+
+
+async def test_a_finished_run_sends_its_snapshot_and_closes(server, app, user_client, factory):
+    drive = ScriptedDrive(before=[], after=[])
+    drive.go.set()
+    batch = await launch_one(user_client, factory, app, drive)
+    run_id = batch["runs"][0]["id"]
+    await wait_for(status_is(user_client, run_id, "completed"))
+
+    headers = {"Origin": ORIGIN, "Cookie": cookie_of(user_client)}
+    async with connect(f"{server}/api/runs/{run_id}/live", additional_headers=headers) as ws:
+        messages = decoded(await receive_all(ws))
+        code = ws.close_code
+
+    snapshot, finished = messages
+    assert snapshot["run"]["status"] == "completed"
+    assert snapshot["transcript"] == [
+        {"role": "agent", "text": "hello", "startMs": 0.0, "endMs": 400.0}
+    ]
+    assert finished == {"type": "finished", "status": "completed", "reason": "caller_hung_up"}
+    assert code == 1000
+
+
+async def test_batch_overview_streams_statuses_until_the_batch_ends(
+    server, app, user_client, factory
+):
+    drive = ScriptedDrive(before=[], after=[])
+    batch = await launch_one(user_client, factory, app, drive, repetitions=2)
+    run_ids = [run["id"] for run in batch["runs"]]
+    await wait_for(status_is(user_client, run_ids[0], "running"))
+
+    headers = {"Origin": ORIGIN, "Cookie": cookie_of(user_client)}
+    url = f"{server}/api/runs/live?batchId={batch['id']}"
+    async with connect(url, additional_headers=headers) as ws:
+        snapshot = json.loads(await asyncio.wait_for(ws.recv(), 5))
+        drive.go.set()
+        messages = decoded(await receive_all(ws))
+        code = ws.close_code
+
+    assert snapshot["type"] == "snapshot"
+    assert snapshot["batch"]["id"] == batch["id"]
+    assert [run["id"] for run in snapshot["runs"]] == run_ids
+    assert all(isinstance(message, dict) for message in messages)  # never audio
+    finished = [m for m in messages if m["type"] == "finished"]
+    assert sorted(m["runId"] for m in finished) == sorted(run_ids)
+    assert all(m["status"] == "completed" for m in finished)
+    assert messages[-1] == {"type": "batchFinished", "batchId": batch["id"]}
+    assert code == 1000
+
+
+# --- hub and backpressure (no socket) ------------------------------------------------------
+
+
+async def drain(subscriber: Subscriber) -> list[str | bytes]:
+    items = []
+    while (item := await asyncio.wait_for(subscriber.get(), 1)) is not None:
+        items.append(item)
+    return items
+
+
+async def test_a_slow_subscriber_loses_audio_but_never_text():
+    hub = LiveHub(audio_frames_per_subscriber=4)
+    run_id, batch_id = uuid.uuid4(), uuid.uuid4()
+    hub.open(run_id, batch_id)
+    slow = hub.subscribe(run_id)
+    for i in range(10):
+        hub.event(run_id, RunEvent("agent_audio", float(i), {}, AGENT_PCM))
+        hub.event(run_id, RunEvent("warning", float(i), {"message": f"w{i}"}))
+    hub.finish(run_id, "completed", "caller_hung_up")
+
+    items = await drain(slow)
+    texts = [json.loads(item) for item in items if isinstance(item, str)]
+    audio = [item for item in items if isinstance(item, bytes)]
+    assert [t["type"] for t in texts].count("lagging") == 1
+    assert [t["message"] for t in texts if t["type"] == "warning"] == [f"w{i}" for i in range(10)]
+    assert texts[0]["type"] == "snapshot" and texts[-1]["type"] == "finished"
+    assert len(audio) == 4
+
+
+async def test_a_consumer_that_catches_up_is_told_again_when_it_lags_again():
+    hub = LiveHub(audio_frames_per_subscriber=2)
+    run_id = uuid.uuid4()
+    hub.open(run_id, uuid.uuid4())
+    sub = hub.subscribe(run_id)
+    await sub.get()  # snapshot
+    for _ in range(3):
+        hub.event(run_id, RunEvent("caller_audio", 0.0, {}, CALLER_PCM))
+    assert [await sub.get() for _ in range(3)][-1].startswith('{"type": "lagging"')
+    for _ in range(3):
+        hub.event(run_id, RunEvent("caller_audio", 0.0, {}, CALLER_PCM))
+    third = [await sub.get() for _ in range(3)]
+    assert json.loads(third[-1])["type"] == "lagging"
+
+
+async def test_runs_are_isolated_and_finishing_closes_only_their_subscribers():
+    hub = LiveHub()
+    first, second = uuid.uuid4(), uuid.uuid4()
+    batch_id = uuid.uuid4()
+    hub.open(first, batch_id)
+    hub.open(second, batch_id)
+    a, b = hub.subscribe(first), hub.subscribe(second)
+    hub.event(first, RunEvent("warning", 1.0, {"message": "only first"}))
+    hub.finish(first, "failed", "tts_failed")
+
+    first_items = [json.loads(item) for item in await drain(a)]
+    assert [item["type"] for item in first_items] == ["snapshot", "warning", "finished"]
+    await b.get()  # snapshot
+    hub.event(second, RunEvent("warning", 2.0, {"message": "only second"}))
+    assert json.loads(await b.get())["message"] == "only second"
+    assert hub.subscribe(first) is None  # finished runs are no longer live

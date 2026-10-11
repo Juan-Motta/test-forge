@@ -1,1 +1,1 @@
-"""Runs module: batches of evaluator conversations, their state and their task manager."""
+"""Runs module: batches of evaluator conversations, their task manager and live stream."""

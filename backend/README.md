@@ -420,6 +420,40 @@ left `queued`, `connecting` or `running` as `interrupted`. Artifacts go to
 `RUNS_DATA_DIR/<run id>/` (default `/data/runs`, the `runs-data` volume in compose; set
 `RUNS_DATA_DIR` to a writable directory when running from source).
 
+### Live stream
+
+`GET /api/runs/{id}/live` (WebSocket) streams one run while it is running;
+`GET /api/runs/live?batchId=` streams a batch overview. Browsers cannot add headers to a
+WebSocket, so both authenticate with the session cookie (the same resolution as HTTP requests)
+and must come from one of `WEB_ORIGINS`. The server accepts the upgrade, then closes with `4403`
+(missing or foreign Origin), `4401` (no valid session) or `4404` (unknown run or batch).
+
+Text frames are JSON objects with a `type`, camelCase fields and `tMs` (milliseconds since the
+run started) where it applies:
+
+| `type` | Fields |
+| --- | --- |
+| `snapshot` | First message: `run {id, batchId, status, endReason}`, `transcript` so far, `turns` so far |
+| `status` | `status` (`connecting`, `running`) |
+| `agentTranscript` | `turn`, `text`: what the agent said in a finished turn |
+| `callerDecision` | `say` (null: stay silent), `hangUp`, `reason` (the evaluator's own reason) |
+| `turnEnded` | `turn`, `firstAudioMs`, `endMs`, `playbackEndMs`, `latencyMs`, `endReason` |
+| `warning` | `message` |
+| `lagging` | `message`: audio frames were dropped for this consumer (text never is) |
+| `finished` | Last message: `status`, `reason`; the server then closes with `1000` |
+
+Binary frames carry audio: one channel byte (`0` agent, `1` caller) followed by a raw PCM16
+little-endian 24 kHz mono chunk, in the order the runner saw them. A run that is no longer live
+gets its `snapshot` (transcript from `transcript.json`) and `finished`, then the close. The
+batch overview sends a `snapshot` (`batch`, `runs`), then `status` and `finished` messages with
+`runId` (never audio or transcripts), and `batchFinished` once no run of the batch is live.
+
+The hub (`modules.runs.live.LiveHub`) lives in the backend process: each subscriber has its own
+queue. A slow consumer loses audio frames once about 100 are queued and gets one `lagging`
+notice per episode; text is never dropped, but a consumer whose text backs up past 1,000
+messages is disconnected (`1013`). The edge keeps these routes open for up to an hour idle (see
+`edge/nginx.conf`).
+
 ### Container image
 
 `backend/Dockerfile` builds a multi-stage image (uv, Python 3.13 slim): dependencies are synced

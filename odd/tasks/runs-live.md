@@ -38,8 +38,8 @@ listens — is missing.
 - [x] T2 — Evaluator policy port + OpenAI/Azure chat adapter (structured output), fully faked in tests.
 - [x] T3 — Session runner: target ↔ policy ↔ TTS loop, end conditions, playback-aware hang-up,
   artifacts writer, event bus.
-- [ ] T4 — Runs module: batches/runs tables, launch/list/get/cancel API, task manager, volume.
-- [ ] T5 — Live WebSocket stream (backend) through the edge.
+- [x] T4 — Runs module: batches/runs tables, launch/list/get/cancel API, task manager, volume.
+- [x] T5 — Live WebSocket stream (backend) through the edge.
 - [ ] T6 — Frontend: launch panel in scenario editor, Runs list + run detail.
 - [ ] T7 — Frontend: Live monitor (transcript, turn state, audio listening).
 
@@ -71,5 +71,20 @@ Branch `feat/runs-live`, chained on `feat/agents-scenarios`. Each work-unit comm
     reasons agent_ended/connection_closed/ready_timeout/protocol_error untested.
 - Nothing verified against a real provider yet (all I/O faked).
 
+- T4 + T5 done by one writer, split into 4 commits via patches (each state verified green; parent re-ran
+  pytest at each: 505 / 528 / 538).
+  - `27bcbe2` runner hardening (session always closed; sink drain bounded at 10 s; new end-reason tests).
+    APPROVED (review-0c3749dc685ce1a5). Advisory: a sender failure can end up only logged if not polled.
+  - `03055e6` runs persistence (migration 0007 run_batches/runs, snapshots, settings
+    RUNS_MAX_CONCURRENCY/RUNS_DATA_DIR, voiceOverride honoured). APPROVED (review-3ec92050d056c71a).
+    Advisory: service-level create_batch input validation; mark_started ignores rowcount.
+  - `7c5b0c9` run manager + runs API + `runs-data` volume (startup recover → interrupted, shutdown,
+    cancel run/batch, audio endpoints). APPROVED (review-89d0a7265dd270d6). Advisory: cancel-after-finish
+    race; shutdown 20 s then engine dispose; some failure paths untested.
+  - T5 live stream (WebSocket `/api/runs/{id}/live` and `/api/runs/live?batchId=`, cookie auth 4401,
+    Origin 4403, unknown 4404, snapshot + camelCase events, binary audio frames tagged 0 agent / 1
+    caller, backpressure drops audio and sends `lagging`; edge 1 h timeout on live routes) — next commit.
+- Compose smoke passed (after one transient Google Fonts failure during the frontend build).
+
 ## Next step
-T4 runs module + T5 live stream (backend) via one writer.
+T6 + T7 frontend (launch, runs list/detail, live monitor) via one writer.

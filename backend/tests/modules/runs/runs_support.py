@@ -129,3 +129,26 @@ async def wait_for(predicate, within_s: float = 10.0) -> None:
     async with asyncio.timeout(within_s):
         while not await predicate():  # noqa: ASYNC110 - the state lives behind the API
             await asyncio.sleep(0.02)
+
+
+class ScriptedDrive:
+    """A fake driver for the live stream: emits `before`, waits for `go`, emits `after`, ends.
+
+    Each item is a `RunEvent`; the summary and artifacts are written like the real runner's.
+    """
+
+    def __init__(self, before: list[RunEvent], after: list[RunEvent]) -> None:
+        self.before = before
+        self.after = after
+        self.go = asyncio.Event()
+        self.result = summary_for()
+
+    async def __call__(self, job, sink: EventSink) -> dict[str, Any]:
+        await sink.emit(RunEvent("protocol_detected", 1.0, {"protocol": "live"}))
+        for event in self.before:
+            await sink.emit(event)
+        await self.go.wait()
+        for event in self.after:
+            await sink.emit(event)
+        write_fake_artifacts(job.out_dir, self.result)
+        return self.result

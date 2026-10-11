@@ -141,6 +141,10 @@ separately, not that two public IPs are.
 - **Containers** run as non-root users (backend uid 10001 and edge uid 101 with read-only root
   filesystems, frontend `node`), with `no-new-privileges`; the edge also drops all capabilities.
   Only the edge is published to the host; the frontend, the backend and the database are not.
+  The backend writes only to the `runs-data` volume (`/data/runs`).
+- **Live streams.** The run WebSockets (`/api/runs/.../live`) authenticate with the session
+  cookie and accept only the origins in `WEB_ORIGINS`. The edge passes WebSocket upgrades on
+  `/api/` and keeps these routes open for up to an hour idle; other routes keep 300 s.
 - **Client IPs.** The backend throttles failed logins per email and per client address (20
   failures in 15 minutes per address). The address must be the real peer and impossible to
   forge:

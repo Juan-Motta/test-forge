@@ -14,6 +14,7 @@ from sqlalchemy import text
 from voice_eval.modules.agents import api as agents_api
 from voice_eval.modules.connections import api as connections_api
 from voice_eval.modules.runs import api as runs_api
+from voice_eval.modules.runs import live_api as runs_live_api
 from voice_eval.modules.runs.manager import RunManager
 from voice_eval.modules.scenarios import api as scenarios_api
 from voice_eval.modules.users import api as users_api
@@ -112,6 +113,7 @@ def create_app(
     api = APIRouter(prefix="/api")
     api.include_router(health_router)
     api.include_router(users_api.public_router)
+    api.include_router(runs_live_api.router)  # WebSockets: authenticated by the handlers
     api.include_router(protected)
     app.include_router(api)
     return app

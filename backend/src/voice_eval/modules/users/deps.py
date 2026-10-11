@@ -22,14 +22,18 @@ class Principal:
     via: Literal["cookie", "bearer"]
 
 
+def origin_allowed(origin: str, settings: Settings) -> bool:
+    return origin.rstrip("/") in settings.web_origins
+
+
 def reject_foreign_origin(request: Request, settings: Settings) -> None:
     """CSRF baseline: a browser request whose Origin is not one of ours may not act."""
     origin = request.headers.get("origin")
-    if origin is not None and origin.rstrip("/") not in settings.web_origins:
+    if origin is not None and not origin_allowed(origin, settings):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Origin not allowed")
 
 
-async def _authenticate(db: AsyncSession, token: str) -> ResolvedSession | None:
+async def authenticate(db: AsyncSession, token: str) -> ResolvedSession | None:
     """Resolve the session and, when due, record the activity (committed here, explicitly)."""
     resolved = await resolve_session(db, token)
     if resolved is not None and resolved.touch_due:
@@ -54,12 +58,12 @@ async def current_principal(
     skip that check: browsers never attach the header on their own.
     """
     cookie = request.cookies.get(settings.session_cookie_name)
-    if cookie and (resolved := await _authenticate(db, cookie)):
+    if cookie and (resolved := await authenticate(db, cookie)):
         if request.method in UNSAFE_METHODS:
             reject_foreign_origin(request, settings)
         return Principal(resolved.user, resolved.session_id, via="cookie")
     token = _bearer_token(request)
-    if token and (resolved := await _authenticate(db, token)):
+    if token and (resolved := await authenticate(db, token)):
         return Principal(resolved.user, resolved.session_id, via="bearer")
     raise HTTPException(
         status.HTTP_401_UNAUTHORIZED,

@@ -4,7 +4,8 @@ Each run waits for a slot of its batch (the batch's concurrency) and one of the 
 (`RUNS_MAX_CONCURRENCY`, shared by every batch), then builds its providers from the connections
 as stored right now, opens the agent with the run's own threadId and holds the conversation with
 a `SessionRunner` whose artifacts land in `<RUNS_DATA_DIR>/<run id>/`. Status changes are
-persisted as they happen. Cancelling a run cancels its task (the runner still closes the
+persisted as they happen, and every event is published to the live hub (`self.hub`, see
+`modules.runs.live`). Cancelling a run cancels its task (the runner still closes the
 session and writes its artifacts); stopping the process interrupts every unfinished run, and
 the next start marks any run a crash left behind as `interrupted`.
 
@@ -27,6 +28,7 @@ from voice_eval.modules.connections.domain import UnsupportedConnection
 from voice_eval.modules.connections.runtime import build_caller_policy, build_synthesizer
 from voice_eval.modules.runs import service
 from voice_eval.modules.runs.domain import Batch, Run, RunStatus, brief_from_snapshot
+from voice_eval.modules.runs.live import LiveHub
 from voice_eval.platform.secrets import SecretBox
 from voice_eval.ports.policy import CallerPolicy
 from voice_eval.ports.tts import SpeechSynthesizer
@@ -71,16 +73,18 @@ def _provider_error(role: str, exc: Exception) -> RunSetupError:
 
 
 class RunEventSink:
-    """Persists the status changes a run's events imply."""
+    """Publishes a run's events live and persists the status changes they imply."""
 
     def __init__(self, manager: "RunManager", job: RunJob) -> None:
         self.manager = manager
         self.job = job
 
     async def emit(self, event: RunEvent) -> None:
+        self.manager.hub.event(self.job.run_id, event)
         if event.type == "protocol_detected":
             async with self.manager.sessionmaker() as db:
                 await service.mark_running(db, self.job.run_id)
+            self.manager.hub.status(self.job.run_id, RunStatus.RUNNING.value)
 
 
 class RunManager:
@@ -101,6 +105,7 @@ class RunManager:
         self.build_policy: PolicyFactory = self._build_policy
         self.build_synthesizer: SynthesizerFactory = self._build_synthesizer
         self.session_overrides: dict[str, Any] = {}  # SessionOptions fields (tests tune timings)
+        self.hub = LiveHub()
         self._slots = asyncio.Semaphore(max_concurrency)
         self._batch_slots: dict[uuid.UUID, asyncio.Semaphore] = {}
         self._tasks: dict[uuid.UUID, asyncio.Task[None]] = {}
@@ -158,6 +163,7 @@ class RunManager:
             task = asyncio.create_task(self._execute(job), name=f"run-{run.id}")
             self._tasks[run.id] = task
             self._jobs[run.id] = job
+            self.hub.open(run.id, run.batch_id)
             task.add_done_callback(lambda _, run_id=run.id: self._forget(run_id))
 
     def _forget(self, run_id: uuid.UUID) -> None:
@@ -202,6 +208,7 @@ class RunManager:
             async with self._batch_slots[job.batch_id], self._slots:
                 async with self.sessionmaker() as db:
                     await service.mark_started(db, job.run_id, job.batch_id)
+                self.hub.status(job.run_id, RunStatus.CONNECTING.value)
                 started = True
                 summary = await self.drive(job, RunEventSink(self, job))
                 outcome = _outcome(summary)
@@ -248,6 +255,7 @@ class RunManager:
                 )
         except Exception:
             log.exception("could not record the end of run %s", run_id)
+        self.hub.finish(run_id, status.value, reason)
 
     async def drive_session(self, job: RunJob, sink: EventSink) -> dict[str, Any]:
         """The real conversation: providers from the stored connections, then the runner."""
