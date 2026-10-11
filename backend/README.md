@@ -149,7 +149,7 @@ Speech is requested as `response_format="pcm"` (raw 24 kHz 16-bit mono), the tar
 FastAPI app over PostgreSQL 17 (SQLAlchemy 2 async + asyncpg, Alembic migrations). Layout:
 `voice_eval/platform/` (settings, database, app factory, migrations) and one package per
 business module under `voice_eval/modules/` (`users`, `connections`, `agents`,
-`scenarios`).
+`scenarios`, `runs`).
 
 ### Running locally
 
@@ -387,12 +387,47 @@ reach `events.jsonl`. A sink that has not taken every event 10 s after the run e
 (`sink_drain_timeout_s`) is abandoned with a warning, so it never holds the artifacts back. The probe shares its detector, close and artifact helpers
 (`voice_eval.runner.common`, `voice_eval.runner.artifacts`).
 
+### Runs
+
+`/api/runs` launches scenarios as evaluator conversations against their agent. `POST /api/runs`
+takes `{scenarioIds (1-20), repetitions (1-10), concurrency (1-10), label?}`, checks that every
+scenario can run (it has a voice connection and an evaluator model; otherwise `422` with one
+`{loc, msg, scenarioId}` item per refused scenario) and creates a batch with one queued run per
+scenario and repetition (interleaved: every scenario once, then again). Each run stores a
+snapshot of the scenario, agent, caller brief and connections it was launched with, so editing
+the scenario later never changes its history, and gets its own `threadId` (also the Langfuse
+session id).
+
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /api/runs?status=&scenarioId=&batchId=&limit=&offset=` | `{items, total}`, newest first |
+| `GET /api/runs/{id}` | Run, `summary` and `transcript` (once finished) and `snapshot`, camelCase keys |
+| `POST /api/runs/{id}/cancel` | `202`; the run becomes `cancelled` once its session is closed (`409` if over) |
+| `GET /api/runs/{id}/audio/agent`, `.../caller` | The side's WAV (`audio/wav`, PCM16 24 kHz mono) |
+| `GET /api/runs/batches`, `GET /api/runs/batches/{id}` | Batches with per-status run counts (and their runs) |
+| `POST /api/runs/batches/{id}/cancel` | `202`; cancels every unfinished run of the batch |
+
+Runs execute inside the backend process as asyncio tasks (`modules.runs.manager.RunManager`,
+`app.state.runs`): a run waits for a slot of its batch (`concurrency`) and one of the process
+(`RUNS_MAX_CONCURRENCY`, default 3, shared by every batch: each run is a real, paid agent
+session), then builds the TTS and the evaluator policy from the connections as stored at that
+moment and drives a `SessionRunner`. Statuses: `queued` -> `connecting` -> `running` ->
+`completed` | `failed` | `cancelled` | `interrupted`, with `endReason` (the runner's reason, or
+`setup_failed`, `cancelled`, `shutdown`, `server_restarted`) and, for failures, a short
+sanitized `error`. Stopping the backend cancels unfinished runs (they still close their session
+and write their artifacts) and marks them `interrupted`; the next start marks any run a crash
+left `queued`, `connecting` or `running` as `interrupted`. Artifacts go to
+`RUNS_DATA_DIR/<run id>/` (default `/data/runs`, the `runs-data` volume in compose; set
+`RUNS_DATA_DIR` to a writable directory when running from source).
+
 ### Container image
 
 `backend/Dockerfile` builds a multi-stage image (uv, Python 3.13 slim): dependencies are synced
 from `uv.lock` without dev packages in a cached layer, then the project is installed editable at
 `/app`. The runtime stage has no uv or build tools and runs as the unprivileged user `app`
-(uid 10001). `docker-entrypoint.sh` runs `voice-eval migrate`, then
+(uid 10001), which owns `/data/runs` (`RUNS_DATA_DIR`), the only directory it writes: the compose
+stack mounts the `runs-data` volume there and keeps the root filesystem read-only.
+`docker-entrypoint.sh` runs `voice-eval migrate`, then
 `uvicorn voice_eval.platform.app:create_app --factory` on `0.0.0.0:8000` with `--proxy-headers`,
 trusting `X-Forwarded-*` only from `FORWARDED_ALLOW_IPS` (default `127.0.0.1`; the root compose
 stack sets it to the edge's address, `EDGE_IPV4`). The health check

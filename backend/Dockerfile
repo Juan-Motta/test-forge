@@ -44,7 +44,14 @@ ENV PATH="/app/.venv/bin:${PATH}" \
 
 RUN groupadd --system --gid 10001 app \
     && useradd --system --uid 10001 --gid app --no-create-home --home-dir /nonexistent \
-       --shell /usr/sbin/nologin app
+       --shell /usr/sbin/nologin app \
+    && mkdir -p /data/runs \
+    && chown app:app /data/runs
+
+# Run artifacts (audio, transcripts, events). The only directory the app writes: mount a volume
+# here (a new named volume takes this directory's owner) and keep the root filesystem read-only.
+ENV RUNS_DATA_DIR=/data/runs
+VOLUME ["/data/runs"]
 
 WORKDIR /app
 # Owned by root and read-only for the app user.

@@ -45,12 +45,18 @@ services:
       # Peers whose X-Forwarded-For uvicorn trusts: exactly the edge (see "Client IPs" in the
       # root README). Never widen it to the subnet: the frontend would become trusted too.
       FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-${EDGE_IPV4:-172.29.53.10}}
+      # Live evaluator conversations at once, across every batch (each is a paid agent session).
+      RUNS_MAX_CONCURRENCY: ${RUNS_MAX_CONCURRENCY:-3}
+      RUNS_DATA_DIR: /data/runs
     depends_on:
       db:
         condition: service_healthy
     read_only: true
     tmpfs:
       - /tmp
+    volumes:
+      # Run artifacts survive restarts and rebuilds; the root filesystem stays read-only.
+      - runs-data:/data/runs
     security_opt:
       - no-new-privileges:true
     networks: [platform]
@@ -105,3 +111,4 @@ networks:
 
 volumes:
   db-data:
+  runs-data:

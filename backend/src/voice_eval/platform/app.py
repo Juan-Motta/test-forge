@@ -13,6 +13,8 @@ from sqlalchemy import text
 
 from voice_eval.modules.agents import api as agents_api
 from voice_eval.modules.connections import api as connections_api
+from voice_eval.modules.runs import api as runs_api
+from voice_eval.modules.runs.manager import RunManager
 from voice_eval.modules.scenarios import api as scenarios_api
 from voice_eval.modules.users import api as users_api
 from voice_eval.modules.users import service as users_service
@@ -59,11 +61,21 @@ def create_app(
     settings = settings or get_settings()
     secret_box = SecretBox.from_settings(settings)  # fail fast, before anything is started
     engine = create_engine(settings.database_url)
+    sessionmaker = create_sessionmaker(engine)
+    runs = RunManager(
+        sessionmaker,
+        secret_box=secret_box,
+        data_dir=settings.runs_data_dir,
+        max_concurrency=settings.runs_max_concurrency,
+        allow_local_http=settings.environment == "development",
+    )
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         await users_service.warm_up()
+        await runs.recover()
         yield
+        await runs.shutdown()  # unfinished runs become `interrupted`, artifacts still written
         await engine.dispose()
 
     docs = settings.environment == "development"  # fail closed: anything else hides the docs
@@ -77,7 +89,8 @@ def create_app(
     app.state.settings = settings
     app.state.secret_box = secret_box
     app.state.engine = engine
-    app.state.sessionmaker = create_sessionmaker(engine)
+    app.state.sessionmaker = sessionmaker
+    app.state.runs = runs
     app.add_exception_handler(RequestValidationError, validation_error)
     app.add_middleware(
         CORSMiddleware,
@@ -92,6 +105,7 @@ def create_app(
     protected.include_router(connections_api.router)
     protected.include_router(agents_api.router)
     protected.include_router(scenarios_api.router)
+    protected.include_router(runs_api.router)
     for router in extra_routers:
         protected.include_router(router)
 

@@ -458,6 +458,7 @@ async def app(settings):
             )
         )
     yield application
+    await application.state.runs.shutdown()
     await application.state.engine.dispose()
 
 

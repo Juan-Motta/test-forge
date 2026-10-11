@@ -55,7 +55,7 @@ logins only from the origins in `WEB_ORIGINS` (default `http://localhost:<FRONTE
 | Follow logs | `docker compose logs -f` (or `docker compose logs -f backend`) |
 | Stop, keep data | `docker compose down` |
 | Rebuild after code changes | `docker compose up --build -d` |
-| Reset everything (deletes the database volume) | `docker compose down -v` |
+| Reset everything (deletes the database and run artifact volumes) | `docker compose down -v` |
 | Database shell | `docker compose exec db psql -U voice_eval -d voice_eval` |
 | Smoke test the running stack | `scripts/compose-smoke.sh` (see "Smoke test") |
 
@@ -83,11 +83,15 @@ services:
 | `ENVIRONMENT` | `production` | `development` serves `/docs`, lifts the SSRF guard for connection tests and accepts `http://localhost` URLs. |
 | `POSTGRES_USER`, `POSTGRES_DB` | `voice_eval` | Database user and name. |
 | `WEB_ORIGINS` | `http://localhost:<FRONTEND_PORT>` | Browser origins the backend accepts (comma-separated). |
+| `RUNS_MAX_CONCURRENCY` | `3` | Evaluator conversations running at once across every batch (each is a paid agent session). |
 | `SESSION_COOKIE_SECURE` | `false` | Marks the session cookie `Secure`; must be `true` behind HTTPS. |
 | `FORWARDED_ALLOW_IPS` | `EDGE_IPV4` | Peers whose `X-Forwarded-For` the backend trusts: exactly the edge (see "Client IPs"). |
 | `PLATFORM_SUBNET` | `172.29.53.0/24` | Subnet of the compose network. |
 | `PLATFORM_IP_RANGE` | `172.29.53.128/25` | Part of the subnet Docker assigns to the other containers; must not contain `EDGE_IPV4`. |
 | `EDGE_IPV4` | `172.29.53.10` | The edge's fixed address, inside `PLATFORM_SUBNET` and outside `PLATFORM_IP_RANGE`. |
+
+Run artifacts (both audio sides, transcript, events, summary) are kept in the `runs-data`
+volume, mounted at `/data/runs` in the backend; they survive restarts and rebuilds.
 
 The backend reads its settings only from these environment variables; no `.env` file is copied
 into any image. Changing the frontend's backend address requires a rebuild: `BACKEND_URL` is a
