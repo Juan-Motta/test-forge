@@ -133,5 +133,9 @@ Branch `feat/runs-live`, chained on `feat/agents-scenarios`. Each work-unit comm
   (agents send whole replies faster than real time) and the server kept only 100 frames per listener.
   Raised generously: MAX_BACKLOG_S 300, AUDIO_FRAMES_PER_SUBSCRIBER 3000.
 
+- Third real run (2026-10-11, run ec3633f4, thread 78594256-6592-4b86-a624-df1d0d4a561d): completed,
+  199 s, no warnings, no lagging in logs; user confirmed live agent audio now plays continuously.
+
 ## Next step
+Judge + Langfuse feature (score runs against scenario criteria with transcript, timing and traces).
 Rebuild stack, user-authorized first real run from the UI; then judge + Langfuse feature.
