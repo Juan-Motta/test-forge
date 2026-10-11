@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { cancelBatch, cancelRun, getBatch, getRun, launchRuns, listBatches, listRuns } from "./api";
+import { isJudging } from "@/features/judgements/format";
 import { isActive } from "./format";
 import type { RunFilters } from "./types";
 
@@ -13,7 +14,7 @@ const batchKey = (id: string) => [...runsQueryKey, "batch", id] as const;
 
 type Polling = { refetchInterval?: number | false };
 
-/** `pollActiveMs`: refetch at this interval while the page shows an active run. */
+/** `pollActiveMs`: refetch at this interval while the page shows an active run or judgement. */
 export function useRuns(filters: RunFilters, options: { pollActiveMs?: number; refetchInterval?: number } = {}) {
   const { pollActiveMs, refetchInterval } = options;
   return useQuery({
@@ -21,7 +22,9 @@ export function useRuns(filters: RunFilters, options: { pollActiveMs?: number; r
     queryFn: ({ signal }) => listRuns(filters, signal),
     refetchInterval: (query) =>
       refetchInterval ??
-      (pollActiveMs && query.state.data?.items.some((run) => isActive(run.status)) ? pollActiveMs : false),
+      (pollActiveMs && query.state.data?.items.some((run) => isActive(run.status) || isJudging(run.judgementStatus))
+        ? pollActiveMs
+        : false),
     placeholderData: (previous) => previous,
   });
 }

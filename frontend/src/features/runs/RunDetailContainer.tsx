@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef } from "react";
+import { ScoreContainer } from "@/features/judgements/ScoreContainer";
 import { PageHeader } from "@/features/shell/PageHeader";
 import { ApiError, errorMessage } from "@/lib/api";
 import { Alert, Button, Card, CardHeader, EmptyState, RunsIcon, Spinner, buttonClasses } from "@/ui";
@@ -16,7 +17,7 @@ import type { RunDetail } from "./types";
 
 const POLL_MS = 3000;
 
-/** Container for `/runs/[id]`: the run report (no judge scores yet). */
+/** Container for `/runs/[id]`: the run report and, once it finished, the judge's score. */
 export function RunDetailContainer({ runId }: { runId: string }) {
   const router = useRouter();
   const run = useRun(runId, { pollWhileActiveMs: POLL_MS });
@@ -106,17 +107,19 @@ export function RunDetailContainer({ runId }: { runId: string }) {
       {cancel.isError ? <Alert>{`Could not cancel: ${errorMessage(cancel.error)}`}</Alert> : null}
       {rerun.isError ? <Alert>{`Could not re-run: ${errorMessage(rerun.error)}`}</Alert> : null}
       {active ? (
-        <Alert tone="info">The recording and transcript appear once the run finishes. Watch it live meanwhile.</Alert>
+        <>
+          <Alert tone="info">The recording and transcript appear once the run finishes. Watch it live meanwhile.</Alert>
+          <Card aria-labelledby="score-suggestions">
+            <CardHeader id="score-suggestions" title="Score & suggestions" />
+            <p className="text-sm text-muted">The judge scores the run once it finishes.</p>
+          </Card>
+        </>
       ) : (
-        <FinishedReport run={data} />
+        <>
+          <FinishedReport run={data} />
+          <ScoreContainer runId={data.id} endedAt={data.endedAt} />
+        </>
       )}
-      <Card aria-labelledby="score-suggestions">
-        <CardHeader id="score-suggestions" title="Score & suggestions" />
-        <p className="text-sm text-muted">
-          Coming with the judge: scores per criterion, findings and suggested fixes will appear here. Nothing is
-          scored yet.
-        </p>
-      </Card>
     </>
   );
 }
@@ -165,7 +168,11 @@ function FinishedReport({ run }: { run: RunDetail }) {
       </Card>
       <Card aria-labelledby="run-transcript">
         <CardHeader id="run-transcript" title="Transcript" />
-        <RunTranscript entries={entriesFromRows(run.transcript ?? [])} emptyText="Nothing was said in this run." />
+        <RunTranscript
+          entries={entriesFromRows(run.transcript ?? [])}
+          emptyText="Nothing was said in this run."
+          anchors
+        />
       </Card>
     </>
   );

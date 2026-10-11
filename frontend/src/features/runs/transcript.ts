@@ -11,11 +11,15 @@ export type TranscriptEntry = {
   latencyMs?: number | null;
   /** Caller lines: the evaluator's own reason for saying it. */
   intent?: string;
+  /** The judge's ref of a finished run's row: `A<n>` (agent) or `C<n>` (caller), counted per role. */
+  ref?: string;
 };
 
 /** Entries from `transcript.json` rows (finished run) or a live snapshot's transcript. */
 export function entriesFromRows(rows: readonly (TranscriptRow & { tMs?: number })[]): TranscriptEntry[] {
+  const counters = { agent: 0, caller: 0 };
   return rows.map((row, index) => ({
+    ref: `${row.role === "agent" ? "A" : "C"}${(counters[row.role] += 1)}`,
     key: `row-${index}`,
     role: row.role,
     text: row.text,

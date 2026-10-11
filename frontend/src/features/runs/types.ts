@@ -23,6 +23,10 @@ export type Run = {
   createdAt: string;
   startedAt: string | null;
   endedAt: string | null;
+  /** Judgement status (judgements/domain.py); null until the run is handed to the judge. */
+  judgementStatus: string | null;
+  /** The judgement's overall score (0-100), once completed. */
+  score: number | null;
 };
 
 /** One agent turn's timings (`summary.turns`). */

@@ -19,6 +19,8 @@ export function runFixture(overrides: Partial<Run> = {}): Run {
     createdAt: "2026-10-05T16:00:00Z",
     startedAt: "2026-10-05T16:00:01Z",
     endedAt: "2026-10-05T16:04:13Z",
+    judgementStatus: null,
+    score: null,
     ...overrides,
   };
 }
@@ -121,6 +123,8 @@ export function mockRunsApi(initial: Run[] = [], options: MockOptions = {}) {
   };
 
   server.use(
+    // Never judged, unless a test mocks the judgements API on top (`mockJudgementApi`).
+    http.get(apiUrl("/runs/:id/judgement"), () => HttpResponse.json({ status: "none" })),
     http.get(apiUrl("/runs/batches"), () => {
       const items = [...state.batches].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
       return HttpResponse.json({ items: items.map((b) => ({ ...b, ...countsFor(b) })), total: items.length });

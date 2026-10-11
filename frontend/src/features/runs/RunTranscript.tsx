@@ -9,10 +9,12 @@ type RunTranscriptProps = {
   /** Live runs announce new lines politely; a finished transcript is static. */
   live?: boolean;
   emptyText: string;
+  /** Give each row the id `turn-<ref>` (A3, C2) so the judge's evidence can link to it. */
+  anchors?: boolean;
 };
 
 /** The conversation, agent lines in blue and evaluator lines in amber, with the evaluator's intent. */
-export function RunTranscript({ entries, live = false, emptyText }: RunTranscriptProps) {
+export function RunTranscript({ entries, live = false, emptyText, anchors = false }: RunTranscriptProps) {
   if (entries.length === 0) {
     return (
       <p className="text-sm text-muted" aria-live={live ? "polite" : undefined}>
@@ -25,6 +27,7 @@ export function RunTranscript({ entries, live = false, emptyText }: RunTranscrip
       {entries.map((entry) => (
         <li
           key={entry.key}
+          id={anchors && entry.ref ? `turn-${entry.ref}` : undefined}
           className={cn(
             "flex flex-col gap-1.5 rounded-lg border-l-2 px-3.5 py-2.5",
             entry.role === "agent" ? "border-agent bg-agent/7" : "border-evaluator bg-evaluator/7",
@@ -35,6 +38,7 @@ export function RunTranscript({ entries, live = false, emptyText }: RunTranscrip
             <span className={cn("font-semibold", entry.role === "agent" ? "text-agent" : "text-evaluator-fg")}>
               {WHO[entry.role]}
             </span>
+            {anchors && entry.ref ? <span className="font-mono text-dim">{entry.ref}</span> : null}
             {entry.role === "agent" && entry.latencyMs !== null && entry.latencyMs !== undefined ? (
               <span className="font-mono text-dim" title="Time the agent took to start answering">
                 {latency(entry.latencyMs)}

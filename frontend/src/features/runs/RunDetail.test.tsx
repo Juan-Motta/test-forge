@@ -47,8 +47,12 @@ describe("Run detail", () => {
     expect(turns[1]).toHaveTextContent("Evaluator intent: opening: state the goal");
     expect(turns[2]).toHaveTextContent("420 ms");
 
+    expect(turns[0]).toHaveAttribute("id", "turn-A1");
+    expect(turns[1]).toHaveAttribute("id", "turn-C1");
+    expect(turns[2]).toHaveAttribute("id", "turn-A2");
+
     const score = screen.getByRole("region", { name: "Score & suggestions" });
-    expect(score).toHaveTextContent("Coming with the judge");
+    expect(await within(score).findByText("Not judged yet.")).toBeInTheDocument();
   });
 
   it("copies the thread id", async () => {

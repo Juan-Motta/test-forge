@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { absoluteTime, relativeTime } from "@/features/connections/format";
+import { isJudging } from "@/features/judgements/format";
 import { Button, buttonClasses } from "@/ui";
 import { STATUS_LABELS, clock, endReasonLabel, isActive, runDurationMs, shortId } from "./format";
 import { RunStatusChip } from "./RunStatusChip";
@@ -17,7 +18,7 @@ type RunsTableProps = {
 export function RunsTable({ runs, onCancel, cancellingId, now }: RunsTableProps) {
   return (
     <div className="overflow-x-auto rounded-xl border border-line bg-panel">
-      <table aria-label="Runs" className="w-full min-w-[52rem] text-left text-sm">
+      <table aria-label="Runs" className="w-full min-w-[56rem] text-left text-sm">
         <thead className="border-b border-line text-xs text-muted">
           <tr>
             <th scope="col" className="px-4 py-3 font-medium">Run</th>
@@ -25,6 +26,7 @@ export function RunsTable({ runs, onCancel, cancellingId, now }: RunsTableProps)
             <th scope="col" className="px-4 py-3 font-medium">Agent</th>
             <th scope="col" className="px-4 py-3 font-medium">Duration</th>
             <th scope="col" className="px-4 py-3 font-medium">Status</th>
+            <th scope="col" className="px-4 py-3 font-medium">Score</th>
             <th scope="col" className="px-4 py-3 font-medium">Started</th>
             <th scope="col" className="px-4 py-3 font-medium">
               <span className="sr-only">Actions</span>
@@ -48,6 +50,9 @@ export function RunsTable({ runs, onCancel, cancellingId, now }: RunsTableProps)
                     <RunStatusChip status={run.status} />
                     {showReason ? <span className="text-xs text-muted">{reason}</span> : null}
                   </div>
+                </td>
+                <td className="px-4 py-3">
+                  <RunScore run={run} />
                 </td>
                 <td className="px-4 py-3 text-xs text-muted">
                   {run.startedAt ? (
@@ -96,4 +101,14 @@ export function RunsTable({ runs, onCancel, cancellingId, now }: RunsTableProps)
       </table>
     </div>
   );
+}
+
+/** The judge's overall score, or where its judgement stands. */
+function RunScore({ run }: { run: Run }) {
+  if (run.score !== null && run.score !== undefined) {
+    return <span className="font-mono text-sm font-semibold">{run.score}</span>;
+  }
+  if (isJudging(run.judgementStatus)) return <span className="text-xs text-muted">Judging…</span>;
+  if (run.judgementStatus === "failed") return <span className="text-xs text-danger-fg">Failed</span>;
+  return <span className="font-mono text-xs text-muted">—</span>;
 }
