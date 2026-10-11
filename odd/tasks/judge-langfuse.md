@@ -43,7 +43,7 @@ agent (prompt, tools, latency, flow) that can be handed to a coding agent.
 - [x] T2 Judge core: generic structured chat call, prompt, schema, scoring, brief (backend) — route: delegated
 - [x] T3 Persistence + orchestration + API + snapshot field (backend, migration 0008) — route: delegated
 - [x] T4 Report UI: Score & suggestions card + runs list score (frontend) — route: delegated
-- [ ] T5 Docs + real validation on an existing run (needs the user's Langfuse connection linked to the agent; paid call → ask) — route: inline
+- [x] T5 Docs + real validation on an existing run (needs the user's Langfuse connection linked to the agent; paid call → ask) — route: inline
 
 ## Acceptance criteria
 - A finished run gets a judgement automatically; the report shows overall score, per-criterion verdicts
@@ -87,3 +87,20 @@ agent (prompt, tools, latency, flow) that can be handed to a coding agent.
 - Stack rebuilt: migration 0008 applied; startup reconcile judged the 3 existing real runs
   (gpt-6-luna, no Langfuse link yet → "This agent has no Langfuse connection."): 907b0661 98,
   ec3633f4 79 (flagged the unsupported "motivos de agenda" reason), 9d9e6de0 94 (first readout cut).
+- Real validation (T5): Langfuse "Langfuse Dev" (https://tracing.vivi.bot, self-hosted 3.169.0) linked
+  to "Vivi dev agent". First re-judge: v2 Observations API → HTTP 404 (v2 exists only in Langfuse 4.x)
+  → judge ran without traces. Fix 96c3e16: fall back to v1 (/api/public/traces?sessionId + detail)
+  on 404 (RED observed; pytest 676 passed). Re-judge of ec3633f4 (thread 78594256-…): 6 traces /
+  12 observations (user confirmed: 2 observations per trace, no tools — complete), gpt-realtime-2.1,
+  20174 tokens, 0 errors → overall 88, no must failure; partial: generic "motivos de agenda" before
+  the reason was given, T5 latency 2025 ms; suggestions: ask for the reason before drafting (prompt,
+  medium), keep latency < 2 s (low). Vivi tags traces with session_id = thread and
+  metadata.thread_id = thread (langfuse_tracer.py:339-370), so sessionId lookup is enough.
+- Observations: the scenario has no trace-sourced criterion (traces only add context); same run
+  scored 79 → 88 across attempts (model variance) — consider multiple samples or trace criteria.
+- Review: 96c3e16 assessed medium, under_budget (325 lines) → pending in slice.
+
+## Next step
+Feature complete. Open: minor advisories (_reconcile partial commit, strict int weight); earlier
+follow-ups from runs-live (Launch selected includes filter-hidden scenarios, /live error handling).
+
