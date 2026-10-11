@@ -64,9 +64,11 @@ Branch `feat/runs-live`, chained on `feat/agents-scenarios`. Each work-unit comm
     json_schema, one retry then safe hang-up, 20 s timeout. 478 tests (parent re-run). Reviewed medium,
     APPROVED (review-743f3594a4924a79). Advisory: empty `choices` not guarded; vacuous secret-log
     assert; max_duration hang-up rule only enforced in the runner.
-  - next commit T3: SessionRunner (policy↔TTS loop, end conditions, playback-aware hang-up with
+  - `5c86e1c` T3: SessionRunner (policy↔TTS loop, end conditions, playback-aware hang-up with
     farewell, ordered event sink, artifacts writer), probe refactored onto shared helpers. 492 tests
-    (parent re-run).
+    (parent re-run). Reviewed medium, APPROVED (review-53d4883773ce265d). Advisory (fold into T4):
+    a sender-task exception can skip session close; a hanging sink blocks artifact writing; end
+    reasons agent_ended/connection_closed/ready_timeout/protocol_error untested.
 - Nothing verified against a real provider yet (all I/O faked).
 
 ## Next step
