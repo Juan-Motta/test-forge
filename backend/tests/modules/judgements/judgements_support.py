@@ -171,8 +171,8 @@ class FakeJudgeModel:
         return {
             "summary": "The agent stated the balance.",
             "criteria": [
-                verdict(MUST_ID, "pass", 90, "transcript"),
-                verdict(TRACE_ID, "fail", 40, "trace"),
+                verdict(MUST_ID, 3, "transcript"),
+                verdict(TRACE_ID, 2, "trace", tags=("tool_or_trace_error",)),
             ],
             "suggestions": [
                 {"title": "Cache the lookup", "detail": "Reply faster.", "area": "latency",
@@ -182,13 +182,16 @@ class FakeJudgeModel:
         }  # fmt: skip
 
 
-def verdict(criterion_id: str, verdict: str, score: int, source: str) -> dict[str, Any]:
+def verdict(
+    criterion_id: str, band: int, source: str, *, tags: tuple[str, ...] = ()
+) -> dict[str, Any]:
     return {
         "criterionId": criterion_id,
-        "verdict": verdict,
-        "score": score,
-        "rationale": f"rationale for {criterion_id[:4]}",
         "evidence": [{"source": source, "ref": "A2", "quote": "It is 120 dollars."}],
+        "reasoning": f"reasoning for {criterion_id[:4]}",
+        "observable": True,
+        "band": band,
+        "failureTags": list(tags),
     }
 
 

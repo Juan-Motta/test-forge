@@ -60,13 +60,20 @@ SUMMARY: dict[str, Any] = {
 }  # fmt: skip
 
 
-def verdict(criterion_id: str, verdict: str = "pass", score: int = 90) -> dict[str, Any]:
+def verdict(
+    criterion_id: str,
+    band: Any = 5,
+    *,
+    observable: bool = True,
+    tags: tuple[str, ...] = (),
+) -> dict[str, Any]:
     return {
         "criterionId": criterion_id,
-        "verdict": verdict,
-        "score": score,
-        "rationale": f"rationale for {criterion_id[:4]}",
         "evidence": [{"source": "transcript", "ref": "A2", "quote": "Booked for 8 pm."}],
+        "reasoning": f"reasoning for {criterion_id[:4]}",
+        "observable": observable,
+        "band": band,
+        "failureTags": list(tags),
     }
 
 

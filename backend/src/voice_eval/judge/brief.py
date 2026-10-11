@@ -1,10 +1,16 @@
 """A deterministic Markdown brief of a judgement, written to be pasted alone into a coding agent.
 
-It names the run, states the score, lists what failed with the evidence, then the fixes to
+It names the run, states the score and the run's failure tags, lists what failed with its
+band, tags and evidence, says why each unobserved criterion was not judged, then the fixes to
 make (high priority first) and how to check them. Nothing here calls a model.
 """
 
-from voice_eval.judge.domain import CriterionResult, ParsedJudgement
+from voice_eval.judge.domain import (
+    CAPPING_TAGS,
+    CriterionResult,
+    ParsedJudgement,
+    run_failure_tags,
+)
 from voice_eval.judge.scoring import Score
 
 PRIORITY_ORDER = {"high": 0, "medium": 1, "low": 2}
@@ -20,13 +26,32 @@ def _one_line(text: str) -> str:
     return " ".join(text.split())
 
 
+def _human(tag: str) -> str:
+    return tag.replace("_", " ")
+
+
+def _band(result: CriterionResult) -> str:
+    """`band 2/5 (capped: fabricated information)`, or "" when not observable."""
+    if result.band is None:
+        return ""
+    text = f"band {result.band}/5"
+    if result.capped:
+        caps = [_human(tag) for tag in result.failure_tags if tag in CAPPING_TAGS]
+        text += f" (capped: {', '.join(caps)})"
+    return text
+
+
 def _criterion(result: CriterionResult) -> list[str]:
+    band = f", {_band(result)}" if result.band is not None else ""
     score = "" if result.score is None else f", score {result.score}"
     lines = [
         f"### [{VERDICT_LABEL[result.verdict]}] {_one_line(result.text)}",
-        f"- {result.kind.upper()} criterion, source {result.source}, weight {result.weight}{score}",
-        f"- Why: {_one_line(result.rationale)}",
+        f"- {result.kind.upper()} criterion, source {result.source}, weight {result.weight}"
+        f"{band}{score}",
     ]
+    if result.failure_tags:
+        lines.append(f"- Failure tags: {', '.join(result.failure_tags)}")
+    lines.append(f"- Why: {_one_line(result.rationale)}")
     for item in result.evidence:
         lines.append(f'- Evidence ({item.source} {item.ref}): "{_one_line(item.quote)}"')
     return lines
@@ -53,6 +78,11 @@ def render_brief(
         f"- Overall score: {overall} / 100",
         f"- Must criteria failed: {'YES' if numbers.must_failed else 'no'}",
     ]
+    tags = run_failure_tags(judgement.criteria)
+    if tags:
+        lines.append(
+            "- Failure tags: " + ", ".join(f"{tag} ({count})" for tag, count in tags.items())
+        )
     if trace_note:
         lines.append(f"- Traces: {_one_line(trace_note)}")
     lines += ["", "## Summary", "", _one_line(judgement.summary) or "(none)"]
@@ -70,7 +100,8 @@ def render_brief(
     if unobservable:
         lines += ["## Not observable", ""]
         for result in unobservable:
-            lines.append(f"- {_one_line(result.text)}: {_one_line(result.rationale)}")
+            reason = _human(result.unobservable_reason or "judge_omitted")
+            lines.append(f"- {_one_line(result.text)} [{reason}]: {_one_line(result.rationale)}")
         lines.append("")
 
     suggestions = sorted(judgement.suggestions, key=lambda s: PRIORITY_ORDER[s.priority])
@@ -93,7 +124,7 @@ def render_brief(
     passed = [r for r in judgement.criteria if r.verdict == "pass"]
     if passed:
         lines += ["", "## Passed criteria", ""]
-        lines += [f"- {_one_line(r.text)} (score {r.score})" for r in passed]
+        lines += [f"- {_one_line(r.text)} ({_band(r)}, score {r.score})" for r in passed]
 
     lines += [
         "",

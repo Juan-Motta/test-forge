@@ -442,6 +442,29 @@ connection (`gpt-6-luna`) from three evidence sources — `transcript.json`, the
 `summary.json` and the agent's Langfuse traces — into an overall score, per-criterion verdicts,
 suggestions and a Markdown brief for a coding agent.
 
+Scoring (`judge/`, result `version: 2`) keeps the numbers in code so repeated judgements of one
+run agree:
+
+- **Anchored bands.** Per criterion the model writes evidence and reasoning first, then picks a
+  band 1-5 against fixed anchors; code maps it to a score (5→100, 4→90, 3→70, 2→50, 1→25) and a
+  verdict (4-5 `pass`, 3 `partial`, 1-2 `fail`). The overall score is the weighted mean over the
+  observable criteria; a failed `must` criterion sets `mustFailed`.
+- **Failure tags and caps.** Tags come from a closed list (normalized: lowercased, unknown ones
+  dropped, deduplicated, at most 5, none on band 5). `fabricated_information`,
+  `wrong_information`, `instruction_ignored` and `unsafe_or_policy_violation` cap the criterion
+  at band 2 (`capped: true` when that lowered it). The result counts tags per run
+  (`failureTags`).
+- **Typed not-observable.** `traces_unavailable` (a `trace` criterion without traces) and
+  `no_timing_data` (a `timing` criterion without turn timings) are decided before the call and
+  those criteria are not sent as judgeable; `judge_marked_unobservable` and `judge_omitted` come
+  from the answer. They neither help nor hurt the overall score.
+- **Evidence hygiene.** Each evidence section of the prompt is a tagged block whose text is
+  escaped (`&`, `<`, `>`), with role-like line starts (`system:`) quoted.
+
+Per criterion the result carries `criterionId, text, kind, source, weight, verdict, score, band,
+failureTags, unobservableReason, capped, rationale, evidence`. Results stored before v2 have no
+`version`, `band` or tags.
+
 Traces are read when the agent has a Langfuse connection (kept in the run snapshot; older runs
 use the agent's current one): the observations of session `threadId` are polled every 30 s
 until two polls in a row return the same non-zero count, for at most 20 minutes after the run

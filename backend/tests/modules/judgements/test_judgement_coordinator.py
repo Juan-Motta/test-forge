@@ -64,8 +64,11 @@ async def test_traces_are_polled_until_stable_then_judged(app, harness, tmp_path
     assert row.trace_stats["observationCount"] == 2
     assert row.model == "gpt-6-luna"
     result = row.result
-    assert result["overallScore"] == 70  # 60 x 90 + 40 x 40
-    assert [c["verdict"] for c in result["criteria"]] == ["pass", "fail"]
+    assert result["version"] == 2
+    assert result["overallScore"] == 62  # (60 x 70 + 40 x 50) / 100: bands 3 and 2
+    assert [c["verdict"] for c in result["criteria"]] == ["partial", "fail"]
+    assert [c["band"] for c in result["criteria"]] == [3, 2]
+    assert result["failureTags"] == {"tool_or_trace_error": 1}
     assert result["traceStats"]["observationCount"] == 2
     assert result["brief"].startswith("#")
     assert json.loads((out / "langfuse.json").read_text()) == two
@@ -87,6 +90,11 @@ async def test_an_agent_without_langfuse_is_judged_without_traces(app, harness, 
     assert row.trace_note == "This agent has no Langfuse connection."
     assert row.trace_stats is None
     assert row.result["traceNote"] == row.trace_note
+    criteria = row.result["criteria"]
+    assert [c["unobservableReason"] for c in criteria] == [None, "traces_unavailable"]
+    assert row.result["overallScore"] == 70  # only the transcript criterion (band 3) counts
+    prompt = harness.model.messages[0][1]["content"]
+    assert "<not_judged>" in prompt and "traces_unavailable" in prompt
     assert harness.reader.calls == [] and harness.clock.sleeps == []
     assert not (out / "langfuse.json").exists()
 
