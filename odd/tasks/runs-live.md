@@ -102,7 +102,11 @@ Branch `feat/runs-live`, chained on `feat/agents-scenarios`. Each work-unit comm
     hidden by filters (paid runs) — fix next; untested failure paths.
   - T7 live monitor (`lib/live` socket seam, reconnect 1/2/4/8/15 s, 4401 login / 4403-4404 messages,
     Web Audio player with 150 ms jitter buffer, mix + volume, lagging badge, aria-live transcript, /live
-    with batch overview, focus page, End call) — next commit; 282 FE tests, lint/typecheck/build green.
+    with batch overview, focus page, End call): `1d8832e`, 282 FE tests, lint/typecheck/build green.
+    APPROVED (review-8d7e27cc63181909). Advisory (fix before/after first real use): one failing poll
+    replaces the whole /live body with an alert; focus jumps when the focused run finishes; Listen start
+    failure unhandled; snapshot of a finished run shows "Waiting for the agent"; batch snapshot rows not
+    validated.
 - Not yet exercised in a real browser nor against the real agent. Run list lacks persona/p50/turns
   (RunOut has no summary) — follow-up.
 
