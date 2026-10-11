@@ -39,9 +39,9 @@ Backend:
 - BP3 probe CLI hangs up before the last turn's playback ends (probe.py:123-124,270).
 
 ## Tasks
-- [ ] T1 Backend items BR1–BR4, BJ1, BJ2, BP1–BP3 — route: delegated writer (many files)
-- [ ] T2 Frontend scenarios/agents/connections FR1, FS1, FS2, FS5 — route: delegated writer
-- [ ] T3 Frontend runs/live FR2–FR10 + BR1 columns — route: delegated writer (after T1 contract)
+- [x] T1 Backend items BR1–BR4, BJ1, BJ2, BP1–BP3 — route: delegated writer (many files)
+- [x] T2 Frontend scenarios/agents/connections FR1, FS1, FS2, FS5 — route: delegated writer
+- [x] T3 Frontend runs/live FR2–FR10 + BR1 columns — route: delegated writer (after T1 contract)
 
 RunOut contract for BR1 (camelCase): `persona: string | null` (scenario persona name from the
 snapshot), `callerTurns: int | null`, `agentTurns: int | null`, `latencyP50Ms: int | null` (from summary).
@@ -54,4 +54,20 @@ snapshot), `callerTurns: int | null`, `agentTurns: int | null`, `latencyP50Ms: i
 ~1.5k authored lines over 3 commits.
 
 ## Progress
-(none yet)
+- T2 218c00a (delegated; 330 lines; RED for each item; vitest 304). T3 83a7ac7 (delegated; 448 lines;
+  RED per item; vitest 319, lint, typecheck). Reviewed together (778 lines): APPROVED + acknowledged.
+  Advisory fixed inline in 791affe: the editor's error branch only replaces the form when nothing
+  loaded yet (a failed background refetch used to discard unsaved edits) — RED observed.
+  Accepted: launch close guard after failure only asserted via Cancel enabled; /live keeps the last
+  focused finished run instead of the "No calls in progress" empty state.
+- T1 105e326 (delegated; 449 lines; RED per item; pytest 703). BJ2 premise corrected: lax int already
+  took 10.0 — real gap was "50"/True. Reviewed: APPROVED + acknowledged. Advisories fixed inline in
+  2b615e1: cancel test wrapper now returns the manager's bool; egress timing margin widened; median
+  guard for non-finite; discard of an unknown turn raises ValueError.
+- Final checks: backend pytest 704 passed; frontend vitest 320 passed; stack rebuilt healthy.
+  791affe + 2b615e1 (~90 lines) assessed under budget → pending in slice.
+
+## Next step
+Judge improvements inspired by vivi-evaluations (anchored 1–5 bands, worst-case caps, rationale
+before score + closed failure tags, deterministic not_observable, stability measurement) — awaiting
+the user's go-ahead.
