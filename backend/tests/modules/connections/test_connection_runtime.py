@@ -165,3 +165,15 @@ async def test_caller_policy_rejects_kinds_without_chat(app, user_client):
         await build_policy(app, connection_id)
     with pytest.raises(ConnectionNotFound):
         await build_policy(app, uuid.uuid4())
+
+
+async def test_a_voice_override_replaces_the_connection_voice(app, user_client):
+    connection_id = await create(
+        user_client,
+        {"name": "tts", "kind": "openai", "config": {}, "secrets": {"apiKey": KEY}},
+    )
+    async with app.state.sessionmaker() as session:
+        synth = await build_synthesizer(
+            session, connection_id, secret_box=app.state.secret_box, voice="nova"
+        )
+    assert synth.voice == "nova"

@@ -33,6 +33,8 @@ class Settings(BaseSettings):
     login_max_failures_per_email: int = Field(default=5, gt=0)
     login_max_failures_per_ip: int = Field(default=20, gt=0)
     login_window_minutes: int = Field(default=15, gt=0)
+    runs_max_concurrency: int = Field(default=3, ge=1, le=50)  # live sessions, every batch
+    runs_data_dir: Path = Path("/data/runs")  # artifacts of each run: <dir>/<run id>/
 
     @field_validator("database_url")
     @classmethod

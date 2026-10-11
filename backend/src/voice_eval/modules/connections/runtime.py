@@ -67,9 +67,11 @@ async def build_synthesizer(
     *,
     secret_box: SecretBox,
     allow_local_http: bool = False,
+    voice: str | None = None,
 ) -> SpeechSynthesizer:
     """A text-to-speech adapter for the stored connection `connection_id`.
 
+    `voice` overrides the connection's voice (a scenario's `voiceOverride`).
     Pass `allow_local_http` as the running environment allows (see `parse_config`).
     Raises `ConnectionNotFound`, `UnsupportedConnection` for kinds that cannot synthesize, and
     `SecretDecryptionError` when the stored secret cannot be opened with the current key.
@@ -90,7 +92,7 @@ async def build_synthesizer(
         return build_openai_synthesizer(
             api_key=secrets["api_key"],
             model=config.tts_model,
-            voice=config.tts_voice,
+            voice=voice or config.tts_voice,
             base_url=config.base_url,
         )
     return build_azure_openai_synthesizer(
@@ -98,7 +100,7 @@ async def build_synthesizer(
         endpoint=config.endpoint,
         api_version=config.api_version,
         deployment=config.tts_deployment,
-        voice=config.tts_voice,
+        voice=voice or config.tts_voice,
     )
 
 

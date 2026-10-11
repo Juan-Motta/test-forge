@@ -427,12 +427,13 @@ def postgres_url():
 
 
 @pytest.fixture
-def settings(postgres_url, master_key):
+def settings(postgres_url, master_key, tmp_path):
     from voice_eval.platform.settings import Settings
 
     return Settings(
         _env_file=None,
         database_url=postgres_url,
+        runs_data_dir=tmp_path / "runs",
         voice_eval_master_key=master_key,
         web_origins=[WEB_ORIGIN],
         session_ttl_hours=12,
@@ -453,7 +454,7 @@ async def app(settings):
         await conn.execute(
             text(
                 "TRUNCATE users, user_sessions, login_attempts, provider_connections, agents,"
-                " scenarios RESTART IDENTITY CASCADE"
+                " scenarios, run_batches, runs RESTART IDENTITY CASCADE"
             )
         )
     yield application

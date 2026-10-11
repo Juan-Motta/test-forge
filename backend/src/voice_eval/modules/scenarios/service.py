@@ -230,9 +230,8 @@ async def count_for_agent(db: AsyncSession, agent_id: uuid.UUID) -> int:
     )
 
 
-async def _connection_ref(
-    db: AsyncSession, connection_id: uuid.UUID | None
-) -> ConnectionRef | None:
+async def connection_ref(db: AsyncSession, connection_id: uuid.UUID | None) -> ConnectionRef | None:
+    """The connection `connection_id` as a run role sees it; None when unset or deleted."""
     if connection_id is None:
         return None
     record = await db.get(ConnectionRecord, connection_id, populate_existing=True)
@@ -251,6 +250,6 @@ async def evaluator_connection(db: AsyncSession, scenario: Scenario) -> Connecti
     Raises `ScenarioNotRunnable` when no configured connection can chat.
     """
     return resolve_evaluator(
-        evaluator=await _connection_ref(db, scenario.evaluator_connection_id),
-        tts=await _connection_ref(db, scenario.tts_connection_id),
+        evaluator=await connection_ref(db, scenario.evaluator_connection_id),
+        tts=await connection_ref(db, scenario.tts_connection_id),
     )
