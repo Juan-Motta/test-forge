@@ -1,0 +1,64 @@
+# Feature: judge-langfuse
+
+Branch: `feat/judge-langfuse` (chained on `feat/runs-live`). Delivery: feature-branch-chain, ask-on-risk.
+
+## Objective
+After a run ends, a judge scores it against the scenario's weighted criteria using three evidence
+sources — transcript, timing (summary.json turns/latencies) and the agent's Langfuse traces
+(`session_id = threadId`) — and produces an overall score, per-criterion verdicts with evidence,
+prioritized suggestions and an exportable Markdown brief for a coding agent. The run report shows it.
+
+## Why
+Runs today end with a transcript and metrics only; the user wants an actionable diagnosis of the
+agent (prompt, tools, latency, flow) that can be handed to a coding agent.
+
+## Scope
+- Langfuse trace reader (public API v2 `GET /api/public/v2/observations?sessionId=` with cursor,
+  field groups, time window; Basic auth; egress-guarded httpx like the connection tester).
+- Trace digest: bounded, chronological, per trace: names, timings, models, TTFT, usage, tool calls
+  (truncated io), errors/warnings. Raw observations saved as `langfuse.json` in the run artifacts.
+- Judge: `gpt-6-luna` through the run's evaluator connection, structured output. Per criterion:
+  verdict (pass | partial | fail | not_observable), score 0–100, rationale, evidence refs
+  (source transcript | trace | timing + quote/ref). Overall score computed in code (weighted), plus
+  `mustFailed` flag. Suggestions (title, detail, area, priority, evidence). Brief (Markdown).
+- Persistence: `run_judgements` table (migration 0008), one row per run, status
+  pending → collecting_traces → judging → completed | failed; result JSONB; trace stats; error.
+- Orchestration: auto-judge when a run finishes completed (or failed with a transcript); traces are
+  polled until the observation count is stable (Vivi uses langfuse 4.5.0 → v2 data may lag up to
+  ~15 min), capped; if no traces arrive the judge still runs and marks trace evidence unavailable.
+  Re-judge on demand. Non-terminal judgements resume on restart.
+- Snapshot keeps the agent's `langfuse_connection_id`; older runs fall back to the agent row.
+- API: `GET /api/runs/{id}/judgement`, `POST /api/runs/{id}/judgement` (re-judge).
+- UI: "Score & suggestions" card in the run report (status, score, criteria, suggestions, brief with
+  copy/download, re-judge); score in the runs list.
+
+## Constraints
+- Only `gpt-6-luna`; reasoning effort low (same as evaluator); generous limits (judge budget
+  16000 completion tokens, 180 s timeout, one retry). No extra knobs.
+- No secrets in errors/logs; Langfuse calls only through the guarded transport.
+- Deprecated Langfuse v1 read APIs (sunset 2026-11-16 on Cloud) are not used.
+
+## Tasks
+- [ ] T1 Langfuse trace reader + digest + runtime builder (backend) — route: delegated (writer; new provider module + tests)
+- [ ] T2 Judge core: generic structured chat call, prompt, schema, scoring, brief (backend) — route: delegated
+- [ ] T3 Persistence + orchestration + API + snapshot field (backend, migration 0008) — route: delegated
+- [ ] T4 Report UI: Score & suggestions card + runs list score (frontend) — route: delegated
+- [ ] T5 Docs + real validation on an existing run (needs the user's Langfuse connection linked to the agent; paid call → ask) — route: inline
+
+## Acceptance criteria
+- A finished run gets a judgement automatically; the report shows overall score, per-criterion verdicts
+  with evidence, suggestions and a copyable brief.
+- Trace evidence comes from Langfuse when the agent has a Langfuse connection; otherwise the judgement
+  says traces were unavailable and trace-sourced criteria are `not_observable`.
+- Re-judge replaces the previous result. Restarting the backend resumes pending judgements.
+- Backend (pytest, ruff) and frontend (vitest, lint, typecheck) suites pass.
+
+## Checks
+- Backend: `uv run pytest -q`, `uv run ruff check . && uv run ruff format --check .` (in `backend/`).
+- Frontend: `npm test`, `npm run lint`, `npm run typecheck` (in `frontend/`).
+
+## Forecast
+~2.5k authored lines across 4 code commits; each commit reviewed right after (lens budget ~1.7k).
+
+## Progress
+(none yet)
