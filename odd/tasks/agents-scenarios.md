@@ -77,6 +77,12 @@ is reviewed right after it is committed.
   renders with an empty TTS list); stale focus flag for server errors on unrendered rows; nav guard and
   bfcacheId keying untested.
 - Not yet checked in a real browser.
+- 2026-10-10: agent "Vivi dev agent" created from the user's cURL via the backend service inside the
+  container (same validation as the API; no password used). `17fb2a0` "Import from cURL" on the agent
+  form (pure parser + inline panel; https→wss, userId decoded, threadId/voiceCapability ignored; 225
+  frontend tests): reviewed medium, APPROVED (lineage review-4d75268f4e5ff1a1). Advisory: unknown
+  value-taking flags (e.g. `-x proxy`) could be read as the URL; Windows cmd-style cURL not supported;
+  `$'…'` branch untested.
 
 ## Next step
 Browser check of Agents/Scenarios with the user; then runs orchestration + live.
