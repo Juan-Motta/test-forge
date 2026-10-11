@@ -154,3 +154,25 @@ def test_gap_detector_marks_end_reason_and_unknown_response_count():
     turn = d.completed_turns[0]
     assert turn.end_reason == "audio_gap"
     assert turn.response_count is None and turn.tool_activity is None
+
+
+def test_discarding_an_empty_turn_hands_its_caller_end_to_a_completed_next_turn():
+    """The empty and the spoken turn both completed before the runner looked at them."""
+    d = ResponseTurnTracker(settle_ms=100)
+    d.mark_caller_end(1000)
+    d.on_response_started(1100)
+    d.on_response_done(1150)
+    assert d.turn_ended(1300)  # the empty response: it holds the caller end
+    d.on_response_started(1400)
+    d.on_agent_audio(1600, nbytes=4800)
+    d.on_response_done(1700)
+    assert d.turn_ended(1900)
+    empty, spoken = d.completed_turns
+    assert spoken.caller_end_ms is None
+
+    d.discard(empty)
+
+    assert d.completed_turns == [spoken]
+    assert spoken.latency_ms == 600
+    d.on_agent_audio(5000)  # nothing is left pending for a later turn
+    assert d.current_turn is not None and d.current_turn.caller_end_ms is None

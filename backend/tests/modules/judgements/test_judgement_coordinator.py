@@ -26,6 +26,7 @@ from judgements_support import (
 from sqlalchemy import update
 
 from voice_eval.modules.agents.models import AgentRecord
+from voice_eval.modules.judgements import service
 from voice_eval.modules.judgements.coordinator import POLL_INTERVAL_S, RECONCILE_WINDOW
 from voice_eval.modules.judgements.models import RunJudgementRecord
 from voice_eval.modules.runs.models import RunRecord
@@ -243,8 +244,6 @@ async def test_rejudge_replaces_the_result_and_refuses_while_active(app, harness
 
 
 async def test_a_superseded_attempt_never_overwrites_the_new_one(app, harness):
-    from voice_eval.modules.judgements import service
-
     sessionmaker = app.state.sessionmaker
     run_id = await insert_run(sessionmaker, data=snapshot(langfuse=None))
     async with sessionmaker() as db:
@@ -336,3 +335,27 @@ async def test_any_reader_error_is_retried_then_a_note_never_a_failure(app, harn
     row = await judge(app, await insert_run(sessionmaker))
     assert row.status == "completed"
     assert "RuntimeError" in row.trace_note and "sk-lf" not in row.trace_note
+
+
+async def test_a_reconcile_error_on_one_run_still_judges_the_others(app, harness, monkeypatch):
+    sessionmaker = app.state.sessionmaker
+    no_traces = snapshot(langfuse=None)
+    first = await insert_run(sessionmaker, data=no_traces)
+    broken = await insert_run(sessionmaker, data=no_traces)
+    last = await insert_run(sessionmaker, data=no_traces)
+    real_start_missing = service.start_missing
+
+    async def start_missing(db, run_id):
+        if run_id == broken:
+            raise RuntimeError("database hiccup")
+        return await real_start_missing(db, run_id)
+
+    monkeypatch.setattr(service, "start_missing", start_missing)
+
+    await app.state.judgements.recover()
+
+    for run_id in (first, last):
+        await settled(app.state.judgements, run_id)
+        row = await judgement_row(sessionmaker, run_id)
+        assert (row.status, row.attempt) == ("completed", 1)
+    assert await judgement_row(sessionmaker, broken) is None  # the next start retries it

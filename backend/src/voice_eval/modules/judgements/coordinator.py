@@ -152,24 +152,32 @@ class JudgementCoordinator:
         await self._reconcile()
 
     async def _reconcile(self) -> None:
+        """Each judgement is spawned right after it is committed, and one run's error skips
+        only that run (it stays unjudged for the next start), never the ones already started."""
+        started = 0
         try:
             async with self.sessionmaker() as db:
                 candidates = await service.unjudged_finished_runs(
                     db, ended_since=self.now() - RECONCILE_WINDOW
                 )
-                started = []
                 for run_id, status, summary in candidates:
-                    if is_judgeable(status, summary):
+                    if not is_judgeable(status, summary):
+                        continue
+                    try:
                         judgement = await service.start_missing(db, run_id)
-                        if judgement is not None:
-                            started.append(judgement)
+                    except Exception as exc:
+                        await db.rollback()
+                        log.warning(
+                            "could not judge run %s left unjudged (%s)", run_id, type(exc).__name__
+                        )
+                        continue
+                    if judgement is not None:
+                        self._spawn(judgement.run_id, judgement.attempt)
+                        started += 1
         except Exception as exc:
             log.warning("could not judge the runs left unjudged (%s)", type(exc).__name__)
-            return
-        for judgement in started:
-            self._spawn(judgement.run_id, judgement.attempt)
         if started:
-            log.warning("judging %d finished run(s) left without a judgement", len(started))
+            log.warning("judging %d finished run(s) left without a judgement", started)
 
     async def shutdown(self) -> None:
         """Cancel every judging task; their judgements stay unfinished for the next start."""

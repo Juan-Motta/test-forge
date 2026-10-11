@@ -83,11 +83,13 @@ async def retry_after(
 async def record_attempt(
     db: AsyncSession, email: str | None, ip: str | None, *, succeeded: bool, now: datetime
 ) -> None:
-    """Add the attempt to `db` (caller commits) and purge a bounded batch of expired rows."""
+    """Add the attempt to `db` (caller commits) and purge a bounded batch of expired rows;
+    rows another transaction holds are skipped (left for a later purge), never waited on."""
     db.add(LoginAttemptRecord(email=email, ip=ip, succeeded=succeeded, created_at=now))
     expired = (
         select(LoginAttemptRecord.id)
         .where(LoginAttemptRecord.created_at < now - RETENTION)
         .limit(PURGE_BATCH)
+        .with_for_update(skip_locked=True)
     )
     await db.execute(delete(LoginAttemptRecord).where(LoginAttemptRecord.id.in_(expired)))

@@ -342,3 +342,90 @@ async def test_shutdown_interrupts_running_runs(app, user_client, factory, drive
     for run_id in run_ids:
         detail = (await user_client.get(f"/api/runs/{run_id}")).json()
         assert (detail["status"], detail["endReason"]) == ("interrupted", "shutdown")
+
+
+async def test_list_items_carry_persona_turns_and_median_latency(user_client, factory, drive):
+    scenario = await factory.scenario()
+    drive.result = {**drive.result, "latencies_ms": [300.0, 500.0, 420.4, 100.0]}
+    done = (await launch(user_client, [scenario["id"]])).json()["runs"][0]["id"]
+    drive.release.set()
+    await wait_for(all_in(user_client, [done], {"completed"}))
+    drive.release.clear()
+    drive.result = {**drive.result, "latencies_ms": []}
+    pending = (await launch(user_client, [scenario["id"]])).json()["runs"][0]["id"]
+    await wait_for(all_in(user_client, [pending], {"running"}))
+
+    items = {item["id"]: item for item in (await user_client.get("/api/runs")).json()["items"]}
+
+    finished = items[done]
+    assert finished["persona"] == "Lucía"
+    assert (finished["callerTurns"], finished["agentTurns"]) == (1, 2)
+    assert finished["latencyP50Ms"] == 360  # median of 100, 300, 420.4, 500
+    running = items[pending]
+    assert running["persona"] == "Lucía"
+    assert (running["callerTurns"], running["agentTurns"], running["latencyP50Ms"]) == (
+        None,
+        None,
+        None,
+    )
+    detail = (await user_client.get(f"/api/runs/{done}")).json()
+    assert detail["latencyP50Ms"] == 360
+
+
+async def test_list_items_tolerate_a_malformed_summary(app, user_client, factory, drive):
+    scenario = await factory.scenario()
+    run_id = (await launch(user_client, [scenario["id"]])).json()["runs"][0]["id"]
+    drive.release.set()
+    await wait_for(all_in(user_client, [run_id], {"completed"}))
+    async with app.state.sessionmaker() as db:
+        await db.execute(
+            update(RunRecord)
+            .where(RunRecord.id == uuid.UUID(run_id))
+            .values(summary={"caller_turns": "x", "agent_turns": True, "latencies_ms": ["a", 5]})
+        )
+        await db.commit()
+
+    item = (await user_client.get("/api/runs")).json()["items"][0]
+
+    assert (item["callerTurns"], item["agentTurns"], item["latencyP50Ms"]) == (None, None, 5)
+
+
+async def test_cancelling_a_run_that_finished_meanwhile_is_409(app, user_client, factory, drive):
+    """The run ends on its own between the API's read and the cancel: 409, status kept."""
+    scenario = await factory.scenario()
+    batch = (await launch(user_client, [scenario["id"]], repetitions=2, concurrency=1)).json()
+    live, orphan = [run["id"] for run in batch["runs"]]
+    await wait_for(all_in(user_client, [live], {"running"}))
+    manager = app.state.runs
+    original = manager.cancel_run
+
+    async def finish_first(run):
+        async with app.state.sessionmaker() as db:
+            await db.execute(
+                update(RunRecord)
+                .where(RunRecord.id == run.id)
+                .values(status="completed", end_reason="caller_hung_up")
+            )
+            await db.commit()
+        await original(run)
+
+    manager.cancel_run = finish_first
+    # a live task: the cancel is requested, but the run had already completed
+    response = await user_client.post(f"/api/runs/{live}/cancel")
+    assert response.status_code == 409, response.text
+    assert await run_status(user_client, live) == "completed"
+
+    # no live task (the process forgot it): the guarded update records nothing
+    manager.cancel_run = original
+    await manager.shutdown()
+    manager.cancel_run = finish_first
+    async with app.state.sessionmaker() as db:
+        await db.execute(
+            update(RunRecord)
+            .where(RunRecord.id == uuid.UUID(orphan))
+            .values(status="running", end_reason=None, ended_at=None)
+        )
+        await db.commit()
+    response = await user_client.post(f"/api/runs/{orphan}/cancel")
+    assert response.status_code == 409, response.text
+    assert await run_status(user_client, orphan) == "completed"

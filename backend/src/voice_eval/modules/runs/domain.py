@@ -5,7 +5,9 @@ edits never change history. It moves `queued` -> `connecting` -> `running` -> on
 status: `completed`, `failed`, `cancelled`, or `interrupted` (the server stopped under it).
 """
 
+import math
 import re
+import statistics
 import uuid
 from dataclasses import asdict, dataclass
 from datetime import datetime
@@ -74,8 +76,41 @@ class Run:
         return self.snapshot["agent"]["name"]
 
     @property
+    def persona(self) -> str | None:
+        persona = self.snapshot["scenario"].get("persona")
+        name = persona.get("name") if isinstance(persona, dict) else None
+        return name if isinstance(name, str) else None
+
+    @property
+    def caller_turns(self) -> int | None:
+        return _count(self.summary, "caller_turns")
+
+    @property
+    def agent_turns(self) -> int | None:
+        return _count(self.summary, "agent_turns")
+
+    @property
+    def latency_p50_ms(self) -> int | None:
+        """The median response latency of the summary, rounded to whole milliseconds."""
+        values = self.summary.get("latencies_ms") if isinstance(self.summary, dict) else None
+        numbers = [v for v in values if _is_number(v)] if isinstance(values, list) else []
+        return round(statistics.median(numbers)) if numbers else None
+
+    @property
     def finished(self) -> bool:
         return self.status not in ACTIVE_RUN_STATUSES
+
+
+def _is_number(value: Any) -> bool:
+    return isinstance(value, int | float) and not isinstance(value, bool) and math.isfinite(value)
+
+
+def _count(summary: dict[str, Any] | None, key: str) -> int | None:
+    """A non-negative integer of the summary; None when missing or malformed."""
+    value = summary.get(key) if isinstance(summary, dict) else None
+    if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+        return value
+    return None
 
 
 @dataclass(frozen=True)

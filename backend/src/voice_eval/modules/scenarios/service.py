@@ -151,13 +151,15 @@ async def _ensure_name_free(
 async def list_scenarios(
     db: AsyncSession, *, agent_id: uuid.UUID | None = None, tag: str | None = None
 ) -> list[Scenario]:
-    """Most recently updated first; optionally only one agent's, or only those with `tag`."""
+    """Most recently updated first; optionally only one agent's, or only those with `tag`
+    (trimmed like stored tags; a blank one filters nothing)."""
     query = select(ScenarioRecord).order_by(
         ScenarioRecord.updated_at.desc(), ScenarioRecord.name, ScenarioRecord.id
     )
     if agent_id is not None:
         query = query.where(ScenarioRecord.agent_id == agent_id)
-    if tag is not None:
+    tag = tag.strip() if tag is not None else None
+    if tag:
         query = query.where(ScenarioRecord.tags.contains([tag]))
     return [record.to_domain() for record in await db.scalars(query)]
 

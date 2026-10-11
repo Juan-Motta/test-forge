@@ -34,6 +34,7 @@ from voice_eval.modules.runs.manager import RunManager, read_json
 from voice_eval.modules.users.deps import Principal, current_principal
 from voice_eval.platform.db import get_db_session
 
+CANCEL_STATUSES = frozenset({RunStatus.CANCELLED, RunStatus.INTERRUPTED})
 Db = Annotated[AsyncSession, Depends(get_db_session)]
 CurrentPrincipal = Annotated[Principal, Depends(current_principal)]
 Limit = Annotated[int, Query(ge=1, le=200)]
@@ -89,6 +90,10 @@ class RunOut(CamelModel):
     ended_at: datetime | None
     judgement_status: str | None  # None until the run is handed to the judge
     score: int | None  # the judgement's overall score (0-100), once completed
+    persona: str | None  # the scenario persona's name, from the snapshot
+    caller_turns: int | None  # from the summary, once the run finished
+    agent_turns: int | None
+    latency_p50_ms: int | None  # median response latency of the summary
 
     @classmethod
     def fields_of(cls, run: Run) -> dict[str, Any]:
@@ -109,6 +114,10 @@ class RunOut(CamelModel):
             "ended_at": run.ended_at,
             "judgement_status": run.judgement_status,
             "score": run.score,
+            "persona": run.persona,
+            "caller_turns": run.caller_turns,
+            "agent_turns": run.agent_turns,
+            "latency_p50_ms": run.latency_p50_ms,
         }
 
     @classmethod
@@ -284,10 +293,12 @@ async def cancel_run(run_id: uuid.UUID, db: Db, runs: Manager) -> RunOut:
         run = await service.get_run(db, run_id)
     except RunNotFound:
         raise _not_found("Run") from None
-    if run.finished:
+    if run.finished or not await runs.cancel_run(run):
         raise HTTPException(status.HTTP_409_CONFLICT, "Run already finished")
-    await runs.cancel_run(run)
-    return RunOut.of(await service.get_run(db, run_id))
+    after = await service.get_run(db, run_id)
+    if after.finished and after.status not in CANCEL_STATUSES:  # it ended on its own meanwhile
+        raise HTTPException(status.HTTP_409_CONFLICT, "Run already finished")
+    return RunOut.of(after)
 
 
 @router.get(

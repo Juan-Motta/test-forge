@@ -89,6 +89,10 @@ def test_a_malformed_answer_raises_without_echoing_it(bad):
         {key: value for key, value in CRITERIA[0].items() if key != "text"},  # missing key
         {**CRITERIA[0], "weight": "heavy"},  # non-numeric weight
         {**CRITERIA[0], "weight": float("nan")},
+        {**CRITERIA[0], "weight": float("inf")},
+        {**CRITERIA[0], "weight": 12.5},  # not integral
+        {**CRITERIA[0], "weight": "50"},  # a number as text is not a number
+        {**CRITERIA[0], "weight": True},
         {**CRITERIA[0], "kind": "nice-to-have"},  # unknown kind
         {**CRITERIA[0], "source": "telepathy"},  # unknown source
         "not-a-criterion",
@@ -99,3 +103,10 @@ def test_a_malformed_snapshot_criterion_is_a_judge_error(broken):
         parse_judgement(answer(verdict(MUST_ID)), [broken, *CRITERIA[1:]])
     assert "heavy" not in str(caught.value) and "telepathy" not in str(caught.value)
     assert caught.value.__cause__ is None
+
+
+@pytest.mark.parametrize("weight", [50, 50.0])
+def test_an_integral_numeric_weight_is_accepted(weight):
+    parsed = parse_judgement(answer(verdict(MUST_ID)), [{**CRITERIA[0], "weight": weight}])
+    assert parsed.criteria[0].weight == 50
+    assert type(parsed.criteria[0].weight) is int

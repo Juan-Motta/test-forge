@@ -95,11 +95,20 @@ class AgentTurnDetector:
         self._current = None
 
     def discard(self, turn: AgentTurn) -> None:
-        """Forget a completed turn that said nothing; the caller end it held moves to the next."""
-        self.completed_turns.remove(turn)
+        """Forget a completed turn that said nothing; the caller end it held moves to the next.
+
+        The next turn is the one completed after it (both may close before the runner looks),
+        else the open one, else the next turn to open.
+        """
+        index = next(i for i, t in enumerate(self.completed_turns) if t is turn)
+        del self.completed_turns[index]
         if turn.caller_end_ms is None:
             return
-        if self._current is not None:
+        if index < len(self.completed_turns):
+            following = self.completed_turns[index]
+            if following.caller_end_ms is None:
+                following.caller_end_ms = turn.caller_end_ms
+        elif self._current is not None:
             if self._current.caller_end_ms is None:
                 self._current.caller_end_ms = turn.caller_end_ms
         elif self._pending_caller_end is None:

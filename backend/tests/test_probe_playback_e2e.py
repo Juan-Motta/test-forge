@@ -145,3 +145,35 @@ async def test_playback_wait_is_bounded_by_the_turn_timeout(fake_realtime_server
     first = summary["turns"][0]
     assert first["end_ms"] < first["caller_resumed_ms"] < first["playback_end_ms"]
     assert first["caller_resumed_ms"] - first["end_ms"] >= 1000 - 60
+
+
+@pytest.mark.parametrize("wait", [True, False], ids=["playback-wait", "no-playback-wait"])
+async def test_the_probe_hangs_up_after_the_last_reply_played(fake_realtime_server, tmp_path, wait):
+    fake_realtime_server.burst_audio_ms = BURST_MS
+    options = ProbeOptions(settle_ms=300, playback_grace_ms=GRACE_MS, playback_wait=wait)
+    probe = ProbeRun(TargetSpec(fake_realtime_server.url, "chan", "user"), tmp_path, options)
+
+    summary = await probe.run([CallerTurn(text="one")])
+
+    assert summary["complete"] is True
+    (reply,) = summary["turns"]
+    sent = [e for e in probe.events if e["dir"] == "out" and e.get("type") != "caller.text"]
+    hang_up_ms = sent[-1]["t_ms"]  # what the adapter sent to close the session
+    if wait:
+        assert hang_up_ms >= reply["playback_end_ms"] + GRACE_MS - 1
+    else:
+        assert hang_up_ms < reply["playback_end_ms"]
+
+
+async def test_max_seconds_during_the_last_playback_is_only_a_warning(
+    fake_realtime_server, tmp_path
+):
+    fake_realtime_server.burst_audio_ms = 20000
+    options = ProbeOptions(settle_ms=300, turn_timeout_s=30, max_seconds=2, close_timeout_s=2)
+    probe = ProbeRun(TargetSpec(fake_realtime_server.url, "chan", "user"), tmp_path, options)
+
+    summary = await probe.run([CallerTurn(text="one")])
+
+    assert summary["complete"] is True  # every turn happened; only the listening was cut short
+    assert any("max run time" in w and "hanging up" in w for w in summary["warnings"])
+    assert summary["duration_ms"] < 4000

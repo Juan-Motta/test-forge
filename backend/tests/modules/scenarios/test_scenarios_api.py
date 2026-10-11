@@ -171,6 +171,10 @@ async def test_get_and_list_with_filters(user_client, agent_id):
     assert [s["id"] for s in by_tag] == [third["id"], first["id"]]
     both = await user_client.get("/api/scenarios", params={"agentId": agent_id, "tag": "smoke"})
     assert [s["id"] for s in both.json()] == [first["id"]]
+    padded = (await user_client.get("/api/scenarios", params={"tag": "  smoke "})).json()
+    assert [s["id"] for s in padded] == [third["id"], first["id"]]
+    blank = (await user_client.get("/api/scenarios", params={"tag": "   "})).json()
+    assert len(blank) == 3  # an empty filter filters nothing
 
     await user_client.patch(f"/api/scenarios/{first['id']}", json={"goal": "Updated goal"})
     listed = (await user_client.get("/api/scenarios")).json()

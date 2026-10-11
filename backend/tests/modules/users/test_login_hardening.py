@@ -7,9 +7,9 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from httpx import ASGITransport, AsyncClient
 from pwdlib.hashers.argon2 import Argon2Hasher
-from sqlalchemy import select, update
+from sqlalchemy import select, text, update
 
-from voice_eval.modules.users import passwords, service
+from voice_eval.modules.users import passwords, service, throttle
 from voice_eval.modules.users.models import LoginAttemptRecord, UserRecord
 from voice_eval.modules.users.passwords import verify_and_update
 from voice_eval.modules.users.throttle import ThrottlePolicy
@@ -304,3 +304,23 @@ def test_app_startup_warms_the_dummy_hash():
             assert service._dummy_hash.cache_info().currsize == 1
     finally:
         service._dummy_hash.cache_clear()
+
+
+async def test_attempt_purge_skips_a_row_another_transaction_holds(make_user, db):
+    """Recording an attempt never waits on a locked expired row: it is left for later."""
+    await add_attempts(db, 2, ago=timedelta(hours=25), email="old@example.com")
+    old = await attempts(db)
+    now = datetime.now(UTC)
+    async with db() as holder, db() as recorder:
+        await holder.execute(
+            select(LoginAttemptRecord.id)
+            .where(LoginAttemptRecord.id == old[0].id)
+            .with_for_update()
+        )
+        await recorder.execute(text("SET LOCAL lock_timeout = '1s'"))  # a wait fails, not hangs
+        await throttle.record_attempt(recorder, EMAIL, CLIENT_IP, succeeded=True, now=now)
+        await recorder.commit()
+        await holder.rollback()
+    remaining = {a.id for a in await attempts(db)}
+    assert old[0].id in remaining
+    assert old[1].id not in remaining

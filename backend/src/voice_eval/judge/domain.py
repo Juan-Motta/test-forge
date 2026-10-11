@@ -6,9 +6,10 @@ criteria: verdicts for unknown criterion ids are dropped, criteria without a ver
 clipped so one verbose answer cannot bloat the stored result.
 """
 
-from typing import Any, Literal
+import math
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, ValidationError
 from pydantic.alias_generators import to_camel
 
 Verdict = Literal["pass", "partial", "fail", "not_observable"]
@@ -120,6 +121,14 @@ def _evidence(items: list[Evidence]) -> list[Evidence]:
     ]
 
 
+def _integral(value: Any) -> Any:
+    """A JSON number with no fractional part as an int (`10.0` -> 10); anything else is left
+    to the strict int check, which refuses text, booleans and non-integral numbers."""
+    if isinstance(value, float) and math.isfinite(value) and value.is_integer():
+        return int(value)
+    return value
+
+
 class SnapshotCriterion(BaseModel):
     """A criterion as the run snapshot stores it (snake_case keys)."""
 
@@ -127,7 +136,7 @@ class SnapshotCriterion(BaseModel):
     text: str
     kind: Literal["must", "should"]
     source: Source
-    weight: int
+    weight: Annotated[int, Field(strict=True), BeforeValidator(_integral)]
 
 
 def _snapshot_criterion(criterion: Any) -> SnapshotCriterion:

@@ -5,7 +5,7 @@ import secrets
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from sqlalchemy import select, update
+from sqlalchemy import select, text, update
 
 from voice_eval.modules.users import sessions
 from voice_eval.modules.users.api import LoginRequest
@@ -152,3 +152,22 @@ async def test_display_name_limit(make_user):
     await make_user(email="max@example.com", display_name="x" * MAX_DISPLAY_NAME_LENGTH)
     with pytest.raises(InvalidUserInput, match=str(MAX_DISPLAY_NAME_LENGTH)):
         await make_user(email="over@example.com", display_name="x" * (MAX_DISPLAY_NAME_LENGTH + 1))
+
+
+async def test_purge_skips_an_expired_session_another_transaction_holds(make_user, db):
+    """A purge never waits on a row lock: the locked row is left for a later purge."""
+    user = await make_user()
+    locked = await _add_session(db, user.id, expires_in=-timedelta(hours=1))
+    free = await _add_session(db, user.id, expires_in=-timedelta(hours=1))
+    async with db() as holder, db() as purger:
+        await holder.execute(
+            select(SessionRecord.id).where(SessionRecord.token_hash == locked).with_for_update()
+        )
+        await purger.execute(text("SET LOCAL lock_timeout = '1s'"))  # a wait fails, not hangs
+        await sessions.purge_expired_sessions(purger, datetime.now(UTC))
+        await purger.commit()
+        await holder.rollback()
+    async with db() as session:
+        hashes = set((await session.scalars(select(SessionRecord.token_hash))).all())
+    assert locked in hashes
+    assert free not in hashes

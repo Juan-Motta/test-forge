@@ -193,20 +193,23 @@ class RunManager:
     def is_active(self, run_id: uuid.UUID) -> bool:
         return run_id in self._tasks
 
-    async def cancel_run(self, run: Run | uuid.UUID) -> None:
-        """Cancel the run's task; a run without a live task is recorded as cancelled directly."""
+    async def cancel_run(self, run: Run | uuid.UUID) -> bool:
+        """Cancel the run's task; a run without a live task is recorded as cancelled directly.
+
+        Returns False when the run had already ended (nothing was cancelled).
+        """
         run_id = run if isinstance(run, uuid.UUID) else run.id
         task = self._tasks.get(run_id)
         if task is not None:
             task.cancel()
             if run_id in self._entered:
-                return  # the task records its own end
+                return True  # the task records its own end
         job = self._jobs.get(run_id)
         batch_id = job.batch_id if job else (run.batch_id if isinstance(run, Run) else None)
         if batch_id is None:
             async with self.sessionmaker() as db:
                 batch_id = (await service.get_run(db, run_id)).batch_id
-        await self._record_end(run_id, batch_id, self._cancel_status(), None, None)
+        return await self._record_end(run_id, batch_id, self._cancel_status(), None, None)
 
     def _cancel_status(self) -> tuple[RunStatus, str]:
         if self._stopping:
@@ -256,7 +259,8 @@ class RunManager:
         error: str | None,
         *,
         artifacts_dir: str | None = None,
-    ) -> None:
+    ) -> bool:
+        """Record the run's end (once); returns whether this call recorded it."""
         status, reason = outcome
         recorded = False
         try:
@@ -283,6 +287,7 @@ class RunManager:
                 log.warning(
                     "could not schedule the judgement of run %s (%s)", run_id, type(exc).__name__
                 )
+        return recorded
 
     async def drive_session(self, job: RunJob, sink: EventSink) -> dict[str, Any]:
         """The real conversation: providers from the stored connections, then the runner."""

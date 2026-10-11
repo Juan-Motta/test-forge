@@ -96,8 +96,14 @@ async def touch_session(
 
 
 async def purge_expired_sessions(db: AsyncSession, now: datetime) -> None:
-    """Delete a bounded batch of expired sessions (caller commits)."""
-    expired = select(SessionRecord.id).where(SessionRecord.expires_at <= now).limit(PURGE_BATCH)
+    """Delete a bounded batch of expired sessions (caller commits); rows another transaction
+    holds are skipped (left for a later purge), so a login never waits on a purge."""
+    expired = (
+        select(SessionRecord.id)
+        .where(SessionRecord.expires_at <= now)
+        .limit(PURGE_BATCH)
+        .with_for_update(skip_locked=True)
+    )
     await db.execute(delete(SessionRecord).where(SessionRecord.id.in_(expired)))
 
 

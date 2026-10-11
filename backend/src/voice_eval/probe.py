@@ -122,6 +122,7 @@ class ProbeRun:
             await self._opening_turn(self.session)
             for n, turn in enumerate(turns, 1):
                 await self._caller_turn(self.session, self.stream, n, turn)
+            await self._final_playback()
         except (ProbeStop, ProtocolDetectionError) as stop:
             self.stopped = True
             self.warnings.append(str(stop))
@@ -152,7 +153,7 @@ class ProbeRun:
     async def _caller_turn(
         self, session: TargetSession, stream: CallerAudioStream, n: int, turn: CallerTurn
     ) -> None:
-        previous = await self._wait_playback(n)
+        previous = await self._wait_playback(f"agent playback before caller turn {n}")
         expected = len(self.detector.completed_turns) + 1
         self.caller_turns += 1
 
@@ -178,8 +179,9 @@ class ProbeRun:
             budget = (duration_ms(pcm) + self.options.trailing_silence_ms) / 1000
         await self._wait_agent_turn(expected, f"reply {n}", budget + self.options.turn_timeout_s)
 
-    async def _wait_playback(self, n: int) -> AgentTurn | None:
-        """Hold caller turn `n` until the last agent turn would have finished playing.
+    async def _wait_playback(self, label: str) -> AgentTurn | None:
+        """Hold the caller (its next turn, or the hang-up) until the last agent turn would have
+        finished playing.
 
         Agents deliver audio faster than real time, so the turn end (`response.done` or an audio
         gap) comes long before a real listener heard the reply. The caller stream keeps sending
@@ -191,7 +193,6 @@ class ProbeRun:
             return previous
         target_ms = previous.playback_end_ms + self.options.playback_grace_ms
         deadline_ms = self._now_ms() + self.options.turn_timeout_s * 1000
-        label = f"agent playback before caller turn {n}"
         while (now := self._now_ms()) < target_ms:
             if self._reader is not None and self._reader.done():
                 raise ProbeStop(f"connection closed while waiting for {label}")
@@ -202,6 +203,14 @@ class ProbeRun:
                 break
             await asyncio.sleep(min(POLL_S, (target_ms - now) / 1000))
         return previous
+
+    async def _final_playback(self) -> None:
+        """Hang up only once the last reply would have been heard. Every turn is done by now,
+        so a closed connection or the max run time here is a warning, never an incomplete run."""
+        try:
+            await self._wait_playback("agent playback before hanging up")
+        except ProbeStop as stop:
+            self.warnings.append(str(stop))
 
     def _log_out(self, record: dict[str, Any], t_ms: float | None = None) -> None:
         t = self._now_ms() if t_ms is None else t_ms

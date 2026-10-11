@@ -81,14 +81,24 @@ class GuardedNetworkBackend(httpcore.AsyncNetworkBackend):
         local_address: str | None = None,
         socket_options: Iterable[httpcore.SOCKET_OPTION] | None = None,
     ) -> httpcore.AsyncNetworkStream:
+        loop = asyncio.get_running_loop()
+        deadline = None if timeout is None else loop.time() + timeout
+
+        def remaining() -> float | None:
+            return None if deadline is None else deadline - loop.time()
+
+        # One budget for the resolution and every connect attempt, not `timeout` per step.
         addresses = await self._addresses(host, port, timeout)
         last_error: Exception = httpcore.ConnectError("could not connect")
         for address in addresses:
+            left = remaining()
+            if left is not None and left <= 0:
+                raise httpcore.ConnectTimeout("connection timed out")
             try:
                 return await self._inner.connect_tcp(
                     address,
                     port,
-                    timeout=timeout,
+                    timeout=left,
                     local_address=local_address,
                     socket_options=socket_options,
                 )

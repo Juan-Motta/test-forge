@@ -1,5 +1,7 @@
 """Outbound guard for connection tests: only public addresses, pinned to the vetted address."""
 
+import asyncio
+
 import httpcore
 import pytest
 
@@ -120,6 +122,55 @@ async def test_resolution_failure_is_a_connect_error():
     backend = GuardedNetworkBackend(resolver=broken, inner=RecordingBackend())
     with pytest.raises(httpcore.ConnectError):
         await backend.connect_tcp("nowhere.invalid", 443)
+
+
+class SlowBackend(RecordingBackend):
+    """Each connect attempt takes `delay_s` and then times out; records the timeout it got."""
+
+    def __init__(self, delay_s: float) -> None:
+        super().__init__()
+        self.delay_s = delay_s
+        self.timeouts: list[float | None] = []
+
+    async def connect_tcp(
+        self,
+        host,
+        port,
+        timeout=None,  # noqa: ASYNC109 - httpcore's interface
+        local_address=None,
+        socket_options=None,
+    ):
+        self.connected.append((host, port))
+        self.timeouts.append(timeout)
+        await asyncio.sleep(self.delay_s)
+        raise httpcore.ConnectTimeout("timed out in the test backend")
+
+
+async def test_resolution_and_every_connect_share_one_deadline():
+    async def slow_resolve(host: str, port: int) -> list[str]:
+        await asyncio.sleep(0.1)
+        return ["93.184.216.1", "93.184.216.2", "93.184.216.3", "93.184.216.4"]
+
+    inner = SlowBackend(delay_s=0.15)
+    backend = GuardedNetworkBackend(resolver=slow_resolve, inner=inner)
+    started = asyncio.get_running_loop().time()
+
+    with pytest.raises(httpcore.ConnectTimeout):
+        await backend.connect_tcp("api.example.com", 443, timeout=0.5)
+
+    elapsed = asyncio.get_running_loop().time() - started
+    assert elapsed < 0.5 + 0.1  # one budget, not 0.5 per step
+    assert len(inner.connected) < 4  # the budget ran out before the last address
+    assert inner.timeouts[0] is not None and inner.timeouts[0] <= 0.4 + 0.01
+    assert all(b < a for a, b in zip(inner.timeouts, inner.timeouts[1:], strict=False))
+
+
+async def test_without_a_timeout_every_address_is_tried_without_one():
+    inner = RecordingBackend()
+    backend = GuardedNetworkBackend(resolver=resolver_for(PUBLIC_V4, PUBLIC_V6), inner=inner)
+    with pytest.raises(httpcore.ConnectError):
+        await backend.connect_tcp("api.example.com", 443)
+    assert len(inner.connected) == 2
 
 
 async def check(tester: ConnectionTester, base_url: str) -> CheckResult:
