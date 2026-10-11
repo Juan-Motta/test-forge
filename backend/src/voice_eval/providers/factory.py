@@ -1,6 +1,7 @@
 from typing import TYPE_CHECKING
 
 from voice_eval.config import ConfigError, TtsSettings, require
+from voice_eval.ports.judge import RunJudgeModel
 from voice_eval.ports.policy import CallerPolicy
 from voice_eval.ports.tts import SpeechSynthesizer
 
@@ -38,6 +39,20 @@ def build_azure_openai_policy(
     from voice_eval.providers.openai_chat import OpenAIChatPolicy
 
     return OpenAIChatPolicy.for_azure(api_key, endpoint, api_version, deployment)
+
+
+def build_openai_judge(*, api_key: str, model: str, base_url: str | None = None) -> RunJudgeModel:
+    from voice_eval.providers.openai_chat import OpenAIJudge
+
+    return OpenAIJudge.for_openai(api_key, model, base_url=base_url)
+
+
+def build_azure_openai_judge(
+    *, api_key: str, endpoint: str, api_version: str, deployment: str
+) -> RunJudgeModel:
+    from voice_eval.providers.openai_chat import OpenAIJudge
+
+    return OpenAIJudge.for_azure(api_key, endpoint, api_version, deployment)
 
 
 def build_langfuse_trace_reader(

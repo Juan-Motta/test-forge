@@ -5,7 +5,7 @@ without restarting the process.
 """
 
 import uuid
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,12 +22,15 @@ from voice_eval.modules.connections.service import open_secrets
 from voice_eval.platform.db import create_engine, create_sessionmaker
 from voice_eval.platform.secrets import SecretBox
 from voice_eval.platform.settings import Settings
+from voice_eval.ports.judge import RunJudgeModel
 from voice_eval.ports.policy import CallerPolicy
 from voice_eval.ports.tts import SpeechSynthesizer
 from voice_eval.providers.factory import (
+    build_azure_openai_judge,
     build_azure_openai_policy,
     build_azure_openai_synthesizer,
     build_langfuse_trace_reader,
+    build_openai_judge,
     build_openai_policy,
     build_openai_synthesizer,
 )
@@ -109,6 +112,29 @@ async def build_synthesizer(
     )
 
 
+async def _chat_settings(
+    db: AsyncSession,
+    connection_id: uuid.UUID,
+    *,
+    secret_box: SecretBox,
+    allow_local_http: bool,
+    role: str,
+) -> tuple[ConnectionKind, Any, dict[str, str]]:
+    """The kind, config and revealed secrets of a chat-capable connection (`role` names the use)."""
+    record = await db.get(ConnectionRecord, connection_id, populate_existing=True)
+    if record is None:
+        raise ConnectionNotFound(str(connection_id))
+    kind = ConnectionKind(record.kind)
+    if kind not in (ConnectionKind.OPENAI, ConnectionKind.AZURE_OPENAI):
+        raise UnsupportedConnection(f"{kind.value} connections cannot act as the {role}")
+    config = parse_config(kind, record.config, allow_local_http=allow_local_http)
+    if kind is ConnectionKind.AZURE_OPENAI and config.chat_deployment is None:
+        raise UnsupportedConnection(
+            f"this azure_openai connection has no chat deployment: set one to use it as the {role}"
+        )
+    return kind, config, reveal(open_secrets(secret_box, record))
+
+
 async def build_caller_policy(
     db: AsyncSession,
     connection_id: uuid.UUID,
@@ -121,24 +147,45 @@ async def build_caller_policy(
     Raises `ConnectionNotFound`, `UnsupportedConnection` when the connection has no chat model
     (other kinds, or Azure OpenAI without a chat deployment), and `SecretDecryptionError`.
     """
-    record = await db.get(ConnectionRecord, connection_id, populate_existing=True)
-    if record is None:
-        raise ConnectionNotFound(str(connection_id))
-    kind = ConnectionKind(record.kind)
-    if kind not in (ConnectionKind.OPENAI, ConnectionKind.AZURE_OPENAI):
-        raise UnsupportedConnection(f"{kind.value} connections cannot act as the evaluator")
-    config = parse_config(kind, record.config, allow_local_http=allow_local_http)
-    if kind is ConnectionKind.AZURE_OPENAI and config.chat_deployment is None:
-        raise UnsupportedConnection(
-            "this azure_openai connection has no chat deployment: "
-            "set one to use it as the evaluator"
-        )
-    secrets = reveal(open_secrets(secret_box, record))
+    kind, config, secrets = await _chat_settings(
+        db,
+        connection_id,
+        secret_box=secret_box,
+        allow_local_http=allow_local_http,
+        role="evaluator",
+    )
     if kind is ConnectionKind.OPENAI:
         return build_openai_policy(
             api_key=secrets["api_key"], model=config.chat_model, base_url=config.base_url
         )
     return build_azure_openai_policy(
+        api_key=secrets["api_key"],
+        endpoint=config.endpoint,
+        api_version=config.api_version,
+        deployment=config.chat_deployment,
+    )
+
+
+async def build_judge(
+    db: AsyncSession,
+    connection_id: uuid.UUID,
+    *,
+    secret_box: SecretBox,
+    allow_local_http: bool = False,
+) -> RunJudgeModel:
+    """The run judge's model (the same gpt-6-luna chat model as the evaluator) for `connection_id`.
+
+    Raises `ConnectionNotFound`, `UnsupportedConnection` when the connection has no chat model,
+    and `SecretDecryptionError`.
+    """
+    kind, config, secrets = await _chat_settings(
+        db, connection_id, secret_box=secret_box, allow_local_http=allow_local_http, role="judge"
+    )
+    if kind is ConnectionKind.OPENAI:
+        return build_openai_judge(
+            api_key=secrets["api_key"], model=config.chat_model, base_url=config.base_url
+        )
+    return build_azure_openai_judge(
         api_key=secrets["api_key"],
         endpoint=config.endpoint,
         api_version=config.api_version,
