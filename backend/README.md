@@ -448,7 +448,9 @@ until two polls in a row return the same non-zero count, for at most 20 minutes 
 ended, because the agent's Langfuse SDK (4.5.0) can take up to ~15 minutes to make them
 readable. A re-judge long after the run reads them once. Without traces the judge still runs
 and the judgement's `traceNote` says why (no connection, none found, read error). The raw
-observations are saved as `langfuse.json` next to the run's other artifacts.
+observations are saved as `langfuse.json` next to the run's other artifacts. Langfuse 4.x and
+Cloud are read through the v2 Observations API; a self-hosted Langfuse 2.x/3.x (where that API
+answers 404) is read through the v1 traces API instead.
 
 Statuses: `pending` -> `collecting_traces` -> `judging` -> `completed` | `failed` (with a safe
 `error`). Stopping the backend leaves unfinished judgements as they are; the next start judges

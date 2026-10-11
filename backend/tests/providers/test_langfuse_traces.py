@@ -157,6 +157,133 @@ async def test_the_egress_guard_blocks_private_destinations():
     assert SECRET not in repr(guarded)
 
 
+# --- v1 fallback (Langfuse 2.x/3.x has no v2 Observations API) ------------------------------
+
+
+def v1_server(traces: dict[str, dict], *, pages: list[list[str]], seen: list[httpx.Request]):
+    """v2 answers 404; v1 lists `pages` of trace ids and serves each trace's detail."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        path = request.url.path
+        if path == "/api/public/v2/observations":
+            return httpx.Response(404, json={"message": "Not found"})
+        if path == "/api/public/traces":
+            page = int(request.url.params.get("page", "1"))
+            ids = pages[page - 1] if page <= len(pages) else []
+            return httpx.Response(
+                200,
+                json={
+                    "data": [{"id": i, "name": traces[i].get("name")} for i in ids],
+                    "meta": {"page": page, "limit": 100, "totalPages": len(pages)},
+                },
+            )
+        trace_id = path.rsplit("/", 1)[-1]
+        return httpx.Response(200, json=traces[trace_id])
+
+    return handler
+
+
+V1_TRACES = {
+    "t1": {
+        "id": "t1",
+        "name": "turn-one",
+        "observations": [
+            {"id": "b", "traceId": "t1", "startTime": at(2000)},
+            {"id": "a", "traceId": "t1", "startTime": at(1000), "traceName": "kept"},
+        ],
+    },
+    "t2": {
+        "id": "t2",
+        "name": "turn-two",
+        "observations": [
+            {"id": "c", "traceId": "t2", "startTime": at(3000)},
+            {"id": "b", "traceId": "t1", "startTime": at(2000)},  # duplicate id
+        ],
+    },
+    "t3": {"id": "t3", "name": "empty", "observations": []},
+}
+
+
+async def test_a_v2_404_falls_back_to_the_v1_traces_api():
+    seen: list[httpx.Request] = []
+    handler = v1_server(V1_TRACES, pages=[["t1", "t2"], ["t3"]], seen=seen)
+
+    rows = await reader(handler).fetch_session("thread-1", start=START, end=END)
+
+    assert [row["id"] for row in rows] == ["a", "b", "c"]
+    assert [row["traceName"] for row in rows] == ["kept", "turn-one", "turn-two"]
+    assert not rows.page_cap_reached
+    listings = [r for r in seen if r.url.path == "/api/public/traces"]
+    assert [r.url.params["page"] for r in listings] == ["1", "2"]
+    first = listings[0]
+    assert first.url.params["sessionId"] == "thread-1"
+    assert first.url.params["fromTimestamp"] == "2026-10-01T12:00:00Z"
+    assert first.url.params["toTimestamp"] == "2026-10-01T12:10:00Z"
+    assert first.url.params["limit"] == "100"
+    details = sorted(r.url.path for r in seen if r.url.path.startswith("/api/public/traces/"))
+    assert details == ["/api/public/traces/t1", "/api/public/traces/t2", "/api/public/traces/t3"]
+    expected = base64.b64encode(f"{PUBLIC}:{SECRET}".encode()).decode()
+    assert all(r.headers["Authorization"] == f"Basic {expected}" for r in seen)
+
+
+async def test_the_v1_fallback_is_remembered_for_later_fetches():
+    seen: list[httpx.Request] = []
+    trace_reader = reader(v1_server(V1_TRACES, pages=[["t1"]], seen=seen))
+
+    await trace_reader.fetch_session("s", start=START, end=END)
+    seen.clear()
+    rows = await trace_reader.fetch_session("s", start=START, end=END)
+
+    assert [row["id"] for row in rows] == ["a", "b"]
+    assert all(r.url.path != "/api/public/v2/observations" for r in seen)
+
+
+async def test_a_v1_404_too_is_the_safe_not_found_error():
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(404, text=f"echo {SECRET}")
+
+    with pytest.raises(TraceFetchError, match="not found") as caught:
+        await reader(handler).fetch_session("s", start=START, end=END)
+    assert SECRET not in str(caught.value)
+    assert [r.url.path for r in seen] == ["/api/public/v2/observations", "/api/public/traces"]
+
+
+async def test_a_rate_limited_v1_trace_detail_is_retried():
+    sleep = FakeSleep()
+    seen: list[httpx.Request] = []
+    inner = v1_server(V1_TRACES, pages=[["t2"]], seen=seen)
+    limited = {"left": 1}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/public/traces/t2" and limited["left"]:
+            limited["left"] -= 1
+            return httpx.Response(429, headers={"Retry-After": "3"})
+        return inner(request)
+
+    rows = await reader(handler, sleep=sleep).fetch_session("s", start=START, end=END)
+
+    assert [row["id"] for row in rows] == ["b", "c"]
+    assert sleep.waits == [3.0]
+
+
+async def test_v1_caps_flag_an_incomplete_fetch():
+    seen: list[httpx.Request] = []
+    handler = v1_server(V1_TRACES, pages=[["t1"], ["t2"], ["t3"]], seen=seen)
+    rows = await reader(handler, max_pages=2).fetch_session("s", start=START, end=END)
+    assert rows.page_cap_reached
+    assert [row["id"] for row in rows] == ["a", "b", "c"]
+
+    seen.clear()
+    handler = v1_server(V1_TRACES, pages=[["t1", "t2"]], seen=seen)
+    rows = await reader(handler, max_traces=1).fetch_session("s", start=START, end=END)
+    assert rows.page_cap_reached
+    assert [row["id"] for row in rows] == ["a", "b"]
+
+
 # --- Digest ---------------------------------------------------------------------------------
 
 

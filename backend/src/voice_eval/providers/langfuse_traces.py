@@ -1,10 +1,14 @@
 """Langfuse trace reader: the agent's observations for one session, and a digest for the judge.
 
-`LangfuseTraceReader` reads `GET /api/public/v2/observations` (the v1 read APIs are deprecated)
-for one `sessionId` inside a time window, following the response cursor, and returns the raw
-observations in chronological order. Requests go through the egress guard like connection
-tests do, redirects are never followed, and errors raise `TraceFetchError` whose message names
-the failure only, never a key or anything the provider sent back.
+`LangfuseTraceReader` reads `GET /api/public/v2/observations` for one `sessionId` inside a time
+window, following the response cursor, and returns the raw observations in chronological order.
+That v2 API exists only from Langfuse 4.x (and on Langfuse Cloud, where the v1 read APIs are
+deprecated); a self-hosted Langfuse 2.x/3.x answers it with 404. Then the reader falls back to
+the v1 public API, remembered for the reader's later fetches: `GET /api/public/traces` lists the
+session's traces page by page and `GET /api/public/traces/{id}` returns each trace with its
+observations embedded. Requests go through the egress guard like connection tests do,
+redirects are never followed, and errors raise `TraceFetchError` whose message names the
+failure only, never a key or anything the provider sent back.
 
 `digest_observations` turns raw observations into a bounded, LLM-friendly structure: traces in
 chronological order with offsets relative to the run start, per-observation timings, models,
@@ -23,6 +27,7 @@ from dataclasses import asdict, dataclass, field, replace
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 
@@ -33,7 +38,9 @@ log = logging.getLogger(__name__)
 TIMEOUT_S = 30.0
 PAGE_LIMIT = 1000
 MAX_PAGES = 50  # 50k observations: far beyond one call; only guards against a cursor loop
-MAX_RETRIES = 3  # per page, on HTTP 429
+V1_PAGE_LIMIT = 100  # traces per page of the v1 listing
+MAX_TRACES = 500  # v1: per-trace detail requests per fetch
+MAX_RETRIES = 3  # per request, on HTTP 429
 MAX_RETRY_WAIT_S = 30.0
 DEFAULT_RETRY_WAIT_S = 2.0
 FIELDS = "core,basic,time,io,metadata,model,usage,metrics,trace_context"
@@ -48,6 +55,10 @@ Sleep = Callable[[float], Awaitable[None]]
 
 class TraceFetchError(Exception):
     """Observations could not be read; the message is safe to show and to log."""
+
+
+class _EndpointNotFound(TraceFetchError):
+    """HTTP 404: on the v2 Observations API, the cue to fall back to the v1 API."""
 
 
 class SessionObservations(list[dict[str, Any]]):
@@ -95,7 +106,7 @@ def _status_error(status: int) -> TraceFetchError:
     if status in (401, 403):
         return TraceFetchError(f"Langfuse authentication failed (HTTP {status})")
     if status == 404:
-        return TraceFetchError(f"Langfuse endpoint not found (HTTP {status}); check the host")
+        return _EndpointNotFound(f"Langfuse endpoint not found (HTTP {status}); check the host")
     if status == 429:
         return TraceFetchError(f"Langfuse rate limit persisted (HTTP {status})")
     if 300 <= status < 400:
@@ -125,6 +136,7 @@ class LangfuseTraceReader:
         timeout_s: float = TIMEOUT_S,
         sleep: Sleep = asyncio.sleep,
         max_pages: int = MAX_PAGES,
+        max_traces: int = MAX_TRACES,
     ) -> None:
         self.host = host.rstrip("/")
         self.public_key = public_key
@@ -134,6 +146,8 @@ class LangfuseTraceReader:
         self.timeout_s = timeout_s
         self.sleep = sleep
         self.max_pages = max_pages
+        self.max_traces = max_traces
+        self._use_v1 = False  # set once the v2 Observations API answered 404
         pair = f"{public_key}:{secret_key}".encode()
         self._authorization = f"Basic {base64.b64encode(pair).decode()}"
 
@@ -148,21 +162,21 @@ class LangfuseTraceReader:
     async def fetch_session(
         self, session_id: str, *, start: datetime, end: datetime
     ) -> SessionObservations:
-        """Every observation of `session_id` that started in [start, end], oldest first.
+        """Every observation of `session_id` in [start, end], oldest first.
 
-        When `max_pages` pages were read and Langfuse still offered another, the result is
-        incomplete and says so with `page_cap_reached`.
+        When a page or trace cap stopped the reading while Langfuse still offered more, the
+        result is incomplete and says so with `page_cap_reached`.
         """
-        base_params = {
-            "sessionId": session_id,
-            "fromStartTime": _iso(start),
-            "toStartTime": _iso(end),
-            "fields": FIELDS,
-            "limit": str(PAGE_LIMIT),
-        }
         found: dict[str, dict[str, Any]] = {}
         anonymous: list[dict[str, Any]] = []
-        page_cap_reached = False
+
+        def keep(observation: dict[str, Any]) -> None:
+            key = observation.get("id")
+            if isinstance(key, str) and key:
+                found[key] = observation
+            else:
+                anonymous.append(observation)
+
         try:
             async with httpx.AsyncClient(
                 transport=self._transport(),
@@ -170,27 +184,18 @@ class LangfuseTraceReader:
                 follow_redirects=False,
                 trust_env=False,  # no proxy or .netrc from the environment
             ) as client:
-                cursor: str | None = None
-                seen_cursors: set[str] = set()
-                for _ in range(self.max_pages):
-                    params = (
-                        dict(base_params) if cursor is None else {**base_params, "cursor": cursor}
-                    )
-                    data, cursor = await self._page(client, params)
-                    for observation in data:
-                        key = observation.get("id")
-                        if isinstance(key, str) and key:
-                            found[key] = observation
-                        else:
-                            anonymous.append(observation)
-                    if not cursor or cursor in seen_cursors:
-                        break
-                    seen_cursors.add(cursor)
-                else:
-                    page_cap_reached = True
-                    log.warning("langfuse pagination stopped after %d pages", self.max_pages)
-        except TraceFetchError:
-            raise
+                if not self._use_v1:
+                    try:
+                        page_cap_reached = await self._read_v2(client, session_id, start, end, keep)
+                    except _EndpointNotFound:
+                        if found or anonymous:  # v2 exists: a 404 mid-way is a real error
+                            raise
+                        log.info("langfuse v2 observations API missing; using the v1 API")
+                        self._use_v1 = True
+                if self._use_v1:
+                    page_cap_reached = await self._read_v1(client, session_id, start, end, keep)
+        except TraceFetchError as exc:
+            raise TraceFetchError(str(exc)) from None  # never leak the internal subclass
         except DestinationNotAllowed:
             raise TraceFetchError(
                 "Langfuse destination not allowed (not a public address)"
@@ -208,14 +213,102 @@ class LangfuseTraceReader:
             sort_observations([*found.values(), *anonymous]), page_cap_reached=page_cap_reached
         )
 
-    async def _page(
-        self, client: httpx.AsyncClient, params: dict[str, str]
-    ) -> tuple[list[dict[str, Any]], str | None]:
+    async def _read_v2(
+        self,
+        client: httpx.AsyncClient,
+        session_id: str,
+        start: datetime,
+        end: datetime,
+        keep: Callable[[dict[str, Any]], None],
+    ) -> bool:
+        """Langfuse 4.x / Cloud: the cursor-paged v2 Observations API. True at the page cap."""
+        base_params = {
+            "sessionId": session_id,
+            "fromStartTime": _iso(start),
+            "toStartTime": _iso(end),
+            "fields": FIELDS,
+            "limit": str(PAGE_LIMIT),
+        }
+        cursor: str | None = None
+        seen_cursors: set[str] = set()
+        for _ in range(self.max_pages):
+            params = dict(base_params) if cursor is None else {**base_params, "cursor": cursor}
+            body = await self._get(client, "/api/public/v2/observations", params)
+            for observation in _rows(body):
+                keep(observation)
+            meta = body.get("meta")
+            cursor = meta.get("cursor") if isinstance(meta, dict) else None
+            if not isinstance(cursor, str) or not cursor or cursor in seen_cursors:
+                return False
+            seen_cursors.add(cursor)
+        log.warning("langfuse pagination stopped after %d pages", self.max_pages)
+        return True
+
+    async def _read_v1(
+        self,
+        client: httpx.AsyncClient,
+        session_id: str,
+        start: datetime,
+        end: datetime,
+        keep: Callable[[dict[str, Any]], None],
+    ) -> bool:
+        """Langfuse 2.x/3.x: list the session's traces, then read each one's observations.
+
+        True when the page or trace cap left traces unread.
+        """
+        base_params = {
+            "sessionId": session_id,
+            "fromTimestamp": _iso(start),
+            "toTimestamp": _iso(end),
+            "limit": str(V1_PAGE_LIMIT),
+        }
+        trace_ids: dict[str, None] = {}  # insertion-ordered, deduplicated
+        names: dict[str, str] = {}  # trace id -> trace name, for observations' `traceName`
+        capped = True
+        for page in range(1, self.max_pages + 1):
+            body = await self._get(client, "/api/public/traces", {**base_params, "page": str(page)})
+            for trace in _rows(body):
+                trace_id = trace.get("id")
+                if not isinstance(trace_id, str) or not trace_id:
+                    continue
+                trace_ids.setdefault(trace_id)
+                if isinstance(name := trace.get("name"), str) and name:
+                    names[trace_id] = name
+            meta = body.get("meta")
+            total = _number(meta.get("totalPages")) if isinstance(meta, dict) else None
+            if total is None or page >= total:
+                capped = False
+                break
+        if capped:
+            log.warning("langfuse trace listing stopped after %d pages", self.max_pages)
+        if len(trace_ids) > self.max_traces:
+            log.warning("langfuse trace details limited to %d traces", self.max_traces)
+            trace_ids = dict.fromkeys(list(trace_ids)[: self.max_traces])
+            capped = True
+        for trace_id in trace_ids:
+            trace = await self._get(client, f"/api/public/traces/{quote(trace_id, safe='')}", {})
+            if isinstance(name := trace.get("name"), str) and name:
+                names[trace_id] = name
+            observations = trace.get("observations")
+            if not isinstance(observations, list):
+                continue
+            for observation in observations:
+                if not isinstance(observation, dict):
+                    continue
+                owner = observation.get("traceId")
+                name = names.get(owner if isinstance(owner, str) else "") or names.get(trace_id)
+                if not observation.get("traceName") and name:
+                    observation = {**observation, "traceName": name}
+                keep(observation)
+        return capped
+
+    async def _get(
+        self, client: httpx.AsyncClient, path: str, params: dict[str, str]
+    ) -> dict[str, Any]:
+        """One JSON object from `path`, retrying HTTP 429 a bounded number of times."""
         headers = {"Authorization": self._authorization, "Accept": "application/json"}
         for attempt in range(MAX_RETRIES + 1):
-            response = await client.get(
-                f"{self.host}/api/public/v2/observations", params=params, headers=headers
-            )
+            response = await client.get(f"{self.host}{path}", params=params, headers=headers)
             if response.status_code == 429 and attempt < MAX_RETRIES:
                 await self.sleep(_retry_wait(response))
                 continue
@@ -228,11 +321,12 @@ class LangfuseTraceReader:
             raise TraceFetchError("Langfuse returned a response that is not JSON") from None
         if not isinstance(body, dict):
             raise TraceFetchError("Langfuse returned an unexpected response shape")
-        data = body.get("data")
-        rows = [row for row in data if isinstance(row, dict)] if isinstance(data, list) else []
-        meta = body.get("meta")
-        cursor = meta.get("cursor") if isinstance(meta, dict) else None
-        return rows, cursor if isinstance(cursor, str) and cursor else None
+        return body
+
+
+def _rows(body: dict[str, Any]) -> list[dict[str, Any]]:
+    data = body.get("data")
+    return [row for row in data if isinstance(row, dict)] if isinstance(data, list) else []
 
 
 def sort_observations(observations: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
