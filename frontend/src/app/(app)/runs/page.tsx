@@ -1,17 +1,15 @@
 import type { Metadata } from "next";
-import { SectionPlaceholder } from "@/features/shell/SectionPlaceholder";
-import { RunsIcon } from "@/ui";
+import { Suspense } from "react";
+import { RunsContainer } from "@/features/runs/RunsContainer";
+import { Spinner } from "@/ui";
 
 export const metadata: Metadata = { title: "Runs & reports" };
 
+// The filters come from the URL (runtime data): read them inside a Suspense boundary.
 export default function Page() {
   return (
-    <SectionPlaceholder
-      title="Runs & reports"
-      description="Every evaluation run with its transcript, scores and findings."
-      emptyTitle="No runs yet"
-      emptyDescription="Runs and their reports will appear here after you run a scenario against an agent."
-      icon={<RunsIcon size={22} />}
-    />
+    <Suspense fallback={<Spinner label="Loading runs" />}>
+      <RunsContainer />
+    </Suspense>
   );
 }

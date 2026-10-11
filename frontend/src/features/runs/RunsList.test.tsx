@@ -1,0 +1,178 @@
+import { QueryClientProvider } from "@tanstack/react-query";
+import { screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { mockScenariosApi, scenarioFixture } from "@/features/scenarios/testing";
+import { renderWithClient } from "@/test/render";
+import { RunsContainer } from "./RunsContainer";
+import { batchFixture, mockRunsApi, runFixture } from "./testing";
+
+const nav = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn(), search: "" }));
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: nav.push, replace: nav.replace, back: vi.fn(), refresh: vi.fn() }),
+  useSearchParams: () => new URLSearchParams(nav.search),
+}));
+
+const done = runFixture();
+const failed = runFixture({
+  id: "r-2",
+  status: "failed",
+  endReason: "tts_failed",
+  error: "speech synthesis failed (TimeoutError)",
+  createdAt: "2026-10-05T17:00:00Z",
+  startedAt: "2026-10-05T17:00:02Z",
+  endedAt: "2026-10-05T17:00:32Z",
+});
+const running = runFixture({
+  id: "r-3",
+  batchId: "b-2",
+  scenarioId: "s-cancel",
+  scenarioName: "Cancel within 24h",
+  status: "running",
+  endReason: null,
+  createdAt: "2026-10-05T18:00:00Z",
+  startedAt: "2026-10-05T18:00:01Z",
+  endedAt: null,
+});
+
+function scenarios() {
+  mockScenariosApi([scenarioFixture(), scenarioFixture({ id: "s-cancel", name: "Cancel within 24h" })]);
+}
+
+function rowNames() {
+  return screen.getAllByRole("row").slice(1).map((row) => within(row).getAllByRole("cell")[1].textContent);
+}
+
+describe("Runs list", () => {
+  beforeEach(() => {
+    nav.push.mockReset();
+    nav.replace.mockReset();
+    nav.search = "";
+  });
+
+  it("lists runs newest first with their scenario, agent, duration and status", async () => {
+    scenarios();
+    mockRunsApi([done, failed, running]);
+    renderWithClient(<RunsContainer />);
+
+    const table = await screen.findByRole("table", { name: "Runs" });
+    expect(rowNames()).toEqual(["Cancel within 24h", "Booking with date change", "Booking with date change"]);
+    const row = within(table).getByRole("row", { name: /r-2/ });
+    expect(within(row).getByText("Failed")).toBeInTheDocument();
+    expect(within(row).getByText("Speech synthesis failed")).toBeInTheDocument();
+    expect(within(row).getByText("0:30")).toBeInTheDocument();
+    expect(within(row).getByText("Hotel booking assistant")).toBeInTheDocument();
+    expect(within(row).getByRole("link", { name: "Open run r-2" })).toHaveAttribute("href", "/runs/r-2");
+    expect(within(row).queryByRole("button", { name: /Cancel/ })).not.toBeInTheDocument();
+    const live = within(table).getByRole("row", { name: /r-3/ });
+    expect(within(live).getByText("Running")).toBeInTheDocument();
+    expect(within(live).getByRole("link", { name: "Watch run r-3 live" })).toHaveAttribute("href", "/runs/r-3/live");
+  });
+
+  it("filters by status and scenario, and keeps the filters in the URL", async () => {
+    scenarios();
+    const api = mockRunsApi([done, failed, running]);
+    renderWithClient(<RunsContainer />);
+    const user = userEvent.setup();
+    await screen.findByRole("table", { name: "Runs" });
+
+    await user.selectOptions(screen.getByLabelText("Status"), "failed");
+    await waitFor(() => expect(rowNames()).toEqual(["Booking with date change"]));
+    expect(api.listQueries.at(-1)).toContain("status=failed");
+    expect(nav.replace).toHaveBeenLastCalledWith("/runs?status=failed", { scroll: false });
+
+    await user.selectOptions(screen.getByLabelText("Status"), "");
+    await user.selectOptions(screen.getByLabelText("Scenario"), "s-cancel");
+    await waitFor(() => expect(rowNames()).toEqual(["Cancel within 24h"]));
+    expect(api.listQueries.at(-1)).toContain("scenarioId=s-cancel");
+  });
+
+  it("shows only one batch when the URL names it, and can clear that filter", async () => {
+    scenarios();
+    nav.search = "batchId=b-2";
+    const api = mockRunsApi([done, failed, running], {
+      batches: [batchFixture({ id: "b-2", label: "nightly", status: "running", total: 1 })],
+    });
+    renderWithClient(<RunsContainer />);
+    const user = userEvent.setup();
+
+    await waitFor(() => expect(screen.queryAllByRole("row").length).toBe(2));
+    expect(api.listQueries[0]).toContain("batchId=b-2");
+    await user.click(screen.getByRole("button", { name: "Clear batch filter nightly" }));
+    await waitFor(() => expect(rowNames()).toHaveLength(3));
+  });
+
+  it("follows a URL changed from elsewhere while the page stays mounted", async () => {
+    scenarios();
+    mockRunsApi([done, failed, running]);
+    const { rerender, queryClient } = renderWithClient(<RunsContainer />);
+    await waitFor(() => expect(rowNames()).toHaveLength(3));
+
+    nav.search = "status=failed";
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <RunsContainer />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => expect(rowNames()).toEqual(["Booking with date change"]));
+    expect(screen.getByLabelText("Status")).toHaveValue("failed");
+  });
+
+  it("pages through the runs 20 at a time", async () => {
+    scenarios();
+    const many = Array.from({ length: 25 }, (_, i) =>
+      runFixture({ id: `r-${i + 1}`, createdAt: `2026-10-05T10:${String(i).padStart(2, "0")}:00Z` }),
+    );
+    mockRunsApi(many);
+    renderWithClient(<RunsContainer />);
+    const user = userEvent.setup();
+
+    expect(await screen.findByText("1–20 of 25")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Previous page" })).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "Next page" }));
+    expect(await screen.findByText("21–25 of 25")).toBeInTheDocument();
+    expect(screen.getAllByRole("row")).toHaveLength(6);
+    expect(screen.getByRole("button", { name: "Next page" })).toBeDisabled();
+  });
+
+  it("cancels an active run", async () => {
+    scenarios();
+    const api = mockRunsApi([done, running]);
+    renderWithClient(<RunsContainer />);
+    const user = userEvent.setup();
+    await screen.findByRole("table", { name: "Runs" });
+
+    await user.click(screen.getByRole("button", { name: "Cancel run r-3" }));
+
+    await waitFor(() => expect(api.requests).toEqual([{ method: "POST", path: "/runs/r-3/cancel", body: undefined }]));
+    const row = await screen.findByRole("row", { name: /r-3/ });
+    await waitFor(() => expect(within(row).getByText("Cancelled")).toBeInTheDocument());
+  });
+
+  it("shows recent batches with their progress", async () => {
+    scenarios();
+    mockRunsApi([], {
+      batches: [
+        batchFixture({
+          id: "b-9",
+          label: "Hotel regression",
+          status: "running",
+          total: 6,
+          counts: { completed: 2, running: 3, queued: 1 },
+          createdAt: "2026-10-05T19:00:00Z",
+        }),
+      ],
+    });
+    renderWithClient(<RunsContainer />);
+
+    const batches = await screen.findByRole("region", { name: "Recent batches" });
+    const item = within(batches).getByRole("listitem", { name: "Hotel regression" });
+    expect(within(item).getByText("2 of 6 finished")).toBeInTheDocument();
+    expect(within(item).getByRole("link", { name: "Watch Hotel regression live" })).toHaveAttribute(
+      "href",
+      "/live?batchId=b-9",
+    );
+    expect(await screen.findByText("No runs yet")).toBeInTheDocument();
+  });
+});

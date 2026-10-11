@@ -1,0 +1,115 @@
+/** Run statuses and their order (runs/domain.py): queued -> connecting -> running -> one terminal. */
+export const RUN_STATUSES = ["queued", "connecting", "running", "completed", "failed", "cancelled", "interrupted"] as const;
+export type RunStatus = (typeof RUN_STATUSES)[number];
+export const ACTIVE_RUN_STATUSES: readonly RunStatus[] = ["queued", "connecting", "running"];
+
+export type BatchStatus = "queued" | "running" | "completed" | "cancelled";
+export type AudioChannel = "agent" | "caller";
+
+/** A run as `GET /api/runs` returns it. */
+export type Run = {
+  id: string;
+  batchId: string;
+  position: number;
+  scenarioId: string | null;
+  scenarioName: string;
+  agentId: string | null;
+  agentName: string;
+  /** Also the Langfuse session id. */
+  threadId: string;
+  status: RunStatus;
+  endReason: string | null;
+  error: string | null;
+  createdAt: string;
+  startedAt: string | null;
+  endedAt: string | null;
+};
+
+/** One agent turn's timings (`summary.turns`). */
+export type TurnTiming = {
+  index: number;
+  kind?: string;
+  latencyMs: number | null;
+  firstAudioMs?: number | null;
+  endMs?: number | null;
+  playbackEndMs?: number | null;
+  endReason?: string | null;
+};
+
+/** `summary.json` of a finished run (camelCase); every field may be missing on old artifacts. */
+export type RunSummary = {
+  status?: string;
+  reason?: string | null;
+  error?: string | null;
+  protocol?: string | null;
+  model?: string | null;
+  durationMs?: number;
+  callerTurns?: number;
+  agentTurns?: number;
+  latenciesMs?: number[];
+  turns?: TurnTiming[];
+  warnings?: string[];
+};
+
+/** One row of `transcript.json` (camelCase). Caller rows carry the evaluator's `reason`. */
+export type TranscriptRow = {
+  role: "agent" | "caller";
+  text: string;
+  startMs?: number | null;
+  endMs?: number | null;
+  playbackEndMs?: number | null;
+  latencyMs?: number | null;
+  reason?: string;
+};
+
+/** What the run was launched with (snake_case keys camelized by the API). */
+export type RunSnapshot = {
+  scenario: {
+    id: string;
+    name: string;
+    persona: { name: string; locale: string; temperament: string; notes?: string };
+    goal: string;
+    endConditions: { maxDurationS: number; maxSilenceS: number; hangUpWhen: string };
+  };
+  agent: { id: string; name: string; protocol: string };
+  connections: { tts: { id: string; name: string }; evaluator: { id: string; name: string; chatModel: string | null } };
+};
+
+/** `GET /api/runs/{id}`: `summary` and `transcript` once the run finished. */
+export type RunDetail = Run & {
+  summary: RunSummary | null;
+  transcript: TranscriptRow[] | null;
+  snapshot: RunSnapshot;
+};
+
+export type RunPage = { items: Run[]; total: number };
+
+export type Batch = {
+  id: string;
+  label: string | null;
+  concurrency: number;
+  status: BatchStatus;
+  total: number;
+  /** Runs per status. */
+  counts: Partial<Record<RunStatus, number>>;
+  createdBy: string | null;
+  createdAt: string;
+};
+
+export type BatchDetail = Batch & { runs: Run[] };
+export type BatchPage = { items: Batch[]; total: number };
+
+export type LaunchInput = {
+  scenarioIds: string[];
+  repetitions: number;
+  concurrency: number;
+  label?: string;
+};
+
+export type RunFilters = {
+  status?: RunStatus;
+  scenarioId?: string;
+  batchId?: string;
+  limit?: number;
+  offset?: number;
+};

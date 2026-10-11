@@ -114,6 +114,17 @@ origin:
   pathname of `/scenarios/[id]` is runtime data, so the shell's navigation reads it behind a
   Suspense boundary and the rest of the route is still prerendered.
 
+## Runs
+
+`/runs` and the overview `/` (`src/features/runs`) use `/api/runs`:
+
+- `/runs` lists runs newest first, 20 per page, filtered by status, scenario and batch (kept in
+  the URL), with recent batches and their progress above. Active runs can be cancelled; the list
+  refreshes every few seconds while it shows an active run. The list API carries no persona or
+  per-run metrics, so the table shows the wall-clock duration from `startedAt`/`endedAt`.
+- The overview counts active, recorded and failed runs from list totals (`limit=1`) and lists the
+  latest five runs; nothing is estimated.
+
 ## Container image
 
 `next.config.ts` sets `output: "standalone"`, so `pnpm build` also writes `.next/standalone`
@@ -139,9 +150,10 @@ see the root README.
 ## Layout
 
 - `src/app/` routes: `login/` and the `(app)/` group (shell layout and section pages).
-- `src/features/<feature>/` screens by business area (`auth`, `shell`, `connections`, `agents`, `scenarios`): containers fetch and hold
+- `src/features/<feature>/` screens by business area (`auth`, `shell`, `connections`, `agents`, `scenarios`, `runs`): containers fetch and hold
   state, presentational components take props only.
 - `src/ui/` design system: tokens live in `src/app/globals.css` (CSS variables mapped into the
   Tailwind theme) and atomic primitives (`Button`, `Field`, `Dialog`, …) build on them.
-- `src/lib/` cross-cutting code: API client and query client, navigation helpers.
+- `src/lib/` cross-cutting code: API client and query client, navigation helpers, a ticking
+  clock hook (`lib/time`).
 - Tests sit next to the code (`*.test.ts(x)`), with MSW (`src/test/server.ts`) mocking the API.
