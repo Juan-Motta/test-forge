@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent, { type UserEvent } from "@testing-library/user-event";
 import { http, HttpResponse } from "msw/http";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -338,6 +338,27 @@ describe("Scenario editor: edit", () => {
     expect(screen.getByText("Value error, criteria weights must total 100")).toBeInTheDocument();
     expect(screen.getByRole("alert")).toHaveTextContent("Check the highlighted fields.");
     expect(field("Fact 2 Key")).toHaveFocus();
+  });
+
+  it("keeps unsaved edits when a background refetch of connections fails", async () => {
+    setup();
+    let failing = false;
+    server.use(
+      http.get(apiUrl("/connections"), () =>
+        failing ? HttpResponse.json({ detail: "Database unavailable" }, { status: 503 }) : HttpResponse.json(connections),
+      ),
+    );
+    const user = userEvent.setup({ delay: null });
+    const { queryClient } = renderWithClient(<ScenarioEditorContainer scenarioId="s-booking" />);
+    await screen.findByLabelText("Name");
+    await retype(user, "Goal", "Something else.");
+
+    failing = true;
+    await act(() => queryClient.refetchQueries({ queryKey: ["connections"] }));
+    await waitFor(() => expect(queryClient.getQueryState(["connections"])?.status).toBe("error"));
+
+    expect(field("Goal")).toHaveValue("Something else.");
+    expect(screen.queryByText("Could not load connections")).not.toBeInTheDocument();
   });
 
   it("says when connections cannot be loaded and retries instead of offering no voices", async () => {

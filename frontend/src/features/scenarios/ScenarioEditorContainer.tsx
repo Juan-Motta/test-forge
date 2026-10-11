@@ -19,6 +19,11 @@ import type { Scenario } from "./types";
 export const DUPLICATE_SCENARIO_NAME = "A scenario with this name already exists for this agent.";
 const TTS_KINDS = new Set(["openai", "azure_openai"]);
 
+/** A load failed before any data arrived; a failed background refetch keeps the editor (and its edits). */
+function loadFailed(query: { isError: boolean; data: unknown }): boolean {
+  return query.isError && query.data === undefined;
+}
+
 type ScenarioEditorContainerProps = {
   /** Present on `/scenarios/[id]`; absent on `/scenarios/new`. */
   scenarioId?: string;
@@ -104,10 +109,18 @@ export function ScenarioEditorContainer({ scenarioId }: ScenarioEditorContainerP
         }
       />
     );
-  } else if (scenario.isError || agents.isError || connections.isError) {
+  } else if (
+    loadFailed(scenario) ||
+    loadFailed(agents) ||
+    loadFailed(connections)
+  ) {
     // Without connections the voice and model selects would silently offer nothing.
-    const failed = scenario.isError ? scenario : agents.isError ? agents : connections;
-    const what = scenario.isError ? "the scenario" : agents.isError ? "agents" : "connections";
+    const failed = loadFailed(scenario) ? scenario : loadFailed(agents) ? agents : connections;
+    const what = loadFailed(scenario)
+      ? "the scenario"
+      : loadFailed(agents)
+        ? "agents"
+        : "connections";
     body = (
       <Alert title={`Could not load ${what}`}>
         <span className="block">{errorMessage(failed.error)}</span>
