@@ -126,5 +126,12 @@ Branch `feat/runs-live`, chained on `feat/agents-scenarios`. Each work-unit comm
   lines (pending intent until `callerSpeaking`, removed on `callerDecisionDiscarded`). RED reproduced
   the real bug. 556 backend / 283 frontend tests.
 
+- Second full real run (2026-10-11, run 907b0661, thread f343bff2-7963-4208-a735-6378f1a4677d):
+  completed, caller_hung_up, 217 s, 6 agent / 7 caller turns, latency 1.28–1.56 s, no warnings, no cuts;
+  the agent read the full final email with the right signature → empty-turn fix confirmed.
+- User report: live agent audio choppy. Cause: browser player dropped frames beyond a 2 s backlog
+  (agents send whole replies faster than real time) and the server kept only 100 frames per listener.
+  Raised generously: MAX_BACKLOG_S 300, AUDIO_FRAMES_PER_SUBSCRIBER 3000.
+
 ## Next step
 Rebuild stack, user-authorized first real run from the UI; then judge + Langfuse feature.

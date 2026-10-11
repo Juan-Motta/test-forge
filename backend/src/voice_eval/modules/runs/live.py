@@ -31,7 +31,7 @@ from voice_eval.runner.events import RunEvent
 AGENT_CHANNEL = 0
 CALLER_CHANNEL = 1
 AUDIO_CHANNELS = {"agent_audio": AGENT_CHANNEL, "caller_audio": CALLER_CHANNEL}
-AUDIO_FRAMES_PER_SUBSCRIBER = 100  # ~ a few seconds of agent audio
+AUDIO_FRAMES_PER_SUBSCRIBER = 3000  # whole agent replies arrive in bursts; keep them all
 TEXT_MESSAGES_PER_SUBSCRIBER = 1000
 
 

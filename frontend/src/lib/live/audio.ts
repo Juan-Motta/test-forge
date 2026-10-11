@@ -11,8 +11,8 @@ export const CALLER_CHANNEL = 1;
 export const SAMPLE_RATE = 24_000;
 /** Lead time before the first frame of a burst plays: absorbs network jitter. */
 export const JITTER_S = 0.15;
-/** A channel already this far ahead drops new frames instead of drifting further behind. */
-export const MAX_BACKLOG_S = 2;
+/** Agents deliver whole replies faster than real time; queue them all (generous safety cap). */
+export const MAX_BACKLOG_S = 300;
 
 export type Mix = "both" | "agent" | "caller";
 
