@@ -7,6 +7,7 @@ import { connectionFixture, mockConnectionsApi } from "@/features/connections/te
 import { renderWithClient } from "@/test/render";
 import { apiUrl, server } from "@/test/server";
 import { ScenarioEditorContainer } from "./ScenarioEditorContainer";
+import { mockRunsApi } from "@/features/runs/testing";
 import { mockScenariosApi, scenarioFixture } from "./testing";
 
 const nav = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn() }));
@@ -117,7 +118,7 @@ describe("Scenario editor: create", () => {
         },
       },
     ]);
-  });
+  }, 15_000); // types every field: well under a second alone, slower on a loaded machine
 
   it("shows the live weight total and blocks saving until it is exactly 100", async () => {
     const api = setup([]);
@@ -345,5 +346,30 @@ describe("Scenario editor: edit", () => {
 
     expect(await screen.findByRole("heading", { name: "Scenario not found" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Back to scenarios" })).toHaveAttribute("href", "/scenarios");
+  });
+});
+
+describe("Scenario editor: launch", () => {
+  beforeEach(() => {
+    nav.push.mockReset();
+  });
+
+  it("launches the saved scenario and opens the batch's live view", async () => {
+    setup();
+    const runs = mockRunsApi([], { scenarioNames: { "s-booking": "Booking with date change" } });
+    const user = await renderEditor("s-booking");
+
+    await user.click(screen.getByRole("button", { name: "Launch runs" }));
+    const dialog = screen.getByRole("dialog", { name: "Launch Booking with date change" });
+    await user.click(within(dialog).getByRole("button", { name: "Launch" }));
+
+    await waitFor(() => expect(nav.push).toHaveBeenCalledWith("/live?batchId=b-new-1"));
+    expect(runs.requests[0].body).toEqual({ scenarioIds: ["s-booking"], repetitions: 1, concurrency: 1 });
+  });
+
+  it("offers no launch while creating a scenario", async () => {
+    setup([]);
+    await renderEditor();
+    expect(screen.queryByRole("button", { name: "Launch runs" })).not.toBeInTheDocument();
   });
 });

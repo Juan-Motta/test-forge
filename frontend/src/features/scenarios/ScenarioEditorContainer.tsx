@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useRef } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useAgents } from "@/features/agents/queries";
 import { canChat } from "@/features/connections/kinds";
+import { LaunchRunsDialog } from "@/features/runs/LaunchRunsDialog";
 import { useConnections } from "@/features/connections/queries";
 import { PageHeader } from "@/features/shell/PageHeader";
 import { ApiError, errorMessage, formErrorView } from "@/lib/api";
@@ -37,6 +38,7 @@ export function ScenarioEditorContainer({ scenarioId }: ScenarioEditorContainerP
   // A ref, not mutation state: two clicks can land before React re-renders the disabled button.
   const saving = useRef(false);
   const save = scenarioId ? update : create;
+  const [launching, setLaunching] = useState(false);
 
   // Memoized per failure: a new `fieldErrors` object tells the editor to show a new set of errors.
   const view = useMemo(
@@ -77,6 +79,13 @@ export function ScenarioEditorContainer({ scenarioId }: ScenarioEditorContainerP
         scenarioId
           ? `Scenario for ${scenario.data?.agent.name ?? "an agent"}.`
           : "What the simulated caller is, knows and wants, and how the call is judged."
+      }
+      actions={
+        scenario.data ? (
+          <Button variant="secondary" onClick={() => setLaunching(true)} title="Launches the saved version">
+            Launch runs
+          </Button>
+        ) : undefined
       }
     />
   );
@@ -153,6 +162,14 @@ export function ScenarioEditorContainer({ scenarioId }: ScenarioEditorContainerP
       </nav>
       {header}
       {body}
+      {scenario.data ? (
+        <LaunchRunsDialog
+          open={launching}
+          scenarios={[{ id: scenario.data.id, name: scenario.data.name }]}
+          onClose={() => setLaunching(false)}
+          onLaunched={(batch) => router.push(`/live?batchId=${encodeURIComponent(batch.id)}`)}
+        />
+      ) : null}
     </>
   );
 }

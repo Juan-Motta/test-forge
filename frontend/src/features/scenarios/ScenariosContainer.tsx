@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useAgents } from "@/features/agents/queries";
+import { LaunchRunsDialog } from "@/features/runs/LaunchRunsDialog";
 import { PageHeader } from "@/features/shell/PageHeader";
 import { errorMessage } from "@/lib/api";
 import { Alert, Button, EmptyState, Field, PlusIcon, ScenariosIcon, Select, Spinner, buttonClasses, cn, focusRing } from "@/ui";
@@ -26,6 +27,8 @@ export function ScenariosContainer() {
   const [filters, setFilters] = useState<LibraryFilters>(NO_FILTERS);
   const [deleting, setDeleting] = useState<Scenario | undefined>(undefined);
   const [notice, setNotice] = useState("");
+  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
+  const [launching, setLaunching] = useState<Scenario[] | undefined>(undefined);
   // Refs, not mutation state: two clicks can land before React re-renders the disabled button.
   const duplicatingNow = useRef(false);
   const deletingNow = useRef(false);
@@ -75,6 +78,19 @@ export function ScenariosContainer() {
   );
 
   const list = scenarios.data ?? [];
+  // Library order (grouped by agent, unfiltered), so a launch follows what the user sees.
+  const ordered = groupScenarios(list, agentList, NO_FILTERS).flatMap((group) => group.scenarios);
+  const picked = ordered.filter((scenario) => selected.has(scenario.id));
+
+  function toggleSelected(scenario: Scenario) {
+    setSelected((current) => {
+      const next = new Set(current);
+      if (next.has(scenario.id)) next.delete(scenario.id);
+      else next.add(scenario.id);
+      return next;
+    });
+  }
+
   let body;
   if (scenarios.isPending || agents.isPending) {
     body = <Spinner label="Loading scenarios" />;
@@ -135,6 +151,15 @@ export function ScenariosContainer() {
             </div>
           ) : null}
         </div>
+        {picked.length > 0 ? (
+          <div className="flex flex-wrap items-center gap-3 rounded-xl border border-line bg-raised px-4 py-3">
+            <p className="text-sm text-muted">{picked.length === 1 ? "1 scenario selected" : `${picked.length} scenarios selected`}</p>
+            <Button onClick={() => setLaunching(picked)}>{`Launch selected (${picked.length})`}</Button>
+            <Button variant="ghost" onClick={() => setSelected(new Set())}>
+              Clear selection
+            </Button>
+          </div>
+        ) : null}
         {groups.length === 0 ? (
           <div className="flex flex-wrap items-center gap-3 rounded-xl border border-dashed border-line-strong bg-panel p-5">
             <p className="text-sm text-muted">No scenarios match these filters.</p>
@@ -150,6 +175,9 @@ export function ScenariosContainer() {
               remove.reset();
               setDeleting(scenario);
             }}
+            onLaunch={(scenario) => setLaunching([scenario])}
+            selected={selected}
+            onToggleSelected={toggleSelected}
             duplicatingId={duplicate.isPending ? duplicate.variables?.id : undefined}
           />
         )}
@@ -185,6 +213,12 @@ export function ScenariosContainer() {
         onConfirm={confirmDelete}
         pending={remove.isPending}
         error={remove.isError ? errorMessage(remove.error) : undefined}
+      />
+      <LaunchRunsDialog
+        open={launching !== undefined}
+        scenarios={launching ?? []}
+        onClose={() => setLaunching(undefined)}
+        onLaunched={(batch) => router.push(`/live?batchId=${encodeURIComponent(batch.id)}`)}
       />
     </>
   );

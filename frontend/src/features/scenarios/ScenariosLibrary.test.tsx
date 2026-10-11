@@ -2,6 +2,7 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { agentFixture, mockAgentsApi } from "@/features/agents/testing";
+import { mockRunsApi } from "@/features/runs/testing";
 import { renderWithClient } from "@/test/render";
 import { ScenariosContainer } from "./ScenariosContainer";
 import { mockScenariosApi, scenarioFixture } from "./testing";
@@ -161,5 +162,59 @@ describe("Scenarios library", () => {
       expect(button).toHaveAccessibleDescription("Add an agent first: scenarios are written against an agent.");
     }
     expect(screen.getByRole("link", { name: "Add an agent" })).toHaveAttribute("href", "/agents");
+  });
+});
+
+describe("Scenarios library: launch", () => {
+  beforeEach(() => {
+    nav.push.mockReset();
+  });
+
+  it("launches one scenario from its card", async () => {
+    mockAgentsApi(agents);
+    mockScenariosApi([booking, cancel, refund], { agents });
+    const runs = mockRunsApi();
+    renderWithClient(<ScenariosContainer />);
+    const user = userEvent.setup();
+    await screen.findByRole("region", { name: "Support triage" });
+
+    await user.click(within(item("Refund dispute")).getByRole("button", { name: "Launch Refund dispute" }));
+    await user.click(within(screen.getByRole("dialog", { name: "Launch Refund dispute" })).getByRole("button", { name: "Launch" }));
+
+    await waitFor(() => expect(nav.push).toHaveBeenCalledWith("/live?batchId=b-new-1"));
+    expect(runs.requests[0].body).toMatchObject({ scenarioIds: ["s-refund"] });
+  });
+
+  it("launches the selected scenarios together, in library order", async () => {
+    mockAgentsApi(agents);
+    mockScenariosApi([booking, cancel, refund], { agents });
+    const runs = mockRunsApi();
+    renderWithClient(<ScenariosContainer />);
+    const user = userEvent.setup();
+    await screen.findByRole("region", { name: "Support triage" });
+    expect(screen.queryByRole("button", { name: /Launch selected/ })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("checkbox", { name: "Select Refund dispute" }));
+    await user.click(screen.getByRole("checkbox", { name: "Select Booking with date change" }));
+    await user.click(screen.getByRole("button", { name: "Launch selected (2)" }));
+    const dialog = screen.getByRole("dialog", { name: "Launch 2 scenarios" });
+    await user.click(within(dialog).getByRole("button", { name: "Launch" }));
+
+    await waitFor(() => expect(runs.requests).toHaveLength(1));
+    expect(runs.requests[0].body).toMatchObject({ scenarioIds: ["s-booking", "s-refund"] });
+    await waitFor(() => expect(nav.push).toHaveBeenCalledWith("/live?batchId=b-new-1"));
+  });
+
+  it("clears the selection", async () => {
+    mockAgentsApi(agents);
+    mockScenariosApi([booking, cancel, refund], { agents });
+    renderWithClient(<ScenariosContainer />);
+    const user = userEvent.setup();
+    await screen.findByRole("region", { name: "Support triage" });
+
+    await user.click(screen.getByRole("checkbox", { name: "Select Cancel within 24h" }));
+    await user.click(screen.getByRole("button", { name: "Clear selection" }));
+    expect(screen.getByRole("checkbox", { name: "Select Cancel within 24h" })).not.toBeChecked();
+    expect(screen.queryByRole("button", { name: /Launch selected/ })).not.toBeInTheDocument();
   });
 });

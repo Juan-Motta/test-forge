@@ -116,12 +116,30 @@ origin:
 
 ## Runs
 
-`/runs` and the overview `/` (`src/features/runs`) use `/api/runs`:
+`/runs`, `/runs/[id]` and the overview `/` (`src/features/runs`) use `/api/runs`:
 
+- Launch: saved scenarios have a "Launch" action (library card and editor header), and the
+  library can select several scenarios for "Launch selected". The dialog takes repetitions (1-10),
+  concurrency (1-10) and an optional label, checked client-side with the backend's limits; a 422
+  for scenarios that cannot run (no voice connection or evaluator model) names each refused
+  scenario with the backend's reason. A launch opens the batch's live view
+  (`/live?batchId=…`). Every run is a real, paid call to the agent.
 - `/runs` lists runs newest first, 20 per page, filtered by status, scenario and batch (kept in
-  the URL), with recent batches and their progress above. Active runs can be cancelled; the list
-  refreshes every few seconds while it shows an active run. The list API carries no persona or
-  per-run metrics, so the table shows the wall-clock duration from `startedAt`/`endedAt`.
+  the URL), with recent batches and their progress above. Active runs link to their live view and
+  can be cancelled; the list refreshes every few seconds while it shows an active run. The list
+  API carries no persona or per-run metrics, so the table shows the wall-clock duration from
+  `startedAt`/`endedAt` and leaves latency and turns to the run report.
+- `/runs/[id]` is the run report: scenario, agent, persona (from the run's launch snapshot),
+  status and end reason, the failure message, and the thread id (the Langfuse session) with a
+  copy button. Once finished: duration, latency p50, slowest reply and turn counts from
+  `summary.json`, the two recorded tracks and the transcript with timestamps, per-reply latency
+  and, on each evaluator line, the evaluator's own reason ("Evaluator intent"). "Re-run" launches
+  the same scenario once. Scores and suggestions are a labelled placeholder until the judge
+  exists.
+- The recording is two native `<audio>` players, one per side, streamed from
+  `/api/runs/{id}/audio/{agent|caller}`. They are deliberately not synchronized: the agent track
+  holds only the audio the agent sent, without the pauses between its turns, so the two WAVs do
+  not share a timeline.
 - The overview counts active, recorded and failed runs from list totals (`limit=1`) and lists the
   latest five runs; nothing is estimated.
 
