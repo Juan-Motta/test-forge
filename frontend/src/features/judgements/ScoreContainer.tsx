@@ -10,6 +10,8 @@ import { useJudgement, useRejudge } from "./queries";
 import { ScoreSection } from "./ScoreSection";
 
 const POLL_MS = 3000;
+/** Revoking the object URL in the same tick as the click can abort the download in some browsers. */
+export const REVOKE_BRIEF_URL_MS = 1000;
 
 type ScoreContainerProps = {
   runId: string;
@@ -55,7 +57,7 @@ export function ScoreContainer({ runId, endedAt, pollMs = POLL_MS }: ScoreContai
     document.body.appendChild(link);
     link.click();
     link.remove();
-    URL.revokeObjectURL(url);
+    setTimeout(() => URL.revokeObjectURL(url), REVOKE_BRIEF_URL_MS);
   }
 
   return (

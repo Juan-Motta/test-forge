@@ -1,8 +1,12 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { http, HttpResponse } from "msw/http";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { useRun } from "@/features/runs/queries";
+import { runDetailFixture } from "@/features/runs/testing";
 import { renderWithClient } from "@/test/render";
-import { ScoreContainer } from "./ScoreContainer";
+import { apiUrl, server } from "@/test/server";
+import { REVOKE_BRIEF_URL_MS, ScoreContainer } from "./ScoreContainer";
 import { judgeResultFixture, judgementFixture, mockJudgementApi } from "./testing";
 import type { Judgement } from "./types";
 
@@ -20,7 +24,10 @@ const section = () => screen.getByRole("region", { name: "Score & suggestions" }
 describe("Score & suggestions", () => {
   // jsdom has no object URLs; the download test installs fakes and this puts the originals back.
   const { createObjectURL, revokeObjectURL } = URL;
-  afterEach(() => Object.assign(URL, { createObjectURL, revokeObjectURL }));
+  afterEach(() => {
+    vi.useRealTimers();
+    Object.assign(URL, { createObjectURL, revokeObjectURL });
+  });
 
   it("offers to judge a run that was never judged", async () => {
     const { api } = renderSection({ status: "none" });
@@ -126,9 +133,14 @@ describe("Score & suggestions", () => {
       clicks.push(this);
     });
     renderSection(judgementFixture());
-    const user = userEvent.setup();
+    const download = await screen.findByRole("button", { name: "Download .md" });
 
-    await user.click(await screen.findByRole("button", { name: "Download .md" }));
+    // Revoking in the same tick as the click can abort the download, so it waits.
+    vi.useFakeTimers();
+    fireEvent.click(download);
+    expect(clicks).toHaveLength(1);
+    expect(revokeObjectURL).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(REVOKE_BRIEF_URL_MS);
 
     const blob = createObjectURL.mock.calls[0][0];
     expect(blob.type).toBe("text/markdown");
@@ -158,5 +170,31 @@ describe("Score & suggestions", () => {
     const settled = api.gets[RUN_ID];
     await new Promise((resolve) => setTimeout(resolve, 150));
     expect(api.gets[RUN_ID]).toBe(settled);
+  });
+
+  it("refreshes the runs once the judgement finishes, so their score and status are current", async () => {
+    const runGets = { count: 0 };
+    server.use(
+      http.get(apiUrl("/runs/:id"), () => {
+        runGets.count += 1;
+        return HttpResponse.json(runDetailFixture({ id: RUN_ID }));
+      }),
+    );
+    function RunProbe() {
+      useRun(RUN_ID);
+      return null;
+    }
+    const pending = judgementFixture({ status: "pending", result: null, completedAt: null });
+    mockJudgementApi({ [RUN_ID]: [pending, judgementFixture()] });
+    renderWithClient(
+      <>
+        <RunProbe />
+        <ScoreContainer runId={RUN_ID} endedAt={ENDED_LONG_AGO} pollMs={20} />
+      </>,
+    );
+
+    await waitFor(() => expect(runGets.count).toBe(1));
+    expect(await screen.findByRole("group", { name: "Overall score" })).toBeInTheDocument();
+    await waitFor(() => expect(runGets.count).toBe(2));
   });
 });
