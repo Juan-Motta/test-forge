@@ -98,7 +98,12 @@ agent (prompt, tools, latency, flow) that can be handed to a coding agent.
   metadata.thread_id = thread (langfuse_tracer.py:339-370), so sessionId lookup is enough.
 - Observations: the scenario has no trace-sourced criterion (traces only add context); same run
   scored 79 → 88 across attempts (model variance) — consider multiple samples or trace criteria.
-- Review: 96c3e16 assessed medium, under_budget (325 lines) → pending in slice.
+- Review: 96c3e16 + docs reviewed together (344 lines): APPROVED + acknowledged. Advisories fixed in
+  42ed3b4 (skip unreadable v1 trace details + mark incomplete; cache details per reader across polls,
+  re-read when listing updatedAt changes; v2→v1 switch only on a first-page 404). RED observed (7
+  failing tests), pytest 685 passed, ruff clean. Reviewed: APPROVED + acknowledged. Accepted
+  advisories: without updatedAt a cached trace is not re-read (by design once the run ended);
+  cached dicts are aliased (no caller mutates them); mixed cache-hit + fresh-failure path untested.
 
 ## Next step
 Feature complete. Open: minor advisories (_reconcile partial commit, strict int weight); earlier
