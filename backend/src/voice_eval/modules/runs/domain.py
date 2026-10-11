@@ -94,7 +94,10 @@ class Run:
         """The median response latency of the summary, rounded to whole milliseconds."""
         values = self.summary.get("latencies_ms") if isinstance(self.summary, dict) else None
         numbers = [v for v in values if _is_number(v)] if isinstance(values, list) else []
-        return round(statistics.median(numbers)) if numbers else None
+        if not numbers:
+            return None
+        median = statistics.median(numbers)
+        return round(median) if math.isfinite(median) else None
 
     @property
     def finished(self) -> bool:

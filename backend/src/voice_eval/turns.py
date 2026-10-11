@@ -100,7 +100,9 @@ class AgentTurnDetector:
         The next turn is the one completed after it (both may close before the runner looks),
         else the open one, else the next turn to open.
         """
-        index = next(i for i, t in enumerate(self.completed_turns) if t is turn)
+        index = next((i for i, t in enumerate(self.completed_turns) if t is turn), None)
+        if index is None:
+            raise ValueError("the turn to discard is not a completed turn")
         del self.completed_turns[index]
         if turn.caller_end_ms is None:
             return

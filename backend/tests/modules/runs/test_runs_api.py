@@ -389,6 +389,18 @@ async def test_list_items_tolerate_a_malformed_summary(app, user_client, factory
 
     assert (item["callerTurns"], item["agentTurns"], item["latencyP50Ms"]) == (None, None, 5)
 
+    async with app.state.sessionmaker() as db:
+        await db.execute(  # huge finite values never break the list
+            update(RunRecord)
+            .where(RunRecord.id == uuid.UUID(run_id))
+            .values(summary={"latencies_ms": [1e308, 1e308]})
+        )
+        await db.commit()
+
+    response = await user_client.get("/api/runs")
+    assert response.status_code == 200
+    assert response.json()["items"][0]["latencyP50Ms"] >= 10**307
+
 
 async def test_cancelling_a_run_that_finished_meanwhile_is_409(app, user_client, factory, drive):
     """The run ends on its own between the API's read and the cancel: 409, status kept."""
@@ -407,7 +419,7 @@ async def test_cancelling_a_run_that_finished_meanwhile_is_409(app, user_client,
                 .values(status="completed", end_reason="caller_hung_up")
             )
             await db.commit()
-        await original(run)
+        return await original(run)
 
     manager.cancel_run = finish_first
     # a live task: the cancel is requested, but the run had already completed

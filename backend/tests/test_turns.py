@@ -1,3 +1,5 @@
+import pytest
+
 from voice_eval.turns import AgentTurnDetector, ResponseTurnTracker
 
 
@@ -176,3 +178,16 @@ def test_discarding_an_empty_turn_hands_its_caller_end_to_a_completed_next_turn(
     assert spoken.latency_ms == 600
     d.on_agent_audio(5000)  # nothing is left pending for a later turn
     assert d.current_turn is not None and d.current_turn.caller_end_ms is None
+
+
+def test_discarding_a_turn_that_is_not_completed_is_a_value_error():
+    d = ResponseTurnTracker(settle_ms=100)
+    d.on_response_started(100)
+    d.on_agent_audio(150, nbytes=4800)
+    d.on_response_done(200)
+    assert d.turn_ended(400)
+    (turn,) = d.completed_turns
+    d.discard(turn)
+
+    with pytest.raises(ValueError, match="not a completed turn"):
+        d.discard(turn)
