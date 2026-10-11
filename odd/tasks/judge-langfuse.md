@@ -42,7 +42,7 @@ agent (prompt, tools, latency, flow) that can be handed to a coding agent.
 - [x] T1 Langfuse trace reader + digest + runtime builder (backend) — route: delegated (writer; new provider module + tests)
 - [x] T2 Judge core: generic structured chat call, prompt, schema, scoring, brief (backend) — route: delegated
 - [x] T3 Persistence + orchestration + API + snapshot field (backend, migration 0008) — route: delegated
-- [ ] T4 Report UI: Score & suggestions card + runs list score (frontend) — route: delegated
+- [x] T4 Report UI: Score & suggestions card + runs list score (frontend) — route: delegated
 - [ ] T5 Docs + real validation on an existing run (needs the user's Langfuse connection linked to the agent; paid call → ask) — route: inline
 
 ## Acceptance criteria
@@ -76,4 +76,14 @@ agent (prompt, tools, latency, flow) that can be handed to a coding agent.
   medium, review-reliability, APPROVED + acknowledged. Advisories: crash between mark_finished and
   schedule leaves runs unjudged (recover doesn't reconcile); non-TraceFetchError from the reader
   fails the judgement; racy negative hook assertions; defensive score cast.
-- Follow-up F1 (route: delegated writer, in progress): fix all T1–T3 advisories in one commit.
+- T4 done: 2832190 (route: delegated writer; 988 lines). Checks: vitest 294 passed, lint, typecheck;
+  parent spot check 30 passed. Native review: medium, APPROVED + acknowledged. Advisories (untested
+  runs invalidation / list polling, revoke before download) fixed in e7fdf95 (vitest 297 passed).
+- F1 done: 61a9c89 (route: delegated writer + inline fix of complete_structured catching client
+  ValueErrors as malformed, RED observed then GREEN). Writer checks: pytest 670 passed, ruff clean.
+  Native review of e7fdf95..61a9c89 (640 lines): medium, APPROVED + acknowledged. Remaining
+  advisories: _reconcile commits pending rows one by one and an error mid-loop leaves earlier rows
+  unspawned until the next start (coordinator.py:166-168); SnapshotCriterion.weight is strict int.
+- Stack rebuilt: migration 0008 applied; startup reconcile judged the 3 existing real runs
+  (gpt-6-luna, no Langfuse link yet → "This agent has no Langfuse connection."): 907b0661 98,
+  ec3633f4 79 (flagged the unsupported "motivos de agenda" reason), 9d9e6de0 94 (first readout cut).
