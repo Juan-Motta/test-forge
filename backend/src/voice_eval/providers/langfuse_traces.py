@@ -6,7 +6,9 @@ That v2 API exists only from Langfuse 4.x (and on Langfuse Cloud, where the v1 r
 deprecated); a self-hosted Langfuse 2.x/3.x answers it with 404. Then the reader falls back to
 the v1 public API, remembered for the reader's later fetches: `GET /api/public/traces` lists the
 session's traces page by page and `GET /api/public/traces/{id}` returns each trace with its
-observations embedded. Requests go through the egress guard like connection tests do,
+observations embedded. A trace detail that cannot be read is skipped and the result flagged
+incomplete; successful details are cached on the reader, so repeated polls only read new or
+updated traces. Requests go through the egress guard like connection tests do,
 redirects are never followed, and errors raise `TraceFetchError` whose message names the
 failure only, never a key or anything the provider sent back.
 
@@ -62,7 +64,11 @@ class _EndpointNotFound(TraceFetchError):
 
 
 class SessionObservations(list[dict[str, Any]]):
-    """A session's observations, oldest first; `page_cap_reached` when some were not read."""
+    """A session's observations, oldest first.
+
+    `page_cap_reached` is set when some were not read: a page or trace cap stopped the reading,
+    or (v1) some trace details failed. The name is kept for `DigestStats.fetch_incomplete`.
+    """
 
     def __init__(self, rows: Iterable[dict[str, Any]] = (), *, page_cap_reached: bool = False):
         super().__init__(rows)
@@ -148,6 +154,12 @@ class LangfuseTraceReader:
         self.max_pages = max_pages
         self.max_traces = max_traces
         self._use_v1 = False  # set once the v2 Observations API answered 404
+        # v1 trace details by trace id, with the listing's `updatedAt` when they were read.
+        # The judge polls the same session for minutes; re-reading every trace on each poll
+        # would multiply requests. A cached trace is read again only when the listing reports a
+        # different `updatedAt`; without one, a trace still being written could miss later
+        # observations, which is negligible once the run has ended. Failures are never cached.
+        self._v1_details: dict[str, tuple[Any, dict[str, Any]]] = {}
         pair = f"{public_key}:{secret_key}".encode()
         self._authorization = f"Basic {base64.b64encode(pair).decode()}"
 
@@ -164,8 +176,9 @@ class LangfuseTraceReader:
     ) -> SessionObservations:
         """Every observation of `session_id` in [start, end], oldest first.
 
-        When a page or trace cap stopped the reading while Langfuse still offered more, the
-        result is incomplete and says so with `page_cap_reached`.
+        When a page or trace cap stopped the reading while Langfuse still offered more, or (v1)
+        some trace details could not be read, the result is incomplete and says so with
+        `page_cap_reached`. When every v1 trace detail fails, the fetch fails.
         """
         found: dict[str, dict[str, Any]] = {}
         anonymous: list[dict[str, Any]] = []
@@ -187,9 +200,7 @@ class LangfuseTraceReader:
                 if not self._use_v1:
                     try:
                         page_cap_reached = await self._read_v2(client, session_id, start, end, keep)
-                    except _EndpointNotFound:
-                        if found or anonymous:  # v2 exists: a 404 mid-way is a real error
-                            raise
+                    except _EndpointNotFound:  # only ever from the first page (see `_read_v2`)
                         log.info("langfuse v2 observations API missing; using the v1 API")
                         self._use_v1 = True
                 if self._use_v1:
@@ -233,7 +244,12 @@ class LangfuseTraceReader:
         seen_cursors: set[str] = set()
         for _ in range(self.max_pages):
             params = dict(base_params) if cursor is None else {**base_params, "cursor": cursor}
-            body = await self._get(client, "/api/public/v2/observations", params)
+            try:
+                body = await self._get(client, "/api/public/v2/observations", params)
+            except _EndpointNotFound as exc:
+                if cursor is None:  # the first request: the API itself is missing
+                    raise
+                raise TraceFetchError(str(exc)) from None  # v2 exists: a later 404 is an error
             for observation in _rows(body):
                 keep(observation)
             meta = body.get("meta")
@@ -254,7 +270,8 @@ class LangfuseTraceReader:
     ) -> bool:
         """Langfuse 2.x/3.x: list the session's traces, then read each one's observations.
 
-        True when the page or trace cap left traces unread.
+        True when the page or trace cap left traces unread, or some trace details failed.
+        A failed detail is skipped; when every detail fails, its error is raised.
         """
         base_params = {
             "sessionId": session_id,
@@ -264,6 +281,7 @@ class LangfuseTraceReader:
         }
         trace_ids: dict[str, None] = {}  # insertion-ordered, deduplicated
         names: dict[str, str] = {}  # trace id -> trace name, for observations' `traceName`
+        versions: dict[str, Any] = {}  # trace id -> the listing's `updatedAt`, if any
         capped = True
         for page in range(1, self.max_pages + 1):
             body = await self._get(client, "/api/public/traces", {**base_params, "page": str(page)})
@@ -272,6 +290,7 @@ class LangfuseTraceReader:
                 if not isinstance(trace_id, str) or not trace_id:
                     continue
                 trace_ids.setdefault(trace_id)
+                versions[trace_id] = trace.get("updatedAt")
                 if isinstance(name := trace.get("name"), str) and name:
                     names[trace_id] = name
             meta = body.get("meta")
@@ -285,8 +304,22 @@ class LangfuseTraceReader:
             log.warning("langfuse trace details limited to %d traces", self.max_traces)
             trace_ids = dict.fromkeys(list(trace_ids)[: self.max_traces])
             capped = True
+        failure: Exception | None = None
+        read = 0
         for trace_id in trace_ids:
-            trace = await self._get(client, f"/api/public/traces/{quote(trace_id, safe='')}", {})
+            cached = self._v1_details.get(trace_id)
+            if cached is not None and cached[0] == versions.get(trace_id):
+                trace = cached[1]
+            else:
+                path = f"/api/public/traces/{quote(trace_id, safe='')}"
+                try:
+                    trace = await self._get(client, path, {})
+                except (TraceFetchError, httpx.HTTPError) as exc:
+                    log.warning("langfuse trace detail skipped (%s)", type(exc).__name__)
+                    failure = exc
+                    continue
+                self._v1_details[trace_id] = (versions.get(trace_id), trace)
+            read += 1
             if isinstance(name := trace.get("name"), str) and name:
                 names[trace_id] = name
             observations = trace.get("observations")
@@ -300,6 +333,10 @@ class LangfuseTraceReader:
                 if not observation.get("traceName") and name:
                     observation = {**observation, "traceName": name}
                 keep(observation)
+        if failure is not None:
+            if not read:  # nothing readable at all: fail with the (safe) last error
+                raise failure
+            capped = True
         return capped
 
     async def _get(

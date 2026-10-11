@@ -160,8 +160,17 @@ async def test_the_egress_guard_blocks_private_destinations():
 # --- v1 fallback (Langfuse 2.x/3.x has no v2 Observations API) ------------------------------
 
 
-def v1_server(traces: dict[str, dict], *, pages: list[list[str]], seen: list[httpx.Request]):
-    """v2 answers 404; v1 lists `pages` of trace ids and serves each trace's detail."""
+def v1_server(
+    traces: dict[str, dict],
+    *,
+    pages: list[list[str]],
+    seen: list[httpx.Request],
+    updated: dict[str, str] | None = None,
+):
+    """v2 answers 404; v1 lists `pages` of trace ids and serves each trace's detail.
+
+    `updated` gives the listing's `updatedAt` per trace id (read at request time).
+    """
 
     def handler(request: httpx.Request) -> httpx.Response:
         seen.append(request)
@@ -174,7 +183,14 @@ def v1_server(traces: dict[str, dict], *, pages: list[list[str]], seen: list[htt
             return httpx.Response(
                 200,
                 json={
-                    "data": [{"id": i, "name": traces[i].get("name")} for i in ids],
+                    "data": [
+                        {
+                            "id": i,
+                            "name": traces[i].get("name"),
+                            "updatedAt": (updated or {}).get(i),
+                        }
+                        for i in ids
+                    ],
                     "meta": {"page": page, "limit": 100, "totalPages": len(pages)},
                 },
             )
@@ -282,6 +298,135 @@ async def test_v1_caps_flag_an_incomplete_fetch():
     rows = await reader(handler, max_traces=1).fetch_session("s", start=START, end=END)
     assert rows.page_cap_reached
     assert [row["id"] for row in rows] == ["a", "b"]
+
+
+def details_requested(seen: list[httpx.Request]) -> list[str]:
+    return [
+        r.url.path.rsplit("/", 1)[-1] for r in seen if r.url.path.startswith("/api/public/traces/")
+    ]
+
+
+@pytest.mark.parametrize("status", [404, 500])
+async def test_a_failing_v1_trace_detail_is_skipped_and_flags_an_incomplete_fetch(status):
+    seen: list[httpx.Request] = []
+    inner = v1_server(V1_TRACES, pages=[["t1", "t2", "t3"]], seen=seen)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/public/traces/t2":
+            seen.append(request)
+            return httpx.Response(status, text=f"echo {SECRET}")
+        return inner(request)
+
+    rows = await reader(handler).fetch_session("s", start=START, end=END)
+
+    assert [row["id"] for row in rows] == ["a", "b"]
+    assert rows.page_cap_reached is True
+    assert digest_observations(rows, origin=START).stats.fetch_incomplete is True
+
+
+async def test_an_exhausted_rate_limit_on_a_v1_trace_detail_skips_it():
+    sleep = FakeSleep()
+    seen: list[httpx.Request] = []
+    inner = v1_server(V1_TRACES, pages=[["t1", "t2"]], seen=seen)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/public/traces/t2":
+            return httpx.Response(429, headers={"Retry-After": "1"})
+        return inner(request)
+
+    rows = await reader(handler, sleep=sleep).fetch_session("s", start=START, end=END)
+
+    assert [row["id"] for row in rows] == ["a", "b"]
+    assert rows.page_cap_reached is True
+    assert sleep.waits == [1.0, 1.0, 1.0]
+
+
+async def test_when_every_v1_trace_detail_fails_the_fetch_fails_safely():
+    seen: list[httpx.Request] = []
+    inner = v1_server(V1_TRACES, pages=[["t1", "t2"]], seen=seen)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.startswith("/api/public/traces/"):
+            return httpx.Response(500, text=f"echo {SECRET}")
+        return inner(request)
+
+    with pytest.raises(TraceFetchError, match="server error") as caught:
+        await reader(handler).fetch_session("s", start=START, end=END)
+    assert SECRET not in str(caught.value)
+    assert type(caught.value) is TraceFetchError
+
+
+async def test_v1_trace_details_are_cached_across_polls():
+    seen: list[httpx.Request] = []
+    pages = [["t1"]]
+    trace_reader = reader(v1_server(V1_TRACES, pages=pages, seen=seen))
+
+    await trace_reader.fetch_session("s", start=START, end=END)
+    assert details_requested(seen) == ["t1"]
+    seen.clear()
+    pages[0] = ["t1", "t2"]  # a new trace showed up between polls
+    rows = await trace_reader.fetch_session("s", start=START, end=END)
+
+    assert details_requested(seen) == ["t2"]
+    assert [row["id"] for row in rows] == ["a", "b", "c"]
+    assert rows.page_cap_reached is False
+
+
+async def test_a_failed_v1_trace_detail_is_not_cached():
+    seen: list[httpx.Request] = []
+    trace_reader = reader(v1_server(V1_TRACES, pages=[["t1", "t2"]], seen=seen))
+    broken = {"t2": True}
+    inner = trace_reader.transport.handler  # type: ignore[union-attr]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/public/traces/t2" and broken["t2"]:
+            return httpx.Response(500)
+        return inner(request)
+
+    trace_reader.transport = httpx.MockTransport(handler)
+    first = await trace_reader.fetch_session("s", start=START, end=END)
+    assert first.page_cap_reached is True
+    broken["t2"] = False
+    seen.clear()
+    rows = await trace_reader.fetch_session("s", start=START, end=END)
+
+    assert details_requested(seen) == ["t2"]
+    assert [row["id"] for row in rows] == ["a", "b", "c"]
+    assert rows.page_cap_reached is False
+
+
+async def test_a_v1_trace_updated_since_it_was_cached_is_read_again():
+    seen: list[httpx.Request] = []
+    updated = {"t1": at(5000), "t2": at(5000)}
+    trace_reader = reader(v1_server(V1_TRACES, pages=[["t1", "t2"]], seen=seen, updated=updated))
+
+    await trace_reader.fetch_session("s", start=START, end=END)
+    seen.clear()
+    updated["t2"] = at(9000)  # t2 gained observations after the first poll
+    await trace_reader.fetch_session("s", start=START, end=END)
+
+    assert details_requested(seen) == ["t2"]
+
+
+@pytest.mark.parametrize("first_rows", [[{"id": "a", "startTime": at(1000)}], []])
+async def test_a_v2_404_after_the_first_page_is_an_error_not_a_fallback(first_rows):
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        if request.url.path != "/api/public/v2/observations":
+            return httpx.Response(200, json={"data": [], "meta": {"totalPages": 1}})
+        if "cursor" not in request.url.params:
+            return httpx.Response(200, json={"data": first_rows, "meta": {"cursor": "page-2"}})
+        return httpx.Response(404, text=f"echo {SECRET}")
+
+    trace_reader = reader(handler)
+    with pytest.raises(TraceFetchError, match="not found") as caught:
+        await trace_reader.fetch_session("s", start=START, end=END)
+
+    assert SECRET not in str(caught.value)
+    assert [r.url.path for r in seen] == ["/api/public/v2/observations"] * 2
+    assert trace_reader._use_v1 is False
 
 
 # --- Digest ---------------------------------------------------------------------------------
