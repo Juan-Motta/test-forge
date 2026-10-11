@@ -211,6 +211,19 @@ export function mockRunsApi(initial: Run[] = [], options: MockOptions = {}) {
       state.batches.push(batch);
       return HttpResponse.json(batchDetail(batch), { status: 201 });
     }),
+    http.post(apiUrl("/runs/batches/:id/cancel"), async ({ request, params }) => {
+      const id = String(params.id);
+      await record(request, `/runs/batches/${id}/cancel`);
+      const index = state.batches.findIndex((item) => item.id === id);
+      if (index < 0) return notFound("Batch");
+      const runs = state.runs.filter((run) => run.batchId === id && isActive(run.status));
+      if (runs.length === 0) return HttpResponse.json({ detail: "Batch already finished" }, { status: 409 });
+      state.runs = state.runs.map((run) =>
+        runs.includes(run) ? { ...run, status: "cancelled", endReason: "cancelled" } : run,
+      );
+      state.batches[index] = { ...state.batches[index], status: "cancelled" };
+      return HttpResponse.json(batchDetail(state.batches[index]), { status: 202 });
+    }),
     http.post(apiUrl("/runs/:id/cancel"), async ({ request, params }) => {
       const id = String(params.id);
       await record(request, `/runs/${id}/cancel`);

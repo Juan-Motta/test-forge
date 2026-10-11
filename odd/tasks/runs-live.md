@@ -40,8 +40,8 @@ listens — is missing.
   artifacts writer, event bus.
 - [x] T4 — Runs module: batches/runs tables, launch/list/get/cancel API, task manager, volume.
 - [x] T5 — Live WebSocket stream (backend) through the edge.
-- [ ] T6 — Frontend: launch panel in scenario editor, Runs list + run detail.
-- [ ] T7 — Frontend: Live monitor (transcript, turn state, audio listening).
+- [x] T6 — Frontend: launch panel in scenario editor, Runs list + run detail.
+- [x] T7 — Frontend: Live monitor (transcript, turn state, audio listening).
 
 ## Delivery
 Branch `feat/runs-live`, chained on `feat/agents-scenarios`. Each work-unit commit reviewed right after.
@@ -89,5 +89,22 @@ Branch `feat/runs-live`, chained on `feat/agents-scenarios`. Each work-unit comm
     break persistence of that event; text-backlog 1013 path untested; one sleep-based test.
 - Compose smoke passed (after one transient Google Fonts failure during the frontend build).
 
+- T6 + T7 + live hardening by one writer, split into 4 commits (each state verified green):
+  - `36f8b85` hub publish guarded; batch snapshot kept ordered (subscribe-first + snapshot prepended even
+    after end). APPROVED (review-fb812eb543945183).
+  - `8a5fe0b` runs list, batches panel, real overview counts (239 FE tests). APPROVED
+    (review-7aa7121e6085c2d3). Advisory: overview count-query errors silent; out-of-range page; failed
+    count not polled.
+  - `5e566d9` run report (dual native audio players — agent.wav is gap-less, not time-aligned with
+    caller.wav —, transcript with evaluator intent, metrics, re-run, judge placeholder) and launch dialog
+    (editor, library card, multi-select). APPROVED (review-430e69f6355f6a30). Advisory: launch
+    double-submit guard lost if the dialog closes mid-request; "Launch selected" includes selections
+    hidden by filters (paid runs) — fix next; untested failure paths.
+  - T7 live monitor (`lib/live` socket seam, reconnect 1/2/4/8/15 s, 4401 login / 4403-4404 messages,
+    Web Audio player with 150 ms jitter buffer, mix + volume, lagging badge, aria-live transcript, /live
+    with batch overview, focus page, End call) — next commit; 282 FE tests, lint/typecheck/build green.
+- Not yet exercised in a real browser nor against the real agent. Run list lacks persona/p50/turns
+  (RunOut has no summary) — follow-up.
+
 ## Next step
-T6 + T7 frontend (launch, runs list/detail, live monitor) via one writer.
+Rebuild stack, user-authorized first real run from the UI; then judge + Langfuse feature.

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { cancelRun, getBatch, getRun, launchRuns, listBatches, listRuns } from "./api";
+import { cancelBatch, cancelRun, getBatch, getRun, launchRuns, listBatches, listRuns } from "./api";
 import { isActive } from "./format";
 import type { RunFilters } from "./types";
 
@@ -69,4 +69,9 @@ export function useLaunchRuns() {
 export function useCancelRun() {
   const queryClient = useQueryClient();
   return useMutation({ mutationFn: (id: string) => cancelRun(id), onSuccess: () => refreshRuns(queryClient) });
+}
+
+export function useCancelBatch() {
+  const queryClient = useQueryClient();
+  return useMutation({ mutationFn: (id: string) => cancelBatch(id), onSuccess: () => refreshRuns(queryClient) });
 }

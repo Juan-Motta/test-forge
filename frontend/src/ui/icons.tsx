@@ -135,3 +135,10 @@ export const CopyIcon = (p: IconProps) => (
     <path d="M5 15V6a2 2 0 0 1 2-2h9" />
   </Icon>
 );
+
+export const VolumeIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M4 9.5h3.5L12 5v14l-4.5-4.5H4z" />
+    <path d="M15.5 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11" />
+  </Icon>
+);

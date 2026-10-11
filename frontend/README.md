@@ -143,6 +143,37 @@ origin:
 - The overview counts active, recorded and failed runs from list totals (`limit=1`) and lists the
   latest five runs; nothing is estimated.
 
+## Live sessions
+
+`/live` and `/runs/[id]/live` (`src/features/live`, `src/lib/live`) watch runs while they happen:
+
+- `/live` lists every active run (polling `GET /api/runs?status=` for `running`, `connecting` and
+  `queued`). With `?batchId=` it follows that batch over `GET /api/runs/live?batchId=` (snapshot,
+  then `status`/`finished` per run, then `batchFinished`) and offers "Stop all" (batch cancel).
+  The focused session (the first one in progress, or the one picked) streams
+  `GET /api/runs/{id}/live`: status, elapsed time against the scenario's maximum, the transcript
+  (agent blue, evaluator amber, announced politely with `aria-live`), the turn state (who is
+  speaking, waiting for the agent's playback, hanging up), the evaluator's latest decision and
+  reason, warnings, and the end reason once finished. "End call" cancels the run.
+- Every connection starts with a `snapshot` that replaces what is shown, so a reconnection never
+  duplicates lines. An unexpected close (anything but 1000 and the 44xx refusals, including
+  `1013` for a consumer too slow) reconnects after 1, 2, 4, 8 and 15 seconds, then gives up with a
+  message; `4404` and `4403` explain themselves, `4401` sends the browser to the login page.
+- Listening is opt-in: "Listen" creates the Web Audio context from that click (autoplay policy).
+  Binary frames (channel byte `0` agent / `1` caller, then PCM16 24 kHz mono) are decoded and
+  scheduled back to back per channel, 150 ms ahead of now as a jitter buffer; after an underrun the
+  schedule restarts from now, and a channel more than 2 s ahead drops frames. The mix (Both,
+  Agent only, Evaluator only) decides which channels play; the volume drives one gain node. When
+  the server reports `lagging` (it dropped audio for this browser) an "Audio skipped" badge shows
+  for a few seconds. Leaving the page closes the socket and the audio context.
+- Tests swap the browser APIs through small seams: `setSocketFactory` (`lib/live/socket.ts`) and
+  `setAudioContextFactory` (`lib/live/audio.ts`), driven by `FakeSocket` and `FakeAudioContext`
+  in `lib/live/testing.ts`.
+- The stream URL is the page's own origin (`ws(s)://<host>/api/...`), so the browser sends the
+  session cookie and an accepted `Origin`. In the compose stack the edge proxies the upgrade to
+  the backend; without Docker it goes through the `/api` rewrite (Next resolves rewrites for
+  upgrade requests too and proxies them to `BACKEND_URL`).
+
 ## Container image
 
 `next.config.ts` sets `output: "standalone"`, so `pnpm build` also writes `.next/standalone`
@@ -168,10 +199,10 @@ see the root README.
 ## Layout
 
 - `src/app/` routes: `login/` and the `(app)/` group (shell layout and section pages).
-- `src/features/<feature>/` screens by business area (`auth`, `shell`, `connections`, `agents`, `scenarios`, `runs`): containers fetch and hold
+- `src/features/<feature>/` screens by business area (`auth`, `shell`, `connections`, `agents`, `scenarios`, `runs`, `live`): containers fetch and hold
   state, presentational components take props only.
 - `src/ui/` design system: tokens live in `src/app/globals.css` (CSS variables mapped into the
   Tailwind theme) and atomic primitives (`Button`, `Field`, `Dialog`, …) build on them.
-- `src/lib/` cross-cutting code: API client and query client, navigation helpers, a ticking
-  clock hook (`lib/time`).
+- `src/lib/` cross-cutting code: API client and query client, navigation helpers, the live
+  stream and audio player (`lib/live`), a ticking clock hook (`lib/time`).
 - Tests sit next to the code (`*.test.ts(x)`), with MSW (`src/test/server.ts`) mocking the API.
