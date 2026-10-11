@@ -40,7 +40,7 @@ from voice_eval.modules.judgements.domain import (
 )
 from voice_eval.modules.runs import service as runs
 from voice_eval.modules.runs.domain import Run, RunNotFound
-from voice_eval.modules.runs.manager import read_json
+from voice_eval.modules.runs.manager import is_judgeable, read_json
 from voice_eval.platform.secrets import SecretBox
 from voice_eval.ports.judge import RunJudgeModel
 from voice_eval.providers.langfuse_traces import TraceFetchError, digest_observations
@@ -55,6 +55,9 @@ TRACE_WINDOW_BEFORE = timedelta(minutes=5)  # observations may start just before
 TRACE_WINDOW_AFTER = timedelta(minutes=30)
 SHUTDOWN_TIMEOUT_S = 10
 TRACES_FILE = "langfuse.json"
+# At startup, finished runs left without a judgement (a crash right after they ended) are
+# judged too, but only recent ones: an old database must not trigger a flood of paid calls.
+RECONCILE_WINDOW = timedelta(days=7)
 
 NO_CONNECTION_NOTE = "This agent has no Langfuse connection."
 CONNECTION_UNUSABLE_NOTE = (
@@ -133,17 +136,40 @@ class JudgementCoordinator:
         return judgement
 
     async def recover(self) -> None:
-        """At startup: judge again every judgement a previous process left unfinished."""
+        """At startup: judge again every judgement a previous process left unfinished, then
+        judge the judgeable runs that ended within `RECONCILE_WINDOW` without ever getting a
+        judgement (the process stopped between recording their end and scheduling them)."""
         try:
             async with self.sessionmaker() as db:
                 unfinished = await service.active_judgements(db)
         except Exception as exc:  # report, never leak connection details
             log.warning("could not resume unfinished judgements (%s)", type(exc).__name__)
+        else:
+            for run_id, attempt in unfinished:
+                self._spawn(run_id, attempt)
+            if unfinished:
+                log.warning("resumed %d unfinished judgement(s)", len(unfinished))
+        await self._reconcile()
+
+    async def _reconcile(self) -> None:
+        try:
+            async with self.sessionmaker() as db:
+                candidates = await service.unjudged_finished_runs(
+                    db, ended_since=self.now() - RECONCILE_WINDOW
+                )
+                started = []
+                for run_id, status, summary in candidates:
+                    if is_judgeable(status, summary):
+                        judgement = await service.start_missing(db, run_id)
+                        if judgement is not None:
+                            started.append(judgement)
+        except Exception as exc:
+            log.warning("could not judge the runs left unjudged (%s)", type(exc).__name__)
             return
-        for run_id, attempt in unfinished:
-            self._spawn(run_id, attempt)
-        if unfinished:
-            log.warning("resumed %d unfinished judgement(s)", len(unfinished))
+        for judgement in started:
+            self._spawn(judgement.run_id, judgement.attempt)
+        if started:
+            log.warning("judging %d finished run(s) left without a judgement", len(started))
 
     async def shutdown(self) -> None:
         """Cancel every judging task; their judgements stay unfinished for the next start."""
@@ -291,6 +317,9 @@ class JudgementCoordinator:
                 error = None
             except TraceFetchError as exc:
                 error = str(exc)  # retried on the next poll; kept only if it persists
+            except Exception as exc:  # a reader bug must not fail the judgement; never its text
+                log.warning("langfuse fetch failed unexpectedly (%s)", type(exc).__name__)
+                error = f"Langfuse request failed (unexpected error: {type(exc).__name__})"
             if error is None and observations:
                 stable = stable + 1 if len(observations) == previous else 1
                 previous = len(observations)

@@ -8,7 +8,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import null, select, update
+from sqlalchemy import exists, null, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,7 +19,8 @@ from voice_eval.modules.judgements.domain import (
     JudgementStatus,
 )
 from voice_eval.modules.judgements.models import RunJudgementRecord
-from voice_eval.modules.runs.domain import sanitize_error
+from voice_eval.modules.runs.domain import RunStatus, sanitize_error
+from voice_eval.modules.runs.models import RunRecord
 
 ACTIVE = [status.value for status in ACTIVE_JUDGEMENT_STATUSES]
 TERMINAL = [status.value for status in TERMINAL_JUDGEMENT_STATUSES]
@@ -67,6 +68,39 @@ async def start(db: AsyncSession, run_id: uuid.UUID) -> Judgement | None:
     if started is None:
         return None
     return await get_judgement(db, run_id)
+
+
+async def start_missing(db: AsyncSession, run_id: uuid.UUID) -> Judgement | None:
+    """A fresh `pending` judgement (attempt 1) only when the run has none yet; else None."""
+    statement = (
+        insert(RunJudgementRecord)
+        .values(run_id=run_id, status=JudgementStatus.PENDING.value, attempt=1, updated_at=_now())
+        .on_conflict_do_nothing(index_elements=[RunJudgementRecord.__table__.c.run_id])
+        .returning(RunJudgementRecord.run_id)
+    )
+    started = (await db.execute(statement)).scalar_one_or_none()
+    await db.commit()
+    if started is None:
+        return None
+    return await get_judgement(db, run_id)
+
+
+async def unjudged_finished_runs(
+    db: AsyncSession, *, ended_since: datetime
+) -> list[tuple[uuid.UUID, RunStatus, dict[str, Any] | None]]:
+    """`(run_id, status, summary)` of completed or failed runs that ended since `ended_since`
+    and have no judgement row; the caller decides which of them are judgeable."""
+    judged = exists().where(RunJudgementRecord.run_id == RunRecord.id)
+    rows = await db.execute(
+        select(RunRecord.id, RunRecord.status, RunRecord.summary)
+        .where(
+            RunRecord.status.in_([RunStatus.COMPLETED.value, RunStatus.FAILED.value]),
+            RunRecord.ended_at >= ended_since,
+            ~judged,
+        )
+        .order_by(RunRecord.ended_at)
+    )
+    return [(run_id, RunStatus(status), summary) for run_id, status, summary in rows]
 
 
 async def active_judgements(db: AsyncSession) -> list[tuple[uuid.UUID, int]]:

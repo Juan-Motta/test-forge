@@ -9,7 +9,7 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import Select, func, select, update
+from sqlalchemy import Integer, Numeric, Select, case, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from voice_eval.modules.agents.models import AgentRecord
@@ -112,14 +112,20 @@ async def create_batch(
 # --- queries ------------------------------------------------------------------------------
 
 
+def _overall_score():
+    """The stored overall score as an integer, or NULL when it is not a number in 0..100: one
+    malformed result must never break a whole list. Nested CASEs fix the evaluation order, so
+    the cast only ever sees a JSON number."""
+    raw = RunJudgementRecord.result["overallScore"]
+    number = raw.astext.cast(Numeric)
+    in_range = case((number.between(0, 100), func.round(number).cast(Integer)), else_=None)
+    return case((func.jsonb_typeof(raw) == "number", in_range), else_=None)
+
+
 def _with_judgement() -> Select:
     """Runs with their judgement's status and, once completed, its overall score (one join)."""
     return (
-        select(
-            RunRecord,
-            RunJudgementRecord.status,
-            RunJudgementRecord.result["overallScore"].as_integer(),
-        )
+        select(RunRecord, RunJudgementRecord.status, _overall_score())
         .outerjoin(RunJudgementRecord, RunJudgementRecord.run_id == RunRecord.id)
         .execution_options(populate_existing=True)
     )

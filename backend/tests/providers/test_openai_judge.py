@@ -77,16 +77,37 @@ async def test_gives_up_after_two_malformed_answers(bad):
 
 
 async def test_provider_errors_retry_once_then_raise_without_secrets(caplog):
+    # Providers sometimes echo the request (key included) in their error text.
     request = httpx.Request("POST", "https://api.openai.com/v1/chat/completions")
+    echoed = httpx.Response(401, request=request, text=f"Incorrect API key provided: {SECRET}")
     judge = OpenAIJudge(
-        fake_client(openai.APITimeoutError(request), openai.APIConnectionError(request=request)),
+        fake_client(
+            openai.AuthenticationError(f"Incorrect API key: {SECRET}", response=echoed, body=None),
+            openai.APIConnectionError(message=f"could not reach with {SECRET}", request=request),
+        ),
         "gpt-6-luna",
     )
-    with caplog.at_level(logging.WARNING), pytest.raises(JudgeError) as caught:
+    with caplog.at_level(logging.DEBUG), pytest.raises(JudgeError) as caught:
         await judge.judge(MESSAGES)
     assert str(caught.value) == "judge model unavailable (APIConnectionError)"
     assert len(calls(judge)) == 2
+    assert caplog.records  # the failed attempts were logged ...
+    assert SECRET not in caplog.text  # ... without the provider's echo
+    assert SECRET not in str(caught.value) and caught.value.__cause__ is None
+
+
+async def test_a_client_value_error_is_unavailability_not_a_malformed_answer(caplog):
+    # A ValueError raised by the client call itself (before any answer) may echo request data.
+    judge = OpenAIJudge(
+        fake_client(ValueError(f"bad header {SECRET}"), ValueError(f"bad header {SECRET}")),
+        "gpt-6-luna",
+    )
+    with caplog.at_level(logging.DEBUG), pytest.raises(JudgeError) as caught:
+        await judge.judge(MESSAGES)
+    assert str(caught.value) == "judge model unavailable (ValueError)"
+    assert len(calls(judge)) == 2
     assert SECRET not in caplog.text
+    assert SECRET not in str(caught.value) and caught.value.__cause__ is None
 
 
 async def test_complete_json_reports_the_last_problem():

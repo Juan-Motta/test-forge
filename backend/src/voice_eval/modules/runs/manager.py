@@ -274,7 +274,9 @@ class RunManager:
         except Exception:
             log.exception("could not record the end of run %s", run_id)
         publish(self.hub.finish, run_id, status.value, reason)
-        if recorded and self.judgements is not None and _judgeable(status, summary):
+        # A crash before `schedule` leaves the run unjudged; the coordinator's `recover`
+        # reconciles recent ones at the next start.
+        if recorded and self.judgements is not None and is_judgeable(status, summary):
             try:
                 await self.judgements.schedule(run_id)
             except Exception as exc:  # the run itself is over and recorded either way
@@ -339,7 +341,7 @@ class RunManager:
         )
 
 
-def _judgeable(status: RunStatus, summary: dict[str, Any] | None) -> bool:
+def is_judgeable(status: RunStatus, summary: dict[str, Any] | None) -> bool:
     """A completed run, or a failed one in which the agent took at least one turn."""
     if status is RunStatus.COMPLETED:
         return True

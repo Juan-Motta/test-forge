@@ -81,3 +81,21 @@ def test_a_malformed_answer_raises_without_echoing_it(bad):
     with pytest.raises(JudgeError, match="malformed judge answer") as caught:
         parse_judgement(bad, CRITERIA)
     assert "great" not in str(caught.value)
+
+
+@pytest.mark.parametrize(
+    "broken",
+    [
+        {key: value for key, value in CRITERIA[0].items() if key != "text"},  # missing key
+        {**CRITERIA[0], "weight": "heavy"},  # non-numeric weight
+        {**CRITERIA[0], "weight": float("nan")},
+        {**CRITERIA[0], "kind": "nice-to-have"},  # unknown kind
+        {**CRITERIA[0], "source": "telepathy"},  # unknown source
+        "not-a-criterion",
+    ],
+)
+def test_a_malformed_snapshot_criterion_is_a_judge_error(broken):
+    with pytest.raises(JudgeError, match="malformed criterion in the run snapshot") as caught:
+        parse_judgement(answer(verdict(MUST_ID)), [broken, *CRITERIA[1:]])
+    assert "heavy" not in str(caught.value) and "telepathy" not in str(caught.value)
+    assert caught.value.__cause__ is None

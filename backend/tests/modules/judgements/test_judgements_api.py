@@ -8,6 +8,8 @@ import uuid
 
 from judgements_support import insert_run, settled, snapshot
 
+from voice_eval.modules.judgements.models import RunJudgementRecord
+
 FIELDS = {
     "status",
     "result",
@@ -116,3 +118,30 @@ async def test_runs_carry_their_judgement_status_and_score(app, user_client, har
 
     harness.model.gate.set()
     await settled(app.state.judgements, in_progress)
+
+
+async def test_a_malformed_stored_score_never_breaks_the_run_list(app, user_client):
+    sessionmaker = app.state.sessionmaker
+    results = {
+        "text": {"overallScore": "high"},
+        "fraction": {"overallScore": 71.6},
+        "huge": {"overallScore": 1e30},  # out of range: no integer overflow
+        "null": {"overallScore": None},
+        "boolean": {"overallScore": True},
+        "missing": {},
+        "array": [1, 2],
+    }
+    ids = {}
+    async with sessionmaker() as db:
+        for label, result in results.items():
+            ids[label] = await insert_run(sessionmaker, data=snapshot(langfuse=None))
+            db.add(RunJudgementRecord(run_id=ids[label], status="completed", result=result))
+        await db.commit()
+
+    response = await user_client.get("/api/runs")
+    assert response.status_code == 200, response.text
+    scores = {item["id"]: item["score"] for item in response.json()["items"]}
+    expected = {label: None for label in results} | {"fraction": 72}
+    assert {label: scores[str(run_id)] for label, run_id in ids.items()} == expected
+    detail = await user_client.get(f"/api/runs/{ids['text']}")
+    assert detail.status_code == 200 and detail.json()["score"] is None

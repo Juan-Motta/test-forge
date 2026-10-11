@@ -26,8 +26,9 @@ from judgements_support import (
 from sqlalchemy import update
 
 from voice_eval.modules.agents.models import AgentRecord
-from voice_eval.modules.judgements.coordinator import POLL_INTERVAL_S
+from voice_eval.modules.judgements.coordinator import POLL_INTERVAL_S, RECONCILE_WINDOW
 from voice_eval.modules.judgements.models import RunJudgementRecord
+from voice_eval.modules.runs.models import RunRecord
 from voice_eval.providers.langfuse_traces import TraceFetchError
 
 
@@ -290,3 +291,48 @@ async def test_shutdown_leaves_the_judgement_unfinished(app, harness):
     await app.state.judgements.schedule(later)
     assert not app.state.judgements.is_active(later)  # stopping: left pending for the next start
     assert (await judgement_row(app.state.sessionmaker, later)).status == "pending"
+
+
+async def test_recover_judges_recent_judgeable_runs_left_without_a_judgement(app, harness):
+    sessionmaker = app.state.sessionmaker
+    no_traces = snapshot(langfuse=None)
+    completed = await insert_run(sessionmaker, data=no_traces)
+    spoke = await insert_run(
+        sessionmaker, data=no_traces, status="failed", summary={"agent_turns": 2}
+    )
+    silent = await insert_run(
+        sessionmaker, data=no_traces, status="failed", summary={"agent_turns": 0}
+    )
+    cancelled = await insert_run(sessionmaker, data=no_traces, status="cancelled")
+    old = await insert_run(sessionmaker, data=no_traces)
+    judged = await insert_run(sessionmaker, data=no_traces)
+    async with sessionmaker() as db:
+        await db.execute(
+            update(RunRecord)
+            .where(RunRecord.id == old)
+            .values(ended_at=harness.clock.now() - RECONCILE_WINDOW - timedelta(minutes=1))
+        )
+        db.add(RunJudgementRecord(run_id=judged, status="completed", attempt=2))
+        await db.commit()
+
+    await app.state.judgements.recover()
+    for run_id in (completed, spoke):
+        await settled(app.state.judgements, run_id)
+        row = await judgement_row(sessionmaker, run_id)
+        assert (row.status, row.attempt) == ("completed", 1)
+    for run_id in (silent, cancelled, old):
+        assert await judgement_row(sessionmaker, run_id) is None
+    assert (await judgement_row(sessionmaker, judged)).attempt == 2  # untouched
+
+
+async def test_any_reader_error_is_retried_then_a_note_never_a_failure(app, harness):
+    sessionmaker = app.state.sessionmaker
+    harness.reader = ScriptedReader(RuntimeError("boom sk-lf-abcdefghijkl"), [observation(0)])
+    row = await judge(app, await insert_run(sessionmaker))
+    assert (row.status, row.trace_note) == ("completed", None)
+
+    harness.clock.moment = ENDED + timedelta(minutes=19)
+    harness.reader = ScriptedReader(RuntimeError("boom sk-lf-abcdefghijkl"))
+    row = await judge(app, await insert_run(sessionmaker))
+    assert row.status == "completed"
+    assert "RuntimeError" in row.trace_note and "sk-lf" not in row.trace_note

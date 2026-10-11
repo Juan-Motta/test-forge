@@ -286,3 +286,100 @@ def test_digest_without_origin_measures_from_the_first_observation():
     digest = digest_observations(SAMPLE, origin=None)
     assert digest.traces[0]["offsetMs"] == 0
     assert digest.traces[1]["offsetMs"] == 4000
+
+
+def _traces_and_note_size(digest) -> int:
+    prompt = digest.to_prompt_dict()
+    traces = len(json.dumps(prompt["traces"], separators=(",", ":"), ensure_ascii=False))
+    return traces + len(prompt.get("truncated", ""))
+
+
+def test_digest_counts_trace_headers_and_drops_traces_that_no_longer_fit():
+    rows = [
+        observation(
+            id=f"o{index}",
+            traceId=f"trace-{index}",
+            traceName="n" * 5000,
+            name="x" * 5000,
+            startTime=at(index * 10),
+        )
+        for index in range(300)
+    ]
+    budget = 3000
+    digest = digest_observations(rows, origin=START, budget_chars=budget)
+
+    assert digest.truncated
+    assert _traces_and_note_size(digest) <= budget
+    assert all(trace["observations"] for trace in digest.traces)  # no empty traces
+    assert all(len(trace["name"]) < 300 for trace in digest.traces)
+    kept = sum(len(trace["observations"]) for trace in digest.traces)
+    assert kept + digest.omitted_observations == 300
+    assert digest.stats.trace_count == 300 and digest.stats.observation_count == 300
+
+
+def test_digest_with_a_tiny_budget_still_fits_the_truncation_note():
+    digest = digest_observations(SAMPLE, origin=START, budget_chars=250)
+    assert digest.truncated
+    assert _traces_and_note_size(digest) <= 250
+    assert digest.omitted_observations + sum(len(t["observations"]) for t in digest.traces) == 5
+
+
+def test_digest_ignores_non_finite_numbers():
+    nan, inf = float("nan"), float("inf")
+    rows = [
+        observation(
+            id="g",
+            traceId="t",
+            type="GENERATION",
+            latency=nan,
+            timeToFirstToken=inf,
+            usageDetails={"input": nan, "output": inf, "total": -inf},
+        ),
+        observation(id="h", traceId="t", type="GENERATION", latency=inf, usage={"total": 5}),
+        observation(id="i", traceId="t", type="GENERATION", latency=1e308),  # overflows in ms
+    ]
+    digest = digest_observations(rows, origin=START)
+    text = json.dumps(digest.to_prompt_dict(), allow_nan=False)  # raises on NaN/Infinity
+    assert "durationMs" not in text and "ttftMs" not in text
+    assert digest.stats.total_tokens == 5
+    assert digest.stats.generation_latency_max_ms is None
+
+
+@pytest.mark.parametrize("value", ["nan", "-5", "inf", "-inf", "garbage"])
+async def test_an_odd_retry_after_falls_back_to_the_default_wait(value):
+    sleep = FakeSleep()
+    answers = iter(
+        [
+            httpx.Response(429, headers={"Retry-After": value}),
+            httpx.Response(200, json={"data": []}),
+        ]
+    )
+    await reader(lambda request: next(answers), sleep=sleep).fetch_session(
+        "s", start=START, end=END
+    )
+    assert sleep.waits == [2.0]
+
+
+async def test_hitting_the_page_cap_is_reported_to_the_caller_and_the_digest():
+    calls = 0
+
+    def endless(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        row = {"id": f"o{calls}", "traceId": "t", "startTime": at(calls)}
+        return httpx.Response(200, json={"data": [row], "meta": {"cursor": f"c{calls}"}})
+
+    rows = await reader(endless, max_pages=3).fetch_session("s", start=START, end=END)
+    assert len(rows) == 3
+    assert rows.page_cap_reached is True
+
+    def single(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"data": [], "meta": {}})
+
+    complete = await reader(single).fetch_session("s", start=START, end=END)
+    assert complete.page_cap_reached is False
+
+    digest = digest_observations(rows, origin=START)
+    assert digest.stats.fetch_incomplete is True
+    assert digest.to_prompt_dict()["stats"]["fetchIncomplete"] is True
+    assert digest_observations(complete, origin=START).stats.fetch_incomplete is False

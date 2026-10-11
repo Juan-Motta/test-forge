@@ -16,9 +16,10 @@ import asyncio
 import base64
 import json
 import logging
+import math
 import statistics
 from collections.abc import Awaitable, Callable, Iterable
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from typing import Any
@@ -39,6 +40,7 @@ FIELDS = "core,basic,time,io,metadata,model,usage,metrics,trace_context"
 
 IO_CHARS = 1500  # tool calls, spans and events
 GENERATION_IO_CHARS = 600  # generation prompts are long and repeat across turns
+NAME_CHARS = 200  # trace and observation names, trace ids
 BUDGET_CHARS = 120_000
 
 Sleep = Callable[[float], Awaitable[None]]
@@ -46,6 +48,14 @@ Sleep = Callable[[float], Awaitable[None]]
 
 class TraceFetchError(Exception):
     """Observations could not be read; the message is safe to show and to log."""
+
+
+class SessionObservations(list[dict[str, Any]]):
+    """A session's observations, oldest first; `page_cap_reached` when some were not read."""
+
+    def __init__(self, rows: Iterable[dict[str, Any]] = (), *, page_cap_reached: bool = False):
+        super().__init__(rows)
+        self.page_cap_reached = page_cap_reached
 
 
 def _iso(moment: datetime) -> str:
@@ -71,12 +81,14 @@ def _retry_wait(response: httpx.Response) -> float:
     if header:
         try:
             wait = float(header)
+            if not math.isfinite(wait) or wait < 0:  # "nan", "inf", "-5": not a usable wait
+                wait = DEFAULT_RETRY_WAIT_S
         except ValueError:
             try:
                 wait = (parsedate_to_datetime(header) - datetime.now(UTC)).total_seconds()
-            except (TypeError, ValueError):
+            except (TypeError, ValueError, OverflowError):
                 wait = DEFAULT_RETRY_WAIT_S
-    return min(max(wait, 0.0), MAX_RETRY_WAIT_S)
+    return min(max(wait, 0.0), MAX_RETRY_WAIT_S)  # a date in the past: retry right away
 
 
 def _status_error(status: int) -> TraceFetchError:
@@ -135,8 +147,12 @@ class LangfuseTraceReader:
 
     async def fetch_session(
         self, session_id: str, *, start: datetime, end: datetime
-    ) -> list[dict[str, Any]]:
-        """Every observation of `session_id` that started in [start, end], oldest first."""
+    ) -> SessionObservations:
+        """Every observation of `session_id` that started in [start, end], oldest first.
+
+        When `max_pages` pages were read and Langfuse still offered another, the result is
+        incomplete and says so with `page_cap_reached`.
+        """
         base_params = {
             "sessionId": session_id,
             "fromStartTime": _iso(start),
@@ -146,6 +162,7 @@ class LangfuseTraceReader:
         }
         found: dict[str, dict[str, Any]] = {}
         anonymous: list[dict[str, Any]] = []
+        page_cap_reached = False
         try:
             async with httpx.AsyncClient(
                 transport=self._transport(),
@@ -170,6 +187,7 @@ class LangfuseTraceReader:
                         break
                     seen_cursors.add(cursor)
                 else:
+                    page_cap_reached = True
                     log.warning("langfuse pagination stopped after %d pages", self.max_pages)
         except TraceFetchError:
             raise
@@ -186,7 +204,9 @@ class LangfuseTraceReader:
         except Exception as exc:  # e.g. UnicodeEncodeError; its text may quote the secret
             log.warning("langfuse fetch failed unexpectedly (%s)", type(exc).__name__)
             raise TraceFetchError("Langfuse request failed (unexpected error)") from None
-        return sort_observations([*found.values(), *anonymous])
+        return SessionObservations(
+            sort_observations([*found.values(), *anonymous]), page_cap_reached=page_cap_reached
+        )
 
     async def _page(
         self, client: httpx.AsyncClient, params: dict[str, str]
@@ -236,6 +256,7 @@ class DigestStats:
     total_tokens: int = 0
     generation_latency_p50_ms: int | None = None
     generation_latency_max_ms: int | None = None
+    fetch_incomplete: bool = False  # the reader stopped at its page cap: not every observation
 
 
 @dataclass(frozen=True)
@@ -252,11 +273,19 @@ class TraceDigest:
             "traces": self.traces,
         }
         if self.truncated:
-            result["truncated"] = (
-                f"Digest truncated to fit {BUDGET_CHARS} characters: some inputs/outputs were"
-                f" dropped and {self.omitted_observations} observation(s) were omitted."
-            )
+            result["truncated"] = _truncation_note(self.omitted_observations)
         return result
+
+
+def _truncation_note(omitted: int) -> str:
+    return (
+        "Digest truncated to fit the size budget: some inputs/outputs were dropped and"
+        f" {omitted} observation(s) were omitted."
+    )
+
+
+# Reserved inside the budget so the note itself always fits (any realistic omitted count).
+NOTE_RESERVE = len(_truncation_note(10**12))
 
 
 def _camel(name: str) -> str:
@@ -269,9 +298,19 @@ def _ms(seconds: float) -> int:
 
 
 def _number(value: Any) -> float | None:
+    """A finite number; NaN and infinities (invalid JSON) count as missing."""
     if isinstance(value, bool) or not isinstance(value, int | float):
         return None
-    return float(value)
+    number = float(value)
+    return number if math.isfinite(number) else None
+
+
+def _seconds_ms(value: Any) -> int | None:
+    """Milliseconds from a reported number of seconds; None when missing or absurd."""
+    seconds = _number(value)
+    if seconds is None or not math.isfinite(seconds * 1000):
+        return None
+    return _ms(seconds)
 
 
 def _clip(value: Any, limit: int) -> str | None:
@@ -320,8 +359,7 @@ def _duration_ms(observation: dict[str, Any]) -> int | None:
     finish = _parse_time(observation.get("endTime"))
     if begin is not None and finish is not None:
         return max(0, _ms((finish - begin).total_seconds()))
-    latency = _number(observation.get("latency"))  # seconds
-    return None if latency is None else _ms(latency)
+    return _seconds_ms(observation.get("latency"))
 
 
 def _ttft_ms(observation: dict[str, Any]) -> int | None:
@@ -329,8 +367,7 @@ def _ttft_ms(observation: dict[str, Any]) -> int | None:
     first = _parse_time(observation.get("completionStartTime"))
     if begin is not None and first is not None:
         return max(0, _ms((first - begin).total_seconds()))
-    ttft = _number(observation.get("timeToFirstToken"))  # seconds
-    return None if ttft is None else _ms(ttft)
+    return _seconds_ms(observation.get("timeToFirstToken"))
 
 
 def _offset_ms(moment: datetime | None, origin: datetime | None) -> int | None:
@@ -349,7 +386,7 @@ def _entry(observation: dict[str, Any], origin: datetime | None, *, with_io: boo
     entry = _compact(
         {
             "type": kind,
-            "name": observation.get("name"),
+            "name": _clip(observation.get("name"), NAME_CHARS),
             "offsetMs": _offset_ms(_parse_time(observation.get("startTime")), origin),
             "durationMs": _duration_ms(observation),
             "model": observation.get("model") or None,
@@ -404,9 +441,13 @@ def digest_observations(
     """Group observations by trace, chronologically, within `budget_chars`.
 
     Offsets are milliseconds from `origin` (the run start); without it, from the earliest
-    observation. Past the budget, observations lose their input/output first, then are omitted;
-    stats always cover every observation.
+    observation. `budget_chars` bounds the serialized traces plus the truncation note. Past
+    the budget, observations lose their input/output first, then are omitted, and a trace with
+    no observation left is dropped (its observations count as omitted); stats always cover
+    every observation. An incomplete fetch (`SessionObservations.page_cap_reached`) is flagged
+    in the stats.
     """
+    fetch_incomplete = bool(getattr(observations, "page_cap_reached", False))
     rows = sort_observations(row for row in observations if isinstance(row, dict))
     if origin is not None and origin.tzinfo is None:
         origin = origin.replace(tzinfo=UTC)
@@ -418,7 +459,8 @@ def digest_observations(
     for row in rows:
         groups.setdefault(str(row.get("traceId") or "unknown"), []).append(row)
 
-    used = 0
+    budget = max(0, budget_chars - NOTE_RESERVE)
+    used = 2  # the list's brackets
     truncated = False
     omitted = 0
     traces: list[dict[str, Any]] = []
@@ -431,32 +473,40 @@ def digest_observations(
         name = next((row["traceName"] for row in members if row.get("traceName")), None)
         trace = _compact(
             {
-                "traceId": trace_id,
-                "name": name or root.get("name"),
+                "traceId": _clip(trace_id, NAME_CHARS),
+                "name": _clip(name or root.get("name"), NAME_CHARS),
                 "offsetMs": _offset_ms(first, origin),
                 "durationMs": _ms((last - first).total_seconds()) if first and last else None,
+                "observations": [],
             }
         )
-        used += _size(trace)
-        entries: list[dict[str, Any]] = []
+        header = _size(trace) + 1  # + the separating comma
+        if used + header > budget:
+            truncated = True
+            omitted += len(members)
+            continue
+        used += header
+        entries: list[dict[str, Any]] = trace["observations"]
         for row in members:
             entry = _entry(row, origin, with_io=True)
-            cost = _size(entry)
-            if used + cost > budget_chars:
+            cost = _size(entry) + 1
+            if used + cost > budget:
                 truncated = True
                 entry = _entry(row, origin, with_io=False)
-                cost = _size(entry)
-                if used + cost > budget_chars:
+                cost = _size(entry) + 1
+                if used + cost > budget:
                     omitted += 1
                     continue
             used += cost
             entries.append(entry)
-        trace["observations"] = entries
+        if not entries:  # nothing of it fits: drop the header too
+            used -= header
+            continue
         traces.append(trace)
 
     return TraceDigest(
         traces=traces,
-        stats=_stats(rows, len(groups)),
+        stats=replace(_stats(rows, len(groups)), fetch_incomplete=fetch_incomplete),
         truncated=truncated,
         omitted_observations=omitted,
     )

@@ -19,6 +19,7 @@ TABLES = {
     "scenarios",
     "run_batches",
     "runs",
+    "run_judgements",
 }
 
 

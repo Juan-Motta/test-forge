@@ -120,11 +120,33 @@ def _evidence(items: list[Evidence]) -> list[Evidence]:
     ]
 
 
+class SnapshotCriterion(BaseModel):
+    """A criterion as the run snapshot stores it (snake_case keys)."""
+
+    id: str
+    text: str
+    kind: Literal["must", "should"]
+    source: Source
+    weight: int
+
+
+def _snapshot_criterion(criterion: Any) -> SnapshotCriterion:
+    """Raises `JudgeError` (never echoing the snapshot) when the criterion is malformed."""
+    try:
+        if isinstance(criterion, dict) and criterion.get("id") is not None:
+            criterion = {**criterion, "id": str(criterion["id"])}
+        return SnapshotCriterion.model_validate(criterion)
+    except ValidationError:
+        raise JudgeError("malformed criterion in the run snapshot") from None
+
+
 def parse_judgement(raw: Any, criteria: list[dict[str, Any]]) -> ParsedJudgement:
     """Reconcile the model's answer with the run's `criteria` (snapshot dicts).
 
-    Raises `JudgeError` when the answer does not have the schema's shape (never echoing it).
+    Raises `JudgeError` when the answer does not have the schema's shape, or a snapshot
+    criterion is malformed (never echoing either).
     """
+    snapshot = [_snapshot_criterion(criterion) for criterion in criteria]
     try:
         answer = RawJudgement.model_validate(raw)
     except ValidationError:
@@ -135,14 +157,14 @@ def parse_judgement(raw: Any, criteria: list[dict[str, Any]]) -> ParsedJudgement
         verdicts.setdefault(item.criterion_id.strip(), item)  # the first verdict wins
 
     results: list[CriterionResult] = []
-    for criterion in criteria:
-        criterion_id = str(criterion["id"])
+    for criterion in snapshot:
+        criterion_id = criterion.id
         common = {
             "criterion_id": criterion_id,
-            "text": criterion["text"],
-            "kind": criterion["kind"],
-            "source": criterion["source"],
-            "weight": int(criterion["weight"]),
+            "text": criterion.text,
+            "kind": criterion.kind,
+            "source": criterion.source,
+            "weight": criterion.weight,
         }
         item = verdicts.get(criterion_id)
         if item is None:

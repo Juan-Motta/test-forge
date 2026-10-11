@@ -31,6 +31,17 @@ async def launch_one(client, factory) -> str:
     return response.json()["runs"][0]["id"]
 
 
+def run_ended(app, run_id: str):
+    """Holds once the manager's task for the run is over, end-of-run processing included
+    (recording the end, then handing the run to the scheduler or not)."""
+    manager, key = app.state.runs, uuid.UUID(run_id)
+
+    async def check() -> bool:
+        return not manager.is_active(key)
+
+    return check
+
+
 def status_is(client, run_id: str, expected: str):
     async def check() -> bool:
         return (await client.get(f"/api/runs/{run_id}")).json()["status"] == expected
@@ -79,7 +90,7 @@ async def test_a_completed_run_is_handed_to_the_judge(user_client, factory, driv
 
 
 async def test_a_failed_run_is_judged_only_if_the_agent_spoke(
-    user_client, factory, drive, scheduler
+    app, user_client, factory, drive, scheduler
 ):
     drive.result = {**summary_for("failed", "agent_closed"), "agent_turns": 1}
     spoke = await launch_one(user_client, factory)
@@ -90,26 +101,36 @@ async def test_a_failed_run_is_judged_only_if_the_agent_spoke(
     drive.result = {**summary_for("failed", "connect_failed"), "agent_turns": 0}
     silent = await launch_one(user_client, factory)
     await wait_for(status_is(user_client, silent, "failed"))
+    await wait_for(run_ended(app, silent))
     assert scheduler.scheduled == [spoke]
 
 
-async def test_cancelled_runs_are_not_judged(user_client, factory, drive, scheduler):
+async def test_cancelled_runs_are_not_judged(app, user_client, factory, drive, scheduler):
     run_id = await launch_one(user_client, factory)
     await wait_for(status_is(user_client, run_id, "running"))
     assert (await user_client.post(f"/api/runs/{run_id}/cancel")).status_code == 202
     await wait_for(status_is(user_client, run_id, "cancelled"))
+    await wait_for(run_ended(app, run_id))
     assert scheduler.scheduled == []
 
 
 async def test_a_scheduler_failure_never_breaks_the_run(app, user_client, factory, drive):
     class Broken:
+        def __init__(self) -> None:
+            self.calls: list[str] = []
+
         async def schedule(self, run_id: uuid.UUID) -> None:
+            self.calls.append(str(run_id))
             raise RuntimeError("database gone")
 
-    app.state.runs.judgements = Broken()
+    broken = Broken()
+    app.state.runs.judgements = broken
     run_id = await launch_one(user_client, factory)
     drive.release.set()
-    await wait_for(status_is(user_client, run_id, "completed"))
+    await wait_for(run_ended(app, run_id))  # the task got past the failing scheduler
+    assert broken.calls == [run_id]
+    body = (await user_client.get(f"/api/runs/{run_id}")).json()
+    assert body["status"] == "completed"
 
 
 async def test_the_app_judges_finished_runs_offline_in_tests(app, user_client, factory, drive):

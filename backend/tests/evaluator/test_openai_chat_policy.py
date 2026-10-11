@@ -9,7 +9,12 @@ import openai
 import pytest
 from openai import AsyncAzureOpenAI, AsyncOpenAI
 
-from voice_eval.evaluator.prompt import DECISION_SCHEMA, build_messages
+from voice_eval.evaluator.prompt import (
+    DECISION_SCHEMA,
+    MalformedDecision,
+    build_messages,
+    parse_decision,
+)
 from voice_eval.ports.policy import CallerBrief, CallerDecision, PolicyState
 from voice_eval.providers.openai_chat import OpenAIChatPolicy
 
@@ -90,6 +95,25 @@ async def test_sends_the_prompt_with_the_strict_schema_and_returns_the_decision(
 )
 async def test_an_empty_or_truncated_answer_is_malformed_then_hangs_up_safely(bad):
     policy = OpenAIChatPolicy(fake_client(bad, bad), "m")
+    decision = await policy.next_turn(STATE)
+    assert (decision.say, decision.hang_up) == (None, True)
+    assert "malformed" in decision.reason
+    assert len(calls(policy)) == 2
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        '{"say": "Hi"}',  # missing hangUp and reason
+        '{"say": "Hi", "hangUp": "no", "reason": "r"}',  # hangUp is not a boolean
+        '{"say": null, "hangUp": false, "reason": "r"}',  # says nothing and stays
+    ],
+)
+async def test_an_answer_the_decision_parser_refuses_hangs_up_safely(content):
+    assert issubclass(MalformedDecision, ValueError)  # the adapter treats ValueError as malformed
+    with pytest.raises(MalformedDecision):
+        parse_decision(content)
+    policy = OpenAIChatPolicy(fake_client(completion(content), completion(content)), "m")
     decision = await policy.next_turn(STATE)
     assert (decision.say, decision.hang_up) == (None, True)
     assert "malformed" in decision.reason

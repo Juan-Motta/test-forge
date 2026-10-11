@@ -47,6 +47,10 @@ class StructuredCallError(Exception):
         self.malformed = malformed
 
 
+class _ClientCallError(Exception):
+    """The client call itself failed with an error that is not about the answer."""
+
+
 def parse_json_object(text: str) -> dict[str, Any]:
     try:
         data = json.loads(text)
@@ -67,15 +71,19 @@ async def _ask_once[T](
     timeout_s: float,
     parse: Callable[[str], T],
 ) -> T:
-    async with asyncio.timeout(timeout_s):
-        completion = await client.chat.completions.create(
-            model=model,
-            messages=messages,
-            response_format={"type": "json_schema", "json_schema": json_schema},
-            max_completion_tokens=max_completion_tokens,
-            reasoning_effort=REASONING_EFFORT,
-            timeout=timeout_s,
-        )
+    try:
+        async with asyncio.timeout(timeout_s):
+            completion = await client.chat.completions.create(
+                model=model,
+                messages=messages,
+                response_format={"type": "json_schema", "json_schema": json_schema},
+                max_completion_tokens=max_completion_tokens,
+                reasoning_effort=REASONING_EFFORT,
+                timeout=timeout_s,
+            )
+    except ValueError as exc:
+        # Raised before any answer exists; its message may echo request data, so keep only the type.
+        raise _ClientCallError(type(exc).__name__) from None
     if not completion.choices:
         raise MalformedOutput("no answer")
     choice = completion.choices[0]
@@ -119,6 +127,8 @@ async def complete_structured[T](
             )
         except ValueError as exc:  # MalformedOutput, MalformedDecision, ...
             failure = StructuredCallError(str(exc), malformed=True)
+        except _ClientCallError as exc:
+            failure = StructuredCallError(str(exc), malformed=False)
         except (TimeoutError, openai.APIError) as exc:
             failure = StructuredCallError(type(exc).__name__, malformed=False)
         kind = "malformed answer" if failure.malformed else "model unavailable"
