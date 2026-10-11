@@ -41,6 +41,9 @@ class ScenarioRecord(Base):
     tts_connection_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("provider_connections.id", ondelete="SET NULL")
     )
+    evaluator_connection_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("provider_connections.id", ondelete="SET NULL")
+    )
     voice_override: Mapped[str | None] = mapped_column(String(100))
     goal: Mapped[str] = mapped_column(Text)
     instructions: Mapped[str] = mapped_column(Text)
@@ -64,6 +67,7 @@ class ScenarioRecord(Base):
             context=self.context,
             persona=Persona.model_validate(self.persona),
             tts_connection_id=self.tts_connection_id,
+            evaluator_connection_id=self.evaluator_connection_id,
             voice_override=self.voice_override,
             goal=self.goal,
             instructions=self.instructions,

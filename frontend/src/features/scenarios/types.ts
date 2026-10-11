@@ -24,6 +24,8 @@ export type Scenario = {
   context: string;
   persona: Persona;
   ttsConnectionId: string | null;
+  /** Connection whose chat model plays the caller; `null` uses the voice (TTS) connection. */
+  evaluatorConnectionId: string | null;
   voiceOverride: string | null;
   goal: string;
   instructions: string;
@@ -44,6 +46,7 @@ export type NewScenario = {
   context: string;
   persona: Persona;
   ttsConnectionId: string | null;
+  evaluatorConnectionId: string | null;
   voiceOverride: string | null;
   goal: string;
   instructions: string;
@@ -54,6 +57,6 @@ export type NewScenario = {
 
 /**
  * Omitted fields are kept; `persona`, `facts`, `criteria` and `endConditions` replace the whole
- * stored value; `null` clears `ttsConnectionId` or `voiceOverride`.
+ * stored value; `null` clears `ttsConnectionId`, `evaluatorConnectionId` or `voiceOverride`.
  */
 export type ScenarioChanges = Partial<NewScenario>;

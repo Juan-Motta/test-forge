@@ -177,6 +177,7 @@ class Scenario:
     context: str
     persona: Persona
     tts_connection_id: uuid.UUID | None
+    evaluator_connection_id: uuid.UUID | None
     voice_override: str | None
     goal: str
     instructions: str
@@ -205,6 +206,50 @@ class InvalidScenarioInput(ValueError):
     def __init__(self, errors: list[dict[str, Any]]) -> None:
         super().__init__("invalid scenario input")
         self.errors = errors
+
+
+class ScenarioNotRunnable(Exception):
+    """The scenario cannot be run as configured; `reason` tells the user what to change."""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
+
+
+@dataclass(frozen=True)
+class ConnectionRef:
+    """A provider connection as a run role sees it; `chat_model` None: it cannot chat."""
+
+    id: uuid.UUID
+    name: str
+    chat_model: str | None
+
+
+def resolve_evaluator(
+    *, evaluator: ConnectionRef | None, tts: ConnectionRef | None
+) -> ConnectionRef:
+    """The connection whose chat model plays the caller: the scenario's evaluator connection,
+    else its voice (TTS) connection when that one has a chat model.
+
+    Raises `ScenarioNotRunnable` with a reason the user can act on.
+    """
+    if evaluator is not None:
+        if evaluator.chat_model is None:
+            raise ScenarioNotRunnable(
+                f"the evaluator model connection {evaluator.name!r} has no chat model; "
+                "set its chat deployment or choose another connection"
+            )
+        return evaluator
+    if tts is not None and tts.chat_model is not None:
+        return tts
+    if tts is not None:
+        raise ScenarioNotRunnable(
+            f"the voice connection {tts.name!r} has no chat deployment; set one or choose an "
+            "evaluator model connection"
+        )
+    raise ScenarioNotRunnable(
+        "choose an evaluator model connection (or a voice connection with a chat model)"
+    )
 
 
 def copy_name(name: str, taken: set[str]) -> str:

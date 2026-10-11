@@ -70,6 +70,7 @@ class ScenarioOut(CamelModel):
     context: str
     persona: Persona
     tts_connection_id: uuid.UUID | None
+    evaluator_connection_id: uuid.UUID | None
     voice_override: str | None
     goal: str
     instructions: str
@@ -90,6 +91,7 @@ class ScenarioOut(CamelModel):
             context=scenario.context,
             persona=scenario.persona,
             tts_connection_id=scenario.tts_connection_id,
+            evaluator_connection_id=scenario.evaluator_connection_id,
             voice_override=scenario.voice_override,
             goal=scenario.goal,
             instructions=scenario.instructions,
@@ -108,6 +110,7 @@ class CreateIn(StrictCamelModel, ScenarioRules):
     context: Context = ""
     persona: Persona
     tts_connection_id: uuid.UUID | None = None
+    evaluator_connection_id: uuid.UUID | None = None
     voice_override: Identifier | None = None
     goal: Goal
     instructions: Instructions = ""
@@ -119,7 +122,8 @@ class CreateIn(StrictCamelModel, ScenarioRules):
 class UpdateIn(StrictCamelModel, ScenarioRules):
     """Partial update: only the fields present change; structured parts are replaced whole.
 
-    `null` clears `ttsConnectionId` or `voiceOverride`; it is refused for every other field.
+    `null` clears `ttsConnectionId`, `evaluatorConnectionId` or `voiceOverride`; it is refused
+    for every other field.
     """
 
     agent_id: uuid.UUID | None = None
@@ -128,6 +132,7 @@ class UpdateIn(StrictCamelModel, ScenarioRules):
     context: Context | None = None
     persona: Persona | None = None
     tts_connection_id: uuid.UUID | None = None
+    evaluator_connection_id: uuid.UUID | None = None
     voice_override: Identifier | None = None
     goal: Goal | None = None
     instructions: Instructions | None = None

@@ -31,6 +31,7 @@ MAX_TEST_DETAIL_LENGTH = 500
 HINT_MASK = "••••"
 HINT_MIN_SECRET_LENGTH = 12
 LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1"})
+DEFAULT_CHAT_MODEL = "gpt-4.1-mini"
 
 
 class ConnectionKind(StrEnum):
@@ -159,6 +160,7 @@ class OpenAIConfig(_Model):
     base_url: str = "https://api.openai.com/v1"
     tts_model: Identifier = "gpt-4o-mini-tts"
     tts_voice: Identifier = "alloy"
+    chat_model: Identifier = DEFAULT_CHAT_MODEL  # the evaluator's model
 
     check_base_url = field_validator("base_url")(check_url)
 
@@ -168,6 +170,7 @@ class AzureOpenAIConfig(_Model):
     api_version: Identifier
     tts_deployment: Identifier
     tts_voice: Identifier = "alloy"
+    chat_deployment: Identifier | None = None  # without it the connection cannot evaluate
 
     check_endpoint = field_validator("endpoint")(check_url)
 
@@ -261,6 +264,18 @@ def secret_hint(secrets: BaseModel) -> str:
     """`••••` plus the last 4 characters of the (single) secret, when it is long enough."""
     (value,) = reveal(secrets).values()
     return HINT_MASK + (value[-4:] if len(value) >= HINT_MIN_SECRET_LENGTH else "")
+
+
+def chat_model(kind: ConnectionKind, stored_config: dict[str, Any]) -> str | None:
+    """The chat model (OpenAI) or deployment (Azure OpenAI) a stored config offers, if any.
+
+    Rows stored before the field existed get the OpenAI default; Azure has no default.
+    """
+    if kind is ConnectionKind.OPENAI:
+        return stored_config.get("chat_model") or DEFAULT_CHAT_MODEL
+    if kind is ConnectionKind.AZURE_OPENAI:
+        return stored_config.get("chat_deployment") or None
+    return None
 
 
 def config_for_api(config: dict[str, Any]) -> dict[str, Any]:

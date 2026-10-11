@@ -44,7 +44,12 @@ describe("Create connection", () => {
         body: {
           name: "Main OpenAI",
           kind: "openai",
-          config: { baseUrl: "https://api.openai.com/v1", ttsModel: "gpt-4o-mini-tts", ttsVoice: "coral" },
+          config: {
+            baseUrl: "https://api.openai.com/v1",
+            ttsModel: "gpt-4o-mini-tts",
+            ttsVoice: "coral",
+            chatModel: "gpt-4.1-mini",
+          },
           secrets: { apiKey: CANARY },
         },
       },
@@ -61,6 +66,7 @@ describe("Create connection", () => {
         Endpoint: "https://res.openai.azure.com",
         "API version": "2025-03-01-preview",
         "TTS deployment": "my-tts",
+        "Chat deployment": "my-chat",
         "API key": "azure-openai-key-123",
       },
       config: {
@@ -68,6 +74,7 @@ describe("Create connection", () => {
         apiVersion: "2025-03-01-preview",
         ttsDeployment: "my-tts",
         ttsVoice: "alloy",
+        chatDeployment: "my-chat",
       },
       secrets: { apiKey: "azure-openai-key-123" },
     },
@@ -238,7 +245,12 @@ describe("Create connection", () => {
         path: "/connections/test",
         body: {
           kind: "openai",
-          config: { baseUrl: "https://api.openai.com/v1", ttsModel: "gpt-4o-mini-tts", ttsVoice: "alloy" },
+          config: {
+            baseUrl: "https://api.openai.com/v1",
+            ttsModel: "gpt-4o-mini-tts",
+            ttsVoice: "alloy",
+            chatModel: "gpt-4.1-mini",
+          },
           secrets: { apiKey: CANARY },
         },
       },
@@ -359,6 +371,43 @@ describe("Form edge cases", () => {
     await waitFor(() =>
       expect(within(dialog).getByLabelText("API key")).toHaveAccessibleDescription(
         expect.stringContaining("must not start or end with spaces"),
+      ),
+    );
+    expect(api.requests).toEqual([]);
+  });
+
+  it("edits the evaluator chat model of a connection stored before it existed", async () => {
+    const api = mockConnectionsApi([connectionFixture()]);
+    const { user, dialog } = await openEdit();
+
+    const chatModel = within(dialog).getByLabelText("Chat model");
+    expect(chatModel).toHaveValue("");
+    expect(chatModel).toHaveAccessibleDescription(expect.stringContaining("evaluator"));
+    await user.type(chatModel, "gpt-4.1");
+    await user.click(within(dialog).getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() => expect(api.requests).toHaveLength(1));
+    expect(api.requests[0].body).toEqual({
+      config: {
+        baseUrl: "https://api.openai.com/v1",
+        ttsModel: "gpt-4o-mini-tts",
+        ttsVoice: "alloy",
+        chatModel: "gpt-4.1",
+      },
+    });
+  });
+
+  it("blocks a chat deployment that is not an identifier", async () => {
+    const api = mockConnectionsApi([]);
+    const { user, dialog } = await openCreate();
+
+    await user.selectOptions(within(dialog).getByLabelText("Provider"), "azure_openai");
+    await user.type(within(dialog).getByLabelText("Chat deployment"), "my chat");
+    await user.click(within(dialog).getByRole("button", { name: "Create connection" }));
+
+    await waitFor(() =>
+      expect(within(dialog).getByLabelText("Chat deployment")).toHaveAccessibleDescription(
+        expect.stringContaining("Use only letters"),
       ),
     );
     expect(api.requests).toEqual([]);

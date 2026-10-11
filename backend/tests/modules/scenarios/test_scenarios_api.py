@@ -11,6 +11,15 @@ AGENT = {
     "userId": "probe-user",
 }
 OPENAI = {"kind": "openai", "config": {}, "secrets": {"apiKey": "sk-proj-abcdefghijklmnop"}}
+AZURE = {
+    "kind": "azure_openai",
+    "config": {
+        "endpoint": "https://res.openai.azure.com",
+        "apiVersion": "2025-03-01-preview",
+        "ttsDeployment": "my-tts",
+    },
+    "secrets": {"apiKey": "sk-azure-abcdefghijklmnop"},
+}
 LANGFUSE = {
     "kind": "langfuse",
     "config": {"host": "https://cloud.langfuse.com", "publicKey": "pk-lf-123"},
@@ -25,6 +34,7 @@ FIELDS = {
     "context",
     "persona",
     "ttsConnectionId",
+    "evaluatorConnectionId",
     "voiceOverride",
     "goal",
     "instructions",
@@ -131,6 +141,7 @@ async def test_create_returns_the_scenario(user_client, agent_id):
         "hangUpWhen": "goal_or_goodbye",
     }
     assert (body["ttsConnectionId"], body["voiceOverride"]) == (None, None)
+    assert body["evaluatorConnectionId"] is None
 
 
 async def test_criterion_ids_are_kept_when_given(user_client, agent_id):
@@ -324,6 +335,84 @@ async def test_deleting_the_tts_connection_clears_the_reference(user_client, age
     assert (await user_client.delete(f"/api/connections/{openai_id}")).status_code == 204
     got = (await user_client.get(f"/api/scenarios/{body['id']}")).json()
     assert got["ttsConnectionId"] is None
+
+
+async def test_evaluator_connection_must_be_a_chat_capable_openai_kind(user_client, agent_id):
+    openai_id = await connection(user_client, "OpenAI", OPENAI)
+    body = await create(user_client, agent_id, evaluatorConnectionId=openai_id)
+    assert body["evaluatorConnectionId"] == openai_id
+
+    langfuse_id = await connection(user_client, "Langfuse", LANGFUSE)
+    azure_id = await connection(user_client, "Azure", AZURE)  # no chat deployment
+    for name, connection_id, message in [
+        ("langfuse", langfuse_id, "openai or azure_openai"),
+        ("missing", str(uuid.uuid4()), "connection not found"),
+        ("azure", azure_id, "chat deployment"),
+    ]:
+        response = await user_client.post(
+            "/api/scenarios",
+            json=scenario(agent_id, name=name, evaluatorConnectionId=connection_id),
+        )
+        assert response.status_code == 422, name
+        (error,) = response.json()["detail"]
+        assert error["loc"] == ["body", "evaluatorConnectionId"]
+        assert message in error["msg"]
+
+
+async def test_evaluator_connection_can_be_patched_cleared_and_dies_with_its_row(
+    user_client, agent_id
+):
+    openai_id = await connection(user_client, "OpenAI", OPENAI)
+    body = await create(user_client, agent_id)
+    url = f"/api/scenarios/{body['id']}"
+    patched = await user_client.patch(url, json={"evaluatorConnectionId": openai_id})
+    assert patched.json()["evaluatorConnectionId"] == openai_id
+    copy = (await user_client.post(f"{url}/duplicate")).json()
+    assert copy["evaluatorConnectionId"] == openai_id
+    cleared = await user_client.patch(url, json={"evaluatorConnectionId": None})
+    assert cleared.json()["evaluatorConnectionId"] is None
+
+    await user_client.patch(url, json={"evaluatorConnectionId": openai_id})
+    assert (await user_client.delete(f"/api/connections/{openai_id}")).status_code == 204
+    assert (await user_client.get(url)).json()["evaluatorConnectionId"] is None
+
+
+async def test_resolves_the_evaluator_connection_of_a_stored_scenario(user_client, agent_id, db):
+    from voice_eval.modules.scenarios.domain import ScenarioNotRunnable
+    from voice_eval.modules.scenarios.service import evaluator_connection, get_scenario
+
+    openai_id = await connection(user_client, "OpenAI", OPENAI)
+    azure_id = await connection(user_client, "Azure", AZURE)
+    voice_only = await create(user_client, agent_id, name="voice", ttsConnectionId=openai_id)
+    azure_voice = await create(user_client, agent_id, name="azure", ttsConnectionId=azure_id)
+    nothing = await create(user_client, agent_id, name="nothing")
+
+    async with db() as session:
+        found = await evaluator_connection(
+            session, await get_scenario(session, uuid.UUID(voice_only["id"]))
+        )
+        assert (str(found.id), found.name, found.chat_model) == (
+            openai_id,
+            "OpenAI",
+            "gpt-4.1-mini",
+        )
+        for body, needle in [(azure_voice, "Azure"), (nothing, "evaluator model connection")]:
+            with pytest.raises(ScenarioNotRunnable, match=needle):
+                await evaluator_connection(
+                    session, await get_scenario(session, uuid.UUID(body["id"]))
+                )
+
+    # Giving the Azure connection a chat deployment makes its scenario runnable.
+    patched = await user_client.patch(
+        f"/api/connections/{azure_id}",
+        json={"config": {**AZURE["config"], "chatDeployment": "my-chat"}},
+    )
+    assert patched.status_code == 200, patched.text
+    async with db() as session:
+        found = await evaluator_connection(
+            session, await get_scenario(session, uuid.UUID(azure_voice["id"]))
+        )
+        assert (str(found.id), found.chat_model) == (azure_id, "my-chat")
 
 
 async def test_patch_is_partial_and_replaces_whole_objects(user_client, agent_id):

@@ -25,6 +25,7 @@ export type ScenarioFormValues = {
   context: string;
   persona: { name: string; locale: string; temperament: Temperament; notes: string };
   ttsConnectionId: string;
+  evaluatorConnectionId: string;
   voiceOverride: string;
   goal: string;
   instructions: string;
@@ -112,6 +113,7 @@ export const scenarioFormSchema = z
       notes: text(MAX.notes),
     }),
     ttsConnectionId: z.string(),
+    evaluatorConnectionId: z.string(),
     voiceOverride: z
       .string()
       .trim()
@@ -173,6 +175,7 @@ export function initialValues(scenario: Scenario | undefined, defaultAgentId = "
       context: "",
       persona: { name: "", locale: "es-MX", temperament: "polite", notes: "" },
       ttsConnectionId: "",
+      evaluatorConnectionId: "",
       voiceOverride: "",
       goal: "",
       instructions: "",
@@ -188,6 +191,7 @@ export function initialValues(scenario: Scenario | undefined, defaultAgentId = "
     context: scenario.context,
     persona: { ...scenario.persona },
     ttsConnectionId: scenario.ttsConnectionId ?? "",
+    evaluatorConnectionId: scenario.evaluatorConnectionId ?? "",
     voiceOverride: scenario.voiceOverride ?? "",
     goal: scenario.goal,
     instructions: scenario.instructions,
@@ -220,6 +224,7 @@ export function toNewScenario(values: ScenarioFormValues): NewScenario {
       notes: values.persona.notes.trim(),
     },
     ttsConnectionId: values.ttsConnectionId || null,
+    evaluatorConnectionId: values.evaluatorConnectionId || null,
     voiceOverride: values.voiceOverride.trim() || null,
     goal: values.goal.trim(),
     instructions: values.instructions.trim(),

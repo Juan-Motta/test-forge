@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useRef } from "react";
 import { useAgents } from "@/features/agents/queries";
+import { canChat } from "@/features/connections/kinds";
 import { useConnections } from "@/features/connections/queries";
 import { PageHeader } from "@/features/shell/PageHeader";
 import { ApiError, errorMessage, formErrorView } from "@/lib/api";
@@ -123,11 +124,15 @@ export function ScenarioEditorContainer({ scenarioId }: ScenarioEditorContainerP
     const ttsOptions: ConnectionOption[] = (connections.data ?? [])
       .filter((connection) => TTS_KINDS.has(connection.kind))
       .map(({ id, name }) => ({ id, name }));
+    const evaluatorOptions: ConnectionOption[] = (connections.data ?? [])
+      .filter(canChat)
+      .map(({ id, name }) => ({ id, name }));
     body = (
       <ScenarioEditor
         scenario={scenario.data}
         agents={agents.data ?? []}
         ttsOptions={ttsOptions}
+        evaluatorOptions={evaluatorOptions}
         onSubmit={onSubmit}
         onCancel={onCancel}
         pending={save.isPending}

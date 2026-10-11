@@ -14,6 +14,7 @@ export function scenarioFixture(overrides: Partial<Scenario> = {}): Scenario {
     context: "The caller already has a reservation number.",
     persona: { name: "Lucía", locale: "es-MX", temperament: "hurried", notes: "Interrupts sometimes." },
     ttsConnectionId: null,
+    evaluatorConnectionId: null,
     voiceOverride: null,
     goal: "Book a double room for 3 nights from November 14.",
     instructions: "Do not give every detail at once.",

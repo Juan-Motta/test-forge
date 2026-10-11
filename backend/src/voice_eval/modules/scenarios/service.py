@@ -2,7 +2,8 @@
 
 The API validates each field's shape and the cross-item rules (unique fact keys, criteria
 weights totalling 100); the rules that need the database (the agent exists, the TTS connection
-has a speech-capable kind) live here and report all their errors at once.
+has a speech-capable kind, the evaluator connection can chat) live here and report all their
+errors at once.
 """
 
 import uuid
@@ -14,15 +15,17 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from voice_eval.modules.agents.models import AgentRecord
-from voice_eval.modules.connections.domain import ConnectionKind
+from voice_eval.modules.connections.domain import ConnectionKind, chat_model
 from voice_eval.modules.connections.models import ConnectionRecord
 from voice_eval.modules.scenarios.domain import (
+    ConnectionRef,
     InvalidScenarioInput,
     Scenario,
     ScenarioConflict,
     ScenarioNameTaken,
     ScenarioNotFound,
     copy_name,
+    resolve_evaluator,
 )
 from voice_eval.modules.scenarios.models import NAME_UNIQUE_CONSTRAINT, ScenarioRecord
 
@@ -36,6 +39,7 @@ WRITABLE = frozenset(
         "context",
         "persona",
         "tts_connection_id",
+        "evaluator_connection_id",
         "voice_override",
         "goal",
         "instructions",
@@ -92,6 +96,26 @@ async def _commit(db: AsyncSession, name: str) -> None:
         raise
 
 
+async def _connection_error(
+    db: AsyncSession, connection_id: uuid.UUID, *, needs_chat: bool
+) -> str | None:
+    """Why `connection_id` cannot serve a scenario role (speech, or chat too), or None."""
+    row = (
+        await db.execute(
+            select(ConnectionRecord.kind, ConnectionRecord.config).where(
+                ConnectionRecord.id == connection_id
+            )
+        )
+    ).one_or_none()
+    if row is None:
+        return "connection not found"
+    if row.kind not in TTS_KINDS:
+        return "must reference an openai or azure_openai connection"
+    if needs_chat and chat_model(ConnectionKind(row.kind), row.config) is None:
+        return "the connection has no chat deployment"
+    return None
+
+
 async def _validate(db: AsyncSession, fields: dict[str, Any]) -> None:
     errors: list[dict[str, Any]] = []
     agent_id = fields.get("agent_id")
@@ -99,19 +123,15 @@ async def _validate(db: AsyncSession, fields: dict[str, Any]) -> None:
         select(AgentRecord.id).where(AgentRecord.id == agent_id)
     ):
         errors.append({"type": "value_error", "loc": ["agentId"], "msg": "agent not found"})
-    connection_id = fields.get("tts_connection_id")
-    if connection_id is not None:
-        kind = await db.scalar(
-            select(ConnectionRecord.kind).where(ConnectionRecord.id == connection_id)
-        )
-        if kind is None:
-            msg = "connection not found"
-        elif kind not in TTS_KINDS:
-            msg = "must reference an openai or azure_openai connection"
-        else:
-            msg = ""
-        if msg:
-            errors.append({"type": "value_error", "loc": ["ttsConnectionId"], "msg": msg})
+    for field, loc, needs_chat in [
+        ("tts_connection_id", "ttsConnectionId", False),
+        ("evaluator_connection_id", "evaluatorConnectionId", True),
+    ]:
+        connection_id = fields.get(field)
+        if connection_id is None:
+            continue
+        if msg := await _connection_error(db, connection_id, needs_chat=needs_chat):
+            errors.append({"type": "value_error", "loc": [loc], "msg": msg})
     if errors:
         raise InvalidScenarioInput(errors)
 
@@ -207,4 +227,30 @@ async def duplicate_scenario(
 async def count_for_agent(db: AsyncSession, agent_id: uuid.UUID) -> int:
     return await db.scalar(
         select(func.count()).select_from(ScenarioRecord).where(ScenarioRecord.agent_id == agent_id)
+    )
+
+
+async def _connection_ref(
+    db: AsyncSession, connection_id: uuid.UUID | None
+) -> ConnectionRef | None:
+    if connection_id is None:
+        return None
+    record = await db.get(ConnectionRecord, connection_id, populate_existing=True)
+    if record is None:
+        return None
+    try:
+        kind = ConnectionKind(record.kind)
+    except ValueError:
+        return ConnectionRef(id=record.id, name=record.name, chat_model=None)
+    return ConnectionRef(id=record.id, name=record.name, chat_model=chat_model(kind, record.config))
+
+
+async def evaluator_connection(db: AsyncSession, scenario: Scenario) -> ConnectionRef:
+    """The connection whose chat model plays the caller in `scenario` (see `resolve_evaluator`).
+
+    Raises `ScenarioNotRunnable` when no configured connection can chat.
+    """
+    return resolve_evaluator(
+        evaluator=await _connection_ref(db, scenario.evaluator_connection_id),
+        tts=await _connection_ref(db, scenario.tts_connection_id),
     )

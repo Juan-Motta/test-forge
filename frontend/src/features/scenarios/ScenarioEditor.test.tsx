@@ -20,6 +20,12 @@ const agents = [hotel, support];
 const connections = [
   connectionFixture(),
   connectionFixture({ id: "c-azure", name: "Azure TTS", kind: "azure_openai" }),
+  connectionFixture({
+    id: "c-azure-chat",
+    name: "Azure chat",
+    kind: "azure_openai",
+    config: { endpoint: "https://res.openai.azure.com", ttsDeployment: "tts", chatDeployment: "chat" },
+  }),
   connectionFixture({ id: "c-speech", name: "Speech", kind: "azure_speech" }),
   connectionFixture({ id: "c-lf", name: "Traces", kind: "langfuse" }),
 ];
@@ -71,6 +77,7 @@ describe("Scenario editor: create", () => {
     await user.type(field("Persona notes"), "Polite but firm.");
     await user.selectOptions(field("Evaluator voice (TTS connection)"), "OpenAI prod");
     await user.type(field("Voice override (optional)"), "coral");
+    await user.selectOptions(field("Evaluator model connection"), "Azure chat");
     await user.type(field("How to behave"), "Ask about the fee.");
     await user.click(screen.getByRole("button", { name: "Add fact" }));
     await user.type(field("Fact 1 Key"), "Room");
@@ -97,6 +104,7 @@ describe("Scenario editor: create", () => {
           context: "The guest is a loyalty member.",
           persona: { name: "Marta", locale: "es-ES", temperament: "friendly", notes: "Polite but firm." },
           ttsConnectionId: "c-openai",
+          evaluatorConnectionId: "c-azure-chat",
           voiceOverride: "coral",
           goal: "Get a late check-out at 2 pm.",
           instructions: "Ask about the fee.",
@@ -203,7 +211,20 @@ describe("Scenario editor: create", () => {
     const options = within(field("Evaluator voice (TTS connection)"))
       .getAllByRole("option")
       .map((option) => option.textContent);
-    expect(options).toEqual(["None", "OpenAI prod", "Azure TTS"]);
+    expect(options).toEqual(["None", "OpenAI prod", "Azure TTS", "Azure chat"]);
+  });
+
+  it("offers only connections with a chat model as the evaluator model, defaulting to the voice connection", async () => {
+    setup([]);
+    await renderEditor();
+
+    const select = field("Evaluator model connection");
+    expect(select).toHaveValue("");
+    expect(select).toHaveAccessibleDescription(expect.stringContaining("chat deployment"));
+    const options = within(select)
+      .getAllByRole("option")
+      .map((option) => option.textContent);
+    expect(options).toEqual(["Same as voice connection", "OpenAI prod", "Azure chat"]);
   });
 
   it("warns before the page unloads only while there are unsaved changes", async () => {
@@ -276,6 +297,18 @@ describe("Scenario editor: edit", () => {
 
     await waitFor(() => expect(api.requests).toHaveLength(1));
     expect(api.requests[0].body).toEqual({ ttsConnectionId: null, voiceOverride: null });
+  });
+
+  it("switches the evaluator model back to the voice connection with null", async () => {
+    const api = setup([scenarioFixture({ evaluatorConnectionId: "c-azure-chat" })]);
+    const user = await renderEditor("s-booking");
+
+    expect(field("Evaluator model connection")).toHaveValue("c-azure-chat");
+    await user.selectOptions(field("Evaluator model connection"), "Same as voice connection");
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() => expect(api.requests).toHaveLength(1));
+    expect(api.requests[0].body).toEqual({ evaluatorConnectionId: null });
   });
 
   it("maps server 422 locations onto the fact and criterion rows and the criteria section", async () => {

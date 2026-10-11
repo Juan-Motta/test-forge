@@ -12,7 +12,7 @@ export function errorAt(errors: FormErrors<ScenarioFormValues>, path: string): s
 }
 
 const KNOWN_PATH =
-  /^(agentId|name|tags|context|persona\.(name|locale|temperament|notes)|ttsConnectionId|voiceOverride|goal|instructions|facts(\.\d+\.(key|value))?|criteria(\.\d+\.(text|kind|source|weight))?|endConditions\.(maxDurationS|maxSilenceS|hangUpWhen))$/;
+  /^(agentId|name|tags|context|persona\.(name|locale|temperament|notes)|ttsConnectionId|evaluatorConnectionId|voiceOverride|goal|instructions|facts(\.\d+\.(key|value))?|criteria(\.\d+\.(text|kind|source|weight))?|endConditions\.(maxDurationS|maxSilenceS|hangUpWhen))$/;
 
 /**
  * Where a server error location (`facts.2.key`, `criteria`, `tags.3`) shows in the form:

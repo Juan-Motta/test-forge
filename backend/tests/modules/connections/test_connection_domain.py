@@ -3,6 +3,7 @@ import pytest
 from voice_eval.modules.connections.domain import (
     ConnectionKind,
     InvalidConnectionInput,
+    chat_model,
     parse_config,
     parse_secrets,
     reveal,
@@ -24,6 +25,7 @@ def test_openai_defaults():
         "base_url": "https://api.openai.com/v1",
         "tts_model": "gpt-4o-mini-tts",
         "tts_voice": "alloy",
+        "chat_model": "gpt-4.1-mini",
     }
 
 
@@ -49,6 +51,49 @@ def test_azure_openai_requires_its_fields():
         },
     )
     assert parsed.tts_voice == "alloy"
+    assert parsed.chat_deployment is None
+
+
+AZURE = {
+    "endpoint": "https://res.openai.azure.com",
+    "apiVersion": "2025-03-01-preview",
+    "ttsDeployment": "my-tts",
+}
+
+
+def test_chat_model_is_configurable():
+    assert config("openai", {"chatModel": "gpt-4.1"}).chat_model == "gpt-4.1"
+    assert config("azure_openai", {**AZURE, "chatDeployment": "chat"}).chat_deployment == "chat"
+    for bad in ("../x", "a b", ""):
+        with pytest.raises(InvalidConnectionInput) as info:
+            config("openai", {"chatModel": bad})
+        assert error_locs(info) == [("config", "chatModel")]
+        with pytest.raises(InvalidConnectionInput) as info:
+            config("azure_openai", {**AZURE, "chatDeployment": bad})
+        assert error_locs(info) == [("config", "chatDeployment")]
+
+
+def test_stored_rows_without_chat_fields_still_parse():
+    stored = {"base_url": "https://api.openai.com/v1", "tts_model": "t", "tts_voice": "alloy"}
+    assert config("openai", stored).chat_model == "gpt-4.1-mini"
+    stored_azure = {"endpoint": AZURE["endpoint"], "api_version": "v", "tts_deployment": "t"}
+    assert config("azure_openai", stored_azure).chat_deployment is None
+
+
+@pytest.mark.parametrize(
+    ("kind", "stored", "expected"),
+    [
+        ("openai", {}, "gpt-4.1-mini"),  # older rows: the default model
+        ("openai", {"chat_model": "gpt-4.1"}, "gpt-4.1"),
+        ("azure_openai", {"tts_deployment": "t"}, None),
+        ("azure_openai", {"chat_deployment": None}, None),
+        ("azure_openai", {"chat_deployment": "chat"}, "chat"),
+        ("azure_speech", {"region": "eastus"}, None),
+        ("langfuse", {"host": "https://cloud.langfuse.com"}, None),
+    ],
+)
+def test_chat_model_of_a_stored_config(kind, stored, expected):
+    assert chat_model(ConnectionKind(kind), stored) == expected
 
 
 @pytest.mark.parametrize(

@@ -1,4 +1,4 @@
-import type { ConnectionKind } from "./types";
+import type { Connection, ConnectionKind } from "./types";
 
 /** How a config value is checked (mirrors the backend's field types). */
 export type FieldFormat = "url" | "identifier" | "region";
@@ -39,12 +39,21 @@ export const KINDS: Record<ConnectionKind, KindDefinition> = {
       },
       { key: "ttsModel", label: "TTS model", format: "identifier", required: false, defaultValue: "gpt-4o-mini-tts" },
       { key: "ttsVoice", label: "TTS voice", format: "identifier", required: false, defaultValue: "alloy" },
+      {
+        key: "chatModel",
+        label: "Chat model",
+        format: "identifier",
+        required: false,
+        defaultValue: "gpt-4.1-mini",
+        placeholder: "gpt-4.1-mini",
+        hint: "Model the evaluator uses to decide what the caller says. Blank uses gpt-4.1-mini.",
+      },
     ],
     secret: { key: "apiKey", label: "API key" },
   },
   azure_openai: {
     label: "Azure OpenAI",
-    description: "An Azure OpenAI resource with a TTS deployment.",
+    description: "An Azure OpenAI resource with a TTS deployment (and a chat deployment for the evaluator).",
     config: [
       {
         key: "endpoint",
@@ -56,6 +65,13 @@ export const KINDS: Record<ConnectionKind, KindDefinition> = {
       { key: "apiVersion", label: "API version", format: "identifier", required: true, placeholder: "2025-03-01-preview" },
       { key: "ttsDeployment", label: "TTS deployment", format: "identifier", required: true },
       { key: "ttsVoice", label: "TTS voice", format: "identifier", required: false, defaultValue: "alloy" },
+      {
+        key: "chatDeployment",
+        label: "Chat deployment",
+        format: "identifier",
+        required: false,
+        hint: "Chat model deployment the evaluator uses to decide what the caller says. Without it this connection cannot be the evaluator.",
+      },
     ],
     secret: { key: "apiKey", label: "API key" },
   },
@@ -97,4 +113,14 @@ export const KINDS: Record<ConnectionKind, KindDefinition> = {
 
 export function kindLabel(kind: string): string {
   return kind in KINDS ? KINDS[kind as ConnectionKind].label : kind;
+}
+
+/**
+ * Whether the connection can act as the evaluator's chat model (mirrors the backend's
+ * `chat_model`): OpenAI always (a default model applies), Azure OpenAI only with a chat deployment.
+ */
+export function canChat(connection: Pick<Connection, "kind" | "config">): boolean {
+  if (connection.kind === "openai") return true;
+  if (connection.kind === "azure_openai") return Boolean(connection.config.chatDeployment);
+  return false;
 }

@@ -30,6 +30,8 @@ type ScenarioEditorProps = {
   agents: Agent[];
   /** Connections that can voice the evaluator (OpenAI, Azure OpenAI). */
   ttsOptions: ConnectionOption[];
+  /** Connections with a chat model that can decide the caller's turns. */
+  evaluatorOptions: ConnectionOption[];
   /** Resolves with the stored scenario when saved, `undefined` when the save failed. */
   onSubmit: (values: ScenarioFormValues) => Promise<Scenario | undefined>;
   onCancel: () => void;
@@ -45,6 +47,7 @@ export function ScenarioEditor({
   scenario,
   agents,
   ttsOptions,
+  evaluatorOptions,
   onSubmit,
   onCancel,
   pending,
@@ -112,6 +115,11 @@ export function ScenarioEditor({
     linkedTts && !ttsOptions.some((option) => option.id === linkedTts)
       ? [...ttsOptions, { id: linkedTts, name: "Current connection" }]
       : ttsOptions;
+  const linkedEvaluator = scenario?.evaluatorConnectionId;
+  const chatOptions =
+    linkedEvaluator && !evaluatorOptions.some((option) => option.id === linkedEvaluator)
+      ? [...evaluatorOptions, { id: linkedEvaluator, name: "Current connection" }]
+      : evaluatorOptions;
 
   async function onValid(values: ScenarioFormValues) {
     setSaved(false);
@@ -232,6 +240,22 @@ export function ScenarioEditor({
             error={fieldError("voiceOverride")}
           >
             {(props) => <Input mono autoComplete="off" spellCheck={false} {...props} {...registerField("voiceOverride")} />}
+          </Field>
+          <Field
+            label="Evaluator model connection"
+            hint="Chat model that decides what the caller says. Azure OpenAI connections need a chat deployment."
+            error={fieldError("evaluatorConnectionId")}
+          >
+            {(props) => (
+              <Select {...props} {...registerField("evaluatorConnectionId")}>
+                <option value="">Same as voice connection</option>
+                {chatOptions.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.name}
+                  </option>
+                ))}
+              </Select>
+            )}
           </Field>
         </div>
       </Section>

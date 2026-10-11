@@ -257,8 +257,8 @@ edit applies to the next run without restarting anything.
 
 | Kind | `config` (camelCase) | `secrets` |
 | --- | --- | --- |
-| `openai` | `baseUrl` (default `https://api.openai.com/v1`), `ttsModel` (`gpt-4o-mini-tts`), `ttsVoice` (`alloy`) | `apiKey` |
-| `azure_openai` | `endpoint`, `apiVersion`, `ttsDeployment`, `ttsVoice` (`alloy`) | `apiKey` |
+| `openai` | `baseUrl` (default `https://api.openai.com/v1`), `ttsModel` (`gpt-4o-mini-tts`), `ttsVoice` (`alloy`), `chatModel` (`gpt-4.1-mini`, the evaluator's model) | `apiKey` |
+| `azure_openai` | `endpoint`, `apiVersion`, `ttsDeployment`, `ttsVoice` (`alloy`), `chatDeployment` (optional; without it the connection cannot be the evaluator) | `apiKey` |
 | `azure_speech` | exactly one of `region` (e.g. `eastus`) or `endpoint`; `voice` (e.g. `es-MX-DaliaNeural`) | `key` |
 | `langfuse` | `host`, `publicKey` | `secretKey` |
 
@@ -332,7 +332,7 @@ two-level: the agent's `context` applies to all its scenarios, the scenario's ad
 - `GET /api/scenarios?agentId=&tag=` (both filters optional; most recently updated first),
   `GET /api/scenarios/{id}`, `POST /api/scenarios` (201), `PATCH /api/scenarios/{id}` (partial;
   `persona`, `facts`, `criteria` and `endConditions` are replaced as whole objects, so omitted
-  inner fields take their defaults; `null` clears only `ttsConnectionId` and `voiceOverride`),
+  inner fields take their defaults; `null` clears only `ttsConnectionId`, `evaluatorConnectionId` and `voiceOverride`),
   `DELETE /api/scenarios/{id}` (204), `POST /api/scenarios/{id}/duplicate` (201; same agent,
   named `<name> (copy)`, then `(copy 2)`, `(copy 3)`...).
 - Names are unique per agent (409 `Scenario name already in use for this agent`); the same name
@@ -341,7 +341,10 @@ two-level: the agent's `context` applies to all its scenarios, the scenario's ad
   `context` (up to 20000), `persona` `{name (1-120), locale (BCP 47-like, e.g. es-MX),
   temperament (polite|hurried|skeptical|confused|angry|friendly|calm|detailed), notes (up to
   2000)}`, `ttsConnectionId` (the evaluator voice: an `openai` or `azure_openai` connection, 422
-  otherwise; deleting it clears the reference), `voiceOverride` (optional voice id),
+  otherwise; deleting it clears the reference), `evaluatorConnectionId` (the chat model that
+  plays the caller: an `openai` connection or an `azure_openai` one with a `chatDeployment`, 422
+  otherwise; deleting it clears the reference; when null the voice connection is used if it can
+  chat, otherwise the scenario cannot run), `voiceOverride` (optional voice id),
   `goal` (1-5000), `instructions` (up to 10000), `facts` (up to 50 `{key (1-80), value
   (1-500)}`, keys unique; revealed only when asked), `criteria` (1-30 `{id, text (1-500),
   kind (must|should), source (transcript|trace|timing), weight (1-100)}`, weights must total
