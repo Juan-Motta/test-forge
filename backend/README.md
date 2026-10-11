@@ -366,6 +366,25 @@ timeout; a malformed answer or a provider error is retried once, then the caller
 the reason. `modules.connections.runtime.build_caller_policy` builds it from the stored
 connection, like the synthesizer.
 
+### Session runner
+
+`voice_eval.runner.session.SessionRunner` holds one evaluator conversation: it opens the agent
+(protocol auto-detected), lets the agent greet first on Live and asks the policy for the opening
+caller turn on legacy, then for each agent turn waits for its end and its playback, feeds the
+agent's own transcript to the policy, synthesizes `say` with the TTS provider and streams it on
+the open-microphone caller stream. It ends on the caller's hang-up (after the agent's last reply
+has finished playing, and after a farewell has been spoken), when the agent closes the session,
+at `maxDurationS`, or after `maxSilenceS` without agent audio or caller speech (the
+`max_duration` rule ignores the caller's hang-up). Every run closes the session and writes
+`agent.wav`, `caller.wav`, `transcript.json` (both roles in order with turn timings),
+`events.jsonl` and `summary.json` (`status` completed/failed/cancelled and `reason`, e.g.
+`caller_hung_up`, `max_duration`, `max_silence`, `agent_ended`, `connect_failed`, `tts_failed`,
+`evaluator_failed`) to an injected directory. Events (`run_started`, `protocol_detected`,
+`agent_audio`, `agent_transcript`, `turn_ended`, `caller_decision`, `caller_audio`, `warning`,
+`run_finished`) go in order to an injected async sink; audio events carry PCM chunks that never
+reach `events.jsonl`. The probe shares its detector, close and artifact helpers
+(`voice_eval.runner.common`, `voice_eval.runner.artifacts`).
+
 ### Container image
 
 `backend/Dockerfile` builds a multi-stage image (uv, Python 3.13 slim): dependencies are synced

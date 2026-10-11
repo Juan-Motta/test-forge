@@ -6,7 +6,6 @@ Live or the legacy realtime adapter.
 
 import argparse
 import asyncio
-import json
 import logging
 import sys
 import time
@@ -19,7 +18,7 @@ from typing import Any
 
 from websockets.exceptions import ConnectionClosed
 
-from voice_eval.audio import BYTES_PER_MS, duration_ms, read_wav_pcm16_24k, write_wav
+from voice_eval.audio import duration_ms, read_wav_pcm16_24k
 from voice_eval.caller_stream import CallerAudioStream
 from voice_eval.ports.target import (
     AgentBusy,
@@ -34,13 +33,14 @@ from voice_eval.ports.target import (
     TranscriptUpdate,
 )
 from voice_eval.ports.tts import SpeechSynthesizer
+from voice_eval.runner.artifacts import write_artifacts
+from voice_eval.runner.common import close_session, make_detector, turn_record
 from voice_eval.targets.detect import PROTOCOLS, ProtocolDetectionError, TargetSpec, open_target
-from voice_eval.turns import AgentTurn, AgentTurnDetector, ResponseTurnTracker
+from voice_eval.turns import AgentTurn, AgentTurnDetector
 
 log = logging.getLogger(__name__)
 
 POLL_S = 0.05
-FALLBACK_GAP_MIN_MS = 5000  # tool runs tick every second; never end on a shorter gap there
 
 
 class ProbeStop(Exception):
@@ -109,7 +109,12 @@ class ProbeRun:
                     f"--text caller turns are not supported by the {self.session.protocol} "
                     "protocol; use --say or --caller-wav"
                 )
-            self.detector = self._make_detector(self.session)
+            self.detector = make_detector(
+                self.session,
+                silence_gap_ms=self.options.silence_gap_ms,
+                settle_ms=self.options.settle_ms,
+                open_response_stall_ms=self.options.open_response_stall_ms,
+            )
             self.stream = CallerAudioStream(self.session.send_caller_audio, self._now_ms)
             self._reader = asyncio.create_task(self._read())
             await self._wait_ready()
@@ -128,13 +133,6 @@ class ProbeRun:
             summary = self.summary()
             self.write_artifacts(summary)
         return summary
-
-    def _make_detector(self, session: TargetSession) -> AgentTurnDetector:
-        if session.explicit_turn_end:
-            fallback = max(self.options.silence_gap_ms, FALLBACK_GAP_MIN_MS)
-            stall = max(self.options.open_response_stall_ms, fallback)
-            return ResponseTurnTracker(self.options.settle_ms, fallback, stall)
-        return AgentTurnDetector(self.options.silence_gap_ms)
 
     async def _wait_ready(self) -> None:
         try:
@@ -269,19 +267,12 @@ class ProbeRun:
             return
         if self._reader is None:  # stopped before reading: still record the closing events
             self._reader = asyncio.create_task(self._read())
-        if not self._reader.done():
-            try:
-                timeout = self.options.close_timeout_s
-                self._log_out(await asyncio.wait_for(self.session.close(), timeout))
-                await asyncio.wait_for(asyncio.shield(self._reader), timeout)
-            except (TimeoutError, ConnectionClosed):
-                self.warnings.append("graceful session close not confirmed in time")
-        with suppress(Exception):
-            await self.session.disconnect()
-        if self._reader is not None and not self._reader.done():
-            self._reader.cancel()
-            with suppress(asyncio.CancelledError):
-                await self._reader
+        self.warnings += await close_session(
+            self.session,
+            self._reader,
+            timeout_s=self.options.close_timeout_s,
+            on_close_sent=self._log_out,
+        )
         self.detector.turn_ended(self._now_ms())
 
     def summary(self) -> dict[str, Any]:
@@ -306,7 +297,10 @@ class ProbeRun:
             "playback_grace_ms": self.options.playback_grace_ms,
             "caller_turns": self.caller_turns,
             "agent_turns": len(self.detector.completed_turns),
-            "turns": [_turn_record(i, t, self.expects_opening_turn) for i, t in enumerate(turns)],
+            "turns": [
+                turn_record(i, t, _turn_kind(i, t, self.expects_opening_turn))
+                for i, t in enumerate(turns)
+            ],
             "latencies_ms": [round(v, 1) for v in self.detector.latencies_ms()],
             "complete": session is not None
             and not self.stopped
@@ -322,12 +316,6 @@ class ProbeRun:
         }
 
     def write_artifacts(self, summary: dict[str, Any]) -> None:
-        self.out_dir.mkdir(parents=True, exist_ok=True)
-        with (self.out_dir / "events.jsonl").open("w") as f:
-            for record in self.events:
-                f.write(json.dumps(record, ensure_ascii=False) + "\n")
-        write_wav(self.out_dir / "agent.wav", bytes(self.agent_pcm))
-        write_wav(self.out_dir / "caller.wav", bytes(self.stream.sent if self.stream else b""))
         transcript = [
             {
                 "role": m.role,
@@ -338,37 +326,20 @@ class ProbeRun:
             }
             for m in (self.session.transcript_messages() if self.session else [])
         ]
-        _write_json(self.out_dir / "transcript.json", transcript)
-        _write_json(self.out_dir / "summary.json", summary)
+        write_artifacts(
+            self.out_dir,
+            events=self.events,
+            agent_pcm=bytes(self.agent_pcm),
+            caller_pcm=bytes(self.stream.sent if self.stream else b""),
+            transcript=transcript,
+            summary=summary,
+        )
 
 
-def _turn_record(index: int, turn: AgentTurn, opening_expected: bool) -> dict[str, Any]:
+def _turn_kind(index: int, turn: AgentTurn, opening_expected: bool) -> str:
     if turn.caller_end_ms is not None:
-        kind = "reply"
-    else:
-        kind = "greeting" if index == 0 and opening_expected else "unprompted"
-    return {
-        "index": index,
-        "kind": kind,
-        "caller_end_ms": _round(turn.caller_end_ms),
-        "first_audio_ms": _round(turn.first_audio_ms),
-        "end_ms": _round(turn.end_ms),
-        "playback_end_ms": _round(turn.playback_end_ms),
-        "caller_resumed_ms": _round(turn.caller_resumed_ms),
-        "latency_ms": _round(turn.latency_ms),
-        "audio_ms": round(turn.audio_bytes / BYTES_PER_MS, 1),
-        "response_count": turn.response_count,
-        "tool_activity": turn.tool_activity,
-        "end_reason": turn.end_reason,
-    }
-
-
-def _round(value: float | None) -> float | None:
-    return None if value is None else round(value, 1)
-
-
-def _write_json(path: Path, data: Any) -> None:
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n")
+        return "reply"
+    return "greeting" if index == 0 and opening_expected else "unprompted"
 
 
 def build_parser() -> argparse.ArgumentParser:
