@@ -1,6 +1,11 @@
+from typing import TYPE_CHECKING
+
 from voice_eval.config import ConfigError, TtsSettings, require
 from voice_eval.ports.policy import CallerPolicy
 from voice_eval.ports.tts import SpeechSynthesizer
+
+if TYPE_CHECKING:
+    from voice_eval.providers.langfuse_traces import LangfuseTraceReader
 
 SUPPORTED_PROVIDERS = ("openai", "azure", "azure_speech")
 
@@ -33,6 +38,14 @@ def build_azure_openai_policy(
     from voice_eval.providers.openai_chat import OpenAIChatPolicy
 
     return OpenAIChatPolicy.for_azure(api_key, endpoint, api_version, deployment)
+
+
+def build_langfuse_trace_reader(
+    *, host: str, public_key: str, secret_key: str, allow_private: bool = False
+) -> "LangfuseTraceReader":
+    from voice_eval.providers.langfuse_traces import LangfuseTraceReader
+
+    return LangfuseTraceReader(host, public_key, secret_key, allow_private=allow_private)
 
 
 def build_synthesizer(settings: TtsSettings) -> SpeechSynthesizer:

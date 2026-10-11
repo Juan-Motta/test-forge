@@ -5,6 +5,7 @@ without restarting the process.
 """
 
 import uuid
+from typing import TYPE_CHECKING
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,9 +27,13 @@ from voice_eval.ports.tts import SpeechSynthesizer
 from voice_eval.providers.factory import (
     build_azure_openai_policy,
     build_azure_openai_synthesizer,
+    build_langfuse_trace_reader,
     build_openai_policy,
     build_openai_synthesizer,
 )
+
+if TYPE_CHECKING:
+    from voice_eval.providers.langfuse_traces import LangfuseTraceReader
 
 
 async def resolve_connection_id(db: AsyncSession, ref: str) -> uuid.UUID:
@@ -138,4 +143,34 @@ async def build_caller_policy(
         endpoint=config.endpoint,
         api_version=config.api_version,
         deployment=config.chat_deployment,
+    )
+
+
+async def build_trace_reader(
+    db: AsyncSession,
+    connection_id: uuid.UUID,
+    *,
+    secret_box: SecretBox,
+    allow_local_http: bool = False,
+    allow_private: bool = False,
+) -> "LangfuseTraceReader":
+    """A Langfuse trace reader for the stored connection `connection_id`.
+
+    `allow_private` lifts the egress guard (development only, for a local Langfuse).
+    Raises `ConnectionNotFound`, `UnsupportedConnection` for kinds other than Langfuse, and
+    `SecretDecryptionError`.
+    """
+    record = await db.get(ConnectionRecord, connection_id, populate_existing=True)
+    if record is None:
+        raise ConnectionNotFound(str(connection_id))
+    kind = ConnectionKind(record.kind)
+    if kind is not ConnectionKind.LANGFUSE:
+        raise UnsupportedConnection(f"{kind.value} connections cannot read traces")
+    config = parse_config(kind, record.config, allow_local_http=allow_local_http)
+    secrets = reveal(open_secrets(secret_box, record))
+    return build_langfuse_trace_reader(
+        host=config.host,
+        public_key=config.public_key,
+        secret_key=secrets["secret_key"],
+        allow_private=allow_private,
     )
