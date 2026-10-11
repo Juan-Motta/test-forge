@@ -39,7 +39,7 @@ agent (prompt, tools, latency, flow) that can be handed to a coding agent.
 - Deprecated Langfuse v1 read APIs (sunset 2026-11-16 on Cloud) are not used.
 
 ## Tasks
-- [ ] T1 Langfuse trace reader + digest + runtime builder (backend) — route: delegated (writer; new provider module + tests)
+- [x] T1 Langfuse trace reader + digest + runtime builder (backend) — route: delegated (writer; new provider module + tests)
 - [ ] T2 Judge core: generic structured chat call, prompt, schema, scoring, brief (backend) — route: delegated
 - [ ] T3 Persistence + orchestration + API + snapshot field (backend, migration 0008) — route: delegated
 - [ ] T4 Report UI: Score & suggestions card + runs list score (frontend) — route: delegated
@@ -61,4 +61,8 @@ agent (prompt, tools, latency, flow) that can be handed to a coding agent.
 ~2.5k authored lines across 4 code commits; each commit reviewed right after (lens budget ~1.7k).
 
 ## Progress
-(none yet)
+- T1 done: 740341a (route: delegated writer; 861 lines). Checks: pytest 575 passed, ruff clean;
+  parent spot check 19 passed. Native review: medium, review-reliability, APPROVED + acknowledged.
+  Advisory follow-ups (non-blocking): digest headers/trace names not counted against the budget
+  (WARNING, langfuse_traces.py:439); non-finite numbers; Retry-After NaN; page cap silent to caller;
+  truncation note budget. → fix in a small follow-up commit.
