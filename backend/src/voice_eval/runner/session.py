@@ -12,7 +12,6 @@ import asyncio
 import logging
 import time
 from collections import Counter
-from contextlib import suppress
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -68,6 +67,7 @@ class SessionOptions:
     trailing_silence_ms: int = 600
     playback_grace_ms: int = 400
     tts_timeout_s: float = 30
+    sink_drain_timeout_s: float = 10  # then the artifacts are written without the sink
 
 
 class Stop(Exception):
@@ -123,6 +123,7 @@ class SessionRunner:
         self.caller_turns = 0
         self.status: str | None = None
         self.reason: str | None = None
+        self.error: str | None = None  # why a failed run failed (no secret, no payload)
         self.closed: Closed | None = None
         self._ready = asyncio.Event()
         self._queue: asyncio.Queue[RunEvent | None] = asyncio.Queue()
@@ -190,7 +191,7 @@ class SessionRunner:
         finally:
             self._publish("run_finished", {"status": self.status, "reason": self.reason})
             self._queue.put_nowait(None)
-            await asyncio.shield(dispatcher)
+            await self._drain(dispatcher)
             summary = self.summary()
             write_artifacts(
                 self.out_dir,
@@ -202,12 +203,24 @@ class SessionRunner:
             )
         return summary
 
+    async def _drain(self, dispatcher: "asyncio.Task[None]") -> None:
+        """Let the sink take the remaining events, but never wait for it forever."""
+        try:
+            await asyncio.wait_for(asyncio.shield(dispatcher), self.options.sink_drain_timeout_s)
+        except TimeoutError:
+            dispatcher.cancel()
+            message = "the event sink did not take every event in time"
+            log.warning(message)
+            self.warnings.append(message)
+
     def _finish(self, status: str, reason: str, message: str | None = None) -> None:
         if self.status is not None:
             return
         self.status, self.reason = status, reason
         if message:
             self._warn(message)
+            if status == "failed":
+                self.error = message
 
     async def _converse(self) -> None:
         try:
@@ -266,10 +279,15 @@ class SessionRunner:
             await self._agent_turn()
 
     async def _shutdown(self) -> None:
+        """Stop the caller stream and close the session, whatever state the sender ended in."""
         if self._sender is not None:
             self._sender.cancel()
-            with suppress(asyncio.CancelledError, ConnectionClosed):
+            try:
                 await self._sender
+            except (asyncio.CancelledError, ConnectionClosed):
+                pass
+            except Exception as exc:  # already reported by `_wait_until`; still close below
+                log.warning("caller audio sender failed (%s)", type(exc).__name__)
         if self.session is None:
             return
         if self._reader is None:
@@ -390,6 +408,12 @@ class SessionRunner:
             self.detector.turn_ended(self._now_ms())
             if done():
                 return
+            if (exc := self._sender_failure()) is not None:
+                raise Stop(
+                    "failed",
+                    "caller_audio_failed",
+                    f"sending caller audio failed ({type(exc).__name__})",
+                )
             if self._reader is not None and self._reader.done():
                 if self.closed is not None:
                     raise Stop("completed", "agent_ended")
@@ -397,6 +421,14 @@ class SessionRunner:
             if check_silence and self._silent_for_ms() >= self.options.max_silence_s * 1000:
                 raise Stop("completed", "max_silence")
             await asyncio.sleep(POLL_S)
+
+    def _sender_failure(self) -> BaseException | None:
+        """The error that stopped the caller stream (a closed socket is the reader's to report)."""
+        sender = self._sender
+        if sender is None or not sender.done() or sender.cancelled():
+            return None
+        exc = sender.exception()
+        return None if isinstance(exc, ConnectionClosed) else exc
 
     def _silent_for_ms(self) -> float:
         now = self._now_ms()
@@ -473,6 +505,7 @@ class SessionRunner:
         return {
             "status": self.status,
             "reason": self.reason,
+            "error": self.error,
             "protocol": session.protocol if session else None,
             "model": session.model if session else None,
             "thread_id": self.spec.thread_id,

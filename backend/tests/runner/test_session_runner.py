@@ -257,6 +257,7 @@ async def test_tts_failure_fails_the_run_and_keeps_artifacts(fake_live_server, t
     summary, sink = await run(fake_live_server.url, tmp_path, policy, tts=FakeTts(fail=True))
 
     assert (summary["status"], summary["reason"]) == ("failed", "tts_failed")
+    assert summary["error"] == "speech synthesis failed (no audio)"
     assert any("no audio" in e.data["message"] for e in sink.of("warning"))
     assert (tmp_path / "run" / "summary.json").exists()
     assert fake_live_server.received_types[-1] == "voice.close"
@@ -356,3 +357,99 @@ def test_agent_text_tracker_reports_only_new_assistant_text():
     assert tracker.take([a0, u1, a1]) == "I am the agent how can I help?"
     a1.text = "rewritten"  # a correction replaces the text
     assert tracker.take([a0, a1]) == "rewritten"
+
+
+async def test_a_failing_caller_audio_sender_still_closes_the_session(fake_live_server, tmp_path):
+    class BrokenSender(SessionRunner):
+        async def _send_caller_audio(self, pcm: bytes) -> None:
+            if any(pcm):
+                raise RuntimeError("audio device gone")
+            await super()._send_caller_audio(pcm)
+
+    import asyncio
+
+    runner = BrokenSender(
+        TargetSpec(fake_live_server.url, "chan-test", "user-test"),
+        brief=BRIEF,
+        policy=ScriptedPolicy(by_turn(say("I need a room"))),
+        synthesizer=FakeTts(),
+        sink=ListSink(),
+        out_dir=tmp_path / "run",
+        options=options(max_silence_s=5),
+    )
+    summary = await asyncio.wait_for(runner.run(), 20)
+
+    assert (summary["status"], summary["reason"]) == ("failed", "caller_audio_failed")
+    assert fake_live_server.received_types[-1] == "voice.close"
+    assert (tmp_path / "run" / "summary.json").exists()
+
+
+async def test_a_hanging_sink_does_not_block_the_artifacts(fake_live_server, tmp_path):
+    import asyncio
+
+    class HangingSink:
+        async def emit(self, event: RunEvent) -> None:
+            await asyncio.Event().wait()  # never returns
+
+    runner = SessionRunner(
+        TargetSpec(fake_live_server.url, "chan-test", "user-test"),
+        brief=BRIEF,
+        policy=ScriptedPolicy(by_turn(HANG_UP)),
+        synthesizer=FakeTts(),
+        sink=HangingSink(),
+        out_dir=tmp_path / "run",
+        options=options(sink_drain_timeout_s=0.5),
+    )
+    summary = await asyncio.wait_for(runner.run(), 20)
+
+    assert summary["status"] == "completed"
+    assert any("event sink" in w for w in summary["warnings"])
+    assert json.loads((tmp_path / "run" / "summary.json").read_text()) == summary
+
+
+LIVE_PROTOCOL = json.dumps({"type": "voice.protocol", "protocol": "gpt_live"})
+LIVE_READY = json.dumps({"type": "voice.ready", "sessionId": "sess-scripted"})
+
+
+@pytest.mark.parametrize(
+    ("frames", "close_code", "expected"),
+    [
+        ([LIVE_PROTOCOL], None, ("failed", "ready_timeout")),
+        ([LIVE_PROTOCOL, LIVE_READY], 1011, ("failed", "connection_closed")),
+        (
+            [
+                LIVE_PROTOCOL,
+                LIVE_READY,
+                json.dumps(
+                    {"type": "voice.closed", "usageSeconds": 0.5, "finalUsageConfirmed": True}
+                ),
+            ],
+            1000,
+            ("completed", "agent_ended"),
+        ),
+    ],
+    ids=["ready_timeout", "connection_closed", "agent_ended"],
+)
+async def test_end_reasons_from_the_target(scripted_server, tmp_path, frames, close_code, expected):
+    server = await scripted_server(frames, close_code)
+    policy = ScriptedPolicy(by_turn(HANG_UP))
+    summary, sink = await run(server.url, tmp_path, policy, opts=options(ready_timeout_s=1))
+
+    assert (summary["status"], summary["reason"]) == expected
+    assert sink.types()[-1] == "run_finished"
+    assert (tmp_path / "run" / "summary.json").exists()
+
+
+async def test_a_forced_protocol_mismatch_is_a_protocol_error(fake_live_server, tmp_path):
+    sink = ListSink()
+    runner = SessionRunner(
+        TargetSpec(fake_live_server.url, "chan-test", "user-test", protocol="realtime"),
+        brief=BRIEF,
+        policy=ScriptedPolicy(by_turn(HANG_UP)),
+        synthesizer=FakeTts(),
+        sink=sink,
+        out_dir=tmp_path / "run",
+        options=options(),
+    )
+    summary = await runner.run()
+    assert (summary["status"], summary["reason"]) == ("failed", "protocol_error")

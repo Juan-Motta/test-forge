@@ -379,10 +379,12 @@ at `maxDurationS`, or after `maxSilenceS` without agent audio or caller speech (
 `agent.wav`, `caller.wav`, `transcript.json` (both roles in order with turn timings),
 `events.jsonl` and `summary.json` (`status` completed/failed/cancelled and `reason`, e.g.
 `caller_hung_up`, `max_duration`, `max_silence`, `agent_ended`, `connect_failed`, `tts_failed`,
-`evaluator_failed`) to an injected directory. Events (`run_started`, `protocol_detected`,
+`evaluator_failed`, `caller_audio_failed`, plus `error` for failures) to an injected directory,
+even when the caller audio sender failed. Events (`run_started`, `protocol_detected`,
 `agent_audio`, `agent_transcript`, `turn_ended`, `caller_decision`, `caller_audio`, `warning`,
 `run_finished`) go in order to an injected async sink; audio events carry PCM chunks that never
-reach `events.jsonl`. The probe shares its detector, close and artifact helpers
+reach `events.jsonl`. A sink that has not taken every event 10 s after the run ended
+(`sink_drain_timeout_s`) is abandoned with a warning, so it never holds the artifacts back. The probe shares its detector, close and artifact helpers
 (`voice_eval.runner.common`, `voice_eval.runner.artifacts`).
 
 ### Container image
