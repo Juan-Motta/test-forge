@@ -69,6 +69,9 @@ export class FakeAudioContext implements AudioContextLike {
   readonly master = { gain: { value: 1 }, connect: () => undefined };
   closed = false;
 
+  /** `resumeError`: the browser refuses to start audio (e.g. no user gesture). */
+  constructor(private readonly resumeError?: Error) {}
+
   createGain() {
     return this.master as unknown as GainNode;
   }
@@ -98,6 +101,7 @@ export class FakeAudioContext implements AudioContextLike {
   }
 
   async resume() {
+    if (this.resumeError) throw this.resumeError;
     this.state = "running";
   }
 
@@ -107,11 +111,14 @@ export class FakeAudioContext implements AudioContextLike {
   }
 }
 
-/** Routes every live player's AudioContext to a new `FakeAudioContext`; `restore()` afterwards. */
-export function installFakeAudio() {
+/**
+ * Routes every live player's AudioContext to a new `FakeAudioContext`; `restore()` afterwards.
+ * `resumeError` makes every context refuse to start.
+ */
+export function installFakeAudio(options: { resumeError?: Error } = {}) {
   const contexts: FakeAudioContext[] = [];
   setAudioContextFactory(() => {
-    const context = new FakeAudioContext();
+    const context = new FakeAudioContext(options.resumeError);
     contexts.push(context);
     return context;
   });

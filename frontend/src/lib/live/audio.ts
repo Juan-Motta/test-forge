@@ -79,7 +79,16 @@ export function createLivePlayer(): LivePlayer {
       master.gain.value = volume;
       master.connect(context.destination);
       next.clear();
-      await context.resume();
+      try {
+        await context.resume();
+      } catch (error) {
+        // Not started: release the context so a later click can try again from scratch.
+        const failed = context;
+        context = null;
+        master = null;
+        void failed.close().catch(() => undefined);
+        throw error;
+      }
     },
     push(channel, pcm) {
       if (!context || !master || !plays(mix, channel) || pcm.byteLength < 2) return;

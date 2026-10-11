@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { batchName, finishedCount } from "@/features/runs/BatchesPanel";
 import { isActive } from "@/features/runs/format";
-import { useBatch, useCancelBatch, useRuns } from "@/features/runs/queries";
+import { useBatch, useCancelBatch, useRun, useRuns } from "@/features/runs/queries";
 import type { Run, RunStatus } from "@/features/runs/types";
 import { PageHeader } from "@/features/shell/PageHeader";
 import { errorMessage } from "@/lib/api";
@@ -47,15 +47,20 @@ function AllActive() {
   const queries = [running, connecting, queued];
   const sessions = queries.flatMap((query) => query.data?.items ?? []).sort(byProgress);
   const failed = queries.find((query) => query.isError);
+  const loaded = queries.some((query) => query.data !== undefined);
 
   let body;
   if (queries.some((query) => query.isPending)) body = <Spinner label="Loading live sessions" />;
-  else if (failed) body = <Alert title="Could not load live sessions">{errorMessage(failed.error)}</Alert>;
+  else if (failed && !loaded) body = <Alert title="Could not load live sessions">{errorMessage(failed.error)}</Alert>;
   else body = <Sessions sessions={sessions} />;
 
   return (
     <>
       <PageHeader title="Live sessions" description="Calls in progress between the evaluator and your agents." />
+      {/* One failing poll must not hide what the others (or earlier polls) loaded. */}
+      {failed && loaded ? (
+        <Alert title="Some live sessions could not be loaded">{errorMessage(failed.error)}</Alert>
+      ) : null}
       {body}
     </>
   );
@@ -113,9 +118,14 @@ function countByStatus(runs: Run[]): Partial<Record<RunStatus, number>> {
 
 function Sessions({ sessions }: { sessions: Run[] }) {
   const now = useNow(1000);
-  const [picked, setPicked] = useState<string | undefined>(undefined);
+  // The focused run, as last listed. It stays focused (and listed) after it ends and drops out of
+  // the active list, until the user picks another: the focus never jumps on its own.
+  const [focused, setFocused] = useState<Run | undefined>(undefined);
+  const fallback = sessions.find((run) => isActive(run.status) && run.status !== "queued") ?? sessions[0];
+  if (focused === undefined && fallback !== undefined) setFocused(fallback);
+  const focus = focused ?? fallback;
 
-  if (sessions.length === 0) {
+  if (focus === undefined) {
     return (
       <EmptyState
         icon={<LiveIcon size={22} />}
@@ -130,19 +140,29 @@ function Sessions({ sessions }: { sessions: Run[] }) {
     );
   }
 
-  const fallback = sessions.find((run) => isActive(run.status) && run.status !== "queued") ?? sessions[0];
-  const focusId = picked && sessions.some((run) => run.id === picked) ? picked : fallback.id;
+  const retained = sessions.some((run) => run.id === focus.id) ? undefined : focus;
 
   return (
     <div className="grid gap-5 lg:grid-cols-[18rem_minmax(0,1fr)]">
       <ul aria-label="Sessions" className="flex flex-col gap-2.5">
         {sessions.map((run) => (
           <li key={run.id}>
-            <SessionCard run={run} now={now} selected={run.id === focusId} onSelect={() => setPicked(run.id)} />
+            <SessionCard run={run} now={now} selected={run.id === focus.id} onSelect={() => setFocused(run)} />
           </li>
         ))}
+        {retained ? (
+          <li key={retained.id}>
+            <RetainedCard run={retained} now={now} />
+          </li>
+        ) : null}
       </ul>
-      <LiveRunPanel key={focusId} runId={focusId} />
+      <LiveRunPanel key={focus.id} runId={focus.id} />
     </div>
   );
+}
+
+/** The focused run after it left the active list: its latest state comes from the run itself. */
+function RetainedCard({ run, now }: { run: Run; now: number }) {
+  const latest = useRun(run.id).data;
+  return <SessionCard run={latest ?? run} now={now} selected onSelect={() => undefined} />;
 }

@@ -202,4 +202,27 @@ describe("Live run", () => {
     await user.click(screen.getByRole("button", { name: "End call" }));
     await waitFor(() => expect(api.requests).toEqual([{ method: "POST", path: "/runs/r-1/cancel", body: undefined }]));
   });
+
+  it("goes straight to the ended state for a run that finished before it connected", async () => {
+    const { socket } = await renderPanel();
+    act(() =>
+      socket.send({ ...snapshot, run: { ...snapshot.run, status: "completed", endReason: "caller_hung_up" } }),
+    );
+    expect(screen.getByText("Call ended")).toBeInTheDocument();
+    expect(screen.queryByText("Waiting for the agent")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open report" })).toBeInTheDocument();
+  });
+
+  it("explains when the browser refuses to start the audio, and stays not listening", async () => {
+    audio.restore();
+    audio = installFakeAudio({ resumeError: new Error("The user did not allow audio") });
+    const { socket, user } = await renderPanel();
+    act(() => socket.send(snapshot));
+
+    await user.click(screen.getByRole("button", { name: "Listen" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Could not start the audio");
+    expect(screen.getByRole("button", { name: "Listen" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Stop listening" })).not.toBeInTheDocument();
+  });
 });

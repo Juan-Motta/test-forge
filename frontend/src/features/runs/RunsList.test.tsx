@@ -136,6 +136,20 @@ describe("Runs list", () => {
     expect(screen.getByRole("button", { name: "Next page" })).toBeDisabled();
   });
 
+  it("moves an out-of-range page to the last page once the total is known", async () => {
+    scenarios();
+    nav.search = "page=9";
+    const many = Array.from({ length: 25 }, (_, i) =>
+      runFixture({ id: `r-${i + 1}`, createdAt: `2026-10-05T10:${String(i).padStart(2, "0")}:00Z` }),
+    );
+    mockRunsApi(many);
+    renderWithClient(<RunsContainer />);
+
+    expect(await screen.findByText("21–25 of 25")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getAllByRole("row")).toHaveLength(6));
+    expect(nav.replace).toHaveBeenCalledWith("/runs?page=2", { scroll: false });
+  });
+
   it("cancels an active run", async () => {
     scenarios();
     const api = mockRunsApi([done, running]);

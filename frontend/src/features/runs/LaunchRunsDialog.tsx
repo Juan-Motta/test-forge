@@ -37,6 +37,12 @@ function LaunchForm({ scenarios, onClose, onLaunched }: Omit<LaunchRunsDialogPro
   const [errors, setErrors] = useState<LaunchErrors>({});
   // A ref, not mutation state: two clicks can land before React re-renders the disabled button.
   const sending = useRef(false);
+  // While a launch is in flight the dialog stays open: closing would unmount this form and drop
+  // both the guard above and the redirect to the new batch (each run is a real, paid call).
+  const busy = launch.isPending;
+  const close = () => {
+    if (!sending.current) onClose();
+  };
 
   const title = scenarios.length === 1 ? `Launch ${scenarios[0].name}` : `Launch ${scenarios.length} scenarios`;
   const planned = plannedRuns(scenarios.length, draft);
@@ -71,7 +77,7 @@ function LaunchForm({ scenarios, onClose, onLaunched }: Omit<LaunchRunsDialogPro
       size="lg"
       title={title}
       description="Each run is a real call to the agent: the evaluator plays the caller and every run is recorded."
-      onClose={onClose}
+      onClose={close}
     >
       <form noValidate onSubmit={onSubmit} className="flex flex-col gap-4">
         {scenarios.length > 1 ? (
@@ -132,11 +138,11 @@ function LaunchForm({ scenarios, onClose, onLaunched }: Omit<LaunchRunsDialogPro
           )
         ) : null}
         <div className="flex flex-wrap justify-end gap-3">
-          <Button variant="secondary" onClick={onClose}>
+          <Button variant="secondary" onClick={close} disabled={busy}>
             Cancel
           </Button>
-          <Button type="submit" loading={launch.isPending}>
-            {launch.isPending ? "Launching…" : "Launch"}
+          <Button type="submit" loading={busy}>
+            {busy ? "Launching…" : "Launch"}
           </Button>
         </div>
       </form>

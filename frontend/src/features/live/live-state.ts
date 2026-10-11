@@ -1,6 +1,7 @@
 import type { TranscriptEntry } from "@/features/runs/transcript";
 import { entriesFromRows } from "@/features/runs/transcript";
-import type { RunStatus, TranscriptRow } from "@/features/runs/types";
+import { isActive } from "@/features/runs/format";
+import { RUN_STATUSES, type RunStatus, type TranscriptRow } from "@/features/runs/types";
 
 /** What the conversation is doing right now, from the latest events. */
 export type TurnState = "waiting" | "agent" | "playback" | "evaluator" | "hanging_up" | "ended";
@@ -102,9 +103,14 @@ export function liveReducer(state: LiveRunState, action: LiveAction): LiveRunSta
       const run = (message.run ?? {}) as Record<string, unknown>;
       const turns = turnsFrom(message.turns);
       const entries = snapshotEntries(message.transcript, turns);
+      const status = (str(run.status) || null) as RunStatus | null;
+      // A run that already ended gets no `finished` event: its snapshot is the final state.
+      const finished = status !== null && RUN_STATUSES.includes(status) && !isActive(status);
       return {
         ...INITIAL_LIVE_STATE,
-        status: (str(run.status) || null) as RunStatus | null,
+        status,
+        finished,
+        turnState: finished ? "ended" : "waiting",
         endReason: (run.endReason as string | null) ?? null,
         entries,
         turns,

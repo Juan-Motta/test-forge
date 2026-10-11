@@ -21,6 +21,10 @@ export function runFixture(overrides: Partial<Run> = {}): Run {
     endedAt: "2026-10-05T16:04:13Z",
     judgementStatus: null,
     score: null,
+    persona: null,
+    callerTurns: null,
+    agentTurns: null,
+    latencyP50Ms: null,
     ...overrides,
   };
 }

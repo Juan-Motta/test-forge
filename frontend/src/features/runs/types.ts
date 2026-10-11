@@ -27,6 +27,12 @@ export type Run = {
   judgementStatus: string | null;
   /** The judgement's overall score (0-100), once completed. */
   score: number | null;
+  /** Persona name from the launch snapshot. */
+  persona: string | null;
+  /** Turn counts and median agent latency from the summary; null until the run finished. */
+  callerTurns: number | null;
+  agentTurns: number | null;
+  latencyP50Ms: number | null;
 };
 
 /** One agent turn's timings (`summary.turns`). */

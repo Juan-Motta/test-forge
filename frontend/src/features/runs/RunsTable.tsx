@@ -2,7 +2,7 @@ import Link from "next/link";
 import { absoluteTime, relativeTime } from "@/features/connections/format";
 import { isJudging } from "@/features/judgements/format";
 import { Button, buttonClasses } from "@/ui";
-import { STATUS_LABELS, clock, endReasonLabel, isActive, runDurationMs, shortId } from "./format";
+import { STATUS_LABELS, clock, endReasonLabel, isActive, latency, runDurationMs, shortId } from "./format";
 import { RunStatusChip } from "./RunStatusChip";
 import type { Run } from "./types";
 
@@ -18,13 +18,20 @@ type RunsTableProps = {
 export function RunsTable({ runs, onCancel, cancellingId, now }: RunsTableProps) {
   return (
     <div className="overflow-x-auto rounded-xl border border-line bg-panel">
-      <table aria-label="Runs" className="w-full min-w-[56rem] text-left text-sm">
+      <table aria-label="Runs" className="w-full min-w-[72rem] text-left text-sm">
         <thead className="border-b border-line text-xs text-muted">
           <tr>
             <th scope="col" className="px-4 py-3 font-medium">Run</th>
             <th scope="col" className="px-4 py-3 font-medium">Scenario</th>
             <th scope="col" className="px-4 py-3 font-medium">Agent</th>
+            <th scope="col" className="px-4 py-3 font-medium">Persona</th>
             <th scope="col" className="px-4 py-3 font-medium">Duration</th>
+            <th scope="col" className="px-4 py-3 font-medium" title="Caller turns / agent turns">
+              Turns
+            </th>
+            <th scope="col" className="px-4 py-3 font-medium" title="Median agent response latency">
+              p50 latency
+            </th>
             <th scope="col" className="px-4 py-3 font-medium">Status</th>
             <th scope="col" className="px-4 py-3 font-medium">Score</th>
             <th scope="col" className="px-4 py-3 font-medium">Started</th>
@@ -44,7 +51,10 @@ export function RunsTable({ runs, onCancel, cancellingId, now }: RunsTableProps)
                 <td className="px-4 py-3 font-mono text-xs text-muted">{label}</td>
                 <td className="px-4 py-3 font-medium">{run.scenarioName}</td>
                 <td className="px-4 py-3 text-muted">{run.agentName}</td>
+                <td className="px-4 py-3 text-muted">{run.persona ?? "—"}</td>
                 <td className="px-4 py-3 font-mono text-xs">{duration === null ? "—" : clock(duration)}</td>
+                <td className="px-4 py-3 font-mono text-xs">{turnsLabel(run)}</td>
+                <td className="px-4 py-3 font-mono text-xs">{latency(run.latencyP50Ms)}</td>
                 <td className="px-4 py-3">
                   <div className="flex flex-col items-start gap-1">
                     <RunStatusChip status={run.status} />
@@ -111,4 +121,9 @@ function RunScore({ run }: { run: Run }) {
   if (isJudging(run.judgementStatus)) return <span className="text-xs text-muted">Judging…</span>;
   if (run.judgementStatus === "failed") return <span className="text-xs text-danger-fg">Failed</span>;
   return <span className="font-mono text-xs text-muted">—</span>;
+}
+
+/** "caller / agent" turns, or a dash while either is unknown. */
+function turnsLabel(run: Run): string {
+  return run.callerTurns == null || run.agentTurns == null ? "—" : `${run.callerTurns} / ${run.agentTurns}`;
 }

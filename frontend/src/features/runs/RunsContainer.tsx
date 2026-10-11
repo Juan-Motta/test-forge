@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { PageHeader } from "@/features/shell/PageHeader";
 import { useScenarios } from "@/features/scenarios/queries";
 import { errorMessage } from "@/lib/api";
@@ -70,6 +70,11 @@ export function RunsContainer() {
   );
 
   const items = runs.data?.items ?? [];
+  // The URL follows a page clamped during render (below); a fresh object per clamp re-runs it.
+  const [urlFix, setUrlFix] = useState<{ href: string } | null>(null);
+  useEffect(() => {
+    if (urlFix) router.replace(urlFix.href, { scroll: false });
+  }, [urlFix, router]);
 
   function update(changes: Partial<Filters>) {
     const next = { ...filters, page: 1, ...changes };
@@ -83,6 +88,14 @@ export function RunsContainer() {
   }
 
   const total = runs.data?.total ?? 0;
+  // A `?page=` past the end (a stale link, or runs deleted since) moves to the last page.
+  const lastPage = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const outOfRange = runs.data !== undefined && !runs.isPlaceholderData && filters.page > lastPage;
+  if (outOfRange) {
+    const clamped = { ...filters, page: lastPage };
+    setFilters(clamped);
+    setUrlFix({ href: hrefOf(clamped) });
+  }
   const first = total === 0 ? 0 : (filters.page - 1) * PAGE_SIZE + 1;
   const last = Math.min(total, filters.page * PAGE_SIZE);
   const filtered = Boolean(filters.status || filters.scenarioId || filters.batchId);

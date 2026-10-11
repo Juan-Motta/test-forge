@@ -19,15 +19,20 @@ export function OverviewContainer() {
   const queued = useRuns({ ...ONE, status: "queued" }, { refetchInterval: POLL_MS });
   const connecting = useRuns({ ...ONE, status: "connecting" }, { refetchInterval: POLL_MS });
   const running = useRuns({ ...ONE, status: "running" }, { refetchInterval: POLL_MS });
-  const failed = useRuns({ ...ONE, status: "failed" });
+  const failed = useRuns({ ...ONE, status: "failed" }, { refetchInterval: POLL_MS });
 
   const counts = [queued, connecting, running, failed];
-  const active = [queued, connecting, running].reduce((sum, query) => sum + (query.data?.total ?? 0), 0);
+  const activeQueries = [queued, connecting, running];
+  // A count that failed (with nothing loaded before) is unknown: "—", never a misleading 0.
+  const active = activeQueries.every((query) => query.data !== undefined)
+    ? activeQueries.reduce((sum, query) => sum + (query.data?.total ?? 0), 0)
+    : null;
   const stats = [
     { label: "Active now", value: active, href: "/live" },
-    { label: "Runs recorded", value: latest.data?.total ?? 0, href: "/runs" },
-    { label: "Failed", value: failed.data?.total ?? 0, href: "/runs?status=failed" },
+    { label: "Runs recorded", value: latest.data?.total ?? null, href: "/runs" },
+    { label: "Failed", value: failed.data?.total ?? null, href: "/runs?status=failed" },
   ];
+  const countError = counts.find((query) => query.isError)?.error;
 
   let body;
   if (latest.isPending || counts.some((query) => query.isPending)) {
@@ -50,6 +55,7 @@ export function OverviewContainer() {
   } else {
     body = (
       <>
+        {countError ? <Alert title="Some counts could not be loaded">{errorMessage(countError)}</Alert> : null}
         <ul aria-label="Run counts" className="grid gap-4 sm:grid-cols-3">
           {stats.map((stat) => (
             <li key={stat.label} aria-label={stat.label}>
@@ -58,7 +64,7 @@ export function OverviewContainer() {
                 className={cn("flex flex-col gap-1 rounded-xl border border-line bg-panel p-5 hover:bg-raised", focusRing)}
               >
                 <span className="text-xs text-muted">{stat.label}</span>
-                <span className="font-mono text-3xl font-semibold">{stat.value}</span>
+                <span className="font-mono text-3xl font-semibold">{stat.value ?? "—"}</span>
               </Link>
             </li>
           ))}

@@ -29,6 +29,7 @@ export function LiveRunPanel({ runId }: { runId: string }) {
   const now = useNow(1000);
   const [player] = useState(createLivePlayer);
   const [listening, setListening] = useState(false);
+  const [audioError, setAudioError] = useState<string | null>(null);
   const [mix, setMix] = useState<Mix>("both");
   const [volume, setVolume] = useState(0.8);
   const { state, connection } = useRunLive(runId, (channel, pcm) => player.push(channel, pcm));
@@ -57,7 +58,13 @@ export function LiveRunPanel({ runId }: { runId: string }) {
   async function listen() {
     player.setMix(mix);
     player.setVolume(volume);
-    await player.start();
+    setAudioError(null);
+    try {
+      await player.start();
+    } catch (error) {
+      setAudioError(error instanceof Error && error.message ? error.message : "The browser refused to play audio.");
+      return;
+    }
     setListening(true);
   }
 
@@ -109,6 +116,7 @@ export function LiveRunPanel({ runId }: { runId: string }) {
       </div>
       <ConnectionNotice state={connection} />
       {cancel.isError ? <Alert>{`Could not end the call: ${errorMessage(cancel.error)}`}</Alert> : null}
+      {audioError ? <Alert title="Could not start the audio">{audioError}</Alert> : null}
       <ListenControls
         listening={listening}
         disabled={!active}

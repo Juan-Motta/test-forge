@@ -23,3 +23,28 @@ describe("Runs table score column", () => {
     expect(scores).toEqual(["72", "Judging…", "Failed", "—"]);
   });
 });
+
+describe("Runs table call columns", () => {
+  it("shows the persona, caller / agent turns and the p50 agent latency, or a dash", () => {
+    const runs = [
+      runFixture({ id: "r-measured", persona: "Lucía", callerTurns: 6, agentTurns: 7, latencyP50Ms: 640 }),
+      runFixture({ id: "r-slow-0001", persona: "Ana", callerTurns: 2, agentTurns: 3, latencyP50Ms: 1800 }),
+      runFixture({ id: "r-unknown-1" }),
+    ];
+    render(<RunsTable runs={runs} onCancel={() => {}} now={Date.parse("2026-10-05T17:00:00Z")} />);
+
+    const headers = screen.getAllByRole("columnheader").map((cell) => cell.textContent);
+    const rows = screen
+      .getAllByRole("row")
+      .slice(1)
+      .map((row) => within(row).getAllByRole("cell").map((cell) => cell.textContent));
+    const column = (name: string) => {
+      const index = headers.indexOf(name);
+      expect(index).toBeGreaterThan(0);
+      return rows.map((row) => row[index]);
+    };
+    expect(column("Persona")).toEqual(["Lucía", "Ana", "—"]);
+    expect(column("Turns")).toEqual(["6 / 7", "2 / 3", "—"]);
+    expect(column("p50 latency")).toEqual(["640 ms", "1.8 s", "—"]);
+  });
+});

@@ -82,4 +82,16 @@ describe("live player", () => {
     player.push(AGENT_CHANNEL, AGENT);
     expect(context.scheduled).toHaveLength(0);
   });
+
+  it("stays stopped, with the context released, when the browser refuses to start audio", async () => {
+    audio.restore();
+    audio = installFakeAudio({ resumeError: new Error("The user did not allow audio") });
+    const player = createLivePlayer();
+
+    await expect(player.start()).rejects.toThrow("The user did not allow audio");
+    expect(player.started).toBe(false);
+    expect(audio.contexts[0].closed).toBe(true);
+    player.push(AGENT_CHANNEL, AGENT);
+    expect(audio.contexts[0].scheduled).toHaveLength(0);
+  });
 });

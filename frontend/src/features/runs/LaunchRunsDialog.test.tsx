@@ -1,9 +1,13 @@
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { http, HttpResponse } from "msw/http";
+import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { renderWithClient } from "@/test/render";
+import { apiUrl, server } from "@/test/server";
 import { LaunchRunsDialog } from "./LaunchRunsDialog";
-import { mockRunsApi } from "./testing";
+import { batchFixture, mockRunsApi } from "./testing";
+import type { BatchDetail } from "./types";
 
 const booking = { id: "s-booking", name: "Booking with date change" };
 const cancel = { id: "s-cancel", name: "Cancel within 24h" };
@@ -14,6 +18,27 @@ function setup(scenarios = [booking], options: Parameters<typeof mockRunsApi>[1]
   const onClose = vi.fn();
   renderWithClient(<LaunchRunsDialog open scenarios={scenarios} onClose={onClose} onLaunched={onLaunched} />);
   return { api, onLaunched, onClose, user: userEvent.setup() };
+}
+
+/** Holds `POST /runs` until `release()`; counts every attempt. */
+function holdLaunch() {
+  let release: () => void = () => undefined;
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  const state = { posts: 0, release: () => release() };
+  server.use(
+    http.post(apiUrl("/runs"), async () => {
+      state.posts += 1;
+      await gate;
+      return HttpResponse.json({ ...batchFixture({ id: "b-held" }), runs: [] }, { status: 201 });
+    }),
+  );
+  return state;
+}
+
+/** The dialog as a page uses it: open state lives in the parent and `onClose` unmounts it. */
+function Host({ onLaunched }: { onLaunched: (batch: BatchDetail) => void }) {
+  const [open, setOpen] = useState(true);
+  return <LaunchRunsDialog open={open} scenarios={[booking]} onClose={() => setOpen(false)} onLaunched={onLaunched} />;
 }
 
 describe("Launch runs dialog", () => {
@@ -76,5 +101,66 @@ describe("Launch runs dialog", () => {
     expect(alert).toHaveTextContent("Cancel within 24h: the scenario has no voice (TTS) connection");
     expect(alert).not.toHaveTextContent("Booking with date change");
     expect(onLaunched).not.toHaveBeenCalled();
+  });
+
+  it("sends one launch for a double click", async () => {
+    const held = holdLaunch();
+    const onLaunched = vi.fn();
+    renderWithClient(<Host onLaunched={onLaunched} />);
+    const user = userEvent.setup();
+
+    await user.dblClick(screen.getByRole("button", { name: "Launch" }));
+    await waitFor(() => expect(held.posts).toBe(1));
+    held.release();
+
+    await waitFor(() => expect(onLaunched).toHaveBeenCalledTimes(1));
+    expect(held.posts).toBe(1);
+  });
+
+  it("cannot be closed while launching, and still redirects once the batch exists", async () => {
+    const held = holdLaunch();
+    const onLaunched = vi.fn();
+    renderWithClient(<Host onLaunched={onLaunched} />);
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole("button", { name: "Launch" }));
+    await waitFor(() => expect(held.posts).toBe(1));
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    await user.keyboard("{Escape}");
+    expect(screen.getByRole("dialog", { name: "Launch Booking with date change" })).toBeInTheDocument();
+
+    held.release();
+    await waitFor(() => expect(onLaunched).toHaveBeenCalledTimes(1));
+    expect(onLaunched.mock.calls[0][0]).toMatchObject({ id: "b-held" });
+    expect(held.posts).toBe(1);
+  });
+
+  it.each([
+    [400, "Bad launch request"],
+    [500, "Launcher crashed"],
+  ])("shows a %i failure and lets you retry", async (status, detail) => {
+    let fail = true;
+    const api = mockRunsApi([]);
+    server.use(
+      http.post(apiUrl("/runs"), () =>
+        fail ? HttpResponse.json({ detail }, { status }) : undefined,
+      ),
+    );
+    const onLaunched = vi.fn();
+    renderWithClient(<Host onLaunched={onLaunched} />);
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole("button", { name: "Launch" }));
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Could not launch");
+    expect(alert).toHaveTextContent(detail);
+    expect(onLaunched).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeEnabled();
+
+    fail = false;
+    await user.click(screen.getByRole("button", { name: "Launch" }));
+    await waitFor(() => expect(onLaunched).toHaveBeenCalledTimes(1));
+    expect(api.requests).toHaveLength(1);
   });
 });
