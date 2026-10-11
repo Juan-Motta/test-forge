@@ -40,7 +40,7 @@ agent (prompt, tools, latency, flow) that can be handed to a coding agent.
 
 ## Tasks
 - [x] T1 Langfuse trace reader + digest + runtime builder (backend) — route: delegated (writer; new provider module + tests)
-- [ ] T2 Judge core: generic structured chat call, prompt, schema, scoring, brief (backend) — route: delegated
+- [x] T2 Judge core: generic structured chat call, prompt, schema, scoring, brief (backend) — route: delegated
 - [ ] T3 Persistence + orchestration + API + snapshot field (backend, migration 0008) — route: delegated
 - [ ] T4 Report UI: Score & suggestions card + runs list score (frontend) — route: delegated
 - [ ] T5 Docs + real validation on an existing run (needs the user's Langfuse connection linked to the agent; paid call → ask) — route: inline
@@ -66,3 +66,8 @@ agent (prompt, tools, latency, flow) that can be handed to a coding agent.
   Advisory follow-ups (non-blocking): digest headers/trace names not counted against the budget
   (WARNING, langfuse_traces.py:439); non-finite numbers; Retry-After NaN; page cap silent to caller;
   truncation note budget. → fix in a small follow-up commit.
+- T2 done: 9e1ed9d (route: delegated writer; 1702 lines). Checks: pytest 623 passed, ruff clean;
+  parent spot check 45 passed. Native review: medium, review-reliability, APPROVED + acknowledged.
+  Advisory follow-ups: caller policy relies on MalformedDecision being a ValueError (it is —
+  evaluator/prompt.py:59 — add a test); parse_judgement should turn a malformed snapshot criterion
+  into JudgeError (judge/domain.py:138-146); vacuous secret-log assertion in test_openai_judge.py.
