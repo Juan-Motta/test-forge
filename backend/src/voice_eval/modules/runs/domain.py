@@ -62,6 +62,8 @@ class Run:
     artifacts_dir: str | None
     error: str | None
     snapshot: dict[str, Any]
+    judgement_status: str | None = None  # from the run's judgement, when it has one
+    score: int | None = None  # the judgement's overall score, once completed
 
     @property
     def scenario_name(self) -> str:
@@ -156,6 +158,9 @@ def snapshot(plan: RunPlan) -> dict[str, Any]:
             "channel_id": agent.channel_id,
             "user_id": agent.user_id,
             "origin": agent.origin,
+            "langfuse_connection_id": (
+                str(agent.langfuse_connection_id) if agent.langfuse_connection_id else None
+            ),
         },
         "brief": asdict(brief),
         "connections": {

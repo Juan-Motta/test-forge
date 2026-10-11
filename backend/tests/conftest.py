@@ -465,14 +465,24 @@ def settings(postgres_url, master_key, tmp_path):
     )
 
 
+async def _no_provider_in_tests(db, connection_id):
+    raise RuntimeError("tests never contact a judge or Langfuse provider")
+
+
 @pytest.fixture
 async def app(settings):
-    """A fresh app (own engine) over emptied tables."""
+    """A fresh app (own engine) over emptied tables.
+
+    The judgement coordinator cannot build a judge or a trace reader (judgements of finished
+    runs fail fast, offline); judgement tests install fakes instead.
+    """
     from sqlalchemy import text
 
     from voice_eval.platform.app import create_app
 
     application = create_app(settings)
+    application.state.judgements.build_judge = _no_provider_in_tests
+    application.state.judgements.build_trace_reader = _no_provider_in_tests
     async with application.state.engine.begin() as conn:
         await conn.execute(
             text(
@@ -482,6 +492,7 @@ async def app(settings):
         )
     yield application
     await application.state.runs.shutdown()
+    await application.state.judgements.shutdown()
     await application.state.engine.dispose()
 
 

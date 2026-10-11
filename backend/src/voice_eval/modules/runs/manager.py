@@ -7,7 +7,9 @@ a `SessionRunner` whose artifacts land in `<RUNS_DATA_DIR>/<run id>/`. Status ch
 persisted as they happen, and every event is published to the live hub (`self.hub`, see
 `modules.runs.live`). Cancelling a run cancels its task (the runner still closes the
 session and writes its artifacts); stopping the process interrupts every unfinished run, and
-the next start marks any run a crash left behind as `interrupted`.
+the next start marks any run a crash left behind as `interrupted`. A run that ends `completed`,
+or `failed` after the agent spoke at least once, is handed to the judgement coordinator
+(`judgements`, when one is wired) to be scored.
 
 The factories (`build_policy`, `build_synthesizer`) and the whole `drive` step are attributes,
 so tests replace them and never contact a provider.
@@ -20,7 +22,7 @@ import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -48,6 +50,10 @@ class RunJob:
     thread_id: str
     snapshot: dict[str, Any]
     out_dir: Path
+
+
+class JudgementScheduler(Protocol):
+    async def schedule(self, run_id: uuid.UUID) -> None: ...
 
 
 class RunSetupError(Exception):
@@ -105,8 +111,10 @@ class RunManager:
         data_dir: Path,
         max_concurrency: int,
         allow_local_http: bool = False,
+        judgements: JudgementScheduler | None = None,
     ) -> None:
         self.sessionmaker = sessionmaker
+        self.judgements = judgements
         self.secret_box = secret_box
         self.data_dir = data_dir
         self.allow_local_http = allow_local_http
@@ -250,9 +258,10 @@ class RunManager:
         artifacts_dir: str | None = None,
     ) -> None:
         status, reason = outcome
+        recorded = False
         try:
             async with self.sessionmaker() as db:
-                await service.mark_finished(
+                recorded = await service.mark_finished(
                     db,
                     run_id,
                     batch_id,
@@ -265,6 +274,13 @@ class RunManager:
         except Exception:
             log.exception("could not record the end of run %s", run_id)
         publish(self.hub.finish, run_id, status.value, reason)
+        if recorded and self.judgements is not None and _judgeable(status, summary):
+            try:
+                await self.judgements.schedule(run_id)
+            except Exception as exc:  # the run itself is over and recorded either way
+                log.warning(
+                    "could not schedule the judgement of run %s (%s)", run_id, type(exc).__name__
+                )
 
     async def drive_session(self, job: RunJob, sink: EventSink) -> dict[str, Any]:
         """The real conversation: providers from the stored connections, then the runner."""
@@ -321,6 +337,16 @@ class RunManager:
             allow_local_http=self.allow_local_http,
             voice=voice,
         )
+
+
+def _judgeable(status: RunStatus, summary: dict[str, Any] | None) -> bool:
+    """A completed run, or a failed one in which the agent took at least one turn."""
+    if status is RunStatus.COMPLETED:
+        return True
+    if status is not RunStatus.FAILED or not summary:
+        return False
+    turns = summary.get("agent_turns")
+    return isinstance(turns, int) and turns > 0
 
 
 def _outcome(summary: dict[str, Any]) -> tuple[RunStatus, str | None]:

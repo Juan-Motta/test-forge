@@ -13,6 +13,8 @@ from sqlalchemy import text
 
 from voice_eval.modules.agents import api as agents_api
 from voice_eval.modules.connections import api as connections_api
+from voice_eval.modules.judgements import api as judgements_api
+from voice_eval.modules.judgements.coordinator import JudgementCoordinator
 from voice_eval.modules.runs import api as runs_api
 from voice_eval.modules.runs import live_api as runs_live_api
 from voice_eval.modules.runs.manager import RunManager
@@ -63,20 +65,30 @@ def create_app(
     secret_box = SecretBox.from_settings(settings)  # fail fast, before anything is started
     engine = create_engine(settings.database_url)
     sessionmaker = create_sessionmaker(engine)
+    development = settings.environment == "development"
+    judgements = JudgementCoordinator(
+        sessionmaker,
+        secret_box=secret_box,
+        allow_local_http=development,
+        allow_private=development,  # a local Langfuse, like the connection tester
+    )
     runs = RunManager(
         sessionmaker,
         secret_box=secret_box,
         data_dir=settings.runs_data_dir,
         max_concurrency=settings.runs_max_concurrency,
-        allow_local_http=settings.environment == "development",
+        allow_local_http=development,
+        judgements=judgements,
     )
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         await users_service.warm_up()
         await runs.recover()
+        await judgements.recover()  # unfinished judgements are judged again
         yield
         await runs.shutdown()  # unfinished runs become `interrupted`, artifacts still written
+        await judgements.shutdown()  # unfinished judgements stay so for the next start
         await engine.dispose()
 
     docs = settings.environment == "development"  # fail closed: anything else hides the docs
@@ -92,6 +104,7 @@ def create_app(
     app.state.engine = engine
     app.state.sessionmaker = sessionmaker
     app.state.runs = runs
+    app.state.judgements = judgements
     app.add_exception_handler(RequestValidationError, validation_error)
     app.add_middleware(
         CORSMiddleware,
@@ -107,6 +120,7 @@ def create_app(
     protected.include_router(agents_api.router)
     protected.include_router(scenarios_api.router)
     protected.include_router(runs_api.router)
+    protected.include_router(judgements_api.router)
     for router in extra_routers:
         protected.include_router(router)
 

@@ -2,7 +2,9 @@
 
 Launching validates that every scenario can run (a voice connection and an evaluator model),
 creates the batch with one queued run per scenario and repetition, and hands it to the task
-manager (`app.state.runs`). Summaries, transcripts and snapshots are returned with camelCase keys.
+manager (`app.state.runs`). Each run carries its judgement's status and score (the judgement
+itself is served by `modules.judgements.api`). Summaries, transcripts and snapshots are
+returned with camelCase keys.
 """
 
 import uuid
@@ -85,6 +87,8 @@ class RunOut(CamelModel):
     created_at: datetime
     started_at: datetime | None
     ended_at: datetime | None
+    judgement_status: str | None  # None until the run is handed to the judge
+    score: int | None  # the judgement's overall score (0-100), once completed
 
     @classmethod
     def fields_of(cls, run: Run) -> dict[str, Any]:
@@ -103,6 +107,8 @@ class RunOut(CamelModel):
             "created_at": run.created_at,
             "started_at": run.started_at,
             "ended_at": run.ended_at,
+            "judgement_status": run.judgement_status,
+            "score": run.score,
         }
 
     @classmethod

@@ -5,13 +5,16 @@ through the functions here, each in its own short transaction.
 """
 
 import uuid
+from dataclasses import replace
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import func, select, update
+from sqlalchemy import Select, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from voice_eval.modules.agents.models import AgentRecord
+from voice_eval.modules.judgements.domain import JudgementStatus
+from voice_eval.modules.judgements.models import RunJudgementRecord
 from voice_eval.modules.runs.domain import (
     ACTIVE_BATCH_STATUSES,
     ACTIVE_RUN_STATUSES,
@@ -109,11 +112,33 @@ async def create_batch(
 # --- queries ------------------------------------------------------------------------------
 
 
+def _with_judgement() -> Select:
+    """Runs with their judgement's status and, once completed, its overall score (one join)."""
+    return (
+        select(
+            RunRecord,
+            RunJudgementRecord.status,
+            RunJudgementRecord.result["overallScore"].as_integer(),
+        )
+        .outerjoin(RunJudgementRecord, RunJudgementRecord.run_id == RunRecord.id)
+        .execution_options(populate_existing=True)
+    )
+
+
+def _run(record: RunRecord, judgement_status: str | None, score: int | None) -> Run:
+    completed = judgement_status == JudgementStatus.COMPLETED.value
+    return replace(
+        record.to_domain(),
+        judgement_status=judgement_status,
+        score=score if completed else None,
+    )
+
+
 async def get_run(db: AsyncSession, run_id: uuid.UUID) -> Run:
-    record = await db.get(RunRecord, run_id, populate_existing=True)
-    if record is None:
+    row = (await db.execute(_with_judgement().where(RunRecord.id == run_id))).one_or_none()
+    if row is None:
         raise RunNotFound(str(run_id))
-    return record.to_domain()
+    return _run(*row)
 
 
 async def list_runs(
@@ -134,15 +159,14 @@ async def list_runs(
     if batch_id is not None:
         conditions.append(RunRecord.batch_id == batch_id)
     total = await db.scalar(select(func.count()).select_from(RunRecord).where(*conditions))
-    records = await db.scalars(
-        select(RunRecord)
+    rows = await db.execute(
+        _with_judgement()
         .where(*conditions)
         .order_by(RunRecord.created_at.desc(), RunRecord.batch_id, RunRecord.position)
         .limit(limit)
         .offset(offset)
-        .execution_options(populate_existing=True)
     )
-    return [record.to_domain() for record in records], total or 0
+    return [_run(*row) for row in rows], total or 0
 
 
 async def _counts(db: AsyncSession, batch_ids: list[uuid.UUID]) -> dict[uuid.UUID, dict[str, int]]:
@@ -245,9 +269,12 @@ async def mark_finished(
     summary: dict[str, Any] | None,
     artifacts_dir: str | None,
     error: str | None,
-) -> None:
-    """Record the terminal state (once), then complete the batch when nothing is left."""
-    await db.execute(
+) -> bool:
+    """Record the terminal state (once), then complete the batch when nothing is left.
+
+    Returns whether this call recorded it (False when the run had already ended).
+    """
+    result = await db.execute(
         update(RunRecord)
         .where(RunRecord.id == run_id, RunRecord.status.in_(ACTIVE_RUNS))
         .values(
@@ -261,6 +288,7 @@ async def mark_finished(
     )
     await _settle_batch(db, batch_id)
     await db.commit()
+    return result.rowcount > 0
 
 
 async def _settle_batch(db: AsyncSession, batch_id: uuid.UUID) -> None:

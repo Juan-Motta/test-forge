@@ -430,7 +430,34 @@ sanitized `error`. Stopping the backend cancels unfinished runs (they still clos
 and write their artifacts) and marks them `interrupted`; the next start marks any run a crash
 left `queued`, `connecting` or `running` as `interrupted`. Artifacts go to
 `RUNS_DATA_DIR/<run id>/` (default `/data/runs`, the `runs-data` volume in compose; set
-`RUNS_DATA_DIR` to a writable directory when running from source).
+`RUNS_DATA_DIR` to a writable directory when running from source). Runs in the list and the
+detail also carry `judgementStatus` and `score` (see Judge).
+
+### Judge
+
+A run that ends `completed`, or `failed` after the agent took at least one turn, is judged
+automatically (`modules.judgements.coordinator`, `app.state.judgements`, at most 3 judgements
+calling a provider at once): the scenario's weighted criteria are scored by the run's evaluator
+connection (`gpt-6-luna`) from three evidence sources — `transcript.json`, the timings in
+`summary.json` and the agent's Langfuse traces — into an overall score, per-criterion verdicts,
+suggestions and a Markdown brief for a coding agent.
+
+Traces are read when the agent has a Langfuse connection (kept in the run snapshot; older runs
+use the agent's current one): the observations of session `threadId` are polled every 30 s
+until two polls in a row return the same non-zero count, for at most 20 minutes after the run
+ended, because the agent's Langfuse SDK (4.5.0) can take up to ~15 minutes to make them
+readable. A re-judge long after the run reads them once. Without traces the judge still runs
+and the judgement's `traceNote` says why (no connection, none found, read error). The raw
+observations are saved as `langfuse.json` next to the run's other artifacts.
+
+Statuses: `pending` -> `collecting_traces` -> `judging` -> `completed` | `failed` (with a safe
+`error`). Stopping the backend leaves unfinished judgements as they are; the next start judges
+them again.
+
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /api/runs/{id}/judgement` | `{status, result, traceStats, traceNote, error, model, attempt, createdAt, updatedAt, completedAt}`, or `{status: "none"}` |
+| `POST /api/runs/{id}/judgement` | `202`; re-judge (next `attempt`, replaces the result); `409` while the run or its judgement is in progress |
 
 ### Live stream
 
