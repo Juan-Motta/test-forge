@@ -42,6 +42,8 @@ export type LivePlayer = {
   /** Creates and resumes the AudioContext; call it from a user gesture. */
   start(): Promise<void>;
   push(channel: number, pcm: ArrayBuffer): void;
+  /** Silences what a channel has queued (e.g. an interrupted agent reply); later frames play from now. */
+  cut(channel: number): void;
   setMix(mix: Mix): void;
   /** 0 to 1. */
   setVolume(volume: number): void;
@@ -67,6 +69,8 @@ export function createLivePlayer(): LivePlayer {
   let mix: Mix = "both";
   let volume = 1;
   const next = new Map<number, number>();
+  /** Sources scheduled or playing, per channel; each removes itself once it ends. */
+  const sources = new Map<number, Set<AudioBufferSourceNode>>();
 
   return {
     get started() {
@@ -79,6 +83,7 @@ export function createLivePlayer(): LivePlayer {
       master.gain.value = volume;
       master.connect(context.destination);
       next.clear();
+      sources.clear();
       try {
         await context.resume();
       } catch (error) {
@@ -101,8 +106,25 @@ export function createLivePlayer(): LivePlayer {
       const source = context.createBufferSource();
       source.buffer = buffer;
       source.connect(master);
+      const queued = sources.get(channel) ?? new Set<AudioBufferSourceNode>();
+      sources.set(channel, queued);
+      queued.add(source);
+      source.onended = () => queued.delete(source);
       source.start(at);
       next.set(channel, at + samples.length / SAMPLE_RATE);
+    },
+    cut(channel) {
+      if (!context) return;
+      const queued = sources.get(channel);
+      sources.delete(channel);
+      next.delete(channel);
+      for (const source of queued ?? []) {
+        try {
+          source.stop();
+        } catch {
+          // Already stopped: nothing left to silence.
+        }
+      }
     },
     setMix(value) {
       mix = value;
@@ -116,6 +138,7 @@ export function createLivePlayer(): LivePlayer {
       context = null;
       master = null;
       next.clear();
+      sources.clear();
       if (current && current.state !== "closed") void current.close().catch(() => undefined);
     },
   };

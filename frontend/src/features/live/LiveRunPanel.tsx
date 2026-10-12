@@ -10,7 +10,7 @@ import { RunStatusChip } from "@/features/runs/RunStatusChip";
 import { RunTranscript } from "@/features/runs/RunTranscript";
 import { interruptedAt } from "@/features/runs/transcript";
 import { errorMessage } from "@/lib/api";
-import { createLivePlayer, type Mix } from "@/lib/live/audio";
+import { AGENT_CHANNEL, createLivePlayer, type Mix } from "@/lib/live/audio";
 import type { LiveConnectionState } from "@/lib/live/connection";
 import { useNow } from "@/lib/time/use-now";
 import { Alert, Button, Card, CardHeader, Spinner, buttonClasses } from "@/ui";
@@ -33,7 +33,11 @@ export function LiveRunPanel({ runId }: { runId: string }) {
   const [audioError, setAudioError] = useState<string | null>(null);
   const [mix, setMix] = useState<Mix>("both");
   const [volume, setVolume] = useState(0.8);
-  const { state, connection } = useRunLive(runId, (channel, pcm) => player.push(channel, pcm));
+  const { state, connection } = useRunLive(runId, {
+    onAudio: (channel, pcm) => player.push(channel, pcm),
+    // The agent's reply arrives faster than real time: drop the part the caller cut off.
+    onCallerInterrupted: () => player.cut(AGENT_CHANNEL),
+  });
 
   useEffect(() => () => player.stop(), [player]);
 

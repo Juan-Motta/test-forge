@@ -203,6 +203,28 @@ describe("Live run", () => {
     expect(context.master.gain.value).toBe(0);
   });
 
+  it("cuts the agent audio already queued when the caller interrupts, once per interruption", async () => {
+    const { socket, user } = await renderPanel();
+    await user.click(screen.getByRole("button", { name: "Listen" }));
+    const context = audio.contexts[0];
+    act(() => {
+      socket.send(snapshot);
+      socket.audio(0, [16384]);
+      socket.audio(0, [16384]);
+      socket.audio(1, [-8192]);
+    });
+
+    act(() => socket.send({ type: "callerInterrupted", tMs: 3600, agentTurn: 1, audioEndMs: 1500, heardText: "Hello, how" }));
+    expect(context.scheduled.map((item) => item.stopped)).toEqual([true, true, false]);
+
+    act(() => {
+      socket.audio(0, [16384]);
+      socket.send(snapshot);
+    });
+    fireEvent.change(screen.getByRole("slider", { name: "Volume" }), { target: { value: "0.5" } });
+    expect(context.scheduled[3].stopped).toBe(false);
+  });
+
   it("closes the stream and the audio when it unmounts", async () => {
     const { socket, user, unmount } = await renderPanel();
     await user.click(screen.getByRole("button", { name: "Listen" }));

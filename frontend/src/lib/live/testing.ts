@@ -58,7 +58,8 @@ export function installFakeSockets() {
   };
 }
 
-type Scheduled = { samples: Float32Array; when: number };
+/** One scheduled source: `stopped` once `stop()` cut it; `end()` plays it out (fires `onended`). */
+type Scheduled = { samples: Float32Array; when: number; stopped: boolean; end: () => void };
 
 /** An AudioContext stand-in that records what would play, and when. */
 export class FakeAudioContext implements AudioContextLike {
@@ -92,11 +93,24 @@ export class FakeAudioContext implements AudioContextLike {
     const scheduled = this.scheduled;
     const source = {
       buffer: null as AudioBuffer | null,
+      onended: null as (() => void) | null,
       connect: () => undefined,
       start(when: number) {
-        scheduled.push({ samples: source.buffer?.getChannelData(0) ?? new Float32Array(), when });
+        const item: Scheduled = {
+          samples: source.buffer?.getChannelData(0) ?? new Float32Array(),
+          when,
+          stopped: false,
+          end: () => source.onended?.(),
+        };
+        entry = item;
+        scheduled.push(item);
+      },
+      stop() {
+        if (entry) entry.stopped = true;
+        source.onended?.();
       },
     };
+    let entry: Scheduled | null = null;
     return source as unknown as AudioBufferSourceNode;
   }
 

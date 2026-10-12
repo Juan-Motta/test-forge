@@ -83,6 +83,31 @@ describe("live player", () => {
     expect(context.scheduled).toHaveLength(0);
   });
 
+  it("cuts the agent's queued audio now, leaving the caller's alone, and schedules later frames from now", async () => {
+    const player = createLivePlayer();
+    await player.start();
+    const context = audio.contexts[0];
+    player.push(AGENT_CHANNEL, AGENT);
+    player.push(AGENT_CHANNEL, AGENT);
+    player.push(AGENT_CHANNEL, AGENT);
+    player.push(CALLER_CHANNEL, pcm(new Array(24000).fill(-8192))); // 1 s queued
+    context.scheduled[0].end(); // already played out: nothing left to stop
+
+    context.currentTime = 0.1;
+    player.cut(AGENT_CHANNEL);
+
+    expect(context.scheduled.map((item) => item.stopped)).toEqual([false, true, true, false]);
+    player.push(AGENT_CHANNEL, AGENT);
+    player.push(CALLER_CHANNEL, CALLER);
+    expect(context.scheduled[4].when).toBeCloseTo(0.1 + JITTER_S);
+    expect(context.scheduled[5].when).toBeCloseTo(JITTER_S + 1);
+  });
+
+  it("ignores a cut before it starts", () => {
+    const player = createLivePlayer();
+    expect(() => player.cut(AGENT_CHANNEL)).not.toThrow();
+  });
+
   it("stays stopped, with the context released, when the browser refuses to start audio", async () => {
     audio.restore();
     audio = installFakeAudio({ resumeError: new Error("The user did not allow audio") });
