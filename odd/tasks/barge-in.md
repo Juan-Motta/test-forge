@@ -62,7 +62,7 @@ target on the host (`localhost` inside the backend container is the container it
   acknowledged. Advisories: live reducer maps agentTurn−1 to the detector index (can drift after a
   dropped empty reply); heard fraction is played / received-so-far (overstates when cut mid-stream);
   silence end condition can fire during a long simulated-playback wait (afterMs > maxSilence).
-- 1db… live player cuts queued agent audio on callerInterrupted (RED observed; vitest 347).
+- b2d37e6 live player cuts queued agent audio on callerInterrupted (RED observed; vitest 347).
 - Flaky: ScenarioEditor.test.tsx "name taken" test can exceed the 1 s waitFor under full-suite load.
 - Stack rebuilt; host.docker.internal:8000 reachable from the backend container (TCP ok).
 - Created agent "Vivi local agent" (ws://localhost:8000, channel 2a8204d3…, Origin
