@@ -65,6 +65,7 @@ class Run:
     snapshot: dict[str, Any]
     judgement_status: str | None = None  # from the run's judgement, when it has one
     score: int | None = None  # the judgement's overall score, once completed
+    must_failed: bool | None = None  # whether a must criterion failed, once completed
 
     @property
     def scenario_name(self) -> str:

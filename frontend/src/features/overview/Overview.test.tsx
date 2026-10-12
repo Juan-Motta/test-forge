@@ -161,6 +161,31 @@ describe("Overview recent runs", () => {
     expect(within(rows[2]).getByText("Failed")).toBeInTheDocument();
   });
 
+  it("keeps ids and names on one line, with the full text in a title", async () => {
+    const longId = "7f6e5d4c-3b2a-4190-8f7e-6d5c4b3a2918";
+    const long = runFixture({
+      id: longId,
+      scenarioName: "Booking with a date change and a late check-in request",
+      agentName: "Hotel booking assistant (staging, EU region)",
+      persona: "Lucía Fernández",
+    });
+    mockRunsApi([long]);
+    mockStatsApi();
+    renderWithClient(<OverviewContainer />);
+
+    const table = await screen.findByRole("table", { name: "Recent runs" });
+    const link = within(table).getByRole("link", { name: `Open run ${longId}` });
+    expect(link).toHaveTextContent("7f6e5d4c…18");
+    expect(link).toHaveAttribute("title", longId);
+    expect(link.closest("td")).toHaveClass("whitespace-nowrap");
+    for (const text of [long.scenarioName, long.agentName, "Lucía Fernández"]) {
+      const cell = within(table).getByText(text);
+      expect(cell).toHaveAttribute("title", text);
+      expect(cell).toHaveClass("truncate");
+    }
+    expect(table).toHaveClass("table-fixed");
+  });
+
   it("filters the table to failed runs or runs that need review", async () => {
     const user = userEvent.setup();
     mockRunsApi(runs);

@@ -11,9 +11,19 @@ describe("run result", () => {
 
   it("flags a judged run under 60, or one whose must criteria failed, for review", () => {
     expect(needsReview(runFixture({ judgementStatus: "completed", score: 59.9 }))).toBe(true);
-    const mustFailed = { ...runFixture({ judgementStatus: "completed", score: 90 }), mustFailed: true };
+    const mustFailed = runFixture({ judgementStatus: "completed", score: 90, mustFailed: true });
     expect(needsReview(mustFailed)).toBe(true);
     expect(runResult(mustFailed)).toMatchObject({ kind: "review", label: "Needs review", tone: "evaluator" });
+  });
+
+  it("flags a judged run whose must criteria failed even when nothing was scorable", () => {
+    const run = runFixture({ judgementStatus: "completed", score: null, mustFailed: true });
+    expect(needsReview(run)).toBe(true);
+    expect(runResult(run)).toMatchObject({ kind: "review", label: "Needs review" });
+  });
+
+  it("only reviews runs whose judgement completed", () => {
+    expect(needsReview(runFixture({ judgementStatus: "judging", score: 40, mustFailed: true }))).toBe(false);
   });
 
   it("never asks to review a run that was not judged", () => {

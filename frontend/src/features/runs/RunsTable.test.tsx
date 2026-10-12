@@ -55,6 +55,7 @@ describe("Runs table design", () => {
       runFixture({ id: "r-passed-01", judgementStatus: "completed", score: 84 }),
       runFixture({ id: "r-review-01", judgementStatus: "completed", score: 41 }),
       runFixture({ id: "r-never-001" }),
+      runFixture({ id: "r-must-fail", judgementStatus: "completed", score: 92, mustFailed: true }),
     ];
     render(<RunsTable runs={runs} onCancel={() => {}} now={Date.parse("2026-10-05T17:00:00Z")} />);
 
@@ -66,6 +67,7 @@ describe("Runs table design", () => {
       "Passed",
       "Needs review",
       "—",
+      "Needs review",
     ]);
     expect(within(rows[0]).getByRole("meter", { name: "Score of run r-passed-01" })).toHaveAttribute("aria-valuenow", "84");
     expect(within(rows[1]).getByRole("meter")).toHaveAttribute("data-tone", "bad");

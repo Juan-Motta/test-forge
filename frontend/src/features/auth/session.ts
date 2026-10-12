@@ -12,7 +12,15 @@ export function fetchSession(signal?: AbortSignal): Promise<SessionUser> {
   return apiFetch<SessionUser>("/auth/me", { signal });
 }
 
-/** Current user. A 401 sends the browser to the login page (see `apiFetch`). */
+/**
+ * Current user. A 401 sends the browser to the login page (see `apiFetch`). It only changes on
+ * sign-in (which seeds this cache) and sign-out (a full reload), so it never goes stale: remounts
+ * reuse it instead of refetching.
+ */
 export function useSession() {
-  return useQuery({ queryKey: sessionQueryKey, queryFn: ({ signal }) => fetchSession(signal) });
+  return useQuery({
+    queryKey: sessionQueryKey,
+    queryFn: ({ signal }) => fetchSession(signal),
+    staleTime: Number.POSITIVE_INFINITY,
+  });
 }

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { confirmLeave } from "@/lib/navigation/unsaved-changes";
-import { PlusIcon, SearchField, Spinner, cn, focusRing } from "@/ui";
+import { PlusIcon, SearchField, cn, focusRing } from "@/ui";
 import { TEMPERAMENT_LABELS } from "./form-schema";
 import type { Scenario } from "./types";
 
@@ -41,7 +41,7 @@ export function ScenarioLibraryRail({ scenarios, failed, currentId }: ScenarioLi
 
   let body;
   if (failed) body = <p className="px-1 text-xs text-muted">Could not load the scenario library.</p>;
-  else if (scenarios === undefined) body = <Spinner label="Loading scenarios" />;
+  else if (scenarios === undefined) body = <RailSkeleton />;
   else if (groups.length === 0)
     body = <p className="px-1 text-xs text-muted">{needle ? "No scenarios match." : "No scenarios yet."}</p>;
   else
@@ -104,5 +104,24 @@ export function ScenarioLibraryRail({ scenarios, failed, currentId }: ScenarioLi
         New scenario
       </Link>
     </aside>
+  );
+}
+
+/** Placeholder rows while the library loads; the editor beside it does not wait for them. */
+function RailSkeleton() {
+  return (
+    <div role="status" aria-label="Loading scenarios" className="flex flex-col gap-1.5 px-1">
+      <span aria-hidden="true" className="h-3 w-24 animate-pulse rounded bg-chip motion-reduce:animate-none" />
+      {[0, 1, 2, 3].map((row) => (
+        <span
+          key={row}
+          aria-hidden="true"
+          className="flex h-11 animate-pulse flex-col justify-center gap-1.5 rounded-lg px-3 motion-reduce:animate-none"
+        >
+          <span className="h-3 w-4/5 rounded bg-chip" />
+          <span className="h-2.5 w-1/3 rounded bg-chip" />
+        </span>
+      ))}
+    </div>
   );
 }

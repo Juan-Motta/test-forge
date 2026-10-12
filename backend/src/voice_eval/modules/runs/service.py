@@ -9,7 +9,7 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import Integer, Numeric, Select, case, func, select, update
+from sqlalchemy import Boolean, Integer, Numeric, Select, case, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from voice_eval.modules.agents.models import AgentRecord
@@ -122,21 +122,34 @@ def _overall_score():
     return case((func.jsonb_typeof(raw) == "number", in_range), else_=None)
 
 
+def _must_failed():
+    """The stored `mustFailed` flag, or NULL when it is not a JSON boolean."""
+    raw = RunJudgementRecord.result["mustFailed"]
+    return case((func.jsonb_typeof(raw) == "boolean", raw.astext.cast(Boolean)), else_=None)
+
+
 def _with_judgement() -> Select:
-    """Runs with their judgement's status and, once completed, its overall score (one join)."""
+    """Runs with their judgement's status and, once completed, its overall score and must
+    flag (one join)."""
     return (
-        select(RunRecord, RunJudgementRecord.status, _overall_score())
+        select(RunRecord, RunJudgementRecord.status, _overall_score(), _must_failed())
         .outerjoin(RunJudgementRecord, RunJudgementRecord.run_id == RunRecord.id)
         .execution_options(populate_existing=True)
     )
 
 
-def _run(record: RunRecord, judgement_status: str | None, score: int | None) -> Run:
+def _run(
+    record: RunRecord,
+    judgement_status: str | None,
+    score: int | None,
+    must_failed: bool | None,
+) -> Run:
     completed = judgement_status == JudgementStatus.COMPLETED.value
     return replace(
         record.to_domain(),
         judgement_status=judgement_status,
         score=score if completed else None,
+        must_failed=must_failed if completed else None,
     )
 
 

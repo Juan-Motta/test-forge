@@ -654,6 +654,27 @@ describe("Scenario editor: layout", () => {
     expect(within(library).getByRole("link", { name: "New scenario" })).toHaveAttribute("href", "/scenarios/new");
   });
 
+  it("renders the form while the library rail is still loading, with the rail's own placeholder", async () => {
+    setup([scenarioFixture(), cancel]);
+    const library: { release?: () => void } = {};
+    server.use(
+      http.get(apiUrl("/scenarios"), async () => {
+        await new Promise<void>((resolve) => (library.release = resolve));
+        return HttpResponse.json([scenarioFixture(), cancel]);
+      }),
+    );
+    await renderEditor("s-booking");
+
+    expect(field("Name")).toHaveValue("Booking with date change");
+    const rail = screen.getByRole("complementary", { name: "Scenario library" });
+    expect(within(rail).getByRole("status", { name: "Loading scenarios" })).toBeInTheDocument();
+    expect(within(rail).queryByRole("link", { name: /Cancel within 24h/ })).not.toBeInTheDocument();
+
+    act(() => library.release?.());
+    expect(await within(rail).findByRole("link", { name: /Cancel within 24h/ })).toBeInTheDocument();
+    expect(within(rail).queryByRole("status", { name: "Loading scenarios" })).not.toBeInTheDocument();
+  });
+
   it("filters the library by name", async () => {
     setup([scenarioFixture(), cancel]);
     const user = await renderEditor("s-booking");

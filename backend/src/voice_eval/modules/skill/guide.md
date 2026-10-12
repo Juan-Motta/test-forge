@@ -217,7 +217,7 @@ Usually a human has already configured connections, agents and scenarios: list t
         "agentId": "0b8f3c1a-2d4e-4f6a-9b1c-7e5d3a2b1c0f", "agentName": "Support line (staging)",
         "threadId": "c0ffee00-1234-4abc-9def-0123456789ab", "status": "queued", "endReason": null, "error": null,
         "createdAt": "2026-10-12T09:30:00Z", "startedAt": null, "endedAt": null,
-        "judgementStatus": null, "score": null, "persona": "Lucía",
+        "judgementStatus": null, "score": null, "mustFailed": null, "persona": "Lucía",
         "callerTurns": null, "agentTurns": null, "latencyP50Ms": null}
      ]
    }
@@ -376,8 +376,9 @@ otherwise:
 ```
 
 `status`: `pending` -> `collecting_traces` (only when the agent has a Langfuse connection) ->
-`judging` -> `completed` or `failed` (`error` says why). The run's `judgementStatus` and `score`
-mirror it in run lists.
+`judging` -> `completed` or `failed` (`error` says why). The run's `judgementStatus`, `score` and
+`mustFailed` mirror it in run lists (`score` and `mustFailed` are `null` until it is
+`completed`).
 
 **Waiting**: Langfuse makes traces readable slowly, so with a Langfuse connection the judge
 polls them every 30 s until two polls agree, for up to 20 minutes after the run ended. Expect a

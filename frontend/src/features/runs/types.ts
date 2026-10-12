@@ -27,6 +27,8 @@ export type Run = {
   judgementStatus: string | null;
   /** The judgement's overall score (0-100), once completed. */
   score: number | null;
+  /** Whether any must criterion failed, once the judgement completed; null otherwise. */
+  mustFailed: boolean | null;
   /** Persona name from the launch snapshot. */
   persona: string | null;
   /** Turn counts and median agent latency from the summary; null until the run finished. */

@@ -2,9 +2,9 @@
 
 Launching validates that every scenario can run (a voice connection and an evaluator model),
 creates the batch with one queued run per scenario and repetition, and hands it to the task
-manager (`app.state.runs`). Each run carries its judgement's status and score (the judgement
-itself is served by `modules.judgements.api`). Summaries, transcripts and snapshots are
-returned with camelCase keys.
+manager (`app.state.runs`). Each run carries its judgement's status, score and must flag (the
+judgement itself is served by `modules.judgements.api`). Summaries, transcripts and snapshots
+are returned with camelCase keys.
 """
 
 import asyncio
@@ -101,6 +101,7 @@ class RunOut(CamelModel):
     ended_at: datetime | None
     judgement_status: str | None  # None until the run is handed to the judge
     score: int | None  # the judgement's overall score (0-100), once completed
+    must_failed: bool | None  # whether any must criterion failed, once completed
     persona: str | None  # the scenario persona's name, from the snapshot
     caller_turns: int | None  # from the summary, once the run finished
     agent_turns: int | None
@@ -125,6 +126,7 @@ class RunOut(CamelModel):
             "ended_at": run.ended_at,
             "judgement_status": run.judgement_status,
             "score": run.score,
+            "must_failed": run.must_failed,
             "persona": run.persona,
             "caller_turns": run.caller_turns,
             "agent_turns": run.agent_turns,

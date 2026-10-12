@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { absoluteTime, relativeTime } from "@/features/connections/format";
 import { isJudging } from "@/features/judgements/format";
-import { needsReview } from "@/features/overview/run-result";
+import { isJudged, needsReview } from "@/features/overview/run-result";
 import { Badge, Button, ScoreBar, buttonClasses, cn } from "@/ui";
 import { STATUS_LABELS, clock, endReasonLabel, isActive, latency, runDurationMs, shortId } from "./format";
 import { RunStatusChip } from "./RunStatusChip";
+import { TruncatedText } from "./TruncatedText";
 import type { Run } from "./types";
 
 const HEAD = "border-b border-line px-2.5 py-2 font-medium";
@@ -53,10 +54,18 @@ export function RunsTable({ runs, onCancel, cancellingId, now }: RunsTableProps)
             const label = shortId(run.id);
             return (
               <tr key={run.id} className="[&:last-child>td]:border-b-0">
-                <td className={cn(CELL, "font-mono text-xs text-muted")}>{label}</td>
-                <td className={cn(CELL, "font-medium")}>{run.scenarioName}</td>
-                <td className={cn(CELL, "text-muted")}>{run.agentName}</td>
-                <td className={cn(CELL, "text-muted")}>{run.persona ?? "—"}</td>
+                <td className={cn(CELL, "whitespace-nowrap font-mono text-xs text-muted")} title={run.id}>
+                  {label}
+                </td>
+                <td className={cn(CELL, "font-medium")}>
+                  <TruncatedText text={run.scenarioName} className="max-w-[18rem]" />
+                </td>
+                <td className={cn(CELL, "text-muted")}>
+                  <TruncatedText text={run.agentName} className="max-w-[14rem]" />
+                </td>
+                <td className={cn(CELL, "text-muted")}>
+                  {run.persona ? <TruncatedText text={run.persona} className="max-w-[9rem]" /> : "—"}
+                </td>
                 <td className={cn(CELL, "font-mono text-xs text-muted")}>{duration === null ? "—" : clock(duration)}</td>
                 <td className={cn(CELL, "font-mono text-xs text-muted")}>{turnsLabel(run)}</td>
                 <td className={cn(CELL, "font-mono text-xs text-muted")}>{latency(run.latencyP50Ms)}</td>
@@ -138,8 +147,9 @@ function RunScore({ run, label }: { run: Run; label: string }) {
 
 /** Judged runs: passed, or flagged for a human review (score under 60 or a must criterion failed). */
 function RunResult({ run }: { run: Run }) {
-  if (run.score === null || run.score === undefined) return <span className="font-mono text-xs text-muted">—</span>;
-  return needsReview(run) ? <Badge tone="evaluator">Needs review</Badge> : <Badge tone="success">Passed</Badge>;
+  if (needsReview(run)) return <Badge tone="evaluator">Needs review</Badge>;
+  if (!isJudged(run) || run.score === null) return <span className="font-mono text-xs text-muted">—</span>;
+  return <Badge tone="success">Passed</Badge>;
 }
 
 /** "caller / agent" turns, or a dash while either is unknown. */
