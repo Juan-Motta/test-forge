@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { OverviewContainer } from "@/features/runs/OverviewContainer";
+import { OverviewContainer } from "@/features/overview/OverviewContainer";
 
 export const metadata: Metadata = { title: "Overview" };
 

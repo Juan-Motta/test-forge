@@ -48,3 +48,27 @@ describe("Runs table call columns", () => {
     expect(column("p50 latency")).toEqual(["640 ms", "1.8 s", "—"]);
   });
 });
+
+describe("Runs table design", () => {
+  it("draws the score as a bar and the judged result as a chip", () => {
+    const runs = [
+      runFixture({ id: "r-passed-01", judgementStatus: "completed", score: 84 }),
+      runFixture({ id: "r-review-01", judgementStatus: "completed", score: 41 }),
+      runFixture({ id: "r-never-001" }),
+    ];
+    render(<RunsTable runs={runs} onCancel={() => {}} now={Date.parse("2026-10-05T17:00:00Z")} />);
+
+    const headers = screen.getAllByRole("columnheader").map((cell) => cell.textContent);
+    const rows = screen.getAllByRole("row").slice(1);
+    const result = headers.indexOf("Result");
+    expect(result).toBeGreaterThan(0);
+    expect(rows.map((row) => within(row).getAllByRole("cell")[result].textContent)).toEqual([
+      "Passed",
+      "Needs review",
+      "—",
+    ]);
+    expect(within(rows[0]).getByRole("meter", { name: "Score of run r-passed-01" })).toHaveAttribute("aria-valuenow", "84");
+    expect(within(rows[1]).getByRole("meter")).toHaveAttribute("data-tone", "bad");
+    expect(within(rows[2]).getByRole("meter")).toHaveAttribute("aria-valuetext", "Not scored");
+  });
+});
