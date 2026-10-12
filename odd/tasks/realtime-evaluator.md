@@ -83,3 +83,13 @@ realtime evaluator mode that listens to the agent's audio and answers by voice w
   prepares during the agent's playback and starts ~0.5 s after it).
 - Conclusion: pipeline stays the default; realtime helps only at the opening and right after a cut,
   and follows the script less reliably.
+- User-requested realtime run 1c33bb53 ended `cancelled` in a goodbye ping-pong: the caller said
+  goodbye without the tool, the agent answered, the caller hung up silently, the runner asked for a
+  spoken goodbye again… The user noted that the evaluator must always end the call (the agent never
+  does). Fixed in 1b64eee: instructions say the caller ends the call and never replies to the
+  agent's goodbye; the goodbye asked for after a silent hang-up closes the call even without the
+  tool (RED observed; tests 68).
+- Re-run f03cb819: completed, caller_hung_up, no loop. Role confusion persists with
+  gpt-realtime-2.1-mini ("Me interrumpiste…", "hasta el diecisiete escuchaste tú", odd last line);
+  agent claimed 17 (heard 1–2).
+
