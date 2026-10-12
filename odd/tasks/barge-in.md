@@ -46,8 +46,8 @@ target on the host (`localhost` inside the backend container is the container it
    `http://localhost:3001`).
 
 ## Tasks
-- [ ] T1 Backend: local targets, scenario interruptions, runner barge-in, events — route: delegated
-- [ ] T2 Frontend: interruptions editor, transcript/live interruption display — route: delegated
+- [x] T1 Backend: local targets, scenario interruptions, runner barge-in, events — route: delegated
+- [x] T2 Frontend: interruptions editor, transcript/live interruption display — route: delegated
 - [ ] T3 Agent + scenario + real run against the local agent (ask before launching) — route: inline
 
 ## Acceptance criteria
@@ -57,4 +57,16 @@ target on the host (`localhost` inside the backend container is the container it
 - Backend pytest + ruff, frontend vitest + lint + typecheck pass.
 
 ## Progress
-(none yet)
+- T1 197701a (delegated; RED observed; pytest 821; compose config ok; app.py wiring added inline).
+- T2 1058bb1 (delegated; RED observed; vitest 344). Reviewed together (1789 lines): APPROVED +
+  acknowledged. Advisories: live reducer maps agentTurn−1 to the detector index (can drift after a
+  dropped empty reply); heard fraction is played / received-so-far (overstates when cut mid-stream);
+  silence end condition can fire during a long simulated-playback wait (afterMs > maxSilence).
+- 1db… live player cuts queued agent audio on callerInterrupted (RED observed; vitest 347).
+- Flaky: ScenarioEditor.test.tsx "name taken" test can exceed the 1 s waitFor under full-suite load.
+- Stack rebuilt; host.docker.internal:8000 reachable from the backend container (TCP ok).
+- Created agent "Vivi local agent" (ws://localhost:8000, channel 2a8204d3…, Origin
+  http://localhost:3001, no Langfuse link yet) and scenario "Interrupción a mitad de una cuenta"
+  (7d8b1fb0…, interrupt agent reply #1 after 4 s; criteria: no claim of unheard numbers (must 40),
+  resumes near the last heard number (must 35), stops and answers (should 10), latency (should 15)).
+- Next: launch (ask).
