@@ -41,14 +41,28 @@ connection/Langfuse cards and a test log.
   opens and closes the agent WebSocket only (no audio); the UI labels it as a live connection.
 
 ## Tasks
-- [ ] F1 Foundation: tokens, `ui/` primitives, shell (nav live badge, env chevron, PageHeader eyebrow, API docs link) — delegated
-- [ ] B1 Backend: the five endpoints above + tests + skill guide/README — delegated
-- [ ] F2 Overview + runs list (KPIs, Live-now, design table, weakest criteria) — delegated (after F1, B1)
-- [ ] F3 Live sessions (batch progress, session cards, audio lanes w/ client-side levels, goals/metrics rail) — delegated (after F1)
-- [ ] F4 Run report (verdict row, tabs, scorecard w/ judge v2 + sampleBands, trace waterfall, recording lanes, suggestions grid, handoff, re-run) — delegated (after F1, B1)
-- [ ] F5 Scenario editor (3 columns, numbered cards, inline LaunchPanel, evaluator RadioCards, interruptions card) — delegated (after F1)
-- [ ] F6 Agents master/detail + connection test log, connections, API keys/skill restyle — delegated (after F1, B1)
-- [ ] V Visual check of every screen in the browser against the design — inline
+- [x] F1 Foundation: tokens, `ui/` primitives, shell (nav live badge, env chevron, PageHeader eyebrow, API docs link) — delegated
+- [x] B1 Backend: the five endpoints above + tests + skill guide/README — delegated
+- [x] F2 Overview + runs list (KPIs, Live-now, design table, weakest criteria) — delegated (after F1, B1)
+- [x] F3 Live sessions (batch progress, session cards, audio lanes w/ client-side levels, goals/metrics rail) — delegated (after F1)
+- [x] F4 Run report (verdict row, tabs, scorecard w/ judge v2 + sampleBands, trace waterfall, recording lanes, suggestions grid, handoff, re-run) — delegated (after F1, B1)
+- [x] F5 Scenario editor (3 columns, numbered cards, inline LaunchPanel, evaluator RadioCards, interruptions card) — delegated (after F1)
+- [x] F6 Agents master/detail + connection test log, connections, API keys/skill restyle — delegated (after F1, B1)
+- [x] V Visual check of every screen in the browser against the design — inline
 
 ## Progress
-(none yet)
+- F1 dad39d0 (tokens, 13 ui primitives, shell: live badge, eyebrow, API docs link), B1 1a195dc
+  (stats, trace, levels, rerun, agent connection test; pytest 970), F5 1b0e647 (3-column editor +
+  LaunchPanel), F3 756db15 (live), F2 d8a748d (overview; fixed a broken "Listen in" link to
+  /live?batchId), F6 0d85f38 (agents master/detail, settings; applied the writer's test patch for
+  AgentsWithScenarioCounts), F4 cf4fe87 (run report), 8cf22f1 (production prerender broke on
+  `window` in api-keys → `useOrigin` with useSyncExternalStore). Frontend: vitest 525, lint,
+  typecheck, `next build` OK. All delegated writers; RED observed for most new modules (F4 only for
+  pure helpers).
+- V (browser, 1440×1000): Overview, Run report (verdict row, aligned lanes + issue pins,
+  scorecard with bands/samples, trace waterfall), Scenario editor (3 columns), Agents
+  (master/detail), Live (empty state) render close to the design.
+- Polish found: recent-runs table wraps ids/names; "Needs review" can't use mustFailed (runs list
+  API lacks it); the editor takes a few seconds to load; the account block flashes "Loading
+  account" on navigation.
+- Not yet reviewed natively: ~10k lines across dad39d0..8cf22f1 (needs slicing).
