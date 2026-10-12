@@ -29,10 +29,10 @@ realtime evaluator mode that listens to the agent's audio and answers by voice w
 - No TTS newer than `gpt-4o-mini-tts`.
 
 ## Tasks
-- [ ] T1 Streaming TTS for the pipeline caller (OpenAI + Azure OpenAI) — route: delegated
-- [ ] T2 Realtime evaluator mode (backend): scenario `evaluatorMode`, realtime caller adapter,
+- [x] T1 Streaming TTS for the pipeline caller (OpenAI + Azure OpenAI) — route: delegated
+- [x] T2 Realtime evaluator mode (backend): scenario `evaluatorMode`, realtime caller adapter,
       runner integration (playback wait, interruptions, hang-up tool, transcripts, events) — delegated
-- [ ] T3 Frontend: evaluator mode in the scenario editor; transcript/live unchanged — delegated
+- [x] T3 Frontend: evaluator mode in the scenario editor; transcript/live unchanged — delegated
 - [ ] T4 Real runs: compare pipeline vs realtime latency on a local-agent scenario (paid; ask) — inline
 
 ## Acceptance criteria
@@ -42,4 +42,22 @@ realtime evaluator mode that listens to the agent's audio and answers by voice w
 - Backend pytest + ruff, frontend vitest + lint + typecheck pass.
 
 ## Progress
-(none yet)
+- T3 42bd116 (delegated; RED observed; vitest 355): Evaluator radio (pipeline/realtime + cost
+  note), realtime voice validation, Azure `realtimeDeployment`, run header label.
+- T1 63631c6 (delegated; RED observed; pytest 838): `stream()` on the TTS port (OpenAI SDK
+  `with_streaming_response`), caller speaks from the first chunk, byte-identical WAV/live audio;
+  events `caller_decision.started_ms/duration_ms`, `caller_speaking.tts_first_chunk_ms`,
+  `caller_speech_synthesized {tts_first_chunk_ms, tts_total_ms}`. Incident: during RED two tests
+  briefly reached api.openai.com with the fake key `test-key` (401); fixed, all tests use fakes.
+  T1+T3 reviewed (1098 lines): APPROVED + acknowledged. Advisories: synthesized event for a stale
+  decision; unfinished utterance on mid-stream failure relies on polling.
+- T2 f278dd0 + f03f81d (delegated; pytest 876; partial RED): realtime caller port + adapter over
+  raw websockets (OpenAI `/v1/realtime?model=gpt-realtime-2.1-mini` Bearer; Azure GA
+  `/openai/v1/realtime?model=<deployment>` api-key — the SDK's Azure path is still preview), manual
+  turns (turn_detection null), hang_up tool, interruptions trim appended agent audio to the played
+  ms, scenario `evaluatorMode` (migration 0010), realtime session uses the TTS connection. Reviewed
+  (2070 lines): APPROVED + acknowledged. Advisories: a response discarded before first audio is
+  cancelled but its partial output item is not deleted (model context may keep unheard words);
+  feed-append failure and abandoned-before-created paths untested; idle gate cleared after send →
+  fixed in 87c0ec1.
+- Stack rebuilt. Next: T4 real runs (ask).
