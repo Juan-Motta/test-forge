@@ -8,9 +8,14 @@ Types, in the order a run produces them: `run_started`, `protocol_detected`, the
 the agent off: `agent_turn`, `audio_end_ms`, `heard_text`), and last `run_finished`. The
 `agent_transcript` of an interrupted turn also carries `interrupted`, `heard_text` and
 `audio_end_ms`.
-`caller_decision`, `caller_speaking` and `caller_decision_discarded` carry the decision's
-`decision_id` (from 1). Audio events carry their PCM16 24 kHz mono chunk in `pcm`, which never
-goes into `events.jsonl`.
+`caller_speech_synthesized` (the decision's streamed synthesis ended) may come before or after
+its `caller_speaking`.
+`caller_decision`, `caller_speaking`, `caller_speech_synthesized` and `caller_decision_discarded`
+carry the decision's `decision_id` (from 1). Latency timings, in ms: `caller_decision` has
+`started_ms` (run time the policy was asked) and `duration_ms`; `caller_speaking` has
+`tts_first_chunk_ms` (synthesis start to its first chunk); `caller_speech_synthesized` has
+`tts_first_chunk_ms` and `tts_total_ms`. Audio events carry their PCM16 24 kHz mono chunk in
+`pcm`, which never goes into `events.jsonl`.
 """
 
 from dataclasses import dataclass, field

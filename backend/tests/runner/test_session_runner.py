@@ -9,6 +9,7 @@ from collections.abc import Callable
 
 import pytest
 
+from voice_eval.audio import FRAME_BYTES, chunk_pcm, read_wav_pcm16_24k
 from voice_eval.ports.policy import CallerBrief, CallerDecision, PolicyState, Utterance
 from voice_eval.ports.tts import SynthesisError
 from voice_eval.runner.artifacts import ARTIFACT_NAMES
@@ -57,18 +58,48 @@ HANG_UP = CallerDecision(None, True, "goal met")
 
 
 class FakeTts:
-    def __init__(self, fail: bool = False, delay_s: float = 0, pcm: bytes = SPEECH) -> None:
+    """A streaming TTS: `delay_s` before the first chunk, `chunk_delay_s` between the others."""
+
+    def __init__(
+        self,
+        fail: bool = False,
+        delay_s: float = 0,
+        pcm: bytes = SPEECH,
+        chunk_bytes: int | None = None,
+        chunk_delay_s: float = 0,
+        fail_after_chunks: int | None = None,
+        delays: dict[str, float] | None = None,
+    ) -> None:
         self.texts: list[str] = []
         self.fail = fail
         self.delay_s = delay_s
         self.pcm = pcm
+        self.chunk_bytes = chunk_bytes or len(pcm)
+        self.chunk_delay_s = chunk_delay_s
+        self.fail_after_chunks = fail_after_chunks
+        self.delays = delays or {}  # first-chunk delay per text, overriding `delay_s`
+        self.cancelled: list[str] = []
+        self.completed: list[str] = []
 
     async def synthesize(self, text: str) -> bytes:
+        return b"".join([chunk async for chunk in self.stream(text)])
+
+    async def stream(self, text: str):
         self.texts.append(text)
-        await asyncio.sleep(self.delay_s)
-        if self.fail:
-            raise SynthesisError("no audio")
-        return self.pcm
+        try:
+            await asyncio.sleep(self.delays.get(text, self.delay_s))
+            if self.fail:
+                raise SynthesisError("no audio")
+            for n, start in enumerate(range(0, len(self.pcm), self.chunk_bytes)):
+                if n:
+                    await asyncio.sleep(self.chunk_delay_s)
+                if n == self.fail_after_chunks:
+                    raise SynthesisError("stream broke")
+                yield self.pcm[start : start + self.chunk_bytes]
+        except (asyncio.CancelledError, GeneratorExit):
+            self.cancelled.append(text)
+            raise
+        self.completed.append(text)
 
 
 class ListSink:
@@ -532,7 +563,11 @@ async def test_a_stale_decision_is_dropped_when_the_agent_speaks_again(
     assert decisions == [(1, "Hello there"), (2, "Stale answer"), (3, None)]
     assert discarded.data["decision_id"] == 2
     (speaking,) = sink.of("caller_speaking")
-    assert speaking.data == {"decision_id": 1, "say": "Hello there", "reason": "said Hello there"}
+    assert {k: speaking.data[k] for k in ("decision_id", "say", "reason")} == {
+        "decision_id": 1,
+        "say": "Hello there",
+        "reason": "said Hello there",
+    }
     assert speaking.t_ms < sink.of("agent_transcript")[0].t_ms
     last_agent_audio = max(e.t_ms for e in sink.of("agent_audio"))
     assert max(e.t_ms for e in sink.of("caller_audio")) < last_agent_audio
@@ -678,3 +713,103 @@ async def test_live_targets_skip_interruptions_with_a_warning(fake_live_server, 
     assert sink.of("caller_interrupted") == []
     assert any("not supported" in w for w in summary["warnings"])
     assert summary["interruptions"] == []
+
+
+# --- streamed caller speech ---------------------------------------------------------------
+
+# not a whole number of frames, so the last frame is a partial one in both paths
+LONG_SPEECH = SPEECH + b"\x20\x00" * 2500 + b"\x30\x00" * 1001
+
+
+def caller_wav_speech(tmp_path) -> bytes:
+    """`caller.wav` without the open microphone's silence before and after the words."""
+    pcm = read_wav_pcm16_24k(tmp_path / "run" / "caller.wav")
+    samples = [i for i in range(0, len(pcm), 2) if pcm[i : i + 2] != b"\x00\x00"]
+    return pcm[samples[0] : samples[-1] + 2]
+
+
+def live_caller_frames(sink) -> list[bytes]:
+    return [e.pcm for e in sink.of("caller_audio")]
+
+
+class SlowPolicy(ScriptedPolicy):
+    async def next_turn(self, state: PolicyState) -> CallerDecision:
+        await asyncio.sleep(0.2)
+        return await super().next_turn(state)
+
+
+async def test_the_caller_speaks_on_the_first_synthesized_chunk(fake_live_server, tmp_path):
+    # synthesis is slower than real time: 6 chunks, 0.3 s apart
+    tts = FakeTts(pcm=LONG_SPEECH, chunk_bytes=FRAME_BYTES, chunk_delay_s=0.3)
+    policy = SlowPolicy(by_turn(say("I need a room"), HANG_UP))
+    summary, sink = await run(fake_live_server.url, tmp_path, policy, tts=tts)
+
+    assert (summary["status"], summary["reason"]) == ("completed", "caller_hung_up")
+    decision = sink.of("caller_decision")[0]
+    assert decision.data["started_ms"] <= decision.t_ms
+    assert decision.data["duration_ms"] >= 200
+    assert decision.data["started_ms"] + decision.data["duration_ms"] <= decision.t_ms + 1
+    (speaking,) = sink.of("caller_speaking")
+    (synthesized,) = sink.of("caller_speech_synthesized")
+    assert synthesized.data["decision_id"] == speaking.data["decision_id"] == 1
+    assert speaking.data["tts_first_chunk_ms"] < 250
+    assert synthesized.data["tts_first_chunk_ms"] == speaking.data["tts_first_chunk_ms"]
+    assert synthesized.data["tts_total_ms"] >= 1100  # 5 chunks, 4 gaps of 0.3 s
+    # the first words went out long before the synthesis ended
+    assert speaking.t_ms < synthesized.t_ms - 1000
+    assert speaking.t_ms - decision.t_ms < 600
+    # the caller's words are exactly the synthesized audio, frame for frame
+    assert live_caller_frames(sink) == chunk_pcm(LONG_SPEECH)
+    assert caller_wav_speech(tmp_path) == LONG_SPEECH
+
+
+async def test_streamed_speech_is_byte_identical_to_whole_speech(fake_live_server, tmp_path):
+    policy = ScriptedPolicy(by_turn(say("I need a room"), HANG_UP))
+    tts = FakeTts(pcm=LONG_SPEECH, chunk_bytes=3002)  # chunks across frame boundaries
+    _, streamed = await run(fake_live_server.url, tmp_path, policy, tts=tts)
+
+    whole_dir = tmp_path / "whole"
+    whole_dir.mkdir()
+    policy = ScriptedPolicy(by_turn(say("I need a room"), HANG_UP))
+    _, whole = await run(fake_live_server.url, whole_dir, policy, tts=FakeTts(pcm=LONG_SPEECH))
+
+    assert live_caller_frames(streamed) == live_caller_frames(whole) == chunk_pcm(LONG_SPEECH)
+    assert caller_wav_speech(tmp_path) == caller_wav_speech(whole_dir) == LONG_SPEECH
+
+
+async def test_a_stream_failing_mid_utterance_fails_the_run(fake_live_server, tmp_path):
+    tts = FakeTts(pcm=LONG_SPEECH, chunk_bytes=FRAME_BYTES, chunk_delay_s=0.3, fail_after_chunks=2)
+    policy = ScriptedPolicy(by_turn(say("I need a room"), HANG_UP))
+    summary, sink = await run(fake_live_server.url, tmp_path, policy, tts=tts)
+
+    assert (summary["status"], summary["reason"]) == ("failed", "tts_failed")
+    assert summary["error"] == "speech synthesis failed (stream broke)"
+    assert len(sink.of("caller_speaking")) == 1  # the first words were already said
+    assert sink.of("caller_speech_synthesized") == []
+    assert (tmp_path / "run" / "summary.json").exists()
+    assert fake_live_server.received_types[-1] == "voice.close"
+
+
+async def test_the_stream_is_cancelled_when_the_agent_speaks_before_its_first_chunk(
+    fake_realtime_server, tmp_path
+):
+    fake_realtime_server.follow_up_after = {1: 0.6}
+
+    def script(state: PolicyState) -> CallerDecision:
+        if state.caller_turns == 0:
+            return say("Hello there")
+        if state.conversation[-1].text == "agent response number 1":
+            return say("Stale answer")
+        return HANG_UP
+
+    tts = FakeTts(delays={"Stale answer": 3.0})
+    summary, sink = await run(fake_realtime_server.url, tmp_path, ScriptedPolicy(script), tts=tts)
+
+    assert (summary["status"], summary["reason"]) == ("completed", "caller_hung_up")
+    assert tts.cancelled == ["Stale answer"]
+    assert tts.completed == ["Hello there"]
+    (discarded,) = sink.of("caller_decision_discarded")
+    assert discarded.data["say"] == "Stale answer"
+    assert [e.data["say"] for e in sink.of("caller_speaking")] == ["Hello there"]
+    assert summary["caller_turns"] == 1
+    assert caller_wav_speech(tmp_path) == SPEECH

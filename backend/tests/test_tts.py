@@ -1,5 +1,6 @@
+import asyncio
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import MagicMock
 
 import pytest
 from openai import AsyncAzureOpenAI, AsyncOpenAI
@@ -16,9 +17,36 @@ from voice_eval.providers.openai_tts import OpenAISpeechSynthesizer
 PCM = b"\x01\x00" * 100
 
 
-def _mock_speech(synth: OpenAISpeechSynthesizer, content: bytes = PCM) -> AsyncMock:
-    create = AsyncMock(return_value=SimpleNamespace(content=content))
-    synth.client.audio.speech.create = create
+class FakeStreamedSpeech:
+    """The SDK's streamed binary response: an async context manager whose body arrives in chunks."""
+
+    def __init__(self, chunks: list[bytes], delay_s: float = 0) -> None:
+        self.chunks = chunks
+        self.delay_s = delay_s
+        self.entered = False
+        self.closed = False
+
+    async def __aenter__(self) -> "FakeStreamedSpeech":
+        self.entered = True
+        return self
+
+    async def __aexit__(self, *exc_info: object) -> None:
+        self.closed = True
+
+    async def iter_bytes(self, chunk_size: int | None = None):
+        for chunk in self.chunks:
+            await asyncio.sleep(self.delay_s)
+            yield chunk
+
+
+def _mock_speech(
+    synth: OpenAISpeechSynthesizer, content: bytes | list[bytes] = PCM, delay_s: float = 0
+) -> MagicMock:
+    chunks = content if isinstance(content, list) else [content]
+    response = FakeStreamedSpeech(chunks, delay_s)
+    create = MagicMock(return_value=response)
+    create.response = response
+    synth.client.audio.speech.with_streaming_response = SimpleNamespace(create=create)
     return create
 
 
@@ -34,9 +62,10 @@ async def test_openai_adapter_requests_raw_pcm_with_model():
     assert not isinstance(synth.client, AsyncAzureOpenAI)
     create = _mock_speech(synth)
     assert await synth.synthesize("hola") == PCM
-    create.assert_awaited_once_with(
+    create.assert_called_once_with(
         model="gpt-4o-mini-tts", voice="coral", input="hola", response_format="pcm"
     )
+    assert create.response.closed
 
 
 async def test_azure_adapter_uses_deployment_as_model():
@@ -51,7 +80,7 @@ async def test_azure_adapter_uses_deployment_as_model():
     assert isinstance(synth.client, AsyncAzureOpenAI)
     create = _mock_speech(synth)
     await synth.synthesize("hola")
-    create.assert_awaited_once_with(
+    create.assert_called_once_with(
         model="my-tts", voice="alloy", input="hola", response_format="pcm"
     )
 
@@ -75,12 +104,68 @@ def test_unknown_provider_is_rejected():
         build_synthesizer(TtsSettings.from_env({"VOICE_EVAL_PROVIDER": "nope"}))
 
 
-@pytest.mark.parametrize("content", [b"", b"\x01\x02\x03"])
+@pytest.mark.parametrize("content", [b"", b"\x01\x02\x03", [b"\x01", b"\x02\x03"]])
 async def test_adapter_rejects_empty_or_odd_pcm(content):
     synth = build_synthesizer(TtsSettings.from_env({"OPENAI_API_KEY": "test-key"}))
     _mock_speech(synth, content)
     with pytest.raises(SynthesisError):
         await synth.synthesize("hola")
+    with pytest.raises(SynthesisError):
+        async for _ in synth.stream("hola"):
+            pass
+
+
+async def test_stream_yields_even_chunks_as_they_arrive():
+    synth = build_synthesizer(TtsSettings.from_env({"OPENAI_API_KEY": "test-key"}))
+    # odd chunk boundaries split samples: the adapter re-aligns them to whole samples
+    chunks = [b"\x01", b"\x02\x03\x04", b"", b"\x05", b"\x06\x07\x08\x09\x0a"]
+    create = _mock_speech(synth, chunks)
+
+    out = [chunk async for chunk in synth.stream("hola")]
+
+    assert out == [b"\x01\x02\x03\x04", b"\x05\x06\x07\x08\x09\x0a"]
+    assert all(len(chunk) % 2 == 0 for chunk in out)
+    create.assert_called_once_with(
+        model="gpt-4o-mini-tts", voice="alloy", input="hola", response_format="pcm"
+    )
+    assert create.response.closed
+
+
+async def test_synthesize_collects_the_stream():
+    synth = build_synthesizer(TtsSettings.from_env({"OPENAI_API_KEY": "test-key"}))
+    _mock_speech(synth, [PCM[:51], PCM[51:120], PCM[120:]])
+    assert await synth.synthesize("hola") == PCM
+
+
+async def test_stream_hands_out_the_first_chunk_before_the_rest_is_synthesized():
+    synth = build_synthesizer(TtsSettings.from_env({"OPENAI_API_KEY": "test-key"}))
+    create = _mock_speech(synth, [PCM, PCM, PCM], delay_s=0.2)
+    loop = asyncio.get_running_loop()
+    started = loop.time()
+    stream = synth.stream("hola")
+    first = await anext(stream)
+    first_s = loop.time() - started
+    await stream.aclose()  # the caller stops listening: the response is released
+
+    assert first == PCM
+    assert first_s < 0.35
+    assert create.response.closed
+
+
+async def test_a_cancelled_stream_releases_the_response():
+    synth = build_synthesizer(TtsSettings.from_env({"OPENAI_API_KEY": "test-key"}))
+    create = _mock_speech(synth, [PCM, PCM], delay_s=5)
+
+    async def consume() -> None:
+        async for _ in synth.stream("hola"):
+            pass
+
+    task = asyncio.create_task(consume())
+    await asyncio.sleep(0.05)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert create.response.entered and create.response.closed
 
 
 def test_synthesizers_can_be_built_from_explicit_values(monkeypatch):

@@ -1,14 +1,15 @@
 """Session runner: one conversation between the policy-driven caller and the agent under test.
 
-The agent's own transcript (legacy `response.output_audio_transcript.done`, Live captions) is
-what the policy hears; its decision is spoken with the TTS provider over the open-microphone
-caller stream. Turn-taking is playback-aware: the caller speaks, and hangs up, only once the
-agent's last reply would have finished playing. A response with no audio and no transcript is no
-agent turn: the runner keeps waiting for the real reply. Right before the caller speaks it checks
-again: if the agent started speaking since the policy decided, the caller waits for it to finish
-and the policy decides again on the new text. The run ends when the caller hangs up, the agent
-ends the session, or an end condition (max duration, max silence) is reached; it always closes
-the session and writes its artifacts.
+The agent's own transcript (legacy `response.output_audio_transcript.done`, Live captions) is what
+the policy hears; its decision is spoken with the TTS provider over the open-microphone caller
+stream, streamed: synthesis starts when the policy decides, and the caller speaks from the first
+synthesized chunk (`runner.speech`). Turn-taking is playback-aware: the caller speaks, and hangs up,
+only once the agent's last reply would have finished playing. A response with no audio and no
+transcript is no agent turn: the runner keeps waiting for the real reply. Right before the caller
+speaks it checks again: if the agent started speaking since the policy decided, the caller waits for
+it to finish and the policy decides again on the new text. The run ends when the caller hangs up,
+the agent ends the session, or an end condition (max duration, max silence) is reached; it always
+closes the session and writes its artifacts.
 
 A scenario may make the caller barge in (legacy realtime only; see `runner.barge_in`): once
 `after_ms` of agent turn N has played, the runner cuts the simulated playback, reports
@@ -50,7 +51,7 @@ from voice_eval.ports.target import (
     TranscriptMessage,
     TranscriptUpdate,
 )
-from voice_eval.ports.tts import SpeechSynthesizer, SynthesisError
+from voice_eval.ports.tts import SpeechSynthesizer
 from voice_eval.runner.artifacts import write_artifacts
 from voice_eval.runner.barge_in import (
     AudioItem,
@@ -64,6 +65,7 @@ from voice_eval.runner.barge_in import (
 )
 from voice_eval.runner.common import close_session, make_detector, rounded, turn_record
 from voice_eval.runner.events import EventSink, RunEvent
+from voice_eval.runner.speech import CallerSpeech
 from voice_eval.targets.detect import ProtocolDetectionError, TargetSpec, open_target
 from voice_eval.turns import AgentTurn, AgentTurnDetector
 
@@ -160,6 +162,7 @@ class SessionRunner:
         self._caller_chunks = 0
         self._caller_speaking = False  # between the first and the last speech frame of a turn
         self._decisions = 0  # ids of the policy's decisions, from 1
+        self._speeches: list[CallerSpeech] = []  # decisions' words still being synthesized
         self._t0 = time.monotonic()
         self._started_at = datetime.now(UTC)
         self._reader: asyncio.Task[None] | None = None
@@ -312,11 +315,15 @@ class SessionRunner:
                     raise Stop("completed", "caller_hung_up")
                 await self._agent_turn()  # nothing to say: listen
                 continue
-            pcm = await self._synthesize(decision.say)
-            if await self._agent_spoke_again():
-                self._discard(decision)
-                continue
-            said = self._speak(decision, pcm)
+            speech = self._synthesize(decision.say)
+            try:
+                if await self._agent_spoke_again() or not await self._first_audio(speech):
+                    self._discard(decision)
+                    continue
+                said = self._speak(decision, speech)
+            finally:
+                if not speech.attached:
+                    await self._drop(speech)
             if decision.hang_up:
                 await self._wait_until(said.is_set)
                 raise Stop("completed", "caller_hung_up")
@@ -324,6 +331,8 @@ class SessionRunner:
 
     async def _shutdown(self) -> None:
         """Stop the caller stream and close the session, whatever state the sender ended in."""
+        for speech in list(self._speeches):
+            await self._drop(speech)
         if self._sender is not None:
             self._sender.cancel()
             try:
@@ -351,6 +360,7 @@ class SessionRunner:
             elapsed_s=self._now_ms() / 1000,
             caller_turns=self.caller_turns,
         )
+        started_ms = self._now_ms()
         try:
             decision = await self.policy.next_turn(state)
         except Exception as exc:
@@ -358,7 +368,10 @@ class SessionRunner:
                 "failed", "evaluator_failed", f"evaluator failed ({type(exc).__name__})"
             ) from None
         self._decisions += 1
-        self._publish("caller_decision", self._decision_data(decision))
+        data = self._decision_data(decision)
+        data["started_ms"] = rounded(started_ms)
+        data["duration_ms"] = rounded(self._now_ms() - started_ms)
+        self._publish("caller_decision", data)
         return decision
 
     def _decision_data(self, decision: CallerDecision) -> dict[str, Any]:
@@ -369,20 +382,58 @@ class SessionRunner:
             "reason": decision.reason,
         }
 
-    async def _synthesize(self, text: str) -> bytes:
-        try:
-            async with asyncio.timeout(self.options.tts_timeout_s):
-                return await self.synthesizer.synthesize(text)
-        except SynthesisError as exc:
-            message = f"speech synthesis failed ({exc})"
-        except TimeoutError:
-            message = "speech synthesis timed out"
-        except Exception as exc:  # provider errors may quote request details: type only
-            message = f"speech synthesis failed ({type(exc).__name__})"
-        raise Stop("failed", "tts_failed", message)
+    def _synthesize(self, text: str) -> CallerSpeech:
+        """Start streaming the decision's words; a failure stops the run where it is noticed."""
+        decision_id = self._decisions
 
-    def _speak(self, decision: CallerDecision, pcm: bytes) -> asyncio.Event:
-        """Queue the caller's words; the returned event is set once the last word was sent."""
+        def synthesized(speech: CallerSpeech) -> None:
+            self._publish(
+                "caller_speech_synthesized",
+                {
+                    "decision_id": decision_id,
+                    "tts_first_chunk_ms": rounded(speech.first_chunk_ms),
+                    "tts_total_ms": rounded(speech.total_ms),
+                },
+            )
+
+        self._speeches = [s for s in self._speeches if not s.done or s.failure is not None]
+        speech = CallerSpeech(
+            self.synthesizer,
+            text,
+            timeout_s=self.options.tts_timeout_s,
+            now_ms=self._now_ms,
+            on_done=synthesized,
+        )
+        self._speeches.append(speech)
+        return speech
+
+    async def _first_audio(self, speech: CallerSpeech) -> bool:
+        """Hold until the first synthesized chunk; False if the agent started speaking first.
+
+        The agent's new turn is collected (it ends and plays) before returning False, so the
+        policy decides again on it.
+        """
+        await self._wait_until(lambda: speech.has_audio or speech.done or self._agent_active())
+        self._check_speech()
+        if speech.has_audio:
+            return True
+        await self._drop(speech)
+        await self._agent_spoke_again()
+        return False
+
+    async def _drop(self, speech: CallerSpeech) -> None:
+        await speech.cancel()
+        if speech in self._speeches:
+            self._speeches.remove(speech)
+
+    def _check_speech(self) -> None:
+        """A failed synthesis stops the run, also when it broke off mid-utterance."""
+        for speech in self._speeches:
+            if speech.failure is not None:
+                raise Stop("failed", "tts_failed", speech.failure)
+
+    def _speak(self, decision: CallerDecision, speech: CallerSpeech) -> asyncio.Event:
+        """Queue the caller's words as they are synthesized; the event is set after the last."""
         assert self.stream is not None and decision.say is not None
         said = asyncio.Event()
         row: dict[str, Any] = {
@@ -401,7 +452,12 @@ class SessionRunner:
             self._caller_speaking = True
             self._publish(
                 "caller_speaking",
-                {"decision_id": decision_id, "say": decision.say, "reason": decision.reason},
+                {
+                    "decision_id": decision_id,
+                    "say": decision.say,
+                    "reason": decision.reason,
+                    "tts_first_chunk_ms": rounded(speech.first_chunk_ms),
+                },
             )
             row["start_ms"] = rounded(now_ms)
             if previous is not None and previous.caller_resumed_ms is None:
@@ -416,7 +472,7 @@ class SessionRunner:
         self.transcript.append(row)
         self.conversation.append(Utterance("caller", decision.say))
         self.caller_turns += 1
-        self.stream.enqueue(pcm, self.options.trailing_silence_ms, ended, started)
+        speech.attach(self.stream.open(self.options.trailing_silence_ms, ended, started))
         return said
 
     async def _agent_turn(self) -> None:
@@ -594,6 +650,7 @@ class SessionRunner:
             self.detector.turn_ended(self._now_ms())
             if done():
                 return
+            self._check_speech()
             if (exc := self._sender_failure()) is not None:
                 raise Stop(
                     "failed",

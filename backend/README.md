@@ -384,15 +384,21 @@ connection, like the synthesizer.
 `voice_eval.runner.session.SessionRunner` holds one evaluator conversation: it opens the agent
 (protocol auto-detected), lets the agent greet first on Live and asks the policy for the opening
 caller turn on legacy, then for each agent turn waits for its end and its playback, feeds the
-agent's own transcript to the policy, synthesizes `say` with the TTS provider and streams it on
-the open-microphone caller stream. A response with no audio and no transcript (a cancelled or
-tool-only one) is not an agent turn: the policy is not asked, the caller stays quiet, and the
-runner keeps waiting for the real reply (bounded by `maxSilenceS`); it is dropped from the turn
-list with a warning. Right before the caller speaks (or hangs up) the runner checks again: if
-the agent started speaking since the decision, the caller waits until that reply has ended and
-played, the decision is discarded (`caller_decision_discarded`) and the policy decides again on
-the new text. An agent turn that starts while the caller is mid-utterance is recorded as
-`agent_barge_in`; the utterance is not cut.
+agent's own transcript to the policy, synthesizes `say` with the TTS provider and streams it on the
+open-microphone caller stream. Synthesis is streamed (`SpeechSynthesizer.stream`): it starts as soon
+as the policy decides, and once the agent's reply has played the caller speaks from the first
+synthesized 100 ms frame instead of waiting for the whole utterance; the bytes sent (and
+`caller.wav`) are the same as with whole-utterance synthesis. If synthesis falls behind real time
+the stream sends nothing until more speech arrives, so no silence is slipped between the words. If
+the agent starts speaking before the first chunk, the stream is cancelled and the decision is
+discarded. A synthesis failure, also one mid-utterance, ends the run with `tts_failed`. A response
+with no audio and no transcript (a cancelled or tool-only one) is not an agent turn: the policy is
+not asked, the caller stays quiet, and the runner keeps waiting for the real reply (bounded by
+`maxSilenceS`); it is dropped from the turn list with a warning. Right before the caller speaks (or
+hangs up) the runner checks again: if the agent started speaking since the decision, the caller
+waits until that reply has ended and played, the decision is discarded (`caller_decision_discarded`)
+and the policy decides again on the new text. An agent turn that starts while the caller is
+mid-utterance is recorded as `agent_barge_in`; the utterance is not cut.
 
 **Barge-in** (scenario `interruptions`, legacy realtime only; on Live the run warns and never
 interrupts). Agent audio arrives faster than real time, so the runner simulates its playback:
@@ -421,7 +427,12 @@ at `maxDurationS`, or after `maxSilenceS` without agent audio or caller speech (
 `evaluator_failed`, `caller_audio_failed`, plus `error` for failures) to an injected directory,
 even when the caller audio sender failed. Events (`run_started`, `protocol_detected`,
 `agent_audio`, `agent_transcript`, `turn_ended`, `caller_decision`, `caller_audio`, `warning`,
-`caller_decision_discarded`, `agent_barge_in`, `caller_interrupted`, `run_finished`) go in order to an injected async sink; audio events carry PCM chunks that never
+`caller_speaking`, `caller_speech_synthesized`, `caller_decision_discarded`, `agent_barge_in`,
+`caller_interrupted`, `run_finished`) go in order to an injected async sink. For latency
+breakdowns `caller_decision` carries `started_ms` (run time the policy was asked) and
+`duration_ms`, `caller_speaking` carries `tts_first_chunk_ms` (synthesis start to first chunk),
+and `caller_speech_synthesized` (the stream ended) carries `tts_first_chunk_ms` and
+`tts_total_ms`. Audio events carry PCM chunks that never
 reach `events.jsonl`. A sink that has not taken every event 10 s after the run ended
 (`sink_drain_timeout_s`) is abandoned with a warning, so it never holds the artifacts back. The probe shares its detector, close and artifact helpers
 (`voice_eval.runner.common`, `voice_eval.runner.artifacts`).

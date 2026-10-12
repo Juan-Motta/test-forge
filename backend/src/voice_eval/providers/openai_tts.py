@@ -1,5 +1,7 @@
 """OpenAI / Azure OpenAI text-to-speech adapter for the SpeechSynthesizer port."""
 
+from collections.abc import AsyncIterator
+
 from openai import AsyncAzureOpenAI, AsyncOpenAI
 
 from voice_eval.ports.tts import SynthesisError
@@ -27,12 +29,22 @@ class OpenAISpeechSynthesizer:
         return cls(client, deployment, voice)
 
     async def synthesize(self, text: str) -> bytes:
+        return b"".join([chunk async for chunk in self.stream(text)])
+
+    async def stream(self, text: str) -> AsyncIterator[bytes]:
         # "pcm" is raw 24 kHz 16-bit signed little-endian mono with no header, which is
-        # exactly the target's wire format, so no resampling is needed.
-        response = await self.client.audio.speech.create(
+        # exactly the target's wire format, so no resampling is needed. The body is read as it
+        # arrives; a chunk may split a sample, so an odd byte waits for the next chunk.
+        total, carry = 0, b""
+        async with self.client.audio.speech.with_streaming_response.create(
             model=self.model, voice=self.voice, input=text, response_format="pcm"
-        )
-        pcm = response.content
-        if not pcm or len(pcm) % 2:
-            raise SynthesisError(f"TTS returned invalid PCM16 payload ({len(pcm)} bytes)")
-        return pcm
+        ) as response:
+            async for chunk in response.iter_bytes():
+                data = carry + chunk
+                whole = len(data) - len(data) % 2
+                carry = data[whole:]
+                if whole:
+                    total += whole
+                    yield data[:whole]
+        if not total or carry:
+            raise SynthesisError(f"TTS returned invalid PCM16 payload ({total + len(carry)} bytes)")

@@ -38,6 +38,9 @@ class FakeTts:
         self.texts.append(text)
         return SPEECH
 
+    async def stream(self, text: str):
+        yield await self.synthesize(text)
+
 
 async def test_a_batch_runs_end_to_end_against_the_fake_agent(
     app, user_client, factory, fake_live_server, settings
