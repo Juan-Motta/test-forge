@@ -16,16 +16,40 @@
   --ve-line-strong: #30353c;
   --ve-field: #111316;
   --ve-field-line: #2a2e35;
+  /* Table rules, score-bar tracks and the environment pill. */
+  --ve-field-border: #262a30;
+  --ve-line-raised: #272b31;
+  /* Nested tiles: elapsed timers, muted chips, meta pills, selected cards. */
+  --ve-tag: #24282e;
+  --ve-pill: #1c1f24;
+  --ve-selected: #1f2329;
+  /* Pending/queued marks and dashed "add" borders. */
+  --ve-idle: #3a3f47;
+  /* Code blocks and handoff briefs. */
+  --ve-code: #0f1013;
+  --ve-code-fg: #a6e3b8;
 
   --ve-fg: #eceae4;
   --ve-muted: #a3a6ac;
   --ve-dim: #8c9097;
+  /* Time axes and per-turn latencies. */
+  --ve-faint: #7e828a;
+  /* Transcript and description text, a step brighter than muted. */
+  --ve-body: #d6d4ce;
+  --ve-body-strong: #e4e2dc;
+  --ve-body-soft: #c9c7c1;
 
   --ve-agent: #6cb6f5;
+  --ve-agent-fg: #8cc6f7;
   --ve-evaluator: #f0b04a;
   --ve-evaluator-hover: #f6c978;
   --ve-evaluator-fg: #f3c06a;
   --ve-on-evaluator: #1a1206;
+  /* Border of the evaluator-owned panels (launch, handoff). */
+  --ve-evaluator-line: #3a3222;
+  /* LLM generations in the trace waterfall. */
+  --ve-llm: #a58beb;
+  --ve-llm-fg: #c4b0f5;
   --ve-success: #5fcb8a;
   --ve-success-fg: #7fd9a2;
   --ve-danger: #f07a6a;
@@ -45,14 +69,30 @@
   --color-line-strong: var(--ve-line-strong);
   --color-field: var(--ve-field);
   --color-field-line: var(--ve-field-line);
+  --color-field-border: var(--ve-field-border);
+  --color-line-raised: var(--ve-line-raised);
+  --color-tag: var(--ve-tag);
+  --color-pill: var(--ve-pill);
+  --color-selected: var(--ve-selected);
+  --color-idle: var(--ve-idle);
+  --color-code: var(--ve-code);
+  --color-code-fg: var(--ve-code-fg);
   --color-fg: var(--ve-fg);
   --color-muted: var(--ve-muted);
   --color-dim: var(--ve-dim);
+  --color-faint: var(--ve-faint);
+  --color-body: var(--ve-body);
+  --color-body-strong: var(--ve-body-strong);
+  --color-body-soft: var(--ve-body-soft);
   --color-agent: var(--ve-agent);
+  --color-agent-fg: var(--ve-agent-fg);
   --color-evaluator: var(--ve-evaluator);
   --color-evaluator-hover: var(--ve-evaluator-hover);
   --color-evaluator-fg: var(--ve-evaluator-fg);
   --color-on-evaluator: var(--ve-on-evaluator);
+  --color-evaluator-line: var(--ve-evaluator-line);
+  --color-llm: var(--ve-llm);
+  --color-llm-fg: var(--ve-llm-fg);
   --color-success: var(--ve-success);
   --color-success-fg: var(--ve-success-fg);
   --color-danger: var(--ve-danger);

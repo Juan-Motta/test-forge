@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { activeHref, NAV_PRIMARY, NAV_SECONDARY } from "./navigation";
 import { Sidebar } from "./Sidebar";
@@ -76,5 +76,34 @@ describe("Sidebar", () => {
 
     expect(screen.getByText("Account details unavailable")).toBeInTheDocument();
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
+  it("shows the active-run count on Live sessions, and no badge when there is none", () => {
+    const nav = renderSidebar("/", { badges: { "/live": 3 } });
+    expect(nav.getByRole("link", { name: "Live sessions (3 active)" })).toHaveTextContent("3");
+    cleanup();
+
+    const idle = renderSidebar("/", { badges: { "/live": 0 } });
+    expect(idle.getByRole("link", { name: "Live sessions" })).toHaveTextContent(/^Live sessions$/);
+  });
+
+  it("links the API docs in a new tab next to Settings", () => {
+    const nav = renderSidebar("/");
+
+    const docs = nav.getByRole("link", { name: "API docs (opens in a new tab)" });
+    expect(docs).toHaveAttribute("href", "/api/docs");
+    expect(docs).toHaveAttribute("target", "_blank");
+    expect(docs).toHaveAttribute("rel", expect.stringContaining("noopener"));
+    const links = nav.getAllByRole("link");
+    expect(links.indexOf(docs)).toBeGreaterThan(links.indexOf(nav.getByRole("link", { name: "Settings" })));
+  });
+
+  it("draws the environment as a pill with a chevron, not as a control", () => {
+    renderSidebar("/");
+
+    const pill = screen.getByText("Environment · dev").closest("[data-environment]");
+    expect(pill).not.toBeNull();
+    expect(pill?.querySelector("svg")).not.toBeNull();
+    expect(screen.queryByRole("button", { name: /Environment/ })).not.toBeInTheDocument();
   });
 });

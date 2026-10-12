@@ -17,8 +17,19 @@ vi.mock("@/lib/navigation/redirect", () => ({
   redirectToLogin: nav.redirectToLogin,
 }));
 
+/** Active-run counts (list totals) per status for the Live sessions badge. */
+function activeRuns(totals: Partial<Record<"queued" | "connecting" | "running", number>> = {}) {
+  server.use(
+    http.get(apiUrl("/runs"), ({ request }) => {
+      const status = new URL(request.url).searchParams.get("status") as keyof typeof totals;
+      return HttpResponse.json({ items: [], total: totals[status] ?? 0 });
+    }),
+  );
+}
+
 function signedIn() {
   const calls = { me: 0 };
+  activeRuns();
   server.use(
     http.get(apiUrl("/auth/me"), () => {
       calls.me += 1;
@@ -118,5 +129,17 @@ describe("AppShell", () => {
     rerender(<QueryClientProvider client={queryClient}>{shell()}</QueryClientProvider>);
 
     expect(screen.getByRole("button", { name: "Open navigation" })).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("badges Live sessions with the number of queued, connecting and running runs", async () => {
+    signedIn();
+    activeRuns({ queued: 1, connecting: 1, running: 2 });
+    renderWithClient(
+      <AppShell>
+        <p>content</p>
+      </AppShell>,
+    );
+
+    expect(await screen.findByRole("link", { name: "Live sessions (4 active)" })).toBeInTheDocument();
   });
 });

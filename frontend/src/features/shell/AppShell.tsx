@@ -7,6 +7,7 @@ import { useSignOut } from "@/features/auth/useSignOut";
 import { CloseIcon, IconButton, MenuIcon, cn } from "@/ui";
 import { Brand } from "./Brand";
 import { Sidebar } from "./Sidebar";
+import { useActiveRunCount } from "./useActiveRunCount";
 
 const ENVIRONMENT_LABEL = process.env.NEXT_PUBLIC_ENVIRONMENT_LABEL || "local";
 const SIDEBAR_ID = "app-sidebar";
@@ -35,6 +36,7 @@ function CurrentNavigation() {
 function Navigation({ pathname }: { pathname: string }) {
   const session = useSession();
   const signOut = useSignOut();
+  const activeRuns = useActiveRunCount();
   // The drawer stays open only on the route it was opened on, so any navigation closes it
   // (a link outside the drawer, browser back/forward, a redirect), not just its own links.
   const [menuOpenOn, setMenuOpenOn] = useState<string | null>(null);
@@ -56,6 +58,7 @@ function Navigation({ pathname }: { pathname: string }) {
         id={SIDEBAR_ID}
         pathname={pathname}
         environmentLabel={ENVIRONMENT_LABEL}
+        badges={activeRuns ? { "/live": activeRuns } : undefined}
         user={session.data}
         onSignOut={() => signOut.mutate()}
         signingOut={signOut.isPending || signOut.isSuccess}

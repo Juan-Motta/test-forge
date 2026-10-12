@@ -1,0 +1,60 @@
+"use client";
+
+import { useRef } from "react";
+import { cn, focusRing } from "./cn";
+import { rovingIndex } from "./roving";
+
+export type SegmentOption<T extends string> = { value: T; label: string };
+
+type SegmentedControlProps<T extends string> = {
+  /** Accessible name of the group. */
+  label: string;
+  options: readonly SegmentOption<T>[];
+  value: T;
+  onChange: (value: T) => void;
+  className?: string;
+};
+
+/** One-of-many switch drawn as joined segments, with radio-group semantics and arrow keys. */
+export function SegmentedControl<T extends string>({ label, options, value, onChange, className }: SegmentedControlProps<T>) {
+  const refs = useRef<Array<HTMLButtonElement | null>>([]);
+  const selected = Math.max(
+    0,
+    options.findIndex((option) => option.value === value),
+  );
+
+  return (
+    <div role="radiogroup" aria-label={label} className={cn("inline-flex gap-0.5 rounded-lg bg-sidebar p-[3px]", className)}>
+      {options.map((option, index) => {
+        const checked = index === selected;
+        return (
+          <button
+            key={option.value}
+            ref={(node) => {
+              refs.current[index] = node;
+            }}
+            type="button"
+            role="radio"
+            aria-checked={checked}
+            tabIndex={checked ? 0 : -1}
+            onClick={() => onChange(option.value)}
+            onKeyDown={(event) => {
+              const next = rovingIndex(event, index, options.length);
+              if (next === null) return;
+              event.preventDefault();
+              refs.current[next]?.focus();
+              onChange(options[next].value);
+            }}
+            className={cn(
+              "min-h-[34px] cursor-pointer rounded-md px-3 text-xs font-medium transition-colors",
+              focusRing,
+              checked ? "bg-chip text-fg" : "text-muted hover:text-fg",
+            )}
+          >
+            {option.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
