@@ -281,8 +281,9 @@ class OpenAIRealtimeCaller:
                     },
                 }
             )
-        await self._send({"type": "response.create"})
+        # Clear before sending: response.done may be routed before this coroutine resumes.
         self._idle.clear()
+        await self._send({"type": "response.create"})
         rid: str | None = None
         finished = False
         try:
