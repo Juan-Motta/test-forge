@@ -98,4 +98,9 @@ realtime evaluator mode that listens to the agent's audio and answers by voice w
   Final turn: silent hang-up → goodbye asked → closed without a spoken goodbye. Latency: opening
   first audio 0.85 s; after the cut 1.9 s; normal turn 1.6 s after playback. Agent claimed "hasta
   el número 15" even after being told the caller heard up to 2. Judge 62, mustFailed.
+- User decision (2026-10-12): offer both realtime models per scenario — `gpt-realtime-2.1-mini`
+  and `gpt-realtime-2.1`. The experimental constant change was reverted.
+- [ ] T5 Scenario `realtimeModel` (`gpt-realtime-2.1-mini` default | `gpt-realtime-2.1`); Azure
+  `realtimeFullDeployment` for 2.1 (existing `realtimeDeployment` stays the mini deployment) —
+  route: delegated (backend + frontend writers).
 
