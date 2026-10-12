@@ -74,4 +74,9 @@ rendering.
   filler rule alone did not settle it, and the report had no reasoning to say why.
 - 05a284e: the stability report now keeps per-sample band, cap, failure tags and reasoning and
   explains every unstable criterion (test added; 18 passed).
-- Next: run 3 to read the reasons (3 paid calls, ask).
+- Stability run 3 (user-approved): overall 98/98/90; email criteria 5/5/5 and 5/5/4; latency 4/4/2
+  (T5 = 2025 ms vs "< 2 s": one judge said minor miss, another said not met; that sample also
+  answered in Spanish). Across runs 2–3 (same prompt) the email criteria are bimodal: 4×band 5,
+  2×band 2 — a single sample is not reliable for this run.
+- User decision (2026-10-11): median of 3 samples per judgement (3 gpt-6-luna calls per run), plus
+  threshold anchors and forced English. Route: delegated writer (in progress).
