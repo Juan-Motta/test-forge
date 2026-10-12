@@ -62,7 +62,13 @@ connection/Langfuse cards and a test log.
 - V (browser, 1440×1000): Overview, Run report (verdict row, aligned lanes + issue pins,
   scorecard with bands/samples, trace waterfall), Scenario editor (3 columns), Agents
   (master/detail), Live (empty state) render close to the design.
-- Polish found: recent-runs table wraps ids/names; "Needs review" can't use mustFailed (runs list
-  API lacks it); the editor takes a few seconds to load; the account block flashes "Loading
-  account" on navigation.
-- Not yet reviewed natively: ~10k lines across dad39d0..8cf22f1 (needs slicing).
+- Polish (6ea611c, delegated; RED observed; vitest 531): one-line run tables with ellipsis,
+  `mustFailed` in RunOut + "Needs review" = judged and (mustFailed or score < 60), rail skeleton
+  (the editor never waited on the rail; the slow paint was a hidden-pane artifact), session query
+  hoisted above AppShell's Suspense boundary + staleTime Infinity (Navigation rendered twice
+  dropped the observer and refetched /auth/me).
+- Native review in 9 slices from a detached review worktree
+  (`../voice-evaluator-worktrees/review`): dad39d0, 1a195dc, 1b0e647, 756db15, d8a748d, 0d85f38,
+  cf4fe87 split into two temporary review commits with the identical final tree, and
+  8cf22f1..6ea611c (high risk, 4 lenses). All APPROVED + acknowledged. Advisories collected into one
+  follow-up writer task (in progress).
