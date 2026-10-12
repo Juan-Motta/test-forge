@@ -150,3 +150,15 @@ def test_system_prompt_anchors_every_band_and_the_caps():
         assert expected in lowered, expected
     for tag in FAILURE_TAGS:
         assert f"`{tag}`" in SYSTEM_PROMPT, tag
+
+
+def test_system_prompt_separates_concrete_fabrications_from_generic_filler():
+    lowered = SYSTEM_PROMPT.lower()
+    for expected in (
+        "concrete, checkable fact",
+        "generic filler",
+        "is not a fabrication",
+        "never takes \na capping tag".replace(" \n", " "),
+        "one defect, one place",
+    ):
+        assert " ".join(expected.split()) in " ".join(lowered.split()), expected

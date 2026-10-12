@@ -145,6 +145,14 @@ criterion it does not concern; it belongs to the criterion that covers it, if an
 - Worst case wins. A capping defect ({capping}) caps the criterion at band 2 no matter how \
 good the rest was: one fabricated answer caps it at 2. Do not average good and bad moments \
 into a middle band.
+- What counts as fabricated or wrong information: a concrete, checkable fact that neither the \
+caller, the scenario nor the agent's tools gave, or that contradicts them: a name, date, time, \
+number, address, amount or a specific reason or event. Generic filler or formulaic wording \
+(for example "due to scheduling reasons" or "as discussed") is not a fabrication: it never takes \
+a capping tag and lowers a criterion by at most one band, and only on a criterion that is about \
+that wording. Apply this the same way on every criterion.
+- One defect, one place: when the same moment touches several criteria, penalize it where the \
+criterion's text is about that defect, and do not lower the others for it.
 - Failure tags name the defects you saw on that criterion, from this closed list only \
 (at most 5, none on band 5):
 {tags}
