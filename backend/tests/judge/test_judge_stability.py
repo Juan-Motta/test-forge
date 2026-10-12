@@ -149,8 +149,20 @@ def test_unstable_criteria_show_why_each_sample_moved():
         "capped": True,
         "failureTags": ["fabricated_information"],
         "rationale": "Invented a reason.",
+        "sampleBands": None,  # a result from before median-of-3 sampling
     }
     assert "why criterion 1111 moved:" in text
     assert "#1 band 2 capped (fabricated_information): Invented a reason." in text
     assert "#2 band 5 (no tags): because" in text
     assert "why criterion 2222" not in text  # stable criteria are not explained
+
+
+def test_details_and_explanations_carry_the_sample_bands_of_aggregated_results():
+    samples = [result({MUST: 2}, 50), result({MUST: 5}, 100)]
+    aggregated = samples[0].criteria[0].model_copy(update={"sample_bands": [2, 5, 2]})
+    samples[0] = samples[0].model_copy(update={"criteria": [aggregated], "samples": 3})
+
+    report = summarize_stability(samples)
+
+    assert report.criteria[0].details[0]["sampleBands"] == [2, 5, 2]
+    assert "#1 band 2 [samples 2 5 2] (no tags): because" in render_stability(report)

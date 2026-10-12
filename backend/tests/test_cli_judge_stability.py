@@ -68,7 +68,8 @@ class CountingReader:
 
 
 class BandsModel:
-    """Answers with the next (must band, trace band) pair on each call."""
+    """Answers with the next (must band, trace band) pair on each call (cycling); every
+    judgement takes `JUDGE_SAMPLES` consecutive calls."""
 
     def __init__(self, *bands: tuple[int, int]) -> None:
         self.bands = list(bands)
@@ -99,7 +100,12 @@ def _verdict(criterion_id: str, band: int) -> dict[str, Any]:
 class Fakes:
     def __init__(self) -> None:
         self.reader = CountingReader()
-        self.model = BandsModel((4, 2), (4, 4), (3, 2))
+        # Three samples per judgement; their medians are (4, 2), (4, 4), then (3, 2).
+        self.model = BandsModel(
+            (4, 2), (4, 4), (3, 2),
+            (4, 4), (4, 4), (5, 4),
+            (3, 2), (3, 2), (2, 4),
+        )  # fmt: skip
         self.built: list[str] = []
 
 
@@ -192,10 +198,10 @@ def test_judges_the_run_n_times_on_one_trace_fetch_and_stores_nothing(
     assert run_cli(["judge-stability", run_id[:8]]) == 0
 
     out, err = capsys.readouterr()
-    assert "3 model calls" in err
+    assert "3 judgements x 3 samples = 9 model calls" in err
     assert fakes.reader.calls == 1
-    assert len(fakes.model.messages) == 3
-    assert fakes.model.messages[0] == fakes.model.messages[2]  # the same evidence every time
+    assert len(fakes.model.messages) == 9
+    assert all(m == fakes.model.messages[0] for m in fakes.model.messages)  # same evidence
     assert fakes.built == [f"traces:{LANGFUSE_ID}", f"judge:{EVALUATOR_ID}"]
     assert "States the balance" in out and "4 4 3" in out
     assert "Calls the balance tool once" in out and "2 4 2" in out
@@ -210,13 +216,14 @@ def test_json_output_and_times(fakes, settings, tmp_path, capsys):
     assert run_cli(["judge-stability", run_id, "--times", "2", "--json"]) == 0
 
     out, err = capsys.readouterr()
-    assert "2 model calls" in err
+    assert "2 judgements x 3 samples = 6 model calls" in err
     report = json.loads(out)
     assert report["runId"] == run_id
     assert report["samples"] == 2
     assert report["overall"]["scores"] == [74, 90]  # (60 x 90 + 40 x 50) / 100, then all 90
     assert [c["bands"] for c in report["criteria"]] == [[4, 4], [2, 4]]
-    assert len(fakes.model.messages) == 2
+    assert [d["sampleBands"] for d in report["criteria"][0]["details"]] == [[4, 4, 3], [4, 4, 5]]
+    assert len(fakes.model.messages) == 6
 
 
 @pytest.mark.parametrize("times", ["1", "11", "x"])

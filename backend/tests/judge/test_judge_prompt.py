@@ -162,3 +162,27 @@ def test_system_prompt_separates_concrete_fabrications_from_generic_filler():
         "one defect, one place",
     ):
         assert " ".join(expected.split()) in " ".join(lowered.split()), expected
+
+
+def test_system_prompt_anchors_numeric_thresholds_applied_to_every_turn():
+    text = " ".join(SYSTEM_PROMPT.lower().split())
+    for expected in (
+        "numeric threshold applied to every turn or item",
+        "5 = all meet it",
+        "4 = exactly one misses it, by at most 10%",
+        "3 = one misses it by more than 10%, or two or three miss it",
+        "2 = most miss it",
+        "1 = all miss it or nothing shows it was met",
+    ):
+        assert expected in text, expected
+
+
+def test_system_prompt_forces_english_free_text_with_verbatim_quotes():
+    text = " ".join(SYSTEM_PROMPT.split())
+    for expected in (
+        "Write every free-text field in English",
+        "reasoning, summary, suggestions and strengths",
+        "even when the transcript is in another language",
+        "quotes stay verbatim",
+    ):
+        assert expected in text, expected

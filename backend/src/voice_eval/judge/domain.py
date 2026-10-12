@@ -137,6 +137,9 @@ class CriterionResult(_Model):
     capped: bool = False  # a capping tag lowered the model's band
     rationale: str  # the model's reasoning, or why the criterion was not judged
     evidence: list[Evidence] = Field(default_factory=list)
+    # One band per successful judge sample (None: not observable in that sample); None in
+    # results stored before median-of-samples judging.
+    sample_bands: list[int | None] | None = None
 
 
 class JudgeResult(_Model):
@@ -153,6 +156,7 @@ class JudgeResult(_Model):
     trace_stats: dict[str, Any] | None
     trace_note: str | None
     model: str
+    samples: int | None = None  # successful judge samples; None before median-of-samples
 
 
 class ParsedJudgement(_Model):

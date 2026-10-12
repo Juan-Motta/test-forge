@@ -5,6 +5,10 @@ judge-stability`) and summarizes them; nothing is stored. A criterion's spread i
 band minus its lowest over the samples that judged it (`None` when none did); a flip is a
 verdict change between consecutive samples (`not_observable` counts as a verdict, a criterion
 absent from a sample as `missing`).
+
+Each result is one judgement as stored: already the median of its own judge samples. Its
+per-criterion `sample_bands` are carried into the details (None for results judged before
+median-of-samples).
 """
 
 from dataclasses import dataclass
@@ -29,7 +33,8 @@ class CriterionStability:
     max_band: int | None
     spread: int | None
     flips: int
-    # Per sample: what the judge said (band, cap, tags, reasoning); None when it was missing.
+    # Per sample: what the judge said (band, cap, tags, reasoning, the bands of its own judge
+    # samples); None when it was missing.
     details: list[dict[str, Any] | None]
 
     def to_dict(self) -> dict[str, Any]:
@@ -97,6 +102,7 @@ def summarize_stability(results: list[JudgeResult]) -> StabilityReport:
                     "capped": found.capped,
                     "failureTags": list(found.failure_tags),
                     "rationale": found.rationale,
+                    "sampleBands": found.sample_bands,
                 }
             )
         judged = [band for band in bands if band is not None]
@@ -165,11 +171,15 @@ def render_stability(report: StabilityReport) -> str:
                 lines.append(f"  #{number} missing")
                 continue
             capped = " capped" if detail["capped"] else ""
+            bands = detail["sampleBands"]
+            sampled = f" [samples {' '.join(_cell(b) for b in bands)}]" if bands else ""
             tags = ", ".join(detail["failureTags"]) or "no tags"
             reason = " ".join(detail["rationale"].split())
             if len(reason) > RATIONALE_WIDTH:
                 reason = reason[: RATIONALE_WIDTH - 1] + "…"
-            lines.append(f"  #{number} band {_cell(detail['band'])}{capped} ({tags}): {reason}")
+            lines.append(
+                f"  #{number} band {_cell(detail['band'])}{capped}{sampled} ({tags}): {reason}"
+            )
     scores = " ".join(_cell(score) for score in report.overall_scores)
     lines.append("")
     lines.append(

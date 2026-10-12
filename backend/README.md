@@ -460,10 +460,25 @@ run agree:
   from the answer. They neither help nor hurt the overall score.
 - **Evidence hygiene.** Each evidence section of the prompt is a tagged block whose text is
   escaped (`&`, `<`, `>`), with role-like line starts (`system:`) quoted.
+- **Rubric anchors.** A criterion with a numeric threshold applied to every turn or item (for
+  example "every turn starts in under 2 seconds") is banded by how many turns miss it: 5 all
+  meet it, 4 exactly one misses it by at most 10%, 3 one misses it by more than 10% or two or
+  three miss it, 2 most miss it, 1 all miss it. Every free-text field is written in English,
+  whatever the transcript's language; evidence quotes stay verbatim.
+- **Median of 3 samples.** Each judgement asks the model 3 times concurrently on identical
+  messages (`JUDGE_SAMPLES` in `judge/service.py`), so **a judgement costs 3 model calls**. Per
+  criterion the band is the lower median of the samples that observed it (`not_observable` when
+  most samples did not), and its evidence, reasoning, tags and cap come from the first sample
+  with that band; summary, suggestions and strengths come from the sample with the median
+  overall score, and the numbers are scored again from the aggregated bands. A sample that fails
+  (model unavailable or malformed answer, after its own retries) is logged and skipped while at
+  least 2 succeed; otherwise the judgement fails.
 
 Per criterion the result carries `criterionId, text, kind, source, weight, verdict, score, band,
-failureTags, unobservableReason, capped, rationale, evidence`. Results stored before v2 have no
-`version`, `band` or tags.
+failureTags, unobservableReason, capped, rationale, evidence, sampleBands` (`sampleBands`: one
+band per successful sample, `null` where that sample found it not observable); the result also
+carries `samples`, the number of successful samples. Results stored before v2 have no
+`version`, `band` or tags; results stored before sampling have no `samples` or `sampleBands`.
 
 Traces are read when the agent has a Langfuse connection (kept in the run snapshot; older runs
 use the agent's current one): the observations of session `threadId` are polled every 30 s
@@ -492,11 +507,12 @@ docker compose exec backend voice-eval judge-stability <run id or prefix>   # in
 ```
 
 Judges one finished run `--times` times (2-10, default 3) on the same evidence: the transcript,
-summary and Langfuse traces are read once (a single fetch, no polling), then the run's
-evaluator connection is called once per time. **Each time is one paid model call**; the count is
-printed before the first one. Nothing is stored: the run's judgement and `langfuse.json` are left
-as they are. The report lists, per criterion, the band and verdict of every sample, the band
-spread (highest minus lowest) and the verdict flips, then the overall scores (spread and mean)
+summary and Langfuse traces are read once (a single fetch, no polling), then the run is judged
+once per time. **Each time is one judgement of 3 paid model calls** (median of 3 samples), so
+`--times N` costs 3N calls; the count is printed before the first one. Nothing is stored: the run's judgement and `langfuse.json` are left
+as they are. The report lists, per criterion, the band and verdict of every judgement, the band
+spread (highest minus lowest) and the verdict flips (each judgement's `sampleBands` are in the
+JSON details and in the explanation of every unstable criterion), then the overall scores (spread and mean)
 and how many criteria moved by two bands or more. `--json` prints it as JSON (progress goes to
 stderr). It exits `1` for an unknown, ambiguous or unfinished run and `4` when a judgement fails.
 

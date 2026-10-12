@@ -69,7 +69,8 @@ JUDGE_SCHEMA: dict[str, Any] = {
                             ),
                         },
                         "reasoning": _string(
-                            "Why, grounded in the cited evidence, written before the band."
+                            "Why, in English, grounded in the cited evidence, written before "
+                            "the band."
                         ),
                         "observable": {
                             "type": "boolean",
@@ -142,6 +143,10 @@ criterion it does not concern; it belongs to the criterion that covers it, if an
   - 3: partially met or mixed: a material part is missing or wrong.
   - 2: mostly not met, or otherwise met but with one capping defect.
   - 1: not met, contradicted, or a clear failure.
+- A criterion that states a numeric threshold applied to every turn or item (for example \
+"every turn starts in under 2 seconds"): count the turns or items that miss it. 5 = all meet \
+it; 4 = exactly one misses it, by at most 10%; 3 = one misses it by more than 10%, or two or \
+three miss it; 2 = most miss it; 1 = all miss it or nothing shows it was met.
 - Worst case wins. A capping defect ({capping}) caps the criterion at band 2 no matter how \
 good the rest was: one fabricated answer caps it at 2. Do not average good and bad moments \
 into a middle band.
@@ -163,7 +168,10 @@ criterion's text is about that defect, and do not lower the others for it.
 latency or voice configuration that would fix an observed problem; tie each one to the \
 evidence refs that show the problem. Order them by impact. No generic advice.
 - Strengths: what the agent did well, briefly, if anything.
-- Write in English, plainly. Answer only with the JSON object of the response schema.\
+- Write every free-text field in English, plainly: reasoning, summary, suggestions and \
+strengths, even when the transcript is in another language. Evidence quotes stay verbatim, in \
+the transcript's own language. Answer only with the JSON object of the \
+response schema.\
 """
 
 SYSTEM_PROMPT = _SYSTEM_TEMPLATE.format(

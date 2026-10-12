@@ -20,6 +20,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from voice_eval.judge.domain import JudgeError, JudgeResult
+from voice_eval.judge.service import JUDGE_SAMPLES
 from voice_eval.judge.stability import render_stability, summarize_stability
 from voice_eval.modules.judgements.coordinator import JudgementCoordinator, judge_inputs
 from voice_eval.modules.judgements.domain import JudgementFailed
@@ -37,7 +38,8 @@ EXIT_INVALID_INPUT = 1
 EXIT_CONFIG = 2
 EXIT_DATABASE = 3
 EXIT_JUDGE = 4
-STABILITY_TIMES = (2, 10)  # judge-stability --times bounds; each time is one paid model call
+# judge-stability --times bounds; each time is one judgement of JUDGE_SAMPLES paid model calls
+STABILITY_TIMES = (2, 10)
 MIN_PREFIX = 4
 RUN_PREFIX = re.compile(r"[0-9a-f-]+")
 ACTIVE_STATUSES = {RunStatus.QUEUED, RunStatus.CONNECTING, RunStatus.RUNNING}
@@ -92,7 +94,7 @@ def build_parser() -> argparse.ArgumentParser:
     stability = commands.add_parser(
         "judge-stability",
         help="judge a finished run several times on the same evidence and report how much the "
-        "bands move (one paid model call per time; stores nothing)",
+        f"bands move ({JUDGE_SAMPLES} paid model calls per time; stores nothing)",
     )
     stability.add_argument("run", help="the run id, or a unique prefix of it (at least 4 chars)")
     stability.add_argument(
@@ -163,7 +165,10 @@ async def _judge_stability(
         if not is_judgeable(status, summary):
             raise InvalidRun(f"run {run_id} is {status} and cannot be judged")
 
-        _progress(f"run {run_id}: {times} model calls (one per judgement); nothing is stored")
+        _progress(
+            f"run {run_id}: {times} judgements x {JUDGE_SAMPLES} samples = "
+            f"{times * JUDGE_SAMPLES} model calls; nothing is stored"
+        )
         inputs = await coordinator.prepare(run_id)
         _progress(f"traces: {inputs.trace_note or 'read'}")
         model = await coordinator.evaluator(inputs.run)
