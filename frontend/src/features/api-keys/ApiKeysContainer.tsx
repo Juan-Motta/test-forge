@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { PageHeader } from "@/features/shell/PageHeader";
 import { errorMessage, formErrorView } from "@/lib/api";
+import { useOrigin } from "@/lib/browser/use-origin";
 import { useNow } from "@/lib/time/use-now";
 import { Alert, Button, Card, CardHeader, Dialog, EmptyState, PlusIcon, Spinner, buttonClasses } from "@/ui";
 import { AgentSkillContainer } from "./AgentSkillContainer";
@@ -18,6 +19,7 @@ const DUPLICATE_NAME = "An API key with this name already exists.";
 
 /** Container for `/settings/api-keys`: list, create-once dialog and revocation. */
 export function ApiKeysContainer() {
+  const origin = useOrigin();
   const apiKeys = useApiKeys();
   const create = useCreateApiKey();
   const revoke = useRevokeApiKey();
@@ -192,7 +194,7 @@ export function ApiKeysContainer() {
             nameError={createError?.fieldErrors.name}
           />
         ) : (
-          <CreatedApiKeyView secret={secret} origin={window.location.origin} onDone={closeCreate} />
+          <CreatedApiKeyView secret={secret} origin={origin} onDone={closeCreate} />
         )}
       </Dialog>
 
