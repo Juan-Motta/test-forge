@@ -50,6 +50,8 @@ export type CriterionResult = {
   unobservableReason?: UnobservableReason | null;
   /** Judge v2 only: a capping failure tag lowered the band. */
   capped?: boolean;
+  /** Median-of-samples judging: each judge sample's band (null where it was not observable). */
+  sampleBands?: (number | null)[] | null;
   rationale: string;
   evidence: Evidence[];
 };
@@ -90,6 +92,8 @@ export type JudgeResult = {
   failureTags?: Record<string, number>;
   suggestions: Suggestion[];
   strengths: string[];
+  /** Successful judge samples (median-of-samples judging); absent before it. */
+  samples?: number | null;
   /** Markdown written for a coding agent. */
   brief: string;
   traceStats: TraceStats | null;

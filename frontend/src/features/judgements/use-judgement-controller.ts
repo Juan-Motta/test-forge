@@ -7,29 +7,47 @@ import { errorMessage } from "@/lib/api";
 import { useNow } from "@/lib/time/use-now";
 import { briefFileName, isJudging } from "./format";
 import { useJudgement, useRejudge } from "./queries";
-import { ScoreSection } from "./ScoreSection";
+import type { Judgement } from "./types";
 
-const POLL_MS = 3000;
+export const JUDGEMENT_POLL_MS = 3000;
 /** Revoking the object URL in the same tick as the click can abort the download in some browsers. */
 export const REVOKE_BRIEF_URL_MS = 1000;
 
-type ScoreContainerProps = {
-  runId: string;
+export type JudgementController = {
+  judgement: Judgement | undefined;
+  loadError: string | null;
+  reload: () => void;
+  /** Starts a (re-)judgement. */
+  judge: () => void;
+  judgeStarting: boolean;
+  judgeError: string | null;
+  /** The completed judgement's brief, "" otherwise. */
+  brief: string;
+  copyBrief: () => void;
+  briefCopied: boolean;
+  downloadBrief: () => void;
+  now: number;
+};
+
+type Options = {
+  /** `enabled`: false while the run is still in progress (nothing to judge yet). */
+  enabled?: boolean;
   endedAt: string | null;
   /** Polling interval while the judgement is in progress (tests shorten it). */
   pollMs?: number;
 };
 
-/** Container of a finished run's "Score & suggestions": loads, polls and re-judges its judgement. */
-export function ScoreContainer({ runId, endedAt, pollMs = POLL_MS }: ScoreContainerProps) {
+/** Loads, polls and re-judges a run's judgement; copies and downloads its brief. */
+export function useJudgementController(runId: string, options: Options): JudgementController {
+  const { enabled = true, endedAt, pollMs = JUDGEMENT_POLL_MS } = options;
   const queryClient = useQueryClient();
-  const judgement = useJudgement(runId, { pollMs, endedAt });
+  const judgement = useJudgement(runId, { enabled, pollMs, endedAt });
   const rejudge = useRejudge(runId);
   const [copied, setCopied] = useState(false);
   const now = useNow(1000);
   const status = judgement.data?.status;
 
-  // Once a judgement finishes, the run's score and judgement status in every runs query are stale.
+  // Once a judgement finishes, the run's score, judgement status and trace in every runs query are stale.
   const previous = useRef(status);
   useEffect(() => {
     if (isJudging(previous.current) && status !== undefined && !isJudging(status)) {
@@ -60,21 +78,20 @@ export function ScoreContainer({ runId, endedAt, pollMs = POLL_MS }: ScoreContai
     setTimeout(() => URL.revokeObjectURL(url), REVOKE_BRIEF_URL_MS);
   }
 
-  return (
-    <ScoreSection
-      judgement={judgement.data}
-      loadError={judgement.isError ? errorMessage(judgement.error) : null}
-      onReload={() => judgement.refetch()}
-      onJudge={() => {
-        setCopied(false);
-        rejudge.mutate();
-      }}
-      judgeStarting={rejudge.isPending}
-      judgeError={rejudge.isError ? errorMessage(rejudge.error) : null}
-      onCopyBrief={copyBrief}
-      briefCopied={copied}
-      onDownloadBrief={downloadBrief}
-      now={now}
-    />
-  );
+  return {
+    judgement: judgement.data,
+    loadError: judgement.isError ? errorMessage(judgement.error) : null,
+    reload: () => void judgement.refetch(),
+    judge: () => {
+      setCopied(false);
+      rejudge.mutate();
+    },
+    judgeStarting: rejudge.isPending,
+    judgeError: rejudge.isError ? errorMessage(rejudge.error) : null,
+    brief,
+    copyBrief: () => void copyBrief(),
+    briefCopied: copied,
+    downloadBrief,
+    now,
+  };
 }

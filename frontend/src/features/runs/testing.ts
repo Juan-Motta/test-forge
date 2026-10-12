@@ -1,6 +1,8 @@
 import { http, HttpResponse } from "msw/http";
 import { apiUrl, server } from "@/test/server";
-import type { Batch, BatchDetail, Run, RunDetail, RunSnapshot, RunStatus } from "./types";
+import type { Agent } from "@/features/agents/types";
+import type { Connection } from "@/features/connections/types";
+import type { Batch, BatchDetail, Run, RunDetail, RunLevels, RunSnapshot, RunStatus, RunTrace, TraceObservation } from "./types";
 import { isActive } from "./format";
 
 export function runFixture(overrides: Partial<Run> = {}): Run {
@@ -69,6 +71,76 @@ export function runDetailFixture(overrides: Partial<RunDetail> = {}): RunDetail 
   };
 }
 
+/** Levels of `runDetailFixture()`'s 4:12 run: 8 bins per side and its three turns. */
+export function levelsFixture(overrides: Partial<RunLevels> = {}): RunLevels {
+  return {
+    durationMs: 252_000,
+    agent: [0.2, 0.9, 0, 0, 0, 0.6, 0.4, 0],
+    caller: [0, 0, 0.5, 1, 0, 0, 0, 0.3],
+    turns: [
+      { role: "agent", startMs: 1200, endMs: 2600, ref: "A1" },
+      { role: "caller", startMs: 3100, endMs: 5000, ref: "C1" },
+      { role: "agent", startMs: 5420, endMs: 7000, ref: "A2" },
+    ],
+    ...overrides,
+  };
+}
+
+export function traceObservationFixture(overrides: Partial<TraceObservation> = {}): TraceObservation {
+  return {
+    id: "o-1",
+    traceId: "t-1",
+    parentId: null,
+    type: "span",
+    name: "realtime.session",
+    startMs: 0,
+    durationMs: 252_000,
+    model: null,
+    tokens: null,
+    costUsd: null,
+    level: "DEFAULT",
+    statusMessage: null,
+    depth: 0,
+    ...overrides,
+  };
+}
+
+/** A trace with a root span, a generation, and a tool call that failed. */
+export function traceFixture(overrides: Partial<RunTrace> = {}): RunTrace {
+  return {
+    available: true,
+    note: null,
+    stats: { observationCount: 3, totalTokens: 1200 },
+    observations: [
+      traceObservationFixture(),
+      traceObservationFixture({
+        id: "o-2",
+        parentId: "o-1",
+        type: "llm",
+        name: "turn-02 · generation",
+        startMs: 5000,
+        durationMs: 900,
+        model: "gpt-6-luna",
+        tokens: 1200,
+        costUsd: 0.012,
+        depth: 1,
+      }),
+      traceObservationFixture({
+        id: "o-3",
+        parentId: "o-2",
+        type: "tool",
+        name: "check_availability",
+        startMs: 5200,
+        durationMs: 400,
+        level: "ERROR",
+        statusMessage: "rate lookup failed",
+        depth: 2,
+      }),
+    ],
+    ...overrides,
+  };
+}
+
 export function batchFixture(overrides: Partial<Batch> = {}): Batch {
   return {
     id: "b-1",
@@ -93,7 +165,15 @@ type MockOptions = {
   /** Detail fields per run id (summary, transcript, snapshot). */
   details?: Record<string, Partial<RunDetail>>;
   batches?: Batch[];
+  /** Levels per run id, or the status code to answer with (409 while running). Default: `levelsFixture()`. */
+  levels?: Record<string, RunLevels | number>;
+  /** Trace per run id. Default: unavailable, with a note. */
+  traces?: Record<string, RunTrace>;
+  /** The status and detail `POST /runs/{id}/rerun` fails with (409 deleted scenario, 422 not runnable). */
+  rerunError?: { status: number; detail: unknown };
 };
+
+const NO_TRACE: RunTrace = { available: false, note: "The agent has no Langfuse connection.", stats: null, observations: [] };
 
 const notFound = (what: string) => HttpResponse.json({ detail: `${what} not found` }, { status: 404 });
 
@@ -219,6 +299,46 @@ export function mockRunsApi(initial: Run[] = [], options: MockOptions = {}) {
       state.batches.push(batch);
       return HttpResponse.json(batchDetail(batch), { status: 201 });
     }),
+    http.get(apiUrl("/runs/:id/levels"), ({ params }) => {
+      const run = state.runs.find((item) => item.id === params.id);
+      if (!run) return notFound("Run");
+      if (isActive(run.status)) return HttpResponse.json({ detail: "Run still in progress" }, { status: 409 });
+      const levels = options.levels?.[run.id] ?? levelsFixture();
+      return typeof levels === "number"
+        ? HttpResponse.json({ detail: "Levels unavailable" }, { status: levels })
+        : HttpResponse.json(levels);
+    }),
+    http.get(apiUrl("/runs/:id/trace"), ({ params }) => {
+      const run = state.runs.find((item) => item.id === params.id);
+      return run ? HttpResponse.json(options.traces?.[run.id] ?? NO_TRACE) : notFound("Run");
+    }),
+    http.post(apiUrl("/runs/:id/rerun"), async ({ request, params }) => {
+      const id = String(params.id);
+      await record(request, `/runs/${id}/rerun`);
+      const run = state.runs.find((item) => item.id === id);
+      if (!run) return notFound("Run");
+      if (options.rerunError) {
+        return HttpResponse.json({ detail: options.rerunError.detail }, { status: options.rerunError.status });
+      }
+      created += 1;
+      const batchId = `b-new-${created}`;
+      const now = new Date().toISOString();
+      const rerun = runFixture({
+        ...run,
+        id: `${batchId}-r1`,
+        batchId,
+        position: 0,
+        status: "queued",
+        endReason: null,
+        createdAt: now,
+        startedAt: null,
+        endedAt: null,
+      });
+      const batch = batchFixture({ id: batchId, label: `Re-run of ${id.slice(0, 8)}`, status: "queued", createdAt: now });
+      state.runs.push(rerun);
+      state.batches.push(batch);
+      return HttpResponse.json(batchDetail(batch), { status: 201 });
+    }),
     http.post(apiUrl("/runs/batches/:id/cancel"), async ({ request, params }) => {
       const id = String(params.id);
       await record(request, `/runs/batches/${id}/cancel`);
@@ -256,4 +376,17 @@ export function mockRunsApi(initial: Run[] = [], options: MockOptions = {}) {
   }
 
   return state;
+}
+
+/**
+ * `/api/agents` and `/api/connections` for the run report's Langfuse link: the agent `agentId`
+ * with a Langfuse connection on `host` (or none when `host` is null).
+ */
+export function mockLangfuseLookup(agentId: string, host: string | null) {
+  const agent = { id: agentId, name: "Agent", langfuseConnectionId: host ? "c-langfuse" : null } as Agent;
+  const connection = { id: "c-langfuse", name: "Langfuse", kind: "langfuse", config: { host } } as unknown as Connection;
+  server.use(
+    http.get(apiUrl("/agents"), () => HttpResponse.json([agent])),
+    http.get(apiUrl("/connections"), () => HttpResponse.json(host ? [connection] : [])),
+  );
 }

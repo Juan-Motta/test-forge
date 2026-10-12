@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
-import { Badge, IconButton, CheckIcon, CopyIcon } from "@/ui";
-import { endReasonLabel, shortId } from "./format";
+import Link from "next/link";
+import { useState, type ReactNode } from "react";
+import { Badge, CheckIcon, CopyIcon, IconButton } from "@/ui";
+import { clock, endReasonLabel, runDurationMs, shortId } from "./format";
 import { RunStatusChip } from "./RunStatusChip";
 import type { RunDetail } from "./types";
 
@@ -14,13 +15,26 @@ export function personaLine(detail: Pick<RunDetail, "snapshot">): string {
 
 const EVALUATOR_LABELS = { pipeline: "Pipeline evaluator", realtime: "Realtime evaluator" } as const;
 
-/** Who, against whom, how it ended, and the thread id (the Langfuse session) with a copy button. */
-export function RunMeta({ run }: { run: RunDetail }) {
-  const [copied, setCopied] = useState(false);
-  const reason = endReasonLabel(run.endReason);
+/** "Realtime evaluator · gpt-realtime-2.1" from the snapshot; undefined on runs launched before the choice. */
+export function evaluatorLabel(run: Pick<RunDetail, "snapshot">): string | undefined {
   const mode = run.snapshot?.scenario?.evaluatorMode;
   const realtimeModel = mode === "realtime" ? run.snapshot?.scenario?.realtimeModel : undefined;
-  const evaluator = mode ? [EVALUATOR_LABELS[mode], realtimeModel].filter(Boolean).join(" · ") : undefined;
+  return mode ? [EVALUATOR_LABELS[mode], realtimeModel].filter(Boolean).join(" · ") : undefined;
+}
+
+/** The run's short id as the report shows it: its first 8 characters. */
+export const shortRunId = (id: string) => id.slice(0, 8);
+
+/**
+ * Report header: breadcrumb eyebrow, the run's short id and scenario, and chips for how it ended,
+ * who took part, how long it took, the thread id (the Langfuse session, copyable) and the evaluator.
+ */
+export function RunHeader({ run, actions }: { run: RunDetail; actions?: ReactNode }) {
+  const [copied, setCopied] = useState(false);
+  const reason = endReasonLabel(run.endReason);
+  const evaluator = evaluatorLabel(run);
+  const durationMs = run.summary?.durationMs ?? runDurationMs(run);
+  const persona = personaLine(run);
 
   async function copy() {
     try {
@@ -32,36 +46,70 @@ export function RunMeta({ run }: { run: RunDetail }) {
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-muted">
-      <RunStatusChip status={run.status} />
-      {reason && reason !== "Cancelled" ? <span>{reason}</span> : null}
-      <span aria-hidden="true">·</span>
-      <span>{run.agentName}</span>
-      {personaLine(run) ? (
-        <>
-          <span aria-hidden="true">·</span>
-          <Badge tone="evaluator">{personaLine(run)}</Badge>
-        </>
-      ) : null}
-      {evaluator ? (
-        <>
-          <span aria-hidden="true">·</span>
-          <span>{evaluator}</span>
-        </>
-      ) : null}
-      <span aria-hidden="true">·</span>
-      <span className="inline-flex items-center gap-1 font-mono text-xs" title={run.threadId}>
-        thread {shortId(run.threadId)}
-        <IconButton
-          label="Copy thread id"
-          className="size-8"
-          icon={copied ? <CheckIcon size={14} /> : <CopyIcon size={14} />}
-          onClick={copy}
-        />
-      </span>
-      <span role="status" className="sr-only">
-        {copied ? "Thread id copied" : ""}
-      </span>
-    </div>
+    <header className="flex flex-wrap items-end justify-between gap-4">
+      <div className="flex min-w-0 flex-col gap-2">
+        <nav aria-label="Breadcrumb" data-eyebrow className="text-[13px] text-dim">
+          <Link href="/runs" className="text-dim hover:text-fg">
+            Runs
+          </Link>
+          <span aria-hidden="true"> / </span>
+          <Link href={`/runs?batchId=${encodeURIComponent(run.batchId)}`} className="text-dim hover:text-fg">
+            {`Batch ${shortRunId(run.batchId)}`}
+          </Link>
+        </nav>
+        <h1 className="text-[28px] font-semibold tracking-[-0.02em] break-words">
+          <span className="font-mono font-medium text-muted" title={`Run ${run.id}`}>
+            {shortRunId(run.id)}
+          </span>{" "}
+          {run.scenarioName}
+        </h1>
+        <ul aria-label="Run details" className="flex flex-wrap items-center gap-2">
+          <li>
+            <RunStatusChip status={run.status} />
+          </li>
+          {reason && reason !== "Cancelled" ? (
+            <li>
+              <Badge tone="muted">{reason}</Badge>
+            </li>
+          ) : null}
+          <li>
+            <Badge tone="muted">{run.agentName}</Badge>
+          </li>
+          {persona ? (
+            <li>
+              <Badge tone="muted">{persona}</Badge>
+            </li>
+          ) : null}
+          {durationMs !== null ? (
+            <li>
+              <Badge tone="muted" mono>
+                <span className="sr-only">Duration </span>
+                {clock(durationMs)}
+              </Badge>
+            </li>
+          ) : null}
+          <li>
+            <Badge tone="muted" mono className="py-0 pr-0.5">
+              <span title={run.threadId}>thread {shortId(run.threadId)}</span>
+              <IconButton
+                label="Copy thread id"
+                className="size-7 min-h-0 min-w-0"
+                icon={copied ? <CheckIcon size={13} /> : <CopyIcon size={13} />}
+                onClick={() => void copy()}
+              />
+            </Badge>
+          </li>
+          {evaluator ? (
+            <li>
+              <Badge tone="outline">{evaluator}</Badge>
+            </li>
+          ) : null}
+        </ul>
+        <span role="status" className="sr-only">
+          {copied ? "Thread id copied" : ""}
+        </span>
+      </div>
+      {actions ? <div className="flex flex-wrap items-center gap-2.5">{actions}</div> : null}
+    </header>
   );
 }

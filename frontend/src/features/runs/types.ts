@@ -139,3 +139,41 @@ export type RunFilters = {
   limit?: number;
   offset?: number;
 };
+
+/** One transcript turn on the run timeline (`GET /api/runs/{id}/levels`); `ref` is A<n>/C<n>. */
+export type LevelTurn = { role: "agent" | "caller"; startMs: number; endMs: number; ref: string };
+
+/**
+ * `GET /api/runs/{id}/levels`: RMS 0..1 per time bin for each side, both on the run timeline (one
+ * scale), and the turns. 409 while the run is in progress.
+ */
+export type RunLevels = { durationMs: number; agent: number[]; caller: number[]; turns: LevelTurn[] };
+
+/** One Langfuse observation of the run, offsets from the run start. */
+export type TraceObservation = {
+  id: string | null;
+  traceId: string | null;
+  parentId: string | null;
+  /** "llm", "tool", "span", "event" or another Langfuse type in lowercase. */
+  type: string;
+  name: string | null;
+  startMs: number | null;
+  durationMs: number | null;
+  model: string | null;
+  tokens: number | null;
+  costUsd: number | null;
+  /** DEFAULT, DEBUG, WARNING or ERROR. */
+  level: string;
+  statusMessage: string | null;
+  /** Nesting under the parent observation (0: a root). */
+  depth: number;
+};
+
+/** `GET /api/runs/{id}/trace`: `available` false (with a `note`) when no observations were saved. */
+export type RunTrace = {
+  available: boolean;
+  note: string | null;
+  /** The judge digest's stats (camelCase); any key may be missing. */
+  stats: (Record<string, unknown> & { totalTokens?: number; observationCount?: number }) | null;
+  observations: TraceObservation[];
+};

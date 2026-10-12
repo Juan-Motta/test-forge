@@ -20,8 +20,14 @@ describe("Run detail", () => {
     mockRunsApi([run], { details: { "r-1": detail } });
     renderWithClient(<RunDetailContainer runId="r-1" />);
 
-    expect(await screen.findByRole("heading", { level: 1, name: "Booking with date change" })).toBeInTheDocument();
-    expect(screen.getByText("Hotel booking assistant")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: "r-1 Booking with date change" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Runs" })).toHaveAttribute("href", "/runs");
+    expect(screen.getByRole("link", { name: "Batch b-1" })).toHaveAttribute("href", "/runs?batchId=b-1");
+    const chips = screen.getByRole("list", { name: "Run details" });
+    expect(within(chips).getByText("Hotel booking assistant")).toBeInTheDocument();
+    expect(within(chips).getByText("Duration")).toBeInTheDocument();
+    expect(chips).toHaveTextContent("Duration 4:12");
+    expect(chips).toHaveTextContent("thread 1786f832…3f");
     expect(screen.getByText("Lucía · hurried · es-MX")).toBeInTheDocument();
     expect(screen.queryByText(/evaluator$/)).not.toBeInTheDocument();
     expect(screen.getByText("Completed")).toBeInTheDocument();
@@ -52,8 +58,8 @@ describe("Run detail", () => {
     expect(turns[1]).toHaveAttribute("id", "turn-C1");
     expect(turns[2]).toHaveAttribute("id", "turn-A2");
 
-    const score = screen.getByRole("region", { name: "Score & suggestions" });
-    expect(await within(score).findByText("Not judged yet.")).toBeInTheDocument();
+    const judgement = screen.getByRole("region", { name: "Judgement" });
+    expect(await within(judgement).findByText(/^Not judged yet\./)).toBeInTheDocument();
   });
 
   it("shows what the caller heard of an interrupted agent reply and strikes the rest", async () => {
@@ -185,22 +191,72 @@ describe("Run detail", () => {
     await user.click(await screen.findByRole("button", { name: "Copy thread id" }));
 
     expect(await navigator.clipboard.readText()).toBe(run.threadId);
-    expect(screen.getByRole("status")).toHaveTextContent("Thread id copied");
+    expect(screen.getByText("Thread id copied")).toHaveAttribute("role", "status");
   });
 
-  it("re-runs the same scenario once and opens its live view", async () => {
+  it("re-runs the scenario after confirming it is a new paid run, then opens its live view", async () => {
     const api = mockRunsApi([run], { details: { "r-1": detail } });
     renderWithClient(<RunDetailContainer runId="r-1" />);
     const user = userEvent.setup();
 
     await user.click(await screen.findByRole("button", { name: "Re-run" }));
+    const dialog = screen.getByRole("dialog", { name: "Start a new paid run?" });
+    expect(dialog).toHaveTextContent("“Booking with date change” against Hotel booking assistant");
+    expect(dialog).toHaveTextContent("billed");
+    expect(api.requests).toEqual([]);
+    await user.click(within(dialog).getByRole("button", { name: "Start paid run" }));
 
     await waitFor(() => expect(nav.push).toHaveBeenCalledWith("/live?batchId=b-new-1"));
-    expect(api.requests[0]).toEqual({
-      method: "POST",
-      path: "/runs",
-      body: { scenarioIds: ["s-booking"], repetitions: 1, concurrency: 1 },
+    expect(api.requests).toEqual([{ method: "POST", path: "/runs/r-1/rerun", body: undefined }]);
+  });
+
+  it("cancels a re-run without launching anything", async () => {
+    const api = mockRunsApi([run], { details: { "r-1": detail } });
+    renderWithClient(<RunDetailContainer runId="r-1" />);
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: "Re-run" }));
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Cancel" }));
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(api.requests).toEqual([]);
+    expect(nav.push).not.toHaveBeenCalled();
+  });
+
+  it("says why a re-run was refused: the scenario was deleted (409)", async () => {
+    mockRunsApi([run], {
+      details: { "r-1": detail },
+      rerunError: { status: 409, detail: "The scenario of this run was deleted" },
     });
+    renderWithClient(<RunDetailContainer runId="r-1" />);
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: "Re-run" }));
+    await user.click(screen.getByRole("button", { name: "Start paid run" }));
+
+    expect(await within(screen.getByRole("dialog")).findByRole("alert")).toHaveTextContent(
+      "The scenario of this run was deleted",
+    );
+    expect(nav.push).not.toHaveBeenCalled();
+  });
+
+  it("lists why the scenario cannot run (422)", async () => {
+    mockRunsApi([run], {
+      details: { "r-1": detail },
+      rerunError: {
+        status: 422,
+        detail: [{ type: "value_error", loc: ["body", "scenarioIds", 0], msg: "The agent has no URL", scenarioId: "s-booking" }],
+      },
+    });
+    renderWithClient(<RunDetailContainer runId="r-1" />);
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: "Re-run" }));
+    await user.click(screen.getByRole("button", { name: "Start paid run" }));
+
+    expect(await within(screen.getByRole("dialog")).findByRole("alert")).toHaveTextContent(
+      "Booking with date change: The agent has no URL",
+    );
   });
 
   it("explains why a failed run stopped", async () => {

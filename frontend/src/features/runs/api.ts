@@ -7,7 +7,9 @@ import type {
   Run,
   RunDetail,
   RunFilters,
+  RunLevels,
   RunPage,
+  RunTrace,
 } from "./types";
 
 const BASE = "/runs";
@@ -59,4 +61,25 @@ export function cancelBatch(id: string): Promise<BatchDetail> {
 /** Same-origin URL of one side's WAV (`audio/wav`, PCM16 24 kHz mono); the cookie authenticates it. */
 export function audioUrl(id: string, channel: AudioChannel): string {
   return `/api${item(id)}/audio/${channel}`;
+}
+
+/** Default number of level bins: one bar per bin of the recording lanes. */
+export const LEVEL_BINS = 140;
+
+/** Both sides' audio levels on the run timeline, and the turns. 409 while the run is in progress. */
+export function getRunLevels(id: string, bins: number = LEVEL_BINS, signal?: AbortSignal): Promise<RunLevels> {
+  return apiFetch<RunLevels>(`${item(id)}/levels${query({ bins })}`, { signal });
+}
+
+/** The agent's Langfuse observations for the run, as waterfall rows. */
+export function getRunTrace(id: string, signal?: AbortSignal): Promise<RunTrace> {
+  return apiFetch<RunTrace>(`${item(id)}/trace`, { signal });
+}
+
+/**
+ * Launches the run's scenario again (paid), one run in a new batch. 409 when the scenario was
+ * deleted; 422 like a launch when it cannot run.
+ */
+export function rerunRun(id: string): Promise<BatchDetail> {
+  return apiFetch<BatchDetail>(`${item(id)}/rerun`, { method: "POST" });
 }

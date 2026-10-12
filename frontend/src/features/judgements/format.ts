@@ -1,4 +1,4 @@
-import type { BadgeTone } from "@/ui";
+import { SCORE_TEXT, scoreTone, type BadgeTone, type ScoreTone } from "@/ui";
 import {
   ACTIVE_JUDGEMENT_STATUSES,
   CAPPING_FAILURE_TAGS,
@@ -78,11 +78,12 @@ export function failureTagCountLabel(tag: string, count: number): string {
   return `${failureTagLabel(tag)}: ${count} ${count === 1 ? "criterion" : "criteria"}`;
 }
 
-/** Score band: >= 80 good, >= 50 fair, below that poor. */
+const BAND_LABELS: Record<ScoreTone, string> = { good: "Good", warn: "Fair", bad: "Poor" };
+
+/** Score band by the app-wide rule (`scoreTone`): >= 80 good, >= 60 fair, below that poor. */
 export function scoreBand(score: number): { label: string; className: string } {
-  if (score >= 80) return { label: "Good", className: "text-success-fg" };
-  if (score >= 50) return { label: "Fair", className: "text-evaluator-fg" };
-  return { label: "Poor", className: "text-danger-fg" };
+  const tone = scoreTone(score);
+  return { label: BAND_LABELS[tone], className: SCORE_TEXT[tone] };
 }
 
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;

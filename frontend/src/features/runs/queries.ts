@@ -1,8 +1,24 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { cancelBatch, cancelRun, getBatch, getRun, launchRuns, listBatches, listRuns } from "./api";
+import { listAgents } from "@/features/agents/api";
+import { agentsQueryKey } from "@/features/agents/queries";
+import { listConnections } from "@/features/connections/api";
+import { connectionsQueryKey } from "@/features/connections/queries";
 import { isJudging } from "@/features/judgements/format";
+import {
+  LEVEL_BINS,
+  cancelBatch,
+  cancelRun,
+  getBatch,
+  getRun,
+  getRunLevels,
+  getRunTrace,
+  launchRuns,
+  listBatches,
+  listRuns,
+  rerunRun,
+} from "./api";
 import { isActive } from "./format";
 import type { RunFilters } from "./types";
 
@@ -11,6 +27,9 @@ const listKey = (filters: RunFilters) => [...runsQueryKey, "list", filters] as c
 export const runQueryKey = (id: string) => [...runsQueryKey, "item", id] as const;
 const batchesKey = (page: { limit?: number; offset?: number }) => [...runsQueryKey, "batches", page] as const;
 const batchKey = (id: string) => [...runsQueryKey, "batch", id] as const;
+const levelsKey = (id: string, bins: number) => [...runsQueryKey, "levels", id, bins] as const;
+// Under `runsQueryKey`: a finished judgement refreshes every runs query, and so the trace it saved.
+const traceKey = (id: string) => [...runsQueryKey, "trace", id] as const;
 
 type Polling = { refetchInterval?: number | false };
 
@@ -77,4 +96,49 @@ export function useCancelRun() {
 export function useCancelBatch() {
   const queryClient = useQueryClient();
   return useMutation({ mutationFn: (id: string) => cancelBatch(id), onSuccess: () => refreshRuns(queryClient) });
+}
+
+/** A finished run's audio levels (the recording lanes). `enabled`: only once the run is over (409 before). */
+export function useRunLevels(id: string, options: { enabled?: boolean; bins?: number } = {}) {
+  const { enabled = true, bins = LEVEL_BINS } = options;
+  return useQuery({
+    queryKey: levelsKey(id, bins),
+    queryFn: ({ signal }) => getRunLevels(id, bins, signal),
+    enabled,
+    // A finished run's artifacts never change.
+    staleTime: Infinity,
+  });
+}
+
+export function useRunTrace(id: string, options: { enabled?: boolean } = {}) {
+  return useQuery({
+    queryKey: traceKey(id),
+    queryFn: ({ signal }) => getRunTrace(id, signal),
+    enabled: options.enabled ?? true,
+  });
+}
+
+/** Re-runs a run's scenario (paid); every runs query is stale after it. */
+export function useRerun() {
+  const queryClient = useQueryClient();
+  return useMutation({ mutationFn: (id: string) => rerunRun(id), onSuccess: () => refreshRuns(queryClient) });
+}
+
+/**
+ * The Langfuse host of the agent's Langfuse connection (e.g. `https://cloud.langfuse.com`), or
+ * null when it is unknown: no agent, no connection, or not loaded (yet). `enabled`: only look it up
+ * when there is a trace to open.
+ */
+export function useLangfuseHost(agentId: string | null, options: { enabled?: boolean } = {}): string | null {
+  const enabled = (options.enabled ?? true) && agentId !== null;
+  const agents = useQuery({ queryKey: agentsQueryKey, queryFn: ({ signal }) => listAgents(signal), enabled });
+  const connectionId = agents.data?.find((agent) => agent.id === agentId)?.langfuseConnectionId ?? null;
+  const connections = useQuery({
+    queryKey: connectionsQueryKey,
+    queryFn: ({ signal }) => listConnections(signal),
+    enabled: enabled && connectionId !== null,
+  });
+  const connection = connections.data?.find((item) => item.id === connectionId && item.kind === "langfuse");
+  const host = connection?.config.host;
+  return typeof host === "string" && /^https?:\/\//.test(host) ? host.replace(/\/+$/, "") : null;
 }
