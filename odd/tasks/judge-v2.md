@@ -69,4 +69,9 @@ rendering.
 - User decision (2026-10-11): only concrete facts count as fabricated; generic filler never caps
   and lowers at most one band on a criterion about that wording. Encoded in 2d96aac (+ "one defect,
   one place" rule), test added, pytest judge 101 passed; backend rebuilt.
-- Next: re-measure stability (3 paid calls, ask).
+- Stability run 2 (user-approved, 3 paid calls) after 2d96aac: overall 71/69/98 (spread 29); both
+  "asks for missing data" and "email content" 2/2/5; tone 5/4/5; readout 5/5/5; latency 4/4/4. The
+  filler rule alone did not settle it, and the report had no reasoning to say why.
+- 05a284e: the stability report now keeps per-sample band, cap, failure tags and reasoning and
+  explains every unstable criterion (test added; 18 passed).
+- Next: run 3 to read the reasons (3 paid calls, ask).
