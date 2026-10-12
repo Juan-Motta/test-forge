@@ -1,8 +1,12 @@
 import { Badge, Button, CheckIcon, CopyIcon } from "@/ui";
 import {
   PRIORITY_TONES,
+  UNOBSERVABLE_REASON_LABELS,
   VERDICT_LABELS,
   VERDICT_TONES,
+  cappedExplanation,
+  failureTagCountLabel,
+  failureTagLabel,
   scoreBand,
   traceStatsLine,
   turnAnchorId,
@@ -21,6 +25,7 @@ export function JudgementReport({ result, onCopyBrief, copied, onDownloadBrief }
   return (
     <div className="flex flex-col gap-6">
       <Overview result={result} />
+      <FailureTagSummary counts={result.failureTags} />
       <section aria-labelledby="judge-criteria" className="flex flex-col gap-3">
         <h3 id="judge-criteria" className="text-sm font-semibold">
           Criteria
@@ -122,17 +127,53 @@ function Overview({ result }: { result: JudgeResult }) {
   );
 }
 
+/** Judge v2: how many criteria carry each failure tag, most frequent first. Hidden for v1 results. */
+function FailureTagSummary({ counts }: { counts: Record<string, number> | undefined }) {
+  const entries = Object.entries(counts ?? {});
+  if (entries.length === 0) return null;
+  return (
+    <section aria-labelledby="judge-failure-tags" className="flex flex-col gap-2">
+      <h3 id="judge-failure-tags" className="text-sm font-semibold">
+        Failure tags
+      </h3>
+      <ul className="flex flex-wrap gap-2">
+        {entries.map(([tag, count]) => (
+          <li key={tag}>
+            <Badge>{failureTagCountLabel(tag, count)}</Badge>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 function CriterionItem({ criterion }: { criterion: CriterionResult }) {
+  const band = criterion.band ?? null;
+  const tags = criterion.failureTags ?? [];
+  const reason = criterion.unobservableReason ?? null;
   return (
     <li className="flex flex-col gap-2 rounded-lg border border-line p-3">
       <div className="flex flex-wrap items-center gap-2 text-xs">
         <Badge tone={VERDICT_TONES[criterion.verdict]}>{VERDICT_LABELS[criterion.verdict]}</Badge>
         <span className="font-mono">{criterion.score === null ? "—" : `${criterion.score}/100`}</span>
+        {band !== null ? <span className="font-mono">Band {band}/5</span> : null}
+        {criterion.capped ? <Badge tone="danger">Capped</Badge> : null}
         <span className="text-muted">weight {criterion.weight}</span>
         <span className="text-muted">{criterion.kind === "must" ? "Must" : "Should"}</span>
         <span className="text-muted">from {criterion.source}</span>
       </div>
       <p className="text-sm font-medium">{criterion.text}</p>
+      {criterion.capped ? <p className="text-xs text-danger-fg">{cappedExplanation(tags)}</p> : null}
+      {reason ? <p className="text-xs text-muted">{UNOBSERVABLE_REASON_LABELS[reason] ?? reason}</p> : null}
+      {tags.length > 0 ? (
+        <ul aria-label="Failure tags" className="flex flex-wrap gap-1.5">
+          {tags.map((tag) => (
+            <li key={tag}>
+              <Badge>{failureTagLabel(tag)}</Badge>
+            </li>
+          ))}
+        </ul>
+      ) : null}
       <p className="text-sm text-muted">{criterion.rationale}</p>
       {criterion.evidence.length > 0 ? (
         <details>

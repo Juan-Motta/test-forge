@@ -7,7 +7,7 @@ import { runDetailFixture } from "@/features/runs/testing";
 import { renderWithClient } from "@/test/render";
 import { apiUrl, server } from "@/test/server";
 import { REVOKE_BRIEF_URL_MS, ScoreContainer } from "./ScoreContainer";
-import { judgeResultFixture, judgementFixture, mockJudgementApi } from "./testing";
+import { judgeResultFixture, judgeResultV2Fixture, judgementFixture, mockJudgementApi } from "./testing";
 import type { Judgement } from "./types";
 
 const RUN_ID = "0123456789abcdef";
@@ -102,6 +102,63 @@ describe("Score & suggestions", () => {
     expect(suggestions).toHaveTextContent("Read the dates back before closing");
     expect(within(suggestions).getByText("R1")).toBeInTheDocument();
     expect(screen.getByRole("list", { name: "Strengths" })).toHaveTextContent("Friendly greeting");
+
+    // A v1 result has no bands, failure tags, caps or not-observable reasons.
+    expect(items[0]).not.toHaveTextContent("/5");
+    expect(screen.queryByText("Capped")).not.toBeInTheDocument();
+    expect(screen.queryByRole("list", { name: "Failure tags" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Failure tags" })).not.toBeInTheDocument();
+  });
+
+  it("renders a v2 judgement: bands, caps, failure tags and why a criterion was not observable", async () => {
+    renderSection(judgementFixture({ result: judgeResultV2Fixture() }));
+
+    const list = await screen.findByRole("list", { name: "Criteria" });
+    const items = Array.from(list.children) as HTMLElement[];
+    expect(items).toHaveLength(4);
+
+    expect(items[0]).toHaveTextContent("50/100");
+    expect(items[0]).toHaveTextContent("Band 2/5");
+    expect(within(items[0]).getByText("Capped")).toBeInTheDocument();
+    expect(items[0]).toHaveTextContent("Capped at 2/5 because of fabricated information");
+    const tags = within(items[0]).getByRole("list", { name: "Failure tags" });
+    expect(within(tags).getAllByRole("listitem").map((item) => item.textContent)).toEqual([
+      "Fabricated information",
+      "Incomplete task",
+    ]);
+
+    expect(items[1]).toHaveTextContent("Band 5/5");
+    expect(within(items[1]).queryByText("Capped")).not.toBeInTheDocument();
+    expect(within(items[1]).queryByRole("list", { name: "Failure tags" })).not.toBeInTheDocument();
+
+    expect(items[2]).toHaveTextContent("Not observable");
+    expect(items[2]).toHaveTextContent("Traces unavailable");
+    expect(items[2]).not.toHaveTextContent("/5");
+
+    // An unknown tag still reads as words.
+    expect(within(items[3]).getByRole("list", { name: "Failure tags" })).toHaveTextContent("Some new tag");
+
+    const summary = screen.getByRole("region", { name: "Failure tags" });
+    expect(within(summary).getAllByRole("listitem").map((item) => item.textContent)).toEqual([
+      "Incomplete task: 2 criteria",
+      "Fabricated information: 1 criterion",
+      "Some new tag: 1 criterion",
+    ]);
+  });
+
+  it.each([
+    ["no_timing_data", "No timing data"],
+    ["judge_marked_unobservable", "The judge could not observe it"],
+    ["judge_omitted", "The judge gave no verdict"],
+  ] as const)("explains a criterion not observable because of %s", async (reason, text) => {
+    const base = judgeResultV2Fixture();
+    const criteria = base.criteria.map((criterion) =>
+      criterion.criterionId === "c-3" ? { ...criterion, unobservableReason: reason } : criterion,
+    );
+    renderSection(judgementFixture({ result: { ...base, criteria } }));
+
+    const items = Array.from((await screen.findByRole("list", { name: "Criteria" })).children) as HTMLElement[];
+    expect(items[2]).toHaveTextContent(text);
   });
 
   it("says when traces were unavailable", async () => {

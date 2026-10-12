@@ -1,9 +1,12 @@
 import type { BadgeTone } from "@/ui";
 import {
   ACTIVE_JUDGEMENT_STATUSES,
+  CAPPING_FAILURE_TAGS,
   type ActiveJudgementStatus,
+  type FailureTag,
   type SuggestionPriority,
   type TraceStats,
+  type UnobservableReason,
   type Verdict,
 } from "./types";
 
@@ -30,6 +33,50 @@ export const PRIORITY_TONES: Record<SuggestionPriority, BadgeTone> = {
   medium: "evaluator",
   low: "neutral",
 };
+
+const FAILURE_TAG_LABELS: Record<FailureTag, string> = {
+  fabricated_information: "Fabricated information",
+  wrong_information: "Wrong information",
+  instruction_ignored: "Instruction ignored",
+  unsafe_or_policy_violation: "Unsafe or policy violation",
+  missing_information_request: "Missing information request",
+  incomplete_task: "Incomplete task",
+  off_topic: "Off topic",
+  unclear_or_unnatural_speech: "Unclear or unnatural speech",
+  cut_off_or_incomplete_reply: "Cut-off or incomplete reply",
+  slow_response: "Slow response",
+  tool_or_trace_error: "Tool or trace error",
+};
+
+/** Human label of a failure tag; an unknown tag is humanized (`some_new_tag` -> "Some new tag"). */
+export function failureTagLabel(tag: string): string {
+  if (Object.hasOwn(FAILURE_TAG_LABELS, tag)) return FAILURE_TAG_LABELS[tag as FailureTag];
+  const words = tag.replace(/[_-]+/g, " ").trim().toLowerCase();
+  return words ? `${words[0].toUpperCase()}${words.slice(1)}` : tag;
+}
+
+/** The band a capping failure tag limits a criterion to (judge/domain.py `CAP_BAND`). */
+export const CAP_BAND = 2;
+
+/** "Capped at 2/5 because of fabricated information and wrong information". */
+export function cappedExplanation(tags: readonly string[]): string {
+  const capping = tags.filter((tag) => (CAPPING_FAILURE_TAGS as readonly string[]).includes(tag));
+  const reasons = capping.map((tag) => failureTagLabel(tag).toLowerCase());
+  const base = `Capped at ${CAP_BAND}/5`;
+  return reasons.length > 0 ? `${base} because of ${reasons.join(" and ")}` : base;
+}
+
+export const UNOBSERVABLE_REASON_LABELS: Record<UnobservableReason, string> = {
+  traces_unavailable: "Traces unavailable",
+  no_timing_data: "No timing data",
+  judge_marked_unobservable: "The judge could not observe it",
+  judge_omitted: "The judge gave no verdict",
+};
+
+/** "Incomplete task: 2 criteria". */
+export function failureTagCountLabel(tag: string, count: number): string {
+  return `${failureTagLabel(tag)}: ${count} ${count === 1 ? "criterion" : "criteria"}`;
+}
 
 /** Score band: >= 80 good, >= 50 fair, below that poor. */
 export function scoreBand(score: number): { label: string; className: string } {

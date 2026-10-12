@@ -61,6 +61,51 @@ export function judgeResultFixture(overrides: Partial<JudgeResult> = {}): JudgeR
   };
 }
 
+/** A judge v2 result: bands, failure tags, a capped criterion and gated not-observable reasons. */
+export function judgeResultV2Fixture(overrides: Partial<JudgeResult> = {}): JudgeResult {
+  const v1 = judgeResultFixture();
+  return judgeResultFixture({
+    version: 2,
+    criteria: [
+      {
+        ...v1.criteria[0],
+        verdict: "fail",
+        score: 50,
+        band: 2,
+        failureTags: ["fabricated_information", "incomplete_task"],
+        unobservableReason: null,
+        capped: true,
+      },
+      { ...v1.criteria[1], verdict: "pass", score: 100, band: 5, failureTags: [], unobservableReason: null, capped: false },
+      {
+        ...v1.criteria[2],
+        band: null,
+        failureTags: [],
+        unobservableReason: "traces_unavailable",
+        capped: false,
+      },
+      {
+        criterionId: "c-4",
+        text: "Speaks naturally",
+        kind: "should",
+        source: "transcript",
+        weight: 1,
+        verdict: "partial",
+        score: 70,
+        band: 3,
+        failureTags: ["incomplete_task", "some_new_tag"],
+        unobservableReason: null,
+        capped: false,
+        rationale: "Some answers trail off.",
+        evidence: [],
+      },
+    ],
+    overallScore: 64,
+    failureTags: { incomplete_task: 2, fabricated_information: 1, some_new_tag: 1 },
+    ...overrides,
+  });
+}
+
 export function judgementFixture(overrides: Partial<JudgementState> = {}): JudgementState {
   return {
     status: "completed",
