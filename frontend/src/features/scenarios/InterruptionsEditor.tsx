@@ -1,7 +1,7 @@
 "use client";
 
 import { useFieldArray, useWatch, type Control } from "react-hook-form";
-import { Button, Field, Input, PlusIcon } from "@/ui";
+import { Button, CloseIcon, Field, Input, PlusIcon, cn, focusRing } from "@/ui";
 import type { SectionProps } from "./editor-form";
 import { RowLabel } from "./FactsEditor";
 import { INTERRUPT_AFTER_S, MAX_INTERRUPTIONS, newInterruption, type ScenarioFormValues } from "./form-schema";
@@ -22,8 +22,8 @@ export function InterruptionsEditor({ control, registerField, fieldError }: Inte
         const prefix = `Interruption ${index + 1}`;
         const values = rows[index];
         return (
-          <div key={row.id} className="flex flex-col gap-1.5">
-            <div className="grid items-start gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+          <div key={row.id} className="flex flex-col gap-2 rounded-lg border border-line bg-field p-3">
+            <div className="grid items-start gap-3 grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
               <Field label={<RowLabel prefix={prefix} text="Agent reply #" />} error={fieldError(`interruptions.${index}.agentTurn`)}>
                 {(props) => (
                   <Input
@@ -51,17 +51,20 @@ export function InterruptionsEditor({ control, registerField, fieldError }: Inte
                   />
                 )}
               </Field>
-              <Button
-                variant="ghost"
-                className="sm:mt-6"
+              <button
+                type="button"
                 aria-label={`Remove interruption ${index + 1}`}
                 onClick={() => remove(index)}
+                className={cn(
+                  "mt-7 grid size-9 place-items-center rounded-md text-dim hover:bg-active hover:text-fg",
+                  focusRing,
+                )}
               >
-                Remove
-              </Button>
+                <CloseIcon size={14} />
+              </button>
             </div>
             {values ? (
-              <p className="text-xs text-muted">
+              <p className="font-mono text-xs text-evaluator-fg">
                 {`Interrupt agent reply #${values.agentTurn.trim() || "?"} after ${values.afterS.trim() || "?"} s`}
               </p>
             ) : null}

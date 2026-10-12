@@ -225,7 +225,7 @@ describe("Scenarios library: launch", () => {
     await screen.findByRole("region", { name: "Support triage" });
 
     await user.click(within(item("Refund dispute")).getByRole("button", { name: "Launch Refund dispute" }));
-    await user.click(within(screen.getByRole("dialog", { name: "Launch Refund dispute" })).getByRole("button", { name: "Launch" }));
+    await user.click(within(screen.getByRole("dialog", { name: "Launch Refund dispute" })).getByRole("button", { name: /^Launch \d+ runs?$/ }));
 
     await waitFor(() => expect(nav.push).toHaveBeenCalledWith("/live?batchId=b-new-1"));
     expect(runs.requests[0].body).toMatchObject({ scenarioIds: ["s-refund"] });
@@ -244,7 +244,7 @@ describe("Scenarios library: launch", () => {
     await user.click(screen.getByRole("checkbox", { name: "Select Booking with date change" }));
     await user.click(screen.getByRole("button", { name: "Launch selected (2)" }));
     const dialog = screen.getByRole("dialog", { name: "Launch 2 scenarios" });
-    await user.click(within(dialog).getByRole("button", { name: "Launch" }));
+    await user.click(within(dialog).getByRole("button", { name: /^Launch \d+ runs?$/ }));
 
     await waitFor(() => expect(runs.requests).toHaveLength(1));
     expect(runs.requests[0].body).toMatchObject({ scenarioIds: ["s-booking", "s-refund"] });
@@ -267,7 +267,7 @@ describe("Scenarios library: launch", () => {
     expect(screen.getByText("1 scenario selected")).toBeInTheDocument();
     expect(screen.getByText("1 more is hidden by the filters and will not launch.")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Launch selected (1)" }));
-    await user.click(within(screen.getByRole("dialog", { name: "Launch Cancel within 24h" })).getByRole("button", { name: "Launch" }));
+    await user.click(within(screen.getByRole("dialog", { name: "Launch Cancel within 24h" })).getByRole("button", { name: /^Launch \d+ runs?$/ }));
 
     await waitFor(() => expect(runs.requests).toHaveLength(1));
     expect(runs.requests[0].body).toMatchObject({ scenarioIds: ["s-cancel"] });

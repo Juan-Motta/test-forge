@@ -40,6 +40,19 @@ export function plannedRuns(scenarioCount: number, draft: LaunchDraft): number |
 }
 
 /**
+ * Rough wall time in minutes: the calls run in waves of `concurrency`, each wave as long as the
+ * longest scenario's `maxDurationS` (an upper bound). Null while a field is invalid or no duration is known.
+ */
+export function estimatedMinutes(scenarios: { maxDurationS?: number }[], draft: LaunchDraft): number | null {
+  const calls = plannedRuns(scenarios.length, draft);
+  const concurrency = count(draft.concurrency, MAX_CONCURRENCY);
+  const durations = scenarios.flatMap((scenario) => (scenario.maxDurationS ? [scenario.maxDurationS] : []));
+  if (calls === null || concurrency === null || durations.length === 0) return null;
+  const waves = Math.ceil(calls / concurrency);
+  return Math.ceil((waves * Math.max(...durations)) / 60);
+}
+
+/**
  * The scenarios a 422 refused, as "name: reason" lines. The backend reports them under
  * `scenarioIds.<index>`; anything else (a plain validation error) yields no lines.
  */

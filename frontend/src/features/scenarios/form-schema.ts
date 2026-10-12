@@ -64,11 +64,11 @@ export const SOURCE_LABELS: Record<EvidenceSource, string> = {
 };
 export const EVALUATOR_MODE_LABELS: Record<EvaluatorMode, { label: string; description: string }> = {
   pipeline: {
-    label: "Pipeline",
+    label: "Pipeline (STT → LLM → TTS)",
     description: "A chat model decides what the caller says and a TTS voice speaks it.",
   },
   realtime: {
-    label: "Realtime",
+    label: "Speech-to-speech (realtime)",
     description:
       "A speech-to-speech model hears the agent and answers by voice: lower latency and more natural, but it costs more (audio from $10 in / $20 out per 1M tokens vs $12 out for TTS).",
   },

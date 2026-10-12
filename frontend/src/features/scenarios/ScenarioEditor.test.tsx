@@ -46,6 +46,8 @@ async function renderEditor(scenarioId?: string) {
 }
 
 const field = (label: string) => screen.getByLabelText(label);
+const PIPELINE = "Pipeline (STT → LLM → TTS)";
+const REALTIME = "Speech-to-speech (realtime)";
 
 async function retype(user: UserEvent, label: string, text: string) {
   await user.clear(field(label));
@@ -74,7 +76,7 @@ describe("Scenario editor: create", () => {
     await user.type(field("Tags"), "checkout, vip, checkout");
     await user.type(field("Scenario-specific context"), "The guest is a loyalty member.");
     await retype(user, "Locale", "es-ES");
-    await user.click(screen.getByRole("radio", { name: "Friendly" }));
+    await user.click(screen.getByRole("button", { name: "Friendly" }));
     await user.type(field("Persona notes"), "Polite but firm.");
     await user.selectOptions(field("Evaluator voice (TTS connection)"), "OpenAI prod");
     await user.type(field("Voice override (optional)"), "coral");
@@ -128,9 +130,9 @@ describe("Scenario editor: create", () => {
     const user = await renderEditor();
     await fillMinimum(user);
 
-    const evaluator = screen.getByRole("group", { name: "Evaluator" });
-    const pipeline = within(evaluator).getByRole("radio", { name: "Pipeline" });
-    const realtime = within(evaluator).getByRole("radio", { name: "Realtime" });
+    const evaluator = screen.getByRole("radiogroup", { name: "Evaluator" });
+    const pipeline = within(evaluator).getByRole("radio", { name: PIPELINE });
+    const realtime = within(evaluator).getByRole("radio", { name: REALTIME });
     expect(pipeline).toBeChecked();
     expect(realtime).toHaveAccessibleDescription(expect.stringContaining("costs more"));
     await user.type(field("Voice override (optional)"), "nova");
@@ -156,10 +158,10 @@ describe("Scenario editor: create", () => {
     const user = await renderEditor();
     await fillMinimum(user);
 
-    expect(screen.queryByRole("group", { name: "Realtime model" })).not.toBeInTheDocument();
-    await user.click(screen.getByRole("radio", { name: "Realtime" }));
+    expect(screen.queryByRole("radiogroup", { name: "Realtime model" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("radio", { name: REALTIME }));
 
-    const models = screen.getByRole("group", { name: "Realtime model" });
+    const models = screen.getByRole("radiogroup", { name: "Realtime model" });
     const mini = within(models).getByRole("radio", { name: "gpt-realtime-2.1-mini" });
     const full = within(models).getByRole("radio", { name: "gpt-realtime-2.1" });
     expect(mini).toBeChecked();
@@ -177,12 +179,12 @@ describe("Scenario editor: create", () => {
     const user = await renderEditor("s-booking");
 
     expect(screen.getByRole("radio", { name: "gpt-realtime-2.1" })).toBeChecked();
-    await user.click(screen.getByRole("radio", { name: "Pipeline" }));
-    expect(screen.queryByRole("group", { name: "Realtime model" })).not.toBeInTheDocument();
-    await user.click(screen.getByRole("radio", { name: "Realtime" }));
+    await user.click(screen.getByRole("radio", { name: PIPELINE }));
+    expect(screen.queryByRole("radiogroup", { name: "Realtime model" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("radio", { name: REALTIME }));
     expect(screen.getByRole("radio", { name: "gpt-realtime-2.1" })).toBeChecked();
     await user.click(screen.getByRole("radio", { name: "gpt-realtime-2.1-mini" }));
-    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(api.requests).toHaveLength(1));
     expect(api.requests[0].body).toEqual({ realtimeModel: "gpt-realtime-2.1-mini" });
@@ -194,9 +196,9 @@ describe("Scenario editor: create", () => {
     await fillMinimum(user);
 
     await user.type(field("Voice override (optional)"), "nova");
-    await user.click(screen.getByRole("radio", { name: "Realtime" }));
+    await user.click(screen.getByRole("radio", { name: REALTIME }));
     await waitFor(() => expect(field("Voice override (optional)")).toHaveAttribute("aria-invalid", "true"));
-    await user.click(screen.getByRole("radio", { name: "Pipeline" }));
+    await user.click(screen.getByRole("radio", { name: PIPELINE }));
     await waitFor(() => expect(field("Voice override (optional)")).not.toHaveAttribute("aria-invalid", "true"));
 
     await user.click(screen.getByRole("button", { name: "Create scenario" }));
@@ -213,7 +215,7 @@ describe("Scenario editor: create", () => {
     await user.click(screen.getByRole("button", { name: "Add criterion" }));
     await user.type(field("Criterion 2 Text"), "Mentions the fee");
     await retype(user, "Criterion 2 Weight", "30");
-    expect(screen.getByText("Weights total 90 of 100")).toBeInTheDocument();
+    expect(screen.getByText("Weights total 90%")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Create scenario" }));
 
     const message = await screen.findByText("Weights must total exactly 100; they total 90.");
@@ -221,7 +223,7 @@ describe("Scenario editor: create", () => {
     expect(api.requests).toEqual([]);
 
     await retype(user, "Criterion 2 Weight", "40");
-    expect(screen.getByText("Weights total 100 of 100")).toBeInTheDocument();
+    expect(screen.getByText("Weights total 100%")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Create scenario" }));
     await waitFor(() => expect(api.requests).toHaveLength(1));
   });
@@ -253,7 +255,7 @@ describe("Scenario editor: create", () => {
     const user = await renderEditor();
     await fillMinimum(user);
 
-    const section = screen.getByRole("region", { name: "7 · Interruptions" });
+    const section = screen.getByRole("region", { name: "6 · Interruptions" });
     expect(within(section).getByText("The caller never interrupts the agent.")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Add interruption" }));
     expect(field("Interruption 1 Agent reply #")).toHaveValue(1);
@@ -408,12 +410,12 @@ describe("Scenario editor: edit", () => {
 
     expect(field("Name")).toHaveValue("Booking with date change");
     expect(field("Tags")).toHaveValue("booking, regression");
-    expect(screen.getByRole("radio", { name: "Hurried" })).toBeChecked();
+    expect(screen.getByRole("button", { name: "Hurried" })).toHaveAttribute("aria-pressed", "true");
     expect(field("Fact 2 Value")).toHaveValue("2 adults");
     await retype(user, "Goal", "Book a double room for 2 nights.");
     await retype(user, "Criterion 1 Weight", "50");
     await retype(user, "Criterion 2 Weight", "50");
-    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(api.requests).toHaveLength(1));
     expect(api.requests[0]).toEqual({
@@ -438,7 +440,7 @@ describe("Scenario editor: edit", () => {
     expect(field("Interruption 1 Agent reply #")).toHaveValue(1);
     expect(field("Interruption 1 After (s)")).toHaveValue(2.5);
     await retype(user, "Interruption 2 After (s)", "4");
-    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(api.requests).toHaveLength(1));
     expect(api.requests[0].body).toEqual({
@@ -450,7 +452,7 @@ describe("Scenario editor: edit", () => {
 
     await user.click(screen.getByRole("button", { name: "Remove interruption 1" }));
     await user.click(screen.getByRole("button", { name: "Remove interruption 1" }));
-    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(api.requests).toHaveLength(2));
     expect(api.requests[1].body).toEqual({ interruptions: [] });
   });
@@ -468,7 +470,7 @@ describe("Scenario editor: edit", () => {
     const user = await renderEditor("s-booking");
 
     await retype(user, "Interruption 1 After (s)", "50");
-    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(field("Interruption 1 After (s)")).toHaveAccessibleDescription("Too late for this agent"));
     expect(field("Interruption 1 After (s)")).toHaveFocus();
@@ -478,9 +480,9 @@ describe("Scenario editor: edit", () => {
     const api = setup([scenarioFixture({ evaluatorMode: "realtime", voiceOverride: "cedar" })]);
     const user = await renderEditor("s-booking");
 
-    expect(screen.getByRole("radio", { name: "Realtime" })).toBeChecked();
-    await user.click(screen.getByRole("radio", { name: "Pipeline" }));
-    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(screen.getByRole("radio", { name: REALTIME })).toBeChecked();
+    await user.click(screen.getByRole("radio", { name: PIPELINE }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(api.requests).toHaveLength(1));
     expect(api.requests[0].body).toEqual({ evaluatorMode: "pipeline" });
@@ -492,7 +494,7 @@ describe("Scenario editor: edit", () => {
 
     await user.selectOptions(field("Evaluator voice (TTS connection)"), "None");
     await user.clear(field("Voice override (optional)"));
-    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(api.requests).toHaveLength(1));
     expect(api.requests[0].body).toEqual({ ttsConnectionId: null, voiceOverride: null });
@@ -504,7 +506,7 @@ describe("Scenario editor: edit", () => {
 
     expect(field("Evaluator model connection")).toHaveValue("c-azure-chat");
     await user.selectOptions(field("Evaluator model connection"), "Same as voice connection");
-    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(api.requests).toHaveLength(1));
     expect(api.requests[0].body).toEqual({ evaluatorConnectionId: null });
@@ -529,7 +531,7 @@ describe("Scenario editor: edit", () => {
     const user = await renderEditor("s-booking");
 
     await retype(user, "Goal", "Something else.");
-    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(field("Fact 2 Key")).toHaveAccessibleDescription("Fact key is not allowed"));
     expect(field("Criterion 2 Text")).toHaveAccessibleDescription("Criterion text is too long");
@@ -595,14 +597,15 @@ describe("Scenario editor: launch", () => {
     nav.push.mockReset();
   });
 
-  it("launches the saved scenario and opens the batch's live view", async () => {
+  it("launches the saved scenario from the rail and opens the batch's live view", async () => {
     setup();
     const runs = mockRunsApi([], { scenarioNames: { "s-booking": "Booking with date change" } });
     const user = await renderEditor("s-booking");
 
-    await user.click(screen.getByRole("button", { name: "Launch runs" }));
-    const dialog = screen.getByRole("dialog", { name: "Launch Booking with date change" });
-    await user.click(within(dialog).getByRole("button", { name: "Launch" }));
+    const rail = screen.getByRole("region", { name: "Launch a batch" });
+    expect(within(rail).getByRole("radio", { name: "This scenario" })).toBeChecked();
+    expect(within(rail).getByText("≈ 6 min wall time")).toBeInTheDocument();
+    await user.click(within(rail).getByRole("button", { name: "Launch 1 run" }));
 
     await waitFor(() => expect(nav.push).toHaveBeenCalledWith("/live?batchId=b-new-1"));
     expect(runs.requests[0].body).toEqual({ scenarioIds: ["s-booking"], repetitions: 1, concurrency: 1 });
@@ -611,6 +614,93 @@ describe("Scenario editor: launch", () => {
   it("offers no launch while creating a scenario", async () => {
     setup([]);
     await renderEditor();
-    expect(screen.queryByRole("button", { name: "Launch runs" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Launch a batch" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Launch/ })).not.toBeInTheDocument();
+    expect(screen.getByText("Save the scenario to launch runs.")).toBeInTheDocument();
+  });
+});
+
+describe("Scenario editor: layout", () => {
+  const cancel = scenarioFixture({
+    id: "s-cancel",
+    name: "Cancel within 24h",
+    tags: ["cancellation"],
+    persona: { name: "Ana", locale: "es-MX", temperament: "polite", notes: "" },
+  });
+  const otherAgent = scenarioFixture({
+    id: "s-refund",
+    agentId: "a-support",
+    agent: { id: "a-support", name: "Support triage" },
+    name: "Refund dispute",
+    tags: ["regression"],
+  });
+
+  it("shows the breadcrumb with the first tag and the scenario's agent library grouped by tag", async () => {
+    setup([scenarioFixture(), cancel, otherAgent]);
+    await renderEditor("s-booking");
+
+    const breadcrumb = screen.getByRole("navigation", { name: "Breadcrumb" });
+    expect(breadcrumb).toHaveTextContent("Scenarios / booking / Booking with date change");
+    expect(within(breadcrumb).getByRole("link", { name: "Scenarios" })).toHaveAttribute("href", "/scenarios");
+
+    const library = screen.getByRole("complementary", { name: "Scenario library" });
+    const current = await within(library).findByRole("link", { name: /Booking with date change/ });
+    expect(current).toHaveAttribute("aria-current", "page");
+    expect(current).toHaveTextContent("Hurried");
+    expect(within(library).getByRole("link", { name: /Cancel within 24h/ })).toHaveAttribute("href", "/scenarios/s-cancel");
+    expect(within(library).queryByText("Refund dispute")).not.toBeInTheDocument();
+    expect(within(library).getByRole("heading", { name: "booking 1" })).toBeInTheDocument();
+    expect(within(library).getByRole("heading", { name: "cancellation 1" })).toBeInTheDocument();
+    expect(within(library).getByRole("link", { name: "New scenario" })).toHaveAttribute("href", "/scenarios/new");
+  });
+
+  it("filters the library by name", async () => {
+    setup([scenarioFixture(), cancel]);
+    const user = await renderEditor("s-booking");
+    const library = screen.getByRole("complementary", { name: "Scenario library" });
+    await within(library).findByRole("link", { name: /Cancel within 24h/ });
+
+    await user.type(within(library).getByRole("searchbox", { name: "Filter scenarios" }), "cancel");
+    expect(within(library).queryByRole("link", { name: /Booking with date change/ })).not.toBeInTheDocument();
+    expect(within(library).getByRole("link", { name: /Cancel within 24h/ })).toBeInTheDocument();
+  });
+
+  it("marks the agent context as inherited and lists facts in a key/value grid", async () => {
+    setup();
+    await renderEditor("s-booking");
+
+    const panel = screen.getByRole("region", { name: "Agent context" });
+    expect(within(panel).getByText("Inherited")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "1 · Target agent and context" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "7 · Evaluator" })).toBeInTheDocument();
+    expect(field("Fact 1 Value")).toHaveValue("2026-11-14");
+  });
+
+  it("duplicates the saved scenario and opens the copy", async () => {
+    const api = setup();
+    const user = await renderEditor("s-booking");
+
+    await user.click(screen.getByRole("button", { name: "Duplicate" }));
+
+    await waitFor(() => expect(nav.push).toHaveBeenCalledWith("/scenarios/s-new-1"));
+    expect(api.requests).toEqual([{ method: "POST", path: "/scenarios/s-booking/duplicate", body: undefined }]);
+  });
+
+  it("asks before duplicating over unsaved changes", async () => {
+    const api = setup();
+    const user = await renderEditor("s-booking");
+    vi.spyOn(window, "confirm").mockReturnValueOnce(false);
+
+    await retype(user, "Goal", "Something else.");
+    await user.click(screen.getByRole("button", { name: "Duplicate" }));
+
+    expect(window.confirm).toHaveBeenCalledTimes(1);
+    expect(api.requests).toEqual([]);
+  });
+
+  it("offers no Duplicate while creating a scenario", async () => {
+    setup([]);
+    await renderEditor();
+    expect(screen.queryByRole("button", { name: "Duplicate" })).not.toBeInTheDocument();
   });
 });

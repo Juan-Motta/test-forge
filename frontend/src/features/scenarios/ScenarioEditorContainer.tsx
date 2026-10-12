@@ -2,18 +2,19 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef } from "react";
 import { useAgents } from "@/features/agents/queries";
 import { canChat } from "@/features/connections/kinds";
-import { LaunchRunsDialog } from "@/features/runs/LaunchRunsDialog";
+import { LaunchPanel } from "@/features/runs/LaunchPanel";
 import { useConnections } from "@/features/connections/queries";
 import { PageHeader } from "@/features/shell/PageHeader";
 import { ApiError, errorMessage, formErrorView } from "@/lib/api";
 import { confirmLeave } from "@/lib/navigation/unsaved-changes";
-import { Alert, Button, EmptyState, ScenariosIcon, Spinner, buttonClasses } from "@/ui";
+import { Alert, Button, Card, EmptyState, ScenariosIcon, Spinner, buttonClasses } from "@/ui";
 import { toChanges, toNewScenario, type ScenarioFormValues } from "./form-schema";
-import { useCreateScenario, useScenario, useUpdateScenario } from "./queries";
+import { useCreateScenario, useDuplicateScenario, useScenario, useScenarios, useUpdateScenario } from "./queries";
 import { ScenarioEditor, type ConnectionOption } from "./ScenarioEditor";
+import { ScenarioLibraryRail } from "./ScenarioLibraryRail";
 import type { Scenario } from "./types";
 
 export const DUPLICATE_SCENARIO_NAME = "A scenario with this name already exists for this agent.";
@@ -40,10 +41,12 @@ export function ScenarioEditorContainer({ scenarioId }: ScenarioEditorContainerP
   const connections = useConnections();
   const create = useCreateScenario();
   const update = useUpdateScenario();
+  const library = useScenarios();
+  const duplicate = useDuplicateScenario();
+  const duplicatingNow = useRef(false);
   // A ref, not mutation state: two clicks can land before React re-renders the disabled button.
   const saving = useRef(false);
   const save = scenarioId ? update : create;
-  const [launching, setLaunching] = useState(false);
 
   // Memoized per failure: a new `fieldErrors` object tells the editor to show a new set of errors.
   const view = useMemo(
@@ -76,24 +79,35 @@ export function ScenarioEditorContainer({ scenarioId }: ScenarioEditorContainerP
     if (confirmLeave()) router.push("/scenarios");
   }
 
+  function onDuplicate() {
+    const current = scenario.data;
+    // The copy is made from the saved version; leaving would drop unsaved edits.
+    if (!current || duplicatingNow.current || !confirmLeave()) return;
+    duplicatingNow.current = true;
+    duplicate.mutate(current, {
+      onSuccess: (copy) => router.push(`/scenarios/${encodeURIComponent(copy.id)}`),
+      onSettled: () => (duplicatingNow.current = false),
+    });
+  }
+
   const title = scenarioId ? (scenario.data?.name ?? "Scenario") : "New scenario";
-  const header = (
-    <PageHeader
-      title={title}
-      description={
-        scenarioId
-          ? `Scenario for ${scenario.data?.agent.name ?? "an agent"}.`
-          : "What the simulated caller is, knows and wants, and how the call is judged."
-      }
-      actions={
-        scenario.data ? (
-          <Button variant="secondary" onClick={() => setLaunching(true)} title="Launches the saved version">
-            Launch runs
-          </Button>
-        ) : undefined
-      }
-    />
+  const tag = scenario.data?.tags[0];
+  const eyebrow = (
+    <nav aria-label="Breadcrumb">
+      <Link href="/scenarios" onNavigate={(event) => (confirmLeave() ? undefined : event.preventDefault())}>
+        Scenarios
+      </Link>
+      {tag ? (
+        <>
+          <span aria-hidden="true"> / </span>
+          <span>{tag}</span>
+        </>
+      ) : null}
+      <span aria-hidden="true"> / </span>
+      <span aria-current="page">{title}</span>
+    </nav>
   );
+  const header = <PageHeader title={title} eyebrow={eyebrow} />;
 
   let body;
   if (scenario.isError && scenario.error instanceof ApiError && scenario.error.status === 404) {
@@ -162,29 +176,61 @@ export function ScenarioEditorContainer({ scenarioId }: ScenarioEditorContainerP
         pending={save.isPending}
         error={view?.message}
         serverFieldErrors={view?.fieldErrors}
+        title={title}
+        eyebrow={eyebrow}
+        onDuplicate={scenario.data ? onDuplicate : undefined}
+        duplicating={duplicate.isPending}
+        banner={duplicate.isError ? <Alert>{`Could not duplicate: ${errorMessage(duplicate.error)}`}</Alert> : null}
+        library={
+          <ScenarioLibraryRail
+            scenarios={library.data?.filter((item) => !scenario.data || item.agentId === scenario.data.agentId)}
+            failed={loadFailed(library)}
+            currentId={scenario.data?.id}
+          />
+        }
+        launch={<LaunchRail scenario={scenario.data} onLaunched={(batchId) => router.push(`/live?batchId=${encodeURIComponent(batchId)}`)} />}
       />
     );
+    return body;
   }
 
   return (
     <>
-      <nav aria-label="Breadcrumb" className="text-sm text-muted">
-        <Link href="/scenarios" onNavigate={(event) => (confirmLeave() ? undefined : event.preventDefault())}>
-          Scenarios
-        </Link>
-        <span aria-hidden="true"> / </span>
-        <span aria-current="page">{title}</span>
-      </nav>
       {header}
       {body}
-      {scenario.data ? (
-        <LaunchRunsDialog
-          open={launching}
-          scenarios={[{ id: scenario.data.id, name: scenario.data.name }]}
-          onClose={() => setLaunching(false)}
-          onLaunched={(batch) => router.push(`/live?batchId=${encodeURIComponent(batch.id)}`)}
-        />
-      ) : null}
     </>
+  );
+}
+
+/** Right rail: launches the saved scenario; a new one has to be saved first. */
+function LaunchRail({ scenario, onLaunched }: { scenario: Scenario | undefined; onLaunched: (batchId: string) => void }) {
+  if (!scenario) {
+    return (
+      <aside aria-label="Launch" className="flex min-w-0 flex-col">
+        <Card className="gap-2">
+          <h2 className="text-[15px] font-semibold">Launch a batch</h2>
+          <p className="text-sm text-muted">Save the scenario to launch runs.</p>
+        </Card>
+      </aside>
+    );
+  }
+  return (
+    <aside aria-label="Launch" className="flex min-w-0 flex-col">
+      <section
+        aria-labelledby="launch-batch-heading"
+        className="flex flex-col gap-4 rounded-xl border border-evaluator-line bg-panel p-5"
+      >
+        <div className="flex flex-col gap-1">
+          <h2 id="launch-batch-heading" className="text-[15px] font-semibold">
+            Launch a batch
+          </h2>
+          <p className="text-xs text-dim">Launches the saved version.</p>
+        </div>
+        <LaunchPanel
+          scenarios={[{ id: scenario.id, name: scenario.name, maxDurationS: scenario.endConditions.maxDurationS }]}
+          onLaunched={(batch) => onLaunched(batch.id)}
+        />
+      </section>
+    </aside>
   );
 }

@@ -7,7 +7,20 @@ import { useAgents } from "@/features/agents/queries";
 import { LaunchRunsDialog } from "@/features/runs/LaunchRunsDialog";
 import { PageHeader } from "@/features/shell/PageHeader";
 import { errorMessage } from "@/lib/api";
-import { Alert, Button, EmptyState, Field, PlusIcon, ScenariosIcon, Select, Spinner, buttonClasses, cn, focusRing } from "@/ui";
+import {
+  Alert,
+  Button,
+  EmptyState,
+  Field,
+  FilterChips,
+  PlusIcon,
+  ScenariosIcon,
+  Select,
+  Spinner,
+  buttonClasses,
+  cn,
+  focusRing,
+} from "@/ui";
 import { DeleteScenarioDialog } from "./DeleteScenarioDialog";
 import { allTags, groupScenarios, type LibraryFilters } from "./library";
 import { useDeleteScenario, useDuplicateScenario, useScenarios } from "./queries";
@@ -156,21 +169,17 @@ export function ScenariosContainer() {
             </Field>
           </div>
           {tags.length > 0 ? (
-            <div role="group" aria-label="Filter by tag" className="flex flex-wrap gap-2">
-              <TagChip label="All tags" pressed={filters.tag === null} onClick={() => setFilters((f) => ({ ...f, tag: null }))} />
-              {tags.map((tag) => (
-                <TagChip
-                  key={tag}
-                  label={tag}
-                  pressed={filters.tag === tag}
-                  onClick={() => setFilters((f) => ({ ...f, tag: f.tag === tag ? null : tag }))}
-                />
-              ))}
-            </div>
+            <FilterChips
+              label="Filter by tag"
+              size="md"
+              options={[{ value: "", label: "All tags" }, ...tags.map((tag) => ({ value: tag, label: tag }))]}
+              selected={[filters.tag ?? ""]}
+              onToggle={(tag) => setFilters((f) => ({ ...f, tag: tag === "" || f.tag === tag ? null : tag }))}
+            />
           ) : null}
         </div>
         {picked.length > 0 || hiddenCount > 0 ? (
-          <div className="flex flex-wrap items-center gap-3 rounded-xl border border-line bg-raised px-4 py-3">
+          <div className="flex flex-wrap items-center gap-3 rounded-xl border border-evaluator-line bg-panel px-4 py-3">
             {picked.length > 0 ? (
               <p className="text-sm text-muted">{picked.length === 1 ? "1 scenario selected" : `${picked.length} scenarios selected`}</p>
             ) : null}
@@ -213,6 +222,7 @@ export function ScenariosContainer() {
       <PageHeader
         titleRef={titleRef}
         title="Scenarios"
+        eyebrow="Library"
         description="Conversations the evaluator plays against an agent, and how the judge scores them."
         actions={newScenario}
       />
@@ -239,7 +249,11 @@ export function ScenariosContainer() {
       />
       <LaunchRunsDialog
         open={launching !== undefined}
-        scenarios={launching ?? []}
+        scenarios={(launching ?? []).map(({ id, name, endConditions }) => ({
+          id,
+          name,
+          maxDurationS: endConditions.maxDurationS,
+        }))}
         onClose={() => setLaunching(undefined)}
         onLaunched={(batch) => router.push(`/live?batchId=${encodeURIComponent(batch.id)}`)}
       />
@@ -251,21 +265,4 @@ export function ScenariosContainer() {
 function hiddenSelectionText(count: number, othersVisible: boolean): string {
   if (othersVisible) return `${count} more ${count === 1 ? "is" : "are"} hidden by the filters and will not launch.`;
   return count === 1 ? "1 selected scenario is hidden by the filters." : `${count} selected scenarios are hidden by the filters.`;
-}
-
-function TagChip({ label, pressed, onClick }: { label: string; pressed: boolean; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      aria-pressed={pressed}
-      onClick={onClick}
-      className={cn(
-        "inline-flex min-h-9 items-center rounded-full border px-3.5 font-mono text-xs transition-colors",
-        focusRing,
-        pressed ? "border-evaluator bg-evaluator/15 text-fg" : "border-line-strong text-muted hover:text-fg",
-      )}
-    >
-      {label}
-    </button>
-  );
 }

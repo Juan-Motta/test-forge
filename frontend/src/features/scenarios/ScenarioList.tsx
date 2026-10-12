@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { absoluteTime, relativeTime } from "@/features/connections/format";
-import { Badge, Button, buttonClasses } from "@/ui";
+import { Badge, Button, buttonClasses, cn } from "@/ui";
 import { TEMPERAMENT_LABELS } from "./form-schema";
 import type { Scenario } from "./types";
 
@@ -33,12 +33,12 @@ export function ScenarioList({
       {groups.map((group) => {
         const headingId = `agent-group-${group.agentId}`;
         return (
-          <section key={group.agentId} aria-labelledby={headingId} className="flex flex-col gap-3">
-            <div className="flex items-center gap-2">
-              <h2 id={headingId} className="text-base font-semibold">
+          <section key={group.agentId} aria-labelledby={headingId} className="flex flex-col gap-2.5">
+            <div className="flex items-center justify-between gap-2 px-1">
+              <h2 id={headingId} className="text-xs font-semibold tracking-[0.06em] text-muted uppercase">
                 {group.agentName}
               </h2>
-              <Badge>{group.scenarios.length}</Badge>
+              <span className="text-xs text-dim">{group.scenarios.length}</span>
             </div>
             <ul className="flex flex-col gap-2.5">
               {group.scenarios.map((scenario) => (
@@ -84,7 +84,10 @@ function ScenarioItem({
   return (
     <li
       aria-labelledby={nameId}
-      className="flex flex-wrap items-start justify-between gap-4 rounded-xl border border-line bg-panel p-4"
+      className={cn(
+        "flex flex-wrap items-start justify-between gap-4 rounded-xl border bg-panel p-4 transition-colors",
+        selected ? "border-evaluator/60" : "border-line hover:border-line-strong",
+      )}
     >
       <div className="flex min-w-0 items-start gap-3">
         <input
@@ -95,7 +98,7 @@ function ScenarioItem({
           className="mt-1 size-4 shrink-0 accent-evaluator"
         />
         <div className="flex min-w-0 flex-col gap-2">
-          <h3 id={nameId} className="font-semibold break-words">
+          <h3 id={nameId} className="text-[15px] font-semibold break-words">
             {scenario.name}
           </h3>
           <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
@@ -116,7 +119,9 @@ function ScenarioItem({
             <ul aria-label="Tags" className="flex flex-wrap gap-1.5">
               {scenario.tags.map((tag) => (
                 <li key={tag}>
-                  <Badge mono>{tag}</Badge>
+                  <Badge tone="outline" mono>
+                    {tag}
+                  </Badge>
                 </li>
               ))}
             </ul>

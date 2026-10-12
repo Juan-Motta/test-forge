@@ -1,9 +1,9 @@
 "use client";
 
 import { useFieldArray, useWatch, type Control } from "react-hook-form";
-import { Badge, Button, Field, Input, PlusIcon, Select, cn } from "@/ui";
+import { Badge, Button, CloseIcon, PlusIcon, cn, focusRing } from "@/ui";
 import type { SectionProps } from "./editor-form";
-import { RowLabel } from "./FactsEditor";
+import { InlineField, inlineControl } from "./FactsEditor";
 import {
   KIND_LABELS,
   newCriterion,
@@ -12,11 +12,27 @@ import {
   weightTotal,
   type ScenarioFormValues,
 } from "./form-schema";
-import { CRITERION_KINDS, EVIDENCE_SOURCES } from "./types";
+import { CRITERION_KINDS, EVIDENCE_SOURCES, type CriterionKind } from "./types";
 
 type CriteriaEditorProps = SectionProps & { control: Control<ScenarioFormValues> };
 
-/** Weighted success criteria for the judge, with a live total that must reach exactly 100. */
+const KIND_TONE: Record<CriterionKind, string> = {
+  must: "bg-danger/15 text-danger-fg",
+  should: "bg-agent/15 text-agent-fg",
+};
+
+/** The live weight total; the criteria must reach exactly 100% to save. */
+export function WeightsStatus({ control }: { control: Control<ScenarioFormValues> }) {
+  const rows = useWatch({ control, name: "criteria" });
+  const total = weightTotal(rows ?? []);
+  return (
+    <Badge tone={total === WEIGHT_TOTAL ? "success" : "danger"}>
+      <span aria-live="polite">{`Weights total ${total}%`}</span>
+    </Badge>
+  );
+}
+
+/** Weighted success criteria for the judge: one compact row each (kind chip, text, evidence pill, weight). */
 export function CriteriaEditor({ control, registerField, fieldError }: CriteriaEditorProps) {
   const { fields, append, remove } = useFieldArray({ control, name: "criteria" });
   const rows = useWatch({ control, name: "criteria" });
@@ -29,73 +45,101 @@ export function CriteriaEditor({ control, registerField, fieldError }: CriteriaE
   }
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs text-muted">The judge scores each criterion; Must criteria fail the call when missed.</p>
-        <Badge tone={total === WEIGHT_TOTAL ? "success" : "danger"}>
-          <span aria-live="polite">{`Weights total ${total} of ${WEIGHT_TOTAL}`}</span>
-        </Badge>
-      </div>
-      {fields.map((row, index) => {
-        const prefix = `Criterion ${index + 1}`;
-        return (
-          <div
-            key={row.id}
-            className="grid items-start gap-3 rounded-lg border border-line bg-raised p-3 sm:grid-cols-[minmax(0,3fr)_minmax(0,1fr)_minmax(0,1fr)_6rem_auto]"
-          >
-            <Field label={<RowLabel prefix={prefix} text="Text" />} error={fieldError(`criteria.${index}.text`)}>
-              {(props) => <Input autoComplete="off" {...props} {...registerField(`criteria.${index}.text`)} />}
-            </Field>
-            <Field label={<RowLabel prefix={prefix} text="Kind" />} error={fieldError(`criteria.${index}.kind`)}>
-              {(props) => (
-                <Select {...props} {...registerField(`criteria.${index}.kind`)}>
-                  {CRITERION_KINDS.map((kind) => (
-                    <option key={kind} value={kind}>
-                      {KIND_LABELS[kind]}
-                    </option>
-                  ))}
-                </Select>
-              )}
-            </Field>
-            <Field label={<RowLabel prefix={prefix} text="Evidence" />} error={fieldError(`criteria.${index}.source`)}>
-              {(props) => (
-                <Select {...props} {...registerField(`criteria.${index}.source`)}>
-                  {EVIDENCE_SOURCES.map((source) => (
-                    <option key={source} value={source}>
-                      {SOURCE_LABELS[source]}
-                    </option>
-                  ))}
-                </Select>
-              )}
-            </Field>
-            <Field label={<RowLabel prefix={prefix} text="Weight" />} error={fieldError(`criteria.${index}.weight`)}>
-              {(props) => (
-                <Input
-                  mono
-                  type="number"
-                  inputMode="numeric"
-                  min={1}
-                  max={WEIGHT_TOTAL}
-                  step={1}
-                  {...props}
-                  {...registerField(`criteria.${index}.weight`)}
-                />
-              )}
-            </Field>
-            <Button
-              variant="ghost"
-              className="sm:mt-6"
-              aria-label={`Remove criterion ${index + 1}`}
-              disabled={fields.length === 1}
-              onClick={() => remove(index)}
+    <div className="flex flex-col gap-2">
+      <p className="text-xs text-muted">The judge scores each criterion; Must criteria fail the call when missed.</p>
+      <ul className="flex flex-col gap-2">
+        {fields.map((row, index) => {
+          const prefix = `Criterion ${index + 1}`;
+          const kind = rows?.[index]?.kind ?? row.kind;
+          return (
+            <li
+              key={row.id}
+              className="flex flex-wrap items-start gap-2.5 rounded-lg border border-line bg-field px-2.5 py-1.5"
             >
-              Remove
-            </Button>
-          </div>
-        );
-      })}
+              <InlineField label={`${prefix} Kind`} error={fieldError(`criteria.${index}.kind`)}>
+                {(props) => (
+                  <select
+                    className={cn(
+                      "mt-1.5 min-h-7 cursor-pointer appearance-none rounded-md border-0 px-2 text-[11px] font-semibold",
+                      focusRing,
+                      KIND_TONE[kind],
+                    )}
+                    {...props}
+                    {...registerField(`criteria.${index}.kind`)}
+                  >
+                    {CRITERION_KINDS.map((value) => (
+                      <option key={value} value={value}>
+                        {KIND_LABELS[value]}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </InlineField>
+              <InlineField label={`${prefix} Text`} error={fieldError(`criteria.${index}.text`)} className="min-w-0 flex-[1_1_240px]">
+                {(props) => (
+                  <input
+                    autoComplete="off"
+                    placeholder="What the agent must do"
+                    className={inlineControl("text-sm text-fg")}
+                    {...props}
+                    {...registerField(`criteria.${index}.text`)}
+                  />
+                )}
+              </InlineField>
+              <InlineField label={`${prefix} Evidence`} error={fieldError(`criteria.${index}.source`)}>
+                {(props) => (
+                  <select
+                    className={cn(
+                      "mt-1.5 min-h-7 cursor-pointer appearance-none rounded-full border border-field-line bg-transparent px-2.5 text-[11px] text-muted",
+                      focusRing,
+                    )}
+                    {...props}
+                    {...registerField(`criteria.${index}.source`)}
+                  >
+                    {EVIDENCE_SOURCES.map((source) => (
+                      <option key={source} value={source}>
+                        {SOURCE_LABELS[source]}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </InlineField>
+              <InlineField label={`${prefix} Weight`} error={fieldError(`criteria.${index}.weight`)} className="w-[5.5rem]">
+                {(props) => (
+                  <span className="flex items-center gap-0.5 font-mono text-xs text-muted">
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      min={1}
+                      max={WEIGHT_TOTAL}
+                      step={1}
+                      className={inlineControl("text-right font-mono text-xs text-fg")}
+                      {...props}
+                      {...registerField(`criteria.${index}.weight`)}
+                    />
+                    <span aria-hidden="true">%</span>
+                  </span>
+                )}
+              </InlineField>
+              <button
+                type="button"
+                aria-label={`Remove criterion ${index + 1}`}
+                disabled={fields.length === 1}
+                onClick={() => remove(index)}
+                className={cn(
+                  "mt-0.5 grid size-8 shrink-0 place-items-center rounded-md text-dim hover:bg-active hover:text-fg",
+                  "disabled:cursor-not-allowed disabled:opacity-40",
+                  focusRing,
+                )}
+              >
+                <CloseIcon size={14} />
+              </button>
+            </li>
+          );
+        })}
+      </ul>
       {listError ? (
-        <p data-error-focus tabIndex={-1} className={cn("text-sm text-danger-fg focus:outline-none")}>
+        <p data-error-focus tabIndex={-1} className="text-sm text-danger-fg focus:outline-none">
           {listError}
         </p>
       ) : null}

@@ -9,6 +9,9 @@ import { LaunchRunsDialog } from "./LaunchRunsDialog";
 import { batchFixture, mockRunsApi } from "./testing";
 import type { BatchDetail } from "./types";
 
+/** The submit button, named after the planned runs ("Launch 1 run", "Launch 6 runs"). */
+const LAUNCH = /^Launch (\d+ runs?|runs)$/;
+
 const booking = { id: "s-booking", name: "Booking with date change" };
 const cancel = { id: "s-cancel", name: "Cancel within 24h" };
 
@@ -45,9 +48,9 @@ describe("Launch runs dialog", () => {
   it("launches with the defaults: one run, one at a time, no label", async () => {
     const { api, onLaunched, user } = setup();
     expect(screen.getByRole("dialog", { name: "Launch Booking with date change" })).toBeInTheDocument();
-    expect(screen.getByText("1 run")).toBeInTheDocument();
+    expect(screen.getByText("1 call")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Launch" }));
+    await user.click(screen.getByRole("button", { name: LAUNCH }));
 
     await waitFor(() => expect(onLaunched).toHaveBeenCalledTimes(1));
     expect(api.requests).toEqual([
@@ -60,13 +63,13 @@ describe("Launch runs dialog", () => {
     const { api, user } = setup([booking, cancel]);
     expect(screen.getByRole("dialog", { name: "Launch 2 scenarios" })).toBeInTheDocument();
 
-    await user.clear(screen.getByLabelText("Repetitions"));
-    await user.type(screen.getByLabelText("Repetitions"), "3");
-    await user.clear(screen.getByLabelText("Concurrency"));
-    await user.type(screen.getByLabelText("Concurrency"), "2");
+    await user.clear(screen.getByLabelText("Runs each"));
+    await user.type(screen.getByLabelText("Runs each"), "3");
+    await user.clear(screen.getByLabelText("In parallel"));
+    await user.type(screen.getByLabelText("In parallel"), "2");
     await user.type(screen.getByLabelText("Label (optional)"), "  nightly  ");
-    expect(screen.getByText("6 runs")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Launch" }));
+    expect(screen.getByText("6 calls")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: LAUNCH }));
 
     await waitFor(() => expect(api.requests).toHaveLength(1));
     expect(api.requests[0].body).toEqual({
@@ -79,14 +82,14 @@ describe("Launch runs dialog", () => {
 
   it("refuses repetitions or concurrency outside 1-10 without calling the API", async () => {
     const { api, user } = setup();
-    await user.clear(screen.getByLabelText("Repetitions"));
-    await user.type(screen.getByLabelText("Repetitions"), "11");
-    await user.clear(screen.getByLabelText("Concurrency"));
-    await user.type(screen.getByLabelText("Concurrency"), "0");
-    await user.click(screen.getByRole("button", { name: "Launch" }));
+    await user.clear(screen.getByLabelText("Runs each"));
+    await user.type(screen.getByLabelText("Runs each"), "11");
+    await user.clear(screen.getByLabelText("In parallel"));
+    await user.type(screen.getByLabelText("In parallel"), "0");
+    await user.click(screen.getByRole("button", { name: LAUNCH }));
 
-    expect(screen.getByLabelText("Repetitions")).toHaveAccessibleDescription(/between 1 and 10/);
-    expect(screen.getByLabelText("Concurrency")).toHaveAccessibleDescription(/between 1 and 10/);
+    expect(screen.getByLabelText("Runs each")).toHaveAccessibleDescription(/between 1 and 10/);
+    expect(screen.getByLabelText("In parallel")).toHaveAccessibleDescription(/between 1 and 10/);
     expect(api.requests).toEqual([]);
   });
 
@@ -94,7 +97,7 @@ describe("Launch runs dialog", () => {
     const { onLaunched, user } = setup([booking, cancel], {
       notRunnable: { "s-cancel": "the scenario has no voice (TTS) connection" },
     });
-    await user.click(screen.getByRole("button", { name: "Launch" }));
+    await user.click(screen.getByRole("button", { name: LAUNCH }));
 
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent("Some scenarios cannot run");
@@ -109,7 +112,7 @@ describe("Launch runs dialog", () => {
     renderWithClient(<Host onLaunched={onLaunched} />);
     const user = userEvent.setup();
 
-    await user.dblClick(screen.getByRole("button", { name: "Launch" }));
+    await user.dblClick(screen.getByRole("button", { name: LAUNCH }));
     await waitFor(() => expect(held.posts).toBe(1));
     held.release();
 
@@ -123,7 +126,7 @@ describe("Launch runs dialog", () => {
     renderWithClient(<Host onLaunched={onLaunched} />);
     const user = userEvent.setup();
 
-    await user.click(screen.getByRole("button", { name: "Launch" }));
+    await user.click(screen.getByRole("button", { name: LAUNCH }));
     await waitFor(() => expect(held.posts).toBe(1));
     expect(screen.getByRole("button", { name: "Cancel" })).toBeDisabled();
     await user.click(screen.getByRole("button", { name: "Cancel" }));
@@ -151,7 +154,7 @@ describe("Launch runs dialog", () => {
     renderWithClient(<Host onLaunched={onLaunched} />);
     const user = userEvent.setup();
 
-    await user.click(screen.getByRole("button", { name: "Launch" }));
+    await user.click(screen.getByRole("button", { name: LAUNCH }));
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent("Could not launch");
     expect(alert).toHaveTextContent(detail);
@@ -159,7 +162,7 @@ describe("Launch runs dialog", () => {
     expect(screen.getByRole("button", { name: "Cancel" })).toBeEnabled();
 
     fail = false;
-    await user.click(screen.getByRole("button", { name: "Launch" }));
+    await user.click(screen.getByRole("button", { name: LAUNCH }));
     await waitFor(() => expect(onLaunched).toHaveBeenCalledTimes(1));
     expect(api.requests).toHaveLength(1);
   });
