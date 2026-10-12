@@ -42,7 +42,7 @@ rendering.
 ## Tasks
 - [x] T1 Backend judge v2: schema, prompt, parsing, bands, caps, gating, escaping, brief — route: delegated
 - [x] T2 Frontend: bands, failure tags, unobservable reasons, v1 compatibility — route: delegated
-- [ ] T3 Stability CLI + measurement on ec3633f4 (paid; ask) — route: delegated + inline run
+- [x] T3 Stability CLI + measurement on ec3633f4 (paid; ask) — route: delegated + inline run
 
 ## Acceptance criteria
 - Bands/caps/gating enforced in code with tests; prompt documents anchors and caps.
@@ -87,4 +87,10 @@ rendering.
   lines): APPROVED + acknowledged. Advisory fixed in 5102ae1: threshold anchors left 4-of-10 misses
   uncovered (now "more than one but fewer than half" → 3, "half or more but not all" → 2); empty
   error-list guard. Backend rebuilt.
-- Next: final stability run (3 judgements × 3 samples = 9 paid calls, ask).
+- Final stability run (user-approved, 9 paid calls): overall 96/91/91 (spread 5, was 12 → 29 → 8);
+  bands: asks-for-missing-data 4/3/3, email content 5/5/5, tone 5/5/5, readout 5/5/5, latency
+  4/4/4; criteria with band spread ≥ 2: 0 of 5 (was 1–2 of 5). Acceptance met.
+
+## Next step
+Feature complete. Optional: run a fresh dev-agent call to see the full flow with judge v2 (paid);
+add trace-sourced criteria to the scenario; push/PRs when the user decides.
