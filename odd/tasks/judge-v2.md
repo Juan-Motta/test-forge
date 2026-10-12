@@ -61,4 +61,12 @@ rendering.
   APPROVED + acknowledged. Advisories: CLI judge-failure / master-key exits untested; evaluator
   KeyError now fails during collecting instead of judging; unjudgeable-run test doesn't assert no
   paid calls.
-- Stack rebuilt with judge v2. Pending: real stability measurement on ec3633f4 (3 paid calls, ask).
+- Stability run 1 (user-approved, 3 paid calls) on ec3633f4: overall 68/80/71 (spread 12);
+  bands: "asks for missing data" 2/5/2 (spread 3, unstable), "email content" 2/2/2, tone 5/5/5,
+  readout 5/5/5, latency 3/3/4. Cause (transcript A3–A6): the generic "por motivos de agenda" was
+  judged sometimes as a fabrication (cap 2) and sometimes as filler (5), and it also lowered the
+  email-content criterion — a rubric fork, not noise.
+- User decision (2026-10-11): only concrete facts count as fabricated; generic filler never caps
+  and lowers at most one band on a criterion about that wording. Encoded in 2d96aac (+ "one defect,
+  one place" rule), test added, pytest judge 101 passed; backend rebuilt.
+- Next: re-measure stability (3 paid calls, ask).
