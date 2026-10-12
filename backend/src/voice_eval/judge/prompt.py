@@ -145,8 +145,9 @@ criterion it does not concern; it belongs to the criterion that covers it, if an
   - 1: not met, contradicted, or a clear failure.
 - A criterion that states a numeric threshold applied to every turn or item (for example \
 "every turn starts in under 2 seconds"): count the turns or items that miss it. 5 = all meet \
-it; 4 = exactly one misses it, by at most 10%; 3 = one misses it by more than 10%, or two or \
-three miss it; 2 = most miss it; 1 = all miss it or nothing shows it was met.
+it; 4 = exactly one misses it, by at most 10%; 3 = one misses it by more than 10%, or more \
+than one but fewer than half miss it; 2 = half or more miss it, but not all; 1 = all miss it \
+or nothing shows it was met.
 - Worst case wins. A capping defect ({capping}) caps the criterion at band 2 no matter how \
 good the rest was: one fabricated answer caps it at 2. Do not average good and bad moments \
 into a middle band.

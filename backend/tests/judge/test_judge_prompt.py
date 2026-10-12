@@ -170,8 +170,8 @@ def test_system_prompt_anchors_numeric_thresholds_applied_to_every_turn():
         "numeric threshold applied to every turn or item",
         "5 = all meet it",
         "4 = exactly one misses it, by at most 10%",
-        "3 = one misses it by more than 10%, or two or three miss it",
-        "2 = most miss it",
+        "3 = one misses it by more than 10%, or more than one but fewer than half miss it",
+        "2 = half or more miss it, but not all",
         "1 = all miss it or nothing shows it was met",
     ):
         assert expected in text, expected

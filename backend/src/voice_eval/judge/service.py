@@ -64,7 +64,7 @@ async def _samples(
         else:
             raise outcome
     if len(parsed) < MIN_SAMPLES:
-        raise errors[0]
+        raise errors[0] if errors else JudgeError("too few judge samples")
     return parsed
 
 
