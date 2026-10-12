@@ -42,7 +42,8 @@ const MAX_CHANNEL_ID = 200;
 const MAX_USER_ID = 200;
 const MAX_ORIGIN = 300;
 const CHANNEL_ID = /^[A-Za-z0-9._~-]+$/;
-const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1"]);
+/** Hosts a `ws://` URL may name: an agent running on this machine (the backend may run in Docker). */
+const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "host.docker.internal"]);
 
 function hasUnsafeCharacter(value: string): boolean {
   return Array.from(value).some((char) => {
@@ -70,8 +71,8 @@ function parseUrl(value: string): URL | string {
 }
 
 /**
- * The agent's WebSocket URL: `wss://`. A `ws://localhost` (or 127.0.0.1) URL is left for the
- * server to judge: it accepts one only when it runs in development.
+ * The agent's WebSocket URL: `wss://`, or `ws://` for a local agent (`localhost`, `127.0.0.1`,
+ * `host.docker.internal`), which the server accepts in any environment.
  */
 export function baseUrlProblem(value: string): string | undefined {
   if (value.length > MAX_URL) return "URL is too long.";

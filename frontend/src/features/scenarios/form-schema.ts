@@ -33,6 +33,8 @@ export type ScenarioFormValues = {
   /** `criterionId` (not `id`, which the field array uses for its own keys) is "" for a new row. */
   criteria: { criterionId: string; text: string; kind: CriterionKind; source: EvidenceSource; weight: string }[];
   endConditions: { maxDurationS: string; maxSilenceS: string; hangUpWhen: HangUpWhen };
+  /** Seconds here (`afterS`), milliseconds in the API (`afterMs`). */
+  interruptions: { agentTurn: string; afterS: string }[];
 };
 
 export const TEMPERAMENT_LABELS: Record<Temperament, string> = {
@@ -73,10 +75,16 @@ const MAX = {
   factValue: 500,
   criteria: 30,
   criterionText: 500,
+  interruptions: 10,
+  agentTurn: 999,
 } as const;
+/** How far into an agent reply the caller may cut in, in seconds (300–60000 ms in the API). */
+export const INTERRUPT_AFTER_S = { min: 0.3, max: 60 } as const;
+export const MAX_INTERRUPTIONS = MAX.interruptions;
 const LOCALE = /^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$/;
 const IDENTIFIER = /^[A-Za-z0-9._:-]{1,100}$/;
 const WHOLE = /^\d+$/;
+const DECIMAL = /^\d+(\.\d+)?$/;
 
 const text = (max: number, required?: string) => {
   const base = z.string().trim();
@@ -140,6 +148,21 @@ export const scenarioFormSchema = z
       maxSilenceS: whole(5, 120, "Use a whole number of seconds from 5 to 120."),
       hangUpWhen: z.enum(HANG_UP_RULES),
     }),
+    interruptions: z
+      .array(
+        z.object({
+          agentTurn: whole(1, MAX.agentTurn, `Use a whole number from 1 to ${MAX.agentTurn}.`),
+          afterS: z
+            .string()
+            .trim()
+            .refine(
+              (value) =>
+                DECIMAL.test(value) && Number(value) >= INTERRUPT_AFTER_S.min && Number(value) <= INTERRUPT_AFTER_S.max,
+              `Use ${INTERRUPT_AFTER_S.min} to ${INTERRUPT_AFTER_S.max} seconds.`,
+            ),
+        }),
+      )
+      .max(MAX.interruptions, `Use at most ${MAX.interruptions} interruptions.`),
   })
   .superRefine((values, ctx) => {
     const tags = parseTags(values.tags);
@@ -155,6 +178,18 @@ export const scenarioFormSchema = z
       }
       seen.add(key);
     });
+    const turns = new Set<string>();
+    values.interruptions.forEach((interruption, index) => {
+      const turn = interruption.agentTurn.trim();
+      if (WHOLE.test(turn) && turns.has(String(Number(turn)))) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["interruptions", index, "agentTurn"],
+          message: "Each interruption needs a different agent reply.",
+        });
+      }
+      if (WHOLE.test(turn)) turns.add(String(Number(turn)));
+    });
     const total = weightTotal(values.criteria);
     if (values.criteria.length > 0 && total !== WEIGHT_TOTAL) {
       ctx.addIssue({ code: "custom", path: ["criteria"], message: weightTotalMessage(total) });
@@ -163,6 +198,12 @@ export const scenarioFormSchema = z
 
 export function newCriterion(weight = ""): ScenarioFormValues["criteria"][number] {
   return { criterionId: "", text: "", kind: "must", source: "transcript", weight };
+}
+
+/** A new interruption row: the agent reply after the last one listed, cut 3 s in. */
+export function newInterruption(rows: { agentTurn: string }[]): ScenarioFormValues["interruptions"][number] {
+  const last = Math.max(0, ...rows.map((row) => (WHOLE.test(row.agentTurn.trim()) ? Number(row.agentTurn) : 0)));
+  return { agentTurn: String(last + 1), afterS: "3" };
 }
 
 /** Initial values: blank with the backend's defaults on create, the stored scenario on edit. */
@@ -182,6 +223,7 @@ export function initialValues(scenario: Scenario | undefined, defaultAgentId = "
       facts: [],
       criteria: [newCriterion(String(WEIGHT_TOTAL))],
       endConditions: { maxDurationS: "360", maxSilenceS: "15", hangUpWhen: "goal_or_goodbye" },
+      interruptions: [],
     };
   }
   return {
@@ -208,6 +250,10 @@ export function initialValues(scenario: Scenario | undefined, defaultAgentId = "
       maxSilenceS: String(scenario.endConditions.maxSilenceS),
       hangUpWhen: scenario.endConditions.hangUpWhen,
     },
+    interruptions: (scenario.interruptions ?? []).map(({ agentTurn, afterMs }) => ({
+      agentTurn: String(agentTurn),
+      afterS: String(afterMs / 1000),
+    })),
   };
 }
 
@@ -241,12 +287,16 @@ export function toNewScenario(values: ScenarioFormValues): NewScenario {
       maxSilenceS: Number(values.endConditions.maxSilenceS),
       hangUpWhen: values.endConditions.hangUpWhen,
     },
+    interruptions: values.interruptions.map(({ agentTurn, afterS }) => ({
+      agentTurn: Number(agentTurn),
+      afterMs: Math.round(Number(afterS) * 1000),
+    })),
   };
 }
 
 /**
  * Only the top-level fields that differ from the stored scenario. Structured fields (persona,
- * facts, criteria, end conditions) are sent whole, as the backend replaces them whole.
+ * facts, criteria, end conditions, interruptions) are sent whole, as the backend replaces them whole.
  */
 export function toChanges(scenario: Scenario, values: ScenarioFormValues): ScenarioChanges {
   const stored = toNewScenario(initialValues(scenario));

@@ -8,6 +8,7 @@ import { useCancelRun, useRun, runQueryKey } from "@/features/runs/queries";
 import { personaLine } from "@/features/runs/RunHeader";
 import { RunStatusChip } from "@/features/runs/RunStatusChip";
 import { RunTranscript } from "@/features/runs/RunTranscript";
+import { interruptedAt } from "@/features/runs/transcript";
 import { errorMessage } from "@/lib/api";
 import { createLivePlayer, type Mix } from "@/lib/live/audio";
 import type { LiveConnectionState } from "@/lib/live/connection";
@@ -140,6 +141,15 @@ export function LiveRunPanel({ runId }: { runId: string }) {
             >
               {`About to say… “${state.pending.say}”`}
             </p>
+          ) : null}
+          {state.interruptions.length > 0 ? (
+            <ul aria-label="Caller interruptions" className="flex flex-col gap-0.5 text-xs text-dim">
+              {state.interruptions.map((interruption, index) => (
+                <li key={index}>
+                  {`Caller interrupted agent reply #${interruption.agentTurn ?? "?"} ${interruptedAt(interruption.audioEndMs)} · heard “${interruption.heardText}”`}
+                </li>
+              ))}
+            </ul>
           ) : null}
           {state.bargeIns.length > 0 ? (
             <ul aria-label="Barge-ins" className="flex flex-col gap-0.5 text-xs text-dim">

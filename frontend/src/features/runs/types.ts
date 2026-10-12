@@ -61,7 +61,10 @@ export type RunSummary = {
   warnings?: string[];
 };
 
-/** One row of `transcript.json` (camelCase). Caller rows carry the evaluator's `reason`. */
+/**
+ * One row of `transcript.json` (camelCase). Caller rows carry the evaluator's `reason`; interrupted
+ * agent rows carry what the caller heard.
+ */
 export type TranscriptRow = {
   role: "agent" | "caller";
   text: string;
@@ -70,6 +73,11 @@ export type TranscriptRow = {
   playbackEndMs?: number | null;
   latencyMs?: number | null;
   reason?: string;
+  /** Agent rows: the caller barged in; `text` stays the whole reply, `heardText` what played. */
+  interrupted?: boolean;
+  heardText?: string;
+  /** Agent rows: how much of the reply had played when the caller cut in; `null`/0 = nothing. */
+  audioEndMs?: number | null;
 };
 
 /** What the run was launched with (snake_case keys camelized by the API). */

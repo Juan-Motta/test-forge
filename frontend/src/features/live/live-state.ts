@@ -29,6 +29,8 @@ export type PendingLine = { decisionId: number | null; say: string; tMs: number 
 /** The agent started a turn while the evaluator was mid-utterance. */
 export type BargeIn = { tMs: number | null; callerTurn: number | null };
 type Turn = { turn: number; latencyMs: number | null };
+/** The caller cut agent reply #`agentTurn` (1-based, like the scenario) once `audioEndMs` had played. */
+export type CallerInterruption = { agentTurn: number | null; audioEndMs: number | null; heardText: string; tMs: number | null };
 
 export type LiveRunState = {
   status: RunStatus | null;
@@ -39,6 +41,7 @@ export type LiveRunState = {
   decision: Decision | null;
   pending: PendingLine | null;
   bargeIns: BargeIn[];
+  interruptions: CallerInterruption[];
   turnState: TurnState;
   warnings: string[];
   /** Times (`Date.now()`) the server dropped audio for this consumer. */
@@ -55,6 +58,7 @@ export const INITIAL_LIVE_STATE: LiveRunState = {
   decision: null,
   pending: null,
   bargeIns: [],
+  interruptions: [],
   turnState: "waiting",
   warnings: [],
   laggingAt: null,
@@ -82,9 +86,18 @@ function snapshotEntries(rows: unknown, turns: Turn[]): TranscriptEntry[] {
   const typed = rows as (TranscriptRow & { tMs?: number; turn?: number })[];
   return entriesFromRows(typed).map((entry, index) => {
     const turn = typed[index].turn;
-    if (entry.role !== "agent" || entry.latencyMs != null || turn === undefined) return entry;
-    return { ...entry, latencyMs: turns.find((item) => item.turn === turn)?.latencyMs ?? null };
+    if (entry.role !== "agent" || turn === undefined) return entry;
+    if (entry.latencyMs != null) return { ...entry, turn };
+    return { ...entry, turn, latencyMs: turns.find((item) => item.turn === turn)?.latencyMs ?? null };
   });
+}
+
+/** The live (0-based) agent turn an interruption of reply #`agentTurn` (1-based) applies to. */
+const liveTurnOf = (interruption: CallerInterruption) =>
+  interruption.agentTurn === null ? null : interruption.agentTurn - 1;
+
+function interrupted(entry: TranscriptEntry, interruption: CallerInterruption): TranscriptEntry {
+  return { ...entry, interruption: { heardText: interruption.heardText, audioEndMs: interruption.audioEndMs } };
 }
 
 /**
@@ -129,8 +142,12 @@ export function liveReducer(state: LiveRunState, action: LiveAction): LiveRunSta
         text: str(message.text),
         tMs: num(message.tMs),
         latencyMs,
+        ...(turn === null ? {} : { turn }),
       };
-      return { ...state, entries: [...state.entries, entry], seq: state.seq + 1 };
+      // The interruption can arrive before the transcript of the reply it cut.
+      const cut = turn === null ? undefined : state.interruptions.find((item) => liveTurnOf(item) === turn);
+      const next = cut ? interrupted(entry, cut) : entry;
+      return { ...state, entries: [...state.entries, next], seq: state.seq + 1 };
     }
     case "callerDecision": {
       // Only an intent: the line joins the transcript on `callerSpeaking`.
@@ -162,6 +179,20 @@ export function liveReducer(state: LiveRunState, action: LiveAction): LiveRunSta
       const pending = state.pending?.decisionId === id ? null : state.pending;
       const decision = state.decision?.decisionId === id ? { ...state.decision, discarded: true } : state.decision;
       return { ...state, pending, decision };
+    }
+    case "callerInterrupted":
+    case "caller_interrupted": {
+      const interruption: CallerInterruption = {
+        agentTurn: num(message.agentTurn ?? message.agent_turn),
+        audioEndMs: num(message.audioEndMs ?? message.audio_end_ms),
+        heardText: str(message.heardText ?? message.heard_text),
+        tMs: num(message.tMs),
+      };
+      const turn = liveTurnOf(interruption);
+      const entries = state.entries.map((entry) =>
+        entry.role === "agent" && turn !== null && entry.turn === turn ? interrupted(entry, interruption) : entry,
+      );
+      return { ...state, entries, interruptions: [...state.interruptions, interruption] };
     }
     case "agentBargeIn":
       return { ...state, bargeIns: [...state.bargeIns, { tMs: num(message.tMs), callerTurn: num(message.callerTurn) }] };

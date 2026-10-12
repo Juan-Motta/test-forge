@@ -293,6 +293,45 @@ describe("Import from cURL", () => {
     ]);
   });
 
+  it("imports a local ws:// agent with a local Origin and creates it", async () => {
+    mockConnectionsApi([]);
+    const api = mockAgentsApi([]);
+    const { user, dialog } = await openCreate();
+
+    await user.type(within(dialog).getByLabelText("Name"), "Vivi local");
+    await importCurl(
+      user,
+      dialog,
+      `curl 'ws://localhost:8000/channelApi/2a8204d3-bd82-4799-a8e8-8e669f318fec/realtime?userId=u%7Clocal&threadId=t-1' -H 'Origin: http://localhost:3001'`,
+    );
+
+    expect(within(dialog).getByLabelText("WebSocket URL")).toHaveValue("ws://localhost:8000");
+    expect(within(dialog).getByLabelText("Origin (optional)")).toHaveValue("http://localhost:3001");
+    await user.click(within(dialog).getByRole("button", { name: "Create agent" }));
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(api.requests[0].body).toMatchObject({
+      baseUrl: "ws://localhost:8000",
+      channelId: "2a8204d3-bd82-4799-a8e8-8e669f318fec",
+      userId: "u|local",
+      origin: "http://localhost:3001",
+    });
+  });
+
+  it("accepts a ws:// URL on host.docker.internal", async () => {
+    mockConnectionsApi([]);
+    const api = mockAgentsApi([agentFixture()]);
+    const { user, dialog } = await openEdit();
+
+    const url = within(dialog).getByLabelText("WebSocket URL");
+    await user.clear(url);
+    await user.type(url, "ws://host.docker.internal:8000");
+    await user.click(within(dialog).getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(api.requests[0].body).toEqual({ baseUrl: "ws://host.docker.internal:8000" });
+  });
+
   it("explains a command without a URL and changes nothing", async () => {
     mockConnectionsApi([]);
     mockAgentsApi([agentFixture()]);

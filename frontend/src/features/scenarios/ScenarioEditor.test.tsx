@@ -115,6 +115,7 @@ describe("Scenario editor: create", () => {
             { text: "Mentions the fee", kind: "should", source: "trace", weight: 30 },
           ],
           endConditions: { maxDurationS: 300, maxSilenceS: 15, hangUpWhen: "goodbye" },
+          interruptions: [],
         },
       },
     ]);
@@ -162,6 +163,65 @@ describe("Scenario editor: create", () => {
     await user.click(screen.getByRole("button", { name: "Remove fact 2" }));
     await user.click(screen.getByRole("button", { name: "Create scenario" }));
     await waitFor(() => expect(api.requests).toHaveLength(1));
+  });
+
+  it("sends interruptions in milliseconds, entered as agent reply numbers and seconds", async () => {
+    const api = setup([]);
+    const user = await renderEditor();
+    await fillMinimum(user);
+
+    const section = screen.getByRole("region", { name: "7 · Interruptions" });
+    expect(within(section).getByText("The caller never interrupts the agent.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Add interruption" }));
+    expect(field("Interruption 1 Agent reply #")).toHaveValue(1);
+    await retype(user, "Interruption 1 Agent reply #", "2");
+    await retype(user, "Interruption 1 After (s)", "4.5");
+    await user.click(screen.getByRole("button", { name: "Add interruption" }));
+    expect(field("Interruption 2 Agent reply #")).toHaveValue(3);
+    await retype(user, "Interruption 2 After (s)", "1");
+    expect(within(section).getByText("Interrupt agent reply #2 after 4.5 s")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Create scenario" }));
+
+    await waitFor(() => expect(api.requests).toHaveLength(1));
+    expect((api.requests[0].body as Record<string, unknown>).interruptions).toEqual([
+      { agentTurn: 2, afterMs: 4500 },
+      { agentTurn: 3, afterMs: 1000 },
+    ]);
+  });
+
+  it("refuses interruptions out of range or on the same agent reply", async () => {
+    const api = setup([]);
+    const user = await renderEditor();
+    await fillMinimum(user);
+
+    await user.click(screen.getByRole("button", { name: "Add interruption" }));
+    await retype(user, "Interruption 1 After (s)", "0.1");
+    await user.click(screen.getByRole("button", { name: "Add interruption" }));
+    await retype(user, "Interruption 2 Agent reply #", "1");
+    await user.click(screen.getByRole("button", { name: "Create scenario" }));
+
+    await waitFor(() => expect(field("Interruption 1 After (s)")).toHaveFocus());
+    expect(field("Interruption 1 After (s)")).toHaveAccessibleDescription("Use 0.3 to 60 seconds.");
+    expect(field("Interruption 2 Agent reply #")).toHaveAccessibleDescription(
+      "Each interruption needs a different agent reply.",
+    );
+    expect(api.requests).toEqual([]);
+
+    await user.click(screen.getByRole("button", { name: "Remove interruption 2" }));
+    await retype(user, "Interruption 1 After (s)", "0.3");
+    await user.click(screen.getByRole("button", { name: "Create scenario" }));
+    await waitFor(() => expect(api.requests).toHaveLength(1));
+  });
+
+  it("offers at most 10 interruptions", async () => {
+    setup([]);
+    const user = await renderEditor();
+    const add = screen.getByRole("button", { name: "Add interruption" });
+    for (let index = 0; index < 10; index += 1) await user.click(add);
+
+    expect(field("Interruption 10 Agent reply #")).toHaveValue(10);
+    expect(add).toBeDisabled();
+    expect(screen.getByText("Up to 10 interruptions.")).toBeInTheDocument();
   });
 
   it("describes required fields and focuses the first error after a failed save", async () => {
@@ -286,6 +346,49 @@ describe("Scenario editor: edit", () => {
     });
     expect(await screen.findByText("Saved")).toBeInTheDocument();
     expect(nav.replace).not.toHaveBeenCalled();
+  });
+
+  it("prefills interruptions in seconds and sends the whole list when it changes", async () => {
+    const api = setup([scenarioFixture({ interruptions: [{ agentTurn: 1, afterMs: 2500 }, { agentTurn: 3, afterMs: 6000 }] })]);
+    const user = await renderEditor("s-booking");
+
+    expect(field("Interruption 1 Agent reply #")).toHaveValue(1);
+    expect(field("Interruption 1 After (s)")).toHaveValue(2.5);
+    await retype(user, "Interruption 2 After (s)", "4");
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() => expect(api.requests).toHaveLength(1));
+    expect(api.requests[0].body).toEqual({
+      interruptions: [
+        { agentTurn: 1, afterMs: 2500 },
+        { agentTurn: 3, afterMs: 4000 },
+      ],
+    });
+
+    await user.click(screen.getByRole("button", { name: "Remove interruption 1" }));
+    await user.click(screen.getByRole("button", { name: "Remove interruption 1" }));
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(api.requests).toHaveLength(2));
+    expect(api.requests[1].body).toEqual({ interruptions: [] });
+  });
+
+  it("puts a server error on an interruption's milliseconds onto its seconds field", async () => {
+    setup([scenarioFixture({ interruptions: [{ agentTurn: 1, afterMs: 2500 }] })]);
+    server.use(
+      http.patch(apiUrl("/scenarios/:id"), () =>
+        HttpResponse.json(
+          { detail: [{ type: "value_error", loc: ["body", "interruptions", 0, "afterMs"], msg: "Too late for this agent" }] },
+          { status: 422 },
+        ),
+      ),
+    );
+    const user = await renderEditor("s-booking");
+
+    await retype(user, "Interruption 1 After (s)", "50");
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() => expect(field("Interruption 1 After (s)")).toHaveAccessibleDescription("Too late for this agent"));
+    expect(field("Interruption 1 After (s)")).toHaveFocus();
   });
 
   it("clears the evaluator voice with null", async () => {

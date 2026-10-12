@@ -183,7 +183,7 @@ export function AgentForm({
         </Field>
         <Field
           label="WebSocket URL"
-          hint="wss:// without query string. ws://localhost works only against a development backend."
+          hint="wss:// without query string. ws:// works for a local agent (localhost, 127.0.0.1, host.docker.internal)."
           error={fieldError("baseUrl")}
         >
           {(control) => (

@@ -93,4 +93,17 @@ describe("parseAgentCurl", () => {
   ])("fails on %j", (text, error) => {
     expect(parseAgentCurl(text)).toEqual({ ok: false, error });
   });
+  it("keeps ws:// for a local agent and its http Origin", () => {
+    const result = parsed(
+      "curl 'ws://localhost:8000/channelApi/2a8204d3-bd82-4799-a8e8-8e669f318fec/realtime?userId=u%7Clocal&threadId=t-1' -H 'Origin: http://localhost:3001'",
+    );
+    expect(result.values).toEqual({
+      baseUrl: "ws://localhost:8000",
+      channelId: "2a8204d3-bd82-4799-a8e8-8e669f318fec",
+      userId: "u|local",
+      origin: "http://localhost:3001",
+    });
+    expect(result.ignored).toEqual(["threadId"]);
+    expect(result.warnings).toEqual([]);
+  });
 });

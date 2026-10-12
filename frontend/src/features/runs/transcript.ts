@@ -13,7 +13,32 @@ export type TranscriptEntry = {
   intent?: string;
   /** The judge's ref of a finished run's row: `A<n>` (agent) or `C<n>` (caller), counted per role. */
   ref?: string;
+  /** Live agent lines: the runner's 0-based agent turn index. */
+  turn?: number;
+  /** Agent lines the caller cut off. */
+  interruption?: Interruption;
 };
+
+/** Where the caller cut an agent line: what had played (`heardText`) and when (`audioEndMs`). */
+export type Interruption = { heardText: string; audioEndMs: number | null };
+
+/** An interrupted line split into what the caller heard and the rest; `null` when the heard text is not its start. */
+export function splitHeard(text: string, heardText: string): { heard: string; unheard: string } | null {
+  const heard = heardText.trim();
+  if (!heard) return { heard: "", unheard: text.trim() };
+  if (!text.startsWith(heard)) return null;
+  return { heard, unheard: text.slice(heard.length).trim() };
+}
+
+/** "at 4.0 s", or that nothing had played yet. */
+export function interruptedAt(audioEndMs: number | null): string {
+  return audioEndMs ? `at ${(audioEndMs / 1000).toFixed(1)} s` : "before any audio played";
+}
+
+function interruptionOf(row: TranscriptRow): Interruption | undefined {
+  if (row.role !== "agent" || !row.interrupted) return undefined;
+  return { heardText: row.heardText ?? "", audioEndMs: row.audioEndMs ?? null };
+}
 
 /** Entries from `transcript.json` rows (finished run) or a live snapshot's transcript. */
 export function entriesFromRows(rows: readonly (TranscriptRow & { tMs?: number })[]): TranscriptEntry[] {
@@ -26,5 +51,6 @@ export function entriesFromRows(rows: readonly (TranscriptRow & { tMs?: number }
     tMs: row.startMs ?? row.tMs ?? null,
     latencyMs: row.role === "agent" ? (row.latencyMs ?? null) : undefined,
     intent: row.role === "caller" ? row.reason || undefined : undefined,
+    interruption: interruptionOf(row),
   }));
 }

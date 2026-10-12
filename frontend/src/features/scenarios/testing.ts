@@ -27,6 +27,7 @@ export function scenarioFixture(overrides: Partial<Scenario> = {}): Scenario {
       { id: "k-2", text: "Reads back the confirmation code", kind: "should", source: "transcript", weight: 40 },
     ],
     endConditions: { maxDurationS: 360, maxSilenceS: 15, hangUpWhen: "goal_or_goodbye" },
+    interruptions: [],
     createdAt: "2026-10-01T10:00:00Z",
     updatedAt: "2026-10-02T10:00:00Z",
     ...overrides,

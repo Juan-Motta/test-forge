@@ -102,6 +102,21 @@ describe("Live run", () => {
     expect(lines.join(" ")).not.toContain("Stale words");
   });
 
+  it("marks the agent reply the caller interrupted and shows what was heard", async () => {
+    const { socket } = await renderPanel();
+    act(() => {
+      socket.send(snapshot);
+      socket.send({ type: "callerInterrupted", tMs: 3600, agentTurn: 1, audioEndMs: 1500, heardText: "Hello, how" });
+    });
+
+    const [agent] = within(screen.getByRole("list", { name: "Transcript" })).getAllByRole("listitem");
+    expect(within(agent).getByText("Caller interrupted")).toBeInTheDocument();
+    expect(within(agent).getByText("Hello, how")).toBeInTheDocument();
+    expect(within(agent).getByTitle("Not heard — the caller interrupted at 1.5 s")).toHaveTextContent("can I help?");
+    const list = screen.getByRole("list", { name: "Caller interruptions" });
+    expect(list).toHaveTextContent("Caller interrupted agent reply #1 at 1.5 s · heard “Hello, how”");
+  });
+
   it("replaces what it showed with the snapshot of a new connection", async () => {
     const { socket } = await renderPanel();
     act(() => {

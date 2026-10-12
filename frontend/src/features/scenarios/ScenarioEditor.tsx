@@ -11,6 +11,7 @@ import { Alert, Button, Card, CardHeader, Field, Input, Select, Textarea, cn, fo
 import { CriteriaEditor } from "./CriteriaEditor";
 import { errorAt, formPath } from "./editor-form";
 import { FactsEditor } from "./FactsEditor";
+import { InterruptionsEditor } from "./InterruptionsEditor";
 import {
   HANG_UP_LABELS,
   initialValues,
@@ -105,6 +106,7 @@ export function ScenarioEditor({
         clearErrors(path);
         if (path.startsWith("facts.")) clearErrors("facts.root" as Path<ScenarioFormValues>);
         if (path.startsWith("criteria.")) clearErrors("criteria.root" as Path<ScenarioFormValues>);
+        if (path.startsWith("interruptions.")) clearErrors("interruptions.root" as Path<ScenarioFormValues>);
       },
     });
 
@@ -301,6 +303,14 @@ export function ScenarioEditor({
             )}
           </Field>
         </div>
+      </Section>
+
+      <Section
+        id="scenario-interruptions"
+        title="7 · Interruptions"
+        description="The caller cuts the agent off mid-reply, like a person barging in. Agent replies count from 1."
+      >
+        <InterruptionsEditor control={control} registerField={registerField} fieldError={fieldError} />
       </Section>
 
       {error || otherServerErrors.length > 0 ? (

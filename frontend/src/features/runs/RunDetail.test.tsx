@@ -55,6 +55,72 @@ describe("Run detail", () => {
     expect(await within(score).findByText("Not judged yet.")).toBeInTheDocument();
   });
 
+  it("shows what the caller heard of an interrupted agent reply and strikes the rest", async () => {
+    const interrupted = runDetailFixture({
+      transcript: [
+        {
+          role: "agent",
+          text: "Our rooms start at 120 dollars and include breakfast and parking.",
+          startMs: 1200,
+          endMs: 6000,
+          latencyMs: null,
+          interrupted: true,
+          heardText: "Our rooms start at 120 dollars",
+          audioEndMs: 4000,
+        },
+        { role: "caller", text: "Wait, is breakfast included?", startMs: 5300, endMs: 7000, reason: "barge in" },
+        {
+          role: "agent",
+          text: "Yes, it is.",
+          startMs: 7500,
+          endMs: 8200,
+          latencyMs: 500,
+          interrupted: true,
+          heardText: "",
+          audioEndMs: null,
+        },
+      ],
+    });
+    mockRunsApi([run], { details: { "r-1": interrupted } });
+    renderWithClient(<RunDetailContainer runId="r-1" />);
+
+    const transcript = await screen.findByRole("list", { name: "Transcript" });
+    const [first, caller, last] = within(transcript).getAllByRole("listitem");
+    expect(within(first).getByText("Interrupted")).toBeInTheDocument();
+    expect(within(first).getByText("Our rooms start at 120 dollars")).toBeInTheDocument();
+    const unheard = within(first).getByTitle("Not heard — the caller interrupted at 4.0 s");
+    expect(unheard).toHaveTextContent("and include breakfast and parking.");
+    expect(unheard).toHaveTextContent("Not heard — the caller interrupted at 4.0 s");
+    expect(within(caller).queryByText("Interrupted")).not.toBeInTheDocument();
+    expect(within(last).getByTitle("Not heard — the caller interrupted before any audio played")).toHaveTextContent(
+      "Yes, it is.",
+    );
+  });
+
+  it("lists the heard part separately when it is not the start of the reply", async () => {
+    const interrupted = runDetailFixture({
+      transcript: [
+        {
+          role: "agent",
+          text: "Hello, how can I help you today?",
+          startMs: 1200,
+          endMs: 2600,
+          latencyMs: null,
+          interrupted: true,
+          heardText: "Hi, how can",
+          audioEndMs: 1500,
+        },
+      ],
+    });
+    mockRunsApi([run], { details: { "r-1": interrupted } });
+    renderWithClient(<RunDetailContainer runId="r-1" />);
+
+    const transcript = await screen.findByRole("list", { name: "Transcript" });
+    const row = within(transcript).getByRole("listitem");
+    expect(row).toHaveTextContent("Hello, how can I help you today?");
+    expect(row).toHaveTextContent("Heard before the interruption at 1.5 s: “Hi, how can”");
+  });
+
   it("copies the thread id", async () => {
     mockRunsApi([run], { details: { "r-1": detail } });
     renderWithClient(<RunDetailContainer runId="r-1" />);

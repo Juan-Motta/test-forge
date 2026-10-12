@@ -1,6 +1,6 @@
-import { cn } from "@/ui";
+import { Badge, cn } from "@/ui";
 import { clock, latency } from "./format";
-import type { TranscriptEntry } from "./transcript";
+import { interruptedAt, splitHeard, type Interruption, type TranscriptEntry } from "./transcript";
 
 const WHO = { agent: "Agent", caller: "Evaluator" } as const;
 
@@ -44,8 +44,13 @@ export function RunTranscript({ entries, live = false, emptyText, anchors = fals
                 {latency(entry.latencyMs)}
               </span>
             ) : null}
+            {entry.interruption ? <Badge tone="danger">{live ? "Caller interrupted" : "Interrupted"}</Badge> : null}
           </div>
-          <p className="text-sm leading-relaxed break-words">{entry.text}</p>
+          {entry.interruption ? (
+            <InterruptedText text={entry.text} interruption={entry.interruption} />
+          ) : (
+            <p className="text-sm leading-relaxed break-words">{entry.text}</p>
+          )}
           {entry.intent ? (
             <p className="text-xs text-muted">
               <span className="font-medium">Evaluator intent:</span> {entry.intent}
@@ -54,5 +59,34 @@ export function RunTranscript({ entries, live = false, emptyText, anchors = fals
         </li>
       ))}
     </ol>
+  );
+}
+
+/** The heard part as usual and the unheard rest struck through, with its meaning spelled out for screen readers. */
+function InterruptedText({ text, interruption }: { text: string; interruption: Interruption }) {
+  const at = interruptedAt(interruption.audioEndMs);
+  const split = splitHeard(text, interruption.heardText);
+  if (!split) {
+    return (
+      <>
+        <p className="text-sm leading-relaxed break-words">{text}</p>
+        <p className="text-xs text-muted">
+          {`Heard before the interruption${interruption.audioEndMs ? ` ${at}` : ""}: “${interruption.heardText.trim()}”`}
+        </p>
+      </>
+    );
+  }
+  const label = `Not heard — the caller interrupted ${at}`;
+  return (
+    <p className="text-sm leading-relaxed break-words">
+      {split.heard ? <span>{split.heard}</span> : null}
+      {split.heard && split.unheard ? " " : null}
+      {split.unheard ? (
+        <span title={label} className="text-dim line-through">
+          <span className="sr-only">{`${label}: `}</span>
+          {split.unheard}
+        </span>
+      ) : null}
+    </p>
   );
 }

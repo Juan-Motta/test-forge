@@ -12,15 +12,17 @@ export function errorAt(errors: FormErrors<ScenarioFormValues>, path: string): s
 }
 
 const KNOWN_PATH =
-  /^(agentId|name|tags|context|persona\.(name|locale|temperament|notes)|ttsConnectionId|evaluatorConnectionId|voiceOverride|goal|instructions|facts(\.\d+\.(key|value))?|criteria(\.\d+\.(text|kind|source|weight))?|endConditions\.(maxDurationS|maxSilenceS|hangUpWhen))$/;
+  /^(agentId|name|tags|context|persona\.(name|locale|temperament|notes)|ttsConnectionId|evaluatorConnectionId|voiceOverride|goal|instructions|facts(\.\d+\.(key|value))?|criteria(\.\d+\.(text|kind|source|weight))?|endConditions\.(maxDurationS|maxSilenceS|hangUpWhen)|interruptions(\.\d+\.(agentTurn|afterS))?)$/;
+const LISTS = new Set(["facts", "criteria", "interruptions"]);
 
 /**
  * Where a server error location (`facts.2.key`, `criteria`, `tags.3`) shows in the form:
- * array-wide errors go to the list's `root`, a single tag to the tags field. `undefined` when
+ * array-wide errors go to the list's `root`, a single tag to the tags field, an interruption's
+ * `afterMs` to its seconds field. `undefined` when
  * the form has no place for it (it is then shown with the form-level message).
  */
 export function formPath(apiPath: string): string | undefined {
-  const path = apiPath.replace(/^tags\.\d+$/, "tags");
+  const path = apiPath.replace(/^tags\.\d+$/, "tags").replace(/^(interruptions\.\d+\.)afterMs$/, "$1afterS");
   if (!KNOWN_PATH.test(path)) return undefined;
-  return path === "facts" || path === "criteria" ? `${path}.root` : path;
+  return LISTS.has(path) ? `${path}.root` : path;
 }

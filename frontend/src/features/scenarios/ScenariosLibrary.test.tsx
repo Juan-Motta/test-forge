@@ -25,6 +25,10 @@ const cancel = scenarioFixture({
   tags: ["cancellation"],
   persona: { name: "Ana", locale: "es-MX", temperament: "polite", notes: "" },
   criteria: [{ id: "k-9", text: "Confirms the cancellation", kind: "must", source: "transcript", weight: 100 }],
+  interruptions: [
+    { agentTurn: 1, afterMs: 2000 },
+    { agentTurn: 3, afterMs: 4500 },
+  ],
   updatedAt: "2026-10-03T10:00:00Z",
 });
 const refund = scenarioFixture({
@@ -59,6 +63,9 @@ describe("Scenarios library", () => {
     expect(within(first).getByText("regression")).toBeInTheDocument();
     expect(within(first).getByText("Hurried")).toBeInTheDocument();
     expect(within(first).getByText("2 criteria")).toBeInTheDocument();
+    expect(within(first).queryByText(/Interrupts/)).not.toBeInTheDocument();
+    const second = within(hotelGroup).getByRole("listitem", { name: "Cancel within 24h" });
+    expect(within(second).getByText("Interrupts 2 replies")).toBeInTheDocument();
     expect(within(first).getByRole("link", { name: "Open Booking with date change" })).toHaveAttribute(
       "href",
       "/scenarios/s-booking",

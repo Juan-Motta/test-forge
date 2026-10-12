@@ -80,6 +80,7 @@ function ScenarioItem({
 }) {
   const nameId = `scenario-${scenario.id}`;
   const criteria = scenario.criteria.length;
+  const interruptions = scenario.interruptions?.length ?? 0;
   return (
     <li
       aria-labelledby={nameId}
@@ -100,6 +101,9 @@ function ScenarioItem({
           <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
             <Badge tone="evaluator">{TEMPERAMENT_LABELS[scenario.persona.temperament]}</Badge>
             <span>{criteria === 1 ? "1 criterion" : `${criteria} criteria`}</span>
+            {interruptions > 0 ? (
+              <Badge tone="agent">{interruptions === 1 ? "Interrupts 1 reply" : `Interrupts ${interruptions} replies`}</Badge>
+            ) : null}
             <span aria-hidden="true">·</span>
             <time dateTime={scenario.updatedAt} title={absoluteTime(scenario.updatedAt)}>
               Updated {relativeTime(scenario.updatedAt)}

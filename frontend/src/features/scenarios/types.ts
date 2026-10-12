@@ -13,6 +13,8 @@ export type Persona = { name: string; locale: string; temperament: Temperament; 
 export type Fact = { key: string; value: string };
 export type Criterion = { id: string; text: string; kind: CriterionKind; source: EvidenceSource; weight: number };
 export type EndConditions = { maxDurationS: number; maxSilenceS: number; hangUpWhen: HangUpWhen };
+/** The caller cuts agent reply #`agentTurn` (1-based) once `afterMs` of it has played. */
+export type Interruption = { agentTurn: number; afterMs: number };
 
 /** A scenario as `GET /api/scenarios` returns it. */
 export type Scenario = {
@@ -32,6 +34,8 @@ export type Scenario = {
   facts: Fact[];
   criteria: Criterion[];
   endConditions: EndConditions;
+  /** Barge-ins the caller performs; empty when it always lets the agent finish. */
+  interruptions: Interruption[];
   createdAt: string;
   updatedAt: string;
 };
@@ -53,10 +57,11 @@ export type NewScenario = {
   facts: Fact[];
   criteria: CriterionInput[];
   endConditions: EndConditions;
+  interruptions: Interruption[];
 };
 
 /**
- * Omitted fields are kept; `persona`, `facts`, `criteria` and `endConditions` replace the whole
+ * Omitted fields are kept; `persona`, `facts`, `criteria`, `endConditions` and `interruptions` replace the whole
  * stored value; `null` clears `ttsConnectionId`, `evaluatorConnectionId` or `voiceOverride`.
  */
 export type ScenarioChanges = Partial<NewScenario>;

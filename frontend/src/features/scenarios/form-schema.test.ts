@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { initialValues, parseTags, toChanges, weightTotal } from "./form-schema";
+import { initialValues, parseTags, scenarioFormSchema, toChanges, weightTotal } from "./form-schema";
 import { scenarioFixture } from "./testing";
 
 describe("scenario form helpers", () => {
@@ -22,5 +22,40 @@ describe("scenario form helpers", () => {
       tags: ["booking"],
       persona: { ...scenario.persona, notes: "New notes" },
     });
+  });
+
+  it("keeps interruptions in seconds in the form and in milliseconds in the payload", () => {
+    const scenario = scenarioFixture({ interruptions: [{ agentTurn: 2, afterMs: 2500 }] });
+    const values = initialValues(scenario);
+    expect(values.interruptions).toEqual([{ agentTurn: "2", afterS: "2.5" }]);
+    expect(toChanges(scenario, values)).toEqual({});
+
+    values.interruptions = [{ agentTurn: " 3 ", afterS: " 0.35 " }];
+    expect(toChanges(scenario, values)).toEqual({ interruptions: [{ agentTurn: 3, afterMs: 350 }] });
+    expect(initialValues(undefined).interruptions).toEqual([]);
+  });
+
+  it("validates interruptions: reply number, 0.3 to 60 seconds, unique replies, at most 10", () => {
+    const base = initialValues(scenarioFixture());
+    const problems = (interruptions: { agentTurn: string; afterS: string }[]) => {
+      const result = scenarioFormSchema.safeParse({ ...base, interruptions });
+      return result.success ? [] : result.error.issues.map((issue) => [issue.path.join("."), issue.message]);
+    };
+
+    expect(problems([{ agentTurn: "1", afterS: "0.3" }, { agentTurn: "2", afterS: "60" }])).toEqual([]);
+    expect(problems([{ agentTurn: "0", afterS: "4" }])).toEqual([
+      ["interruptions.0.agentTurn", "Use a whole number from 1 to 999."],
+    ]);
+    expect(problems([{ agentTurn: "1", afterS: "0.2" }])).toEqual([
+      ["interruptions.0.afterS", "Use 0.3 to 60 seconds."],
+    ]);
+    expect(problems([{ agentTurn: "1", afterS: "abc" }])).toEqual([
+      ["interruptions.0.afterS", "Use 0.3 to 60 seconds."],
+    ]);
+    expect(problems([{ agentTurn: "2", afterS: "1" }, { agentTurn: "2", afterS: "3" }])).toEqual([
+      ["interruptions.1.agentTurn", "Each interruption needs a different agent reply."],
+    ]);
+    const eleven = Array.from({ length: 11 }, (_, index) => ({ agentTurn: String(index + 1), afterS: "1" }));
+    expect(problems(eleven)).toEqual([["interruptions", "Use at most 10 interruptions."]]);
   });
 });
