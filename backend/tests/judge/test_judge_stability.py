@@ -123,3 +123,34 @@ def test_table_lists_every_criterion_and_the_overall_line():
     assert any("criterion 3333" in line and "- - -" in line for line in lines)
     assert "overall: 75 90 60 (spread 30, mean 75.0)" in text
     assert "criteria with band spread >= 2: 1 of 3" in text
+
+
+def test_unstable_criteria_show_why_each_sample_moved():
+    samples = [result({MUST: 2, SHOULD: 5}, 50), result({MUST: 5, SHOULD: 5}, 100)]
+    capped = (
+        samples[0]
+        .criteria[0]
+        .model_copy(
+            update={
+                "capped": True,
+                "failure_tags": ["fabricated_information"],
+                "rationale": "Invented a reason.",
+            }
+        )
+    )
+    samples[0] = samples[0].model_copy(update={"criteria": [capped, samples[0].criteria[1]]})
+
+    report = summarize_stability(samples)
+    text = render_stability(report)
+
+    must = report.criteria[0]
+    assert must.details[0] == {
+        "band": 2,
+        "capped": True,
+        "failureTags": ["fabricated_information"],
+        "rationale": "Invented a reason.",
+    }
+    assert "why criterion 1111 moved:" in text
+    assert "#1 band 2 capped (fabricated_information): Invented a reason." in text
+    assert "#2 band 5 (no tags): because" in text
+    assert "why criterion 2222" not in text  # stable criteria are not explained

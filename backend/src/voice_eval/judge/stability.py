@@ -15,6 +15,7 @@ from voice_eval.judge.domain import JudgeResult
 UNSTABLE_SPREAD = 2  # a band spread this wide crosses a verdict boundary
 MISSING = "missing"
 TEXT_WIDTH = 40
+RATIONALE_WIDTH = 400
 
 
 @dataclass(frozen=True)
@@ -28,6 +29,8 @@ class CriterionStability:
     max_band: int | None
     spread: int | None
     flips: int
+    # Per sample: what the judge said (band, cap, tags, reasoning); None when it was missing.
+    details: list[dict[str, Any] | None]
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -40,6 +43,7 @@ class CriterionStability:
             "maxBand": self.max_band,
             "spread": self.spread,
             "flips": self.flips,
+            "details": self.details,
         }
 
 
@@ -80,10 +84,21 @@ def summarize_stability(results: list[JudgeResult]) -> StabilityReport:
     for criterion_id, (text, kind) in order.items():
         bands: list[int | None] = []
         verdicts: list[str] = []
+        details: list[dict[str, Any] | None] = []
         for result in results:
             found = next((c for c in result.criteria if c.criterion_id == criterion_id), None)
             bands.append(found.band if found is not None else None)
             verdicts.append(found.verdict if found is not None else MISSING)
+            details.append(
+                None
+                if found is None
+                else {
+                    "band": found.band,
+                    "capped": found.capped,
+                    "failureTags": list(found.failure_tags),
+                    "rationale": found.rationale,
+                }
+            )
         judged = [band for band in bands if band is not None]
         low, high = (min(judged), max(judged)) if judged else (None, None)
         criteria.append(
@@ -97,6 +112,7 @@ def summarize_stability(results: list[JudgeResult]) -> StabilityReport:
                 max_band=high,
                 spread=high - low if high is not None and low is not None else None,
                 flips=_flips(verdicts),
+                details=details,
             )
         )
 
@@ -139,6 +155,21 @@ def render_stability(report: StabilityReport) -> str:
     widths = [max(len(row[i]) for row in [header, *rows]) for i in range(len(header))]
     lines = ["  ".join(cell.ljust(width) for cell, width in zip(row, widths, strict=True)).rstrip()
              for row in [header, *rows]]  # fmt: skip
+    for c in report.criteria:
+        if c.spread is None or c.spread < UNSTABLE_SPREAD:
+            continue
+        lines.append("")
+        lines.append(f"why {_clip(c.text)} moved:")
+        for number, detail in enumerate(c.details, start=1):
+            if detail is None:
+                lines.append(f"  #{number} missing")
+                continue
+            capped = " capped" if detail["capped"] else ""
+            tags = ", ".join(detail["failureTags"]) or "no tags"
+            reason = " ".join(detail["rationale"].split())
+            if len(reason) > RATIONALE_WIDTH:
+                reason = reason[: RATIONALE_WIDTH - 1] + "…"
+            lines.append(f"  #{number} band {_cell(detail['band'])}{capped} ({tags}): {reason}")
     scores = " ".join(_cell(score) for score in report.overall_scores)
     lines.append("")
     lines.append(
