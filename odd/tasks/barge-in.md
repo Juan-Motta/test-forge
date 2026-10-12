@@ -69,4 +69,17 @@ target on the host (`localhost` inside the backend container is the container it
   http://localhost:3001, no Langfuse link yet) and scenario "Interrupción a mitad de una cuenta"
   (7d8b1fb0…, interrupt agent reply #1 after 4 s; criteria: no claim of unheard numbers (must 40),
   resumes near the last heard number (must 35), stops and answers (should 10), latency (should 15)).
-- Next: launch (ask).
+- Real run b0b497f6 (user-approved; thread edc0b5aa-37ad-409d-b312-36f2e256a417) against the local
+  Vivi container: completed. Interruption sent at 4021 ms of agent reply #1 (heard "Número 1–3";
+  transcript at the cut reached 16). Vivi logs: response.done cancelled `client_cancelled`
+  (01:41:09.905) then "Realtime interruption correction acknowledged" (01:41:10.991) — the fix
+  path ran. Yet the agent answered "Llegué hasta el número 18" and resumed at 19 → its context
+  still held unheard numbers (or it guessed); next reply after the cut took 3625 ms. Also a VAD
+  split of the caller's first utterance produced an empty, cancelled (`turn_detected`) response.
+- Judge (no Langfuse link): 58/100, mustFailed; both recall criteria fail (bands 2,2,1). It compared
+  against 16 (full generated text) instead of the heard 3 → fixed in 052a310: interrupted turns
+  render heard vs NOT heard text and the rubric says to judge recall against the heard part
+  (RED observed; judge tests 117).
+- Next: re-judge b0b497f6 (3 paid calls, ask); the user checks turn-2 model input in their
+  tracing (LangSmith project vivi-dev is enabled in the local container) to see whether it held
+  the full count or the interruption marker.
