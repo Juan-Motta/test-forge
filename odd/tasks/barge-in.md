@@ -48,7 +48,7 @@ target on the host (`localhost` inside the backend container is the container it
 ## Tasks
 - [x] T1 Backend: local targets, scenario interruptions, runner barge-in, events — route: delegated
 - [x] T2 Frontend: interruptions editor, transcript/live interruption display — route: delegated
-- [ ] T3 Agent + scenario + real run against the local agent (ask before launching) — route: inline
+- [x] T3 Agent + scenario + real run against the local agent (ask before launching) — route: inline
 
 ## Acceptance criteria
 - A run with an interruption sends `playback.interrupted` with a valid `audioEndMs` and the agent
@@ -80,6 +80,9 @@ target on the host (`localhost` inside the backend container is the container it
   against 16 (full generated text) instead of the heard 3 → fixed in 052a310: interrupted turns
   render heard vs NOT heard text and the rubric says to judge recall against the heard part
   (RED observed; judge tests 117).
-- Next: re-judge b0b497f6 (3 paid calls, ask); the user checks turn-2 model input in their
+- Re-judge b0b497f6 with 052a310 (user-approved, 3 paid calls): 39/100, mustFailed; recall
+  criteria bands [1,1,2] and [1,1,1] judged against the heard "3" (claimed 18, resumed at 19);
+  stops-and-answers 5; latency 3 (T2 3625 ms). T3 done.
+- Next: the user checks turn-2 model input in their
   tracing (LangSmith project vivi-dev is enabled in the local container) to see whether it held
   the full count or the interruption marker.
