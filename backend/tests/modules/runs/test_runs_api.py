@@ -113,6 +113,7 @@ async def test_launch_creates_a_batch_with_snapshots(user_client, factory, drive
     assert snapshot["agent"]["channelId"] == "channel-123"
     assert snapshot["brief"]["facts"] == [["account_number", "123-456"]]
     assert snapshot["connections"]["evaluator"]["chatModel"] == "gpt-6-luna"
+    assert snapshot["scenario"]["evaluatorMode"] == "pipeline"  # what the run header reads
 
     drive.release.set()
     await wait_for(all_in(user_client, [run["id"] for run in runs], TERMINAL))

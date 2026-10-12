@@ -113,3 +113,105 @@ async def test_a_batch_runs_end_to_end_against_the_fake_agent(
     assert audio.content[:4] == b"RIFF"
     batch = (await user_client.get(f"/api/runs/batches/{detail['batchId']}")).json()
     assert (batch["status"], batch["counts"]) == ("completed", {"completed": 3})
+
+
+class OneShotRealtimeCaller:
+    """Says goodbye and hangs up on its first response (a fake of the RealtimeCaller port)."""
+
+    def __init__(self) -> None:
+        self.instructions: str | None = None
+        self.heard = 0
+        self.closed = False
+
+    async def open(self, instructions: str) -> None:
+        self.instructions = instructions
+
+    async def append(self, pcm: bytes) -> None:
+        self.heard += len(pcm)
+
+    async def respond(self, note=None):
+        from voice_eval.ports.realtime_caller import CallerAudio, CallerTranscript, HangUp
+
+        for _ in range(3):
+            yield CallerAudio(SPEECH[:4800])
+        yield CallerTranscript("Thanks, bye")
+        yield HangUp("call_1", "goal met")
+
+    async def tool_output(self, call_id: str, output: str) -> None:
+        pass
+
+    async def close(self) -> None:
+        self.closed = True
+
+
+async def test_a_realtime_scenario_runs_with_the_realtime_caller_only(
+    app, user_client, factory, fake_live_server
+):
+    built: list[tuple[str, uuid.UUID, str | None]] = []
+    callers: list[OneShotRealtimeCaller] = []
+
+    async def build_realtime_caller(db, connection_id, voice):
+        built.append(("realtime", connection_id, voice))
+        callers.append(OneShotRealtimeCaller())
+        return callers[-1]
+
+    async def no_pipeline(*args):
+        raise AssertionError("the realtime evaluator needs no policy or TTS")
+
+    manager = app.state.runs
+    manager.build_realtime_caller = build_realtime_caller
+    manager.build_policy = no_pipeline
+    manager.build_synthesizer = no_pipeline
+    manager.session_overrides = {"silence_gap_ms": 300, "settle_ms": 300, "playback_grace_ms": 50}
+    scenario = await factory.scenario(evaluatorMode="realtime", voiceOverride="marin")
+    async with app.state.sessionmaker() as db:
+        await db.execute(update(AgentRecord).values(base_url=fake_live_server.url))
+        await db.commit()
+
+    response = await user_client.post("/api/runs", json={"scenarioIds": [scenario["id"]]})
+    assert response.status_code == 201, response.text
+    run_id = response.json()["runs"][0]["id"]
+
+    async def finished() -> bool:
+        return (await user_client.get(f"/api/runs/{run_id}")).json()["status"] == "completed"
+
+    await wait_for(finished, within_s=30)
+    assert built == [("realtime", uuid.UUID(await factory.openai()), "marin")]
+    (caller,) = callers
+    assert "Learn the current account balance." in caller.instructions
+    assert caller.heard > 0 and caller.closed
+    detail = (await user_client.get(f"/api/runs/{run_id}")).json()
+    assert detail["summary"]["evaluatorMode"] == "realtime"
+    caller_rows = [r for r in detail["transcript"] if r["role"] == "caller"]
+    assert [(r["text"], r["reason"]) for r in caller_rows] == [("Thanks, bye", "realtime")]
+
+
+async def test_an_azure_connection_without_a_realtime_deployment_fails_the_run(
+    app, user_client, factory
+):
+    azure = await factory.post(
+        "/api/connections",
+        {
+            "name": "Azure no realtime",
+            "kind": "azure_openai",
+            "config": {
+                "endpoint": "https://res.openai.azure.com",
+                "apiVersion": "2025-03-01-preview",
+                "ttsDeployment": "tts",
+                "chatDeployment": "chat",
+            },
+            "secrets": {"apiKey": "sk-azure-abcdefghijkl"},
+        },
+    )
+    scenario = await factory.scenario(evaluatorMode="realtime", ttsConnectionId=azure["id"])
+    response = await user_client.post("/api/runs", json={"scenarioIds": [scenario["id"]]})
+    run_id = response.json()["runs"][0]["id"]
+
+    async def failed() -> bool:
+        return (await user_client.get(f"/api/runs/{run_id}")).json()["status"] == "failed"
+
+    await wait_for(failed, within_s=10)
+    detail = (await user_client.get(f"/api/runs/{run_id}")).json()
+    assert detail["endReason"] == "setup_failed"
+    assert "no realtime deployment" in detail["error"]
+    assert "sk-azure" not in detail["error"]

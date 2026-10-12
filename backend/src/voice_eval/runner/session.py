@@ -16,6 +16,13 @@ A scenario may make the caller barge in (legacy realtime only; see `runner.barge
 `playback.interrupted` for every audio item still playing, drops the rest of that reply (it never
 reaches live listeners nor `agent.wav`), and the policy decides on only the part of the agent's
 text that was heard; the caller then speaks without waiting for the cut reply to play.
+
+With a realtime caller (`realtime`, the scenario's realtime evaluator) no policy or TTS is used:
+a speech-to-speech model hears the agent's audio as it arrives (`runner.realtime`) and, at the
+same playback-aware moment the pipeline caller would speak, answers by voice; its audio streams
+to the agent from the first chunk and its output transcript is the caller's transcript row. It
+ends the call with its `hang_up` tool (after its goodbye played). On an interrupted turn it hears
+only the audio that played before the cut, plus a note that it cut the agent off.
 """
 
 import asyncio
@@ -31,6 +38,11 @@ from websockets.exceptions import ConnectionClosed, WebSocketException
 
 from voice_eval.audio import BYTES_PER_MS
 from voice_eval.caller_stream import CallerAudioStream
+from voice_eval.evaluator.prompt import (
+    REALTIME_JUST_INTERRUPTED,
+    REALTIME_OPENING,
+    realtime_instructions,
+)
 from voice_eval.ports.policy import (
     CallerBrief,
     CallerDecision,
@@ -38,6 +50,7 @@ from voice_eval.ports.policy import (
     PolicyState,
     Utterance,
 )
+from voice_eval.ports.realtime_caller import RealtimeCaller, RealtimeCallerError
 from voice_eval.ports.target import (
     AgentBusy,
     AudioDelta,
@@ -65,6 +78,7 @@ from voice_eval.runner.barge_in import (
 )
 from voice_eval.runner.common import close_session, make_detector, rounded, turn_record
 from voice_eval.runner.events import EventSink, RunEvent
+from voice_eval.runner.realtime import AgentAudioFeed, RealtimeSpeech
 from voice_eval.runner.speech import CallerSpeech
 from voice_eval.targets.detect import ProtocolDetectionError, TargetSpec, open_target
 from voice_eval.turns import AgentTurn, AgentTurnDetector
@@ -72,6 +86,9 @@ from voice_eval.turns import AgentTurn, AgentTurnDetector
 log = logging.getLogger(__name__)
 
 POLL_S = 0.05
+REALTIME_REASON = "realtime"  # the caller rows' reason: the realtime model gives none
+HUNG_UP_OUTPUT = "the call has ended"
+HANG_UP_REFUSED_OUTPUT = "the call cannot end yet: keep talking"
 
 
 @dataclass
@@ -133,11 +150,12 @@ class AgentTextTracker:
 class SessionRunner:
     spec: TargetSpec
     brief: CallerBrief
-    policy: CallerPolicy
-    synthesizer: SpeechSynthesizer
+    policy: CallerPolicy | None  # the pipeline evaluator (None with a realtime caller)
+    synthesizer: SpeechSynthesizer | None
     sink: EventSink
     out_dir: Path
     options: SessionOptions = field(default_factory=SessionOptions)
+    realtime: RealtimeCaller | None = None  # the realtime evaluator, instead of policy + TTS
 
     def __post_init__(self) -> None:
         self.session: TargetSession | None = None
@@ -173,6 +191,8 @@ class SessionRunner:
         self._cut_items: set[str] = set()
         self._cut_responses: set[str] = set()
         self.interruptions: list[dict[str, Any]] = []
+        self._feed: AgentAudioFeed | None = None
+        self._cuts_noted = 0  # interruptions the realtime caller was told about
 
     def _now_ms(self) -> float:
         return (time.monotonic() - self._t0) * 1000
@@ -260,6 +280,8 @@ class SessionRunner:
                 self.error = message
 
     async def _converse(self) -> None:
+        if self.realtime is not None:
+            await self._open_realtime(self.realtime)
         try:
             self.session = await open_target(self.spec, self.options.ready_timeout_s)
         except ProtocolDetectionError as exc:
@@ -293,7 +315,10 @@ class SessionRunner:
         remaining_s = max(0.0, self.options.max_duration_s - self._now_ms() / 1000)
         try:
             async with asyncio.timeout(remaining_s) as deadline:
-                await self._loop(self.session)
+                if self.realtime is not None:
+                    await self._realtime_loop(self.session, self.realtime)
+                else:
+                    await self._loop(self.session)
         except TimeoutError:
             if deadline.expired():
                 raise Stop("completed", "max_duration") from None
@@ -333,6 +358,13 @@ class SessionRunner:
         """Stop the caller stream and close the session, whatever state the sender ended in."""
         for speech in list(self._speeches):
             await self._drop(speech)
+        if self._feed is not None:
+            await self._feed.stop()
+        if self.realtime is not None:
+            try:
+                await self.realtime.close()
+            except Exception as exc:
+                log.warning("realtime caller close failed (%s)", type(exc).__name__)
         if self._sender is not None:
             self._sender.cancel()
             try:
@@ -351,9 +383,124 @@ class SessionRunner:
             self._warn(warning)
         self.detector.turn_ended(self._now_ms())
 
+    # --- realtime evaluator -----------------------------------------------------------------
+
+    async def _open_realtime(self, caller: RealtimeCaller) -> None:
+        try:
+            await caller.open(realtime_instructions(self.brief))
+        except RealtimeCallerError as exc:
+            raise Stop("failed", "realtime_failed", f"realtime caller failed ({exc})") from None
+        except Exception as exc:  # never a provider payload: the type only
+            raise Stop(
+                "failed", "realtime_failed", f"realtime caller failed ({type(exc).__name__})"
+            ) from None
+        self._feed = AgentAudioFeed(caller)
+        self._feed.start()
+
+    async def _realtime_loop(self, session: TargetSession, caller: RealtimeCaller) -> None:
+        if session.agent_speaks_first:
+            await self._agent_turn()
+        while True:
+            if await self._agent_spoke_again():
+                continue
+            if await self._realtime_turn(caller):
+                await self._agent_turn()
+
+    async def _realtime_turn(self, caller: RealtimeCaller) -> bool:
+        """One caller response; False when the agent started speaking before its first audio
+        (the response is cancelled and the agent's turn collected). Raises `Stop` on hang-up."""
+        speech = await self._realtime_response(caller)
+        said: asyncio.Event | None = None
+        row: dict[str, Any] | None = None
+        try:
+            await self._wait_until(lambda: speech.has_audio or speech.done or self._agent_active())
+            self._check_speech()
+            if not speech.has_audio and not speech.done:  # the agent spoke first
+                await self._drop(speech)
+                self._publish(
+                    "caller_decision_discarded",
+                    self._realtime_decision(speech, say=None, hang_up=False),
+                )
+                await self._agent_spoke_again()
+                return False
+            if speech.has_audio:
+                said, row = self._utter(speech, speech.decision_id, "", REALTIME_REASON)
+            await self._wait_until(lambda: speech.done)  # its transcript and hang-up
+            self._check_speech()
+        finally:
+            if not speech.attached:
+                await self._drop(speech)
+        self._realtime_decided(speech, row)
+        if speech.hang_up is not None:
+            if self.options.hang_up_when == "max_duration":
+                self._warn("the caller tried to hang up; this scenario ends only at max duration")
+                await self._answer_tool(caller, speech.hang_up.call_id, HANG_UP_REFUSED_OUTPUT)
+            else:
+                if said is not None:
+                    await self._wait_until(said.is_set)
+                await self._answer_tool(caller, speech.hang_up.call_id, HUNG_UP_OUTPUT)
+                raise Stop("completed", "caller_hung_up")
+        return True
+
+    async def _realtime_response(self, caller: RealtimeCaller) -> RealtimeSpeech:
+        """Start the caller's response once it heard everything the agent said so far."""
+        assert self._feed is not None
+        feed = self._feed
+        await self._wait_until(lambda: feed.idle)
+        note = None
+        if self._agent_turns == 0 and self.caller_turns == 0:
+            note = REALTIME_OPENING
+        elif len(self.interruptions) > self._cuts_noted:
+            self._cuts_noted = len(self.interruptions)
+            note = REALTIME_JUST_INTERRUPTED
+        self._decisions += 1
+        self._speeches = [s for s in self._speeches if not s.done or s.failure is not None]
+        speech = RealtimeSpeech(
+            caller,
+            note,
+            decision_id=self._decisions,
+            timeout_s=self.options.tts_timeout_s,
+            now_ms=self._now_ms,
+        )
+        self._speeches.append(speech)
+        return speech
+
+    def _realtime_decision(
+        self, speech: RealtimeSpeech, *, say: str | None, hang_up: bool
+    ) -> dict[str, Any]:
+        return {
+            "decision_id": speech.decision_id,
+            "say": say,
+            "hang_up": hang_up,
+            "reason": REALTIME_REASON,
+        }
+
+    def _realtime_decided(self, speech: RealtimeSpeech, row: dict[str, Any] | None) -> None:
+        """The response is done: its words go to the transcript and the conversation."""
+        text = (speech.transcript or "").strip()
+        if row is not None:
+            row["text"] = text
+            self.conversation.append(Utterance("caller", text))
+            if not text:
+                self._warn("the realtime caller's speech had no transcript")
+        data = self._realtime_decision(speech, say=text or None, hang_up=speech.hang_up is not None)
+        data["started_ms"] = rounded(speech.started_ms)
+        # the realtime "decision" is the time to its first audio (the whole response if none)
+        data["duration_ms"] = rounded(
+            speech.first_chunk_ms if speech.first_chunk_ms is not None else speech.total_ms
+        )
+        self._publish("caller_decision", data)
+
+    async def _answer_tool(self, caller: RealtimeCaller, call_id: str, output: str) -> None:
+        try:
+            await caller.tool_output(call_id, output)
+        except Exception as exc:  # the call goes on (or ends) either way
+            self._warn(f"could not answer the realtime caller's tool call ({type(exc).__name__})")
+
     # --- turns ----------------------------------------------------------------------------
 
     async def _decide(self) -> CallerDecision:
+        assert self.policy is not None
         state = PolicyState(
             brief=self.brief,
             conversation=tuple(self.conversation),
@@ -396,6 +543,7 @@ class SessionRunner:
                 },
             )
 
+        assert self.synthesizer is not None
         self._speeches = [s for s in self._speeches if not s.done or s.failure is not None]
         speech = CallerSpeech(
             self.synthesizer,
@@ -430,23 +578,30 @@ class SessionRunner:
         """A failed synthesis stops the run, also when it broke off mid-utterance."""
         for speech in self._speeches:
             if speech.failure is not None:
-                raise Stop("failed", "tts_failed", speech.failure)
+                raise Stop("failed", speech.failure_reason, speech.failure)
 
     def _speak(self, decision: CallerDecision, speech: CallerSpeech) -> asyncio.Event:
         """Queue the caller's words as they are synthesized; the event is set after the last."""
-        assert self.stream is not None and decision.say is not None
+        assert decision.say is not None
+        said, _ = self._utter(speech, self._decisions, decision.say, decision.reason)
+        self.conversation.append(Utterance("caller", decision.say))
+        return said
+
+    def _utter(
+        self, speech: CallerSpeech, decision_id: int, say: str, reason: str
+    ) -> tuple[asyncio.Event, dict[str, Any]]:
+        """Speak `speech` as the caller's next turn: its transcript row and a `said` event."""
+        assert self.stream is not None
         said = asyncio.Event()
         row: dict[str, Any] = {
             "role": "caller",
-            "text": decision.say,
+            "text": say,
             "start_ms": None,
             "end_ms": None,
-            "reason": decision.reason,
+            "reason": reason,
         }
         completed = self.detector.completed_turns
         previous = completed[-1] if completed else None
-
-        decision_id = self._decisions
 
         def started(now_ms: float) -> None:
             self._caller_speaking = True
@@ -454,8 +609,8 @@ class SessionRunner:
                 "caller_speaking",
                 {
                     "decision_id": decision_id,
-                    "say": decision.say,
-                    "reason": decision.reason,
+                    "say": say,
+                    "reason": reason,
                     "tts_first_chunk_ms": rounded(speech.first_chunk_ms),
                 },
             )
@@ -470,10 +625,9 @@ class SessionRunner:
             said.set()
 
         self.transcript.append(row)
-        self.conversation.append(Utterance("caller", decision.say))
         self.caller_turns += 1
         speech.attach(self.stream.open(self.options.trailing_silence_ms, ended, started))
-        return said
+        return said, row
 
     async def _agent_turn(self) -> None:
         """Wait for the agent's next real turn, skipping empty responses (max silence bounds it)."""
@@ -493,6 +647,8 @@ class SessionRunner:
         await self._wait_until(lambda: self._turn_over(plan, due), check_silence=True)
         assert self.session is not None
         cut = await self._cut(plan, due[0]) if plan is not None and due else None
+        if self._feed is not None:  # the realtime caller hears only what played
+            self._feed.release(position_bytes(cut.audio_end_ms) if cut is not None else None)
         text = self._text.take(self.session.transcript_messages())
         if cut is not None:
             self._text.ignore(cut.item_ids)
@@ -651,6 +807,8 @@ class SessionRunner:
             if done():
                 return
             self._check_speech()
+            if self._feed is not None and self._feed.failure is not None:
+                raise Stop("failed", "realtime_failed", self._feed.failure)
             if (exc := self._sender_failure()) is not None:
                 raise Stop(
                     "failed",
@@ -708,6 +866,8 @@ class SessionRunner:
                 if item_id in self._cut_items or response_id in self._cut_responses:
                     return  # the rest of a reply the caller cut off: never played
                 self.agent_pcm += pcm
+                if self._feed is not None:  # a turn the caller will cut is held until the cut
+                    self._feed.push(pcm, hold=self._agent_turns + 1 in self._plans)
                 opening = self.detector.current_turn is None
                 self.detector.on_agent_audio(t, len(pcm))
                 if opening:
@@ -800,6 +960,7 @@ class SessionRunner:
             "usage_seconds": self.closed.usage_seconds if self.closed else None,
             "final_usage_confirmed": self.closed.final_usage_confirmed if self.closed else None,
             "interruptions": self.interruptions,
+            "evaluator_mode": "pipeline" if self.realtime is None else "realtime",
             "warnings": self.warnings,
             "event_counts": dict(Counter(e["type"] for e in self.events)),
         }

@@ -8,13 +8,18 @@ safe message (`failure`) for the runner to stop on; `cancel` drops a stale decis
 
 import asyncio
 import contextlib
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
 
 from voice_eval.caller_stream import Utterance
 from voice_eval.ports.tts import SpeechSynthesizer, SynthesisError
 
 
 class CallerSpeech:
+    failure_reason = "tts_failed"  # the run's end reason when this speech fails
+    label = "speech synthesis"
+    errors: tuple[type[Exception], ...] = (SynthesisError,)  # their message is safe to keep
+    needs_audio = True  # a stream without audio is a failure
+
     def __init__(
         self,
         synthesizer: SpeechSynthesizer,
@@ -26,6 +31,14 @@ class CallerSpeech:
     ) -> None:
         self._synthesizer = synthesizer
         self._text = text
+        self._setup(timeout_s, now_ms, on_done)
+
+    def _setup(
+        self,
+        timeout_s: float,
+        now_ms: Callable[[], float],
+        on_done: Callable[["CallerSpeech"], None] | None,
+    ) -> None:
         self._timeout_s = timeout_s
         self._now_ms = now_ms
         self._on_done = on_done
@@ -66,21 +79,21 @@ class CallerSpeech:
     async def _pull(self) -> None:
         try:
             async with asyncio.timeout(self._timeout_s):
-                stream = self._synthesizer.stream(self._text)
+                stream = self._chunks()
                 try:
                     async for chunk in stream:
                         self._take(chunk)
                 finally:  # release the provider's request, also when cancelled
                     if (aclose := getattr(stream, "aclose", None)) is not None:
                         await aclose()
-            if not self.has_audio:
+            if not self.has_audio and self.needs_audio:
                 raise SynthesisError("no audio")
-        except SynthesisError as exc:
-            self.failure = f"speech synthesis failed ({exc})"
+        except (SynthesisError, *self.errors) as exc:
+            self.failure = f"{self.label} failed ({exc})"
         except TimeoutError:
-            self.failure = "speech synthesis timed out"
+            self.failure = f"{self.label} timed out"
         except Exception as exc:  # provider errors may quote request details: type only
-            self.failure = f"speech synthesis failed ({type(exc).__name__})"
+            self.failure = f"{self.label} failed ({type(exc).__name__})"
         self.total_ms = self._now_ms() - self.started_ms
         if self.failure is not None:
             return
@@ -88,6 +101,9 @@ class CallerSpeech:
             self._utterance.finish()
         if self._on_done is not None:
             self._on_done(self)
+
+    def _chunks(self) -> AsyncIterator[bytes]:
+        return self._synthesizer.stream(self._text)
 
     def _take(self, chunk: bytes) -> None:
         if not chunk:

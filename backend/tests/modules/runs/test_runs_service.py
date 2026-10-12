@@ -56,6 +56,7 @@ async def test_create_batch_interleaves_runs_with_their_snapshot(db, factory):
     assert batch.runs[0].snapshot["connections"]["evaluator"]["chat_model"] == "gpt-6-luna"
     assert "secrets" not in str(batch.runs[0].snapshot)
     assert batch.runs[0].snapshot["scenario"]["interruptions"] == []
+    assert batch.runs[0].snapshot["scenario"]["evaluator_mode"] == "pipeline"
 
 
 async def test_the_snapshot_keeps_the_scenario_interruptions(db, factory):
@@ -142,3 +143,10 @@ def test_sanitize_error_keeps_one_short_printable_line():
     assert sanitize_error("a\nb\x1b[0m\tc") == "a b [0m c"
     long = sanitize_error("x" * 600)
     assert len(long) == 500 and long.endswith("…")
+
+
+async def test_the_snapshot_keeps_the_evaluator_mode(db, factory):
+    created = await factory.scenario("Realtime", evaluatorMode="realtime")
+    async with db() as session:
+        (plan,) = await service.plan_runs(session, [uuid.UUID(created["id"])])
+    assert snapshot(plan)["scenario"]["evaluator_mode"] == "realtime"

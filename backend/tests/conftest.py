@@ -549,6 +549,16 @@ async def _no_provider_in_tests(db, connection_id):
     raise RuntimeError("tests never contact a judge or Langfuse provider")
 
 
+def _offline_realtime(build):
+    """Resolve the connection like a run does (its errors stay), never return a live caller."""
+
+    async def build_offline(db, connection_id, voice):
+        await build(db, connection_id, voice)
+        raise RuntimeError("tests never contact a realtime model")
+
+    return build_offline
+
+
 @pytest.fixture
 async def app(settings):
     """A fresh app (own engine) over emptied tables.
@@ -563,6 +573,8 @@ async def app(settings):
     application = create_app(settings)
     application.state.judgements.build_judge = _no_provider_in_tests
     application.state.judgements.build_trace_reader = _no_provider_in_tests
+    runs = application.state.runs
+    runs.build_realtime_caller = _offline_realtime(runs.build_realtime_caller)
     async with application.state.engine.begin() as conn:
         await conn.execute(
             text(
