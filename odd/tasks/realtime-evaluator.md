@@ -100,7 +100,11 @@ realtime evaluator mode that listens to the agent's audio and answers by voice w
   el número 15" even after being told the caller heard up to 2. Judge 62, mustFailed.
 - User decision (2026-10-12): offer both realtime models per scenario — `gpt-realtime-2.1-mini`
   and `gpt-realtime-2.1`. The experimental constant change was reverted.
-- [ ] T5 Scenario `realtimeModel` (`gpt-realtime-2.1-mini` default | `gpt-realtime-2.1`); Azure
+- [x] T5 Scenario `realtimeModel` (`gpt-realtime-2.1-mini` default | `gpt-realtime-2.1`); Azure
   `realtimeFullDeployment` for 2.1 (existing `realtimeDeployment` stays the mini deployment) —
   route: delegated (backend + frontend writers).
+- T5 done: frontend b2fb340 (vitest 360), backend 5e4ecd9 (pytest 897; migration 0011
+  `realtime_model`, Azure `realtimeFullDeployment`, OpenAI URL `?model=<choice>`). Review of
+  87c0ec1..5e4ecd9 (896 lines, incl. 33aa150 and 1b64eee): APPROVED + acknowledged; suggestions
+  only (legacy snapshot fallback untested; truncate uses handed-out audio, not played). Stack rebuilt.
 
