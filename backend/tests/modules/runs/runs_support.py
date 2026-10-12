@@ -2,6 +2,8 @@
 
 import asyncio
 import json
+import uuid
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -152,3 +154,43 @@ class ScriptedDrive:
             await sink.emit(event)
         write_fake_artifacts(job.out_dir, self.result)
         return self.result
+
+
+async def insert_run(
+    sessionmaker,
+    *,
+    status: str = "completed",
+    artifacts_dir: Path | None = None,
+    started_at: datetime | None = None,
+    scenario_id: uuid.UUID | None = None,
+    summary: dict[str, Any] | None = None,
+) -> uuid.UUID:
+    """A run written straight to the database (in its own batch), never driven."""
+    from voice_eval.modules.runs.models import RunBatchRecord, RunRecord
+
+    run_id, batch_id = uuid.uuid4(), uuid.uuid4()
+    started = started_at or datetime(2026, 10, 10, 12, 0, tzinfo=UTC)
+    active = status in {"queued", "connecting", "running"}
+    async with sessionmaker() as db:
+        db.add(RunBatchRecord(id=batch_id, concurrency=1, status="completed", total_runs=1))
+        await db.flush()
+        db.add(
+            RunRecord(
+                id=run_id,
+                batch_id=batch_id,
+                position=0,
+                scenario_id=scenario_id,
+                thread_id=f"thread-{str(run_id)[:8]}",
+                status=status,
+                snapshot={
+                    "scenario": {"id": str(scenario_id or uuid.uuid4()), "name": "Balance"},
+                    "agent": {"id": str(uuid.uuid4()), "name": "Vivi"},
+                },
+                summary=summary,
+                artifacts_dir=str(artifacts_dir) if artifacts_dir else None,
+                started_at=started,
+                ended_at=None if active else started + timedelta(minutes=2),
+            )
+        )
+        await db.commit()
+    return run_id

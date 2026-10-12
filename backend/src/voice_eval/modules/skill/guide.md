@@ -68,8 +68,10 @@ per run), text-to-speech, the evaluator chat model or realtime speech model, and
 (each judgement is 3 judge model calls). A batch costs roughly `scenarios x repetitions` calls.
 Re-judging costs another judgement. Testing a connection makes one request to the provider.
 
-**Ask your human before** launching runs (`POST /api/runs`), re-judging
-(`POST /api/runs/{runId}/judgement`) or running `voice-eval judge-stability`, unless they told
+**Ask your human before** launching runs (`POST /api/runs`), re-running one
+(`POST /api/runs/{runId}/rerun`), re-judging (`POST /api/runs/{runId}/judgement`), testing an
+agent's connection (`POST /api/agents/{agentId}/test`, a short real session with the agent) or
+running `voice-eval judge-stability`, unless they told
 you that you may. State what you will launch (scenarios, repetitions) when you ask. Reading
 anything (runs, transcripts, judgements, briefs) is free and safe. Deleting agents, scenarios or
 connections, and creating or revoking API keys, also need the human's approval.
@@ -129,6 +131,11 @@ Usually a human has already configured connections, agents and scenarios: list t
   agent checks it.
 - `409` when the name is taken; `DELETE /api/agents/{agentId}` answers `409` while scenarios use
   the agent.
+- Check that the agent answers (ask first): `POST /api/agents/{agentId}/test` opens its
+  WebSocket like a run does, waits until the session is ready (8 seconds at most), then closes
+  it; no audio is sent. It answers `200` with `reachable`, `latencyMs` (connect + ready),
+  `protocol` (`live` or `realtime`, once detected) and `log`, a list of `{ok, message}` steps;
+  an unreachable agent has `reachable: false` and a failing last step.
 
 ### Scenarios
 
@@ -231,6 +238,19 @@ Usually a human has already configured connections, agents and scenarios: list t
 Other reads: `GET /api/runs?status=&scenarioId=&batchId=&limit=&offset=` (runs, newest first)
 and `GET /api/runs/batches` (batches with per-status `counts`).
 
+Run one scenario again (paid, ask first): `POST /api/runs/{runId}/rerun` launches the run's
+scenario as it is now, one run in a new batch labelled `Re-run of <first 8 characters of the
+run id>`. Response `201`, the batch, like a launch; `422` like a launch when the scenario cannot
+run, `409` when the scenario was deleted.
+
+Overview of recent activity: `GET /api/stats/overview?days=7` (`days` 1-90) aggregates the runs
+created in the window: `runs` (`count`, and `previousCount` for the window just before),
+`averageScore` (0-100, completed judgements), `goalCompletion` (0-1, share of completed
+judgements whose must criteria passed), `latency` (`p50Ms`, `p95Ms` over every response
+latency), `live.active` (runs queued, connecting or running now), `weakestCriteria` (up to 5,
+lowest `averageScore` first, with `text`, `scenarioName`, `judged`) and `suggestions` (`open`,
+`highPriority`). Aggregates without data are `null`.
+
 ### Run statuses and end reasons
 
 `status`: `queued` -> `connecting` -> `running` -> one terminal status:
@@ -321,7 +341,19 @@ are what the judge applies.
 ```
 
 Audio: `GET /api/runs/{runId}/audio/{channel}` with `channel` `agent` or `caller` returns a WAV
-(PCM16, 24 kHz, mono) once the run is finished.
+(PCM16, 24 kHz, mono) once the run is finished. The two files are not aligned in time (the
+agent's holds only the audio it sent, back to back).
+
+Audio levels on the run timeline: `GET /api/runs/{runId}/levels?bins=140` (`bins` 20-400)
+returns `durationMs`, `agent` and `caller` (one RMS value 0-1 per bin, one scale for both sides,
+placed with the run's audio events) and `turns` (`role`, `startMs`, `endMs`, `ref` `A<n>` or
+`C<n>`, the refs the judge cites). `409` while the run is in progress.
+
+Agent trace: `GET /api/runs/{runId}/trace` returns the agent's Langfuse observations saved when
+the run was judged: `available`, `note` (why there is none), `stats` and `observations`, each
+with `id`, `traceId`, `parentId`, `type` (`llm`, `tool`, `span`, `event`, ...), `name`,
+`startMs` (from the run start), `durationMs`, `model`, `tokens`, `costUsd`, `level`,
+`statusMessage` and `depth` (nesting), sorted by start.
 
 ## Reading the judgement
 

@@ -7,8 +7,11 @@ itself is served by `modules.judgements.api`). Summaries, transcripts and snapsh
 returned with camelCase keys.
 """
 
+import asyncio
 import uuid
+from collections import OrderedDict
 from datetime import datetime
+from pathlib import Path
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -30,11 +33,19 @@ from voice_eval.modules.runs.domain import (
     RunStatus,
     ScenariosNotRunnable,
 )
+from voice_eval.modules.runs.levels import DEFAULT_BINS, MAX_BINS, MIN_BINS, RunLevels, build_levels
 from voice_eval.modules.runs.manager import RunManager, read_json
+from voice_eval.modules.runs.trace import build_trace
 from voice_eval.modules.users.deps import Principal, current_principal
 from voice_eval.platform.db import get_db_session
 
 CANCEL_STATUSES = frozenset({RunStatus.CANCELLED, RunStatus.INTERRUPTED})
+TRACES_FILE = "langfuse.json"  # written by the judge (`modules.judgements.coordinator`)
+NO_TRACE_NOTE = (
+    "No Langfuse trace was saved for this run: the agent has no Langfuse connection, or no "
+    "observations were found for its session."
+)
+LEVELS_CACHE_SIZE = 64
 Db = Annotated[AsyncSession, Depends(get_db_session)]
 CurrentPrincipal = Annotated[Principal, Depends(current_principal)]
 Limit = Annotated[int, Query(ge=1, le=200)]
@@ -175,6 +186,43 @@ class BatchPage(CamelModel):
     total: int
 
 
+class TraceObservationOut(CamelModel):
+    id: str | None
+    trace_id: str | None
+    parent_id: str | None
+    type: str  # "llm", "tool", "span", "event", or another Langfuse type in lowercase
+    name: str | None
+    start_ms: int | None  # from the run start
+    duration_ms: int | None
+    model: str | None
+    tokens: int | None
+    cost_usd: float | None
+    level: str  # DEFAULT, DEBUG, WARNING or ERROR
+    status_message: str | None
+    depth: int  # nesting under the parent observation (0: a root)
+
+
+class TraceOut(CamelModel):
+    available: bool
+    note: str | None
+    stats: dict[str, Any] | None  # the judge digest's stats (camelCase)
+    observations: list[TraceObservationOut]
+
+
+class LevelTurnOut(CamelModel):
+    role: Literal["agent", "caller"]
+    start_ms: int
+    end_ms: int
+    ref: str  # A<n> / C<n>, as the judge cites turns
+
+
+class LevelsOut(CamelModel):
+    duration_ms: int
+    agent: list[float]  # RMS 0..1 per bin, one scale for both sides
+    caller: list[float]
+    turns: list[LevelTurnOut]
+
+
 def _not_found(what: str) -> HTTPException:
     return HTTPException(status.HTTP_404_NOT_FOUND, f"{what} not found")
 
@@ -196,9 +244,8 @@ def _not_runnable(exc: ScenariosNotRunnable) -> HTTPException:
 router = APIRouter(prefix="/runs", tags=["runs"])
 
 
-@router.post("", response_model=BatchDetailOut, status_code=status.HTTP_201_CREATED)
-async def launch(
-    body: LaunchIn, principal: CurrentPrincipal, db: Db, runs: Manager
+async def _launch(
+    db: AsyncSession, runs: RunManager, body: LaunchIn, principal: Principal
 ) -> BatchDetailOut:
     scenario_ids = list(dict.fromkeys(body.scenario_ids))  # a repeat is what repetitions are for
     try:
@@ -215,6 +262,13 @@ async def launch(
     )
     runs.launch(batch)
     return BatchDetailOut.of(batch)
+
+
+@router.post("", response_model=BatchDetailOut, status_code=status.HTTP_201_CREATED)
+async def launch(
+    body: LaunchIn, principal: CurrentPrincipal, db: Db, runs: Manager
+) -> BatchDetailOut:
+    return await _launch(db, runs, body, principal)
 
 
 @router.get("", response_model=RunPage)
@@ -318,3 +372,80 @@ async def get_audio(
     if not path.is_file():  # noqa: ASYNC240 - one stat call
         raise _not_found("Audio")
     return FileResponse(path, media_type="audio/wav")
+
+
+@router.post("/{run_id}/rerun", response_model=BatchDetailOut, status_code=status.HTTP_201_CREATED)
+async def rerun(
+    run_id: uuid.UUID, principal: CurrentPrincipal, db: Db, runs: Manager
+) -> BatchDetailOut:
+    """Launch the run's scenario again (as it is now): one run, in a new batch labelled
+    "Re-run of <first 8 characters of the run id>". Paid, like `POST /api/runs`, with the same
+    422 when the scenario cannot run; 409 when the scenario was deleted."""
+    try:
+        run = await service.get_run(db, run_id)
+    except RunNotFound:
+        raise _not_found("Run") from None
+    if run.scenario_id is None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "The scenario of this run was deleted")
+    body = LaunchIn(scenario_ids=[run.scenario_id], label=f"Re-run of {str(run.id)[:8]}")
+    return await _launch(db, runs, body, principal)
+
+
+def _artifacts(run: Run, runs: RunManager) -> Path:
+    return Path(run.artifacts_dir) if run.artifacts_dir else runs.artifacts_dir(run.id)
+
+
+@router.get("/{run_id}/trace", response_model=TraceOut)
+async def get_trace(run_id: uuid.UUID, db: Db, runs: Manager) -> dict[str, Any]:
+    """The agent's Langfuse observations for the run, as a waterfall (offsets from the run
+    start). `available` is false, with a `note`, when none were saved (no Langfuse connection,
+    nothing found, the run still in progress or not judged yet)."""
+    try:
+        run = await service.get_run(db, run_id)
+    except RunNotFound:
+        raise _not_found("Run") from None
+    if not run.finished:
+        return build_trace(None, origin=None, note="The run is still in progress.")
+    path = _artifacts(run, runs) / TRACES_FILE
+    observations = await asyncio.to_thread(read_json, path)
+    note = None
+    if not isinstance(observations, list) or not observations:
+        note = await service.judgement_trace_note(db, run_id) or NO_TRACE_NOTE
+    return build_trace(observations, origin=run.started_at, note=note)
+
+
+_levels_cache: OrderedDict[tuple[uuid.UUID, int], RunLevels] = OrderedDict()
+
+
+@router.get("/{run_id}/levels", response_model=LevelsOut)
+async def get_levels(
+    run_id: uuid.UUID,
+    db: Db,
+    runs: Manager,
+    bins: Annotated[int, Query(ge=MIN_BINS, le=MAX_BINS)] = DEFAULT_BINS,
+) -> LevelsOut:
+    """Audio levels of both sides on the run timeline (RMS 0..1 per bin), and the turns.
+    409 while the run is in progress."""
+    try:
+        run = await service.get_run(db, run_id)
+    except RunNotFound:
+        raise _not_found("Run") from None
+    if not run.finished:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Run still in progress")
+    key = (run.id, bins)
+    levels = _levels_cache.get(key)
+    if levels is None:  # a finished run's artifacts never change
+        levels = await asyncio.to_thread(
+            build_levels, _artifacts(run, runs), bins=bins, summary=run.summary
+        )
+        _levels_cache[key] = levels
+        while len(_levels_cache) > LEVELS_CACHE_SIZE:
+            _levels_cache.popitem(last=False)
+    else:
+        _levels_cache.move_to_end(key)
+    return LevelsOut(
+        duration_ms=levels.duration_ms,
+        agent=levels.agent,
+        caller=levels.caller,
+        turns=[LevelTurnOut(**turn) for turn in levels.turns],
+    )

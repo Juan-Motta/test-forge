@@ -404,6 +404,12 @@ a fresh UUID4 `threadId` (`voice_eval.modules.agents.domain.target_spec` builds 
   deleting that connection clears the reference.
 - An agent that scenarios still reference cannot be deleted: 409 `Agent is used by N
   scenario(s)`.
+- `POST /api/agents/{id}/test` (`modules.agents.connection_check`) opens the agent's WebSocket
+  the way a run does (same protocol detection, `Origin` and `LOCAL_TARGET_HOST` rewrite), waits
+  up to 8 s in all for the session to be ready, then closes it like a run (`voice.close` on
+  Live, close code 1000 on legacy realtime). No audio and no `response.create` are sent. It
+  answers `{reachable, latencyMs, protocol, log: [{ok, message}]}`; failures are
+  `reachable: false` with a safe message (the URL is logged without its query string).
 
 ### Scenarios
 
@@ -572,6 +578,17 @@ session id).
 | `GET /api/runs/{id}/audio/agent`, `.../caller` | The side's WAV (`audio/wav`, PCM16 24 kHz mono) |
 | `GET /api/runs/batches`, `GET /api/runs/batches/{id}` | Batches with per-status run counts (and their runs) |
 | `POST /api/runs/batches/{id}/cancel` | `202`; cancels every unfinished run of the batch |
+| `POST /api/runs/{id}/rerun` | `201`, a new batch: one run of the run's scenario as it is now (`409` if the scenario was deleted) |
+| `GET /api/runs/{id}/levels?bins=140` | Per-bin RMS of both sides on the run timeline, and the turns (`409` while running) |
+| `GET /api/runs/{id}/trace` | The agent's Langfuse observations saved by the judge (`langfuse.json`), as a waterfall |
+| `GET /api/stats/overview?days=7` | Aggregates over the runs created in the window (scores, goal completion, latency, weakest criteria) |
+
+Levels (`modules.runs.levels`) are placed with `events.jsonl`, since the WAV files are not
+aligned: the n-th `agent_audio` event is the n-th chunk of `agent.wav`, played back to back from
+its arrival (a `caller_interrupted` event stops that playback), and `caller_audio` events match
+the speech frames of `caller.wav` in order, skipping the open microphone's silent frames. Values
+share one scale (the loudest bin is 1) and are cached per run and bin count, since a finished
+run's artifacts never change.
 
 Runs execute inside the backend process as asyncio tasks (`modules.runs.manager.RunManager`,
 `app.state.runs`): a run waits for a slot of its batch (`concurrency`) and one of the process

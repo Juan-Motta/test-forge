@@ -140,6 +140,13 @@ def _run(record: RunRecord, judgement_status: str | None, score: int | None) -> 
     )
 
 
+async def judgement_trace_note(db: AsyncSession, run_id: uuid.UUID) -> str | None:
+    """Why the run's judgement has no (or partial) trace evidence, when it said so."""
+    return await db.scalar(
+        select(RunJudgementRecord.trace_note).where(RunJudgementRecord.run_id == run_id)
+    )
+
+
 async def get_run(db: AsyncSession, run_id: uuid.UUID) -> Run:
     row = (await db.execute(_with_judgement().where(RunRecord.id == run_id))).one_or_none()
     if row is None:

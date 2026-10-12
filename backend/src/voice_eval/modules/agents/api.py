@@ -4,12 +4,13 @@ import uuid
 from datetime import datetime
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import AfterValidator, BaseModel, ConfigDict, StringConstraints, field_validator
 from pydantic.alias_generators import to_camel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from voice_eval.modules.agents import service
+from voice_eval.modules.agents.connection_check import check_connection
 from voice_eval.modules.agents.domain import (
     CHANNEL_ID_PATTERN,
     MAX_CHANNEL_ID_LENGTH,
@@ -126,6 +127,18 @@ class UpdateIn(StrictCamelModel):
         return value
 
 
+class ConnectionLogLineOut(CamelModel):
+    ok: bool
+    message: str
+
+
+class ConnectionTestOut(CamelModel):
+    reachable: bool  # the session became ready
+    latency_ms: int | None  # connect + ready, when reachable
+    protocol: str | None  # "live" or "realtime", once detected
+    log: list[ConnectionLogLineOut]
+
+
 def _invalid(exc: InvalidAgentInput) -> HTTPException:
     """Same `{type, loc, msg}` items as request validation errors (see `platform.app`)."""
     detail = [
@@ -216,3 +229,23 @@ async def delete_agent(agent_id: uuid.UUID, db: Db) -> Response:
             status.HTTP_409_CONFLICT, f"Agent is used by {exc.scenarios} scenario(s)"
         ) from None
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/{agent_id}/test", response_model=ConnectionTestOut)
+async def test_agent(agent_id: uuid.UUID, request: Request, db: Db) -> ConnectionTestOut:
+    """Open a live session with the agent, wait until it is ready, then close it (no audio is
+    sent). Unreachable agents answer `200` with `reachable: false` and the failing step."""
+    try:
+        agent = await service.get_agent(db, agent_id)
+    except AgentNotFound:
+        raise _not_found() from None
+    await db.close()  # release the connection while the agent is dialled
+    check = await check_connection(
+        agent, local_target_host=request.app.state.settings.local_target_host
+    )
+    return ConnectionTestOut(
+        reachable=check.reachable,
+        latency_ms=check.latency_ms,
+        protocol=check.protocol,
+        log=[ConnectionLogLineOut(ok=line.ok, message=line.message) for line in check.log],
+    )
