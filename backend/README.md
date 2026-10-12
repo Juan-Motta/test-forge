@@ -293,6 +293,33 @@ Validation errors are `422 {"detail": [{type, loc, msg}]}`, whether the request 
 module's own rules rejected the input: the submitted value is never echoed back (it may be a
 password or an API key).
 
+### Agent skill
+
+An AI agent holding an API key can learn the platform from the API itself:
+
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /api/skill` | `text/markdown; charset=utf-8`: a `SKILL.md` (Anthropic skill format) |
+| `GET /api/skill.zip` | `application/zip`: `voice-evaluator/SKILL.md` and `voice-evaluator/reference/openapi.json`, to unzip into an agent's skills directory |
+
+Both need authentication (API key or session) like the rest of the API. `SKILL.md` is YAML
+frontmatter (`name: voice-evaluator`, a `description` of when to use it), then the curated guide
+`src/voice_eval/modules/skill/guide.md` (concepts, auth, costs and when to ask a human, the
+set-up / launch / follow / judge flows with example JSON, how to read summaries, transcripts and
+judge v2 results, the live WebSocket, the stability CLI), then an endpoint reference generated
+on every request from the app's own OpenAPI schema (`app.openapi()`, also when `/openapi.json`
+is not exposed): every operation grouped by tag, with its parameters, request body fields
+(types, required, constraints) and response fields, each object type described once. Routes
+excluded from the schema are left out. The guide is packaged with the code, so it ships in the
+image. Tests (`tests/modules/skill`) fail when an API operation is missing from the reference
+or when the guide mentions an `/api/...` path the app no longer serves; keep `guide.md` in
+step with behavior changes (statuses, fields, flows).
+
+```bash
+curl -s -H "Authorization: Bearer $VE_KEY" "$VE_URL/api/skill" > SKILL.md
+curl -s -H "Authorization: Bearer $VE_KEY" -o voice-evaluator-skill.zip "$VE_URL/api/skill.zip"
+```
+
 ### Provider connections
 
 Provider credentials (OpenAI, Azure OpenAI, Azure AI Speech, Langfuse) are managed through the
