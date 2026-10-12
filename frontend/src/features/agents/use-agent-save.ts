@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef } from "react";
+import { useMemo, useRef, useState } from "react";
 import { formErrorView, type FieldErrors } from "@/lib/api";
 import { toChanges, toNewAgent, type AgentFormValues } from "./form-schema";
 import { useCreateAgent, useUpdateAgent } from "./queries";
@@ -22,13 +22,29 @@ export type AgentSave = {
   reset: () => void;
 };
 
-/** Saves the form: creates without `agent`, otherwise PATCHes only what changed. */
+/** The in-flight key of a save that creates an agent. */
+const NEW_AGENT = "\u0000new";
+
+/**
+ * Saves the form: creates without `agent`, otherwise PATCHes only what changed. The double-submit
+ * guard and `pending` are per agent: a save still in flight for one agent never blocks (or shows
+ * on) another the user opened meanwhile.
+ */
 export function useAgentSave(agent: Agent | undefined, onSaved: (agent: Agent, outcome: SaveOutcome) => void): AgentSave {
   const create = useCreateAgent();
   const update = useUpdateAgent();
   // A ref, not mutation state: two clicks can land before React re-renders the disabled button.
-  const saving = useRef(false);
+  const saving = useRef(new Set<string>());
+  // Mirrors `saving` for rendering.
+  const [inFlight, setInFlight] = useState<ReadonlySet<string>>(() => new Set());
   const save = agent ? update : create;
+  const key = agent?.id ?? NEW_AGENT;
+
+  function track(id: string, busy: boolean) {
+    if (busy) saving.current.add(id);
+    else saving.current.delete(id);
+    setInFlight(new Set(saving.current));
+  }
 
   function reset() {
     create.reset();
@@ -36,7 +52,7 @@ export function useAgentSave(agent: Agent | undefined, onSaved: (agent: Agent, o
   }
 
   function onSubmit(values: AgentFormValues) {
-    if (saving.current) return;
+    if (saving.current.has(key)) return;
     reset();
     let request: Promise<void>;
     if (agent) {
@@ -49,14 +65,14 @@ export function useAgentSave(agent: Agent | undefined, onSaved: (agent: Agent, o
     } else {
       request = create.mutateAsync(toNewAgent(values)).then((created) => onSaved(created, "created"));
     }
-    saving.current = true;
+    track(key, true);
     // mutateAsync, not mutate's callbacks: `reset()` (opening another agent) drops pending callbacks.
     // A failure is shown through the mutation's error state.
-    request.catch(() => {}).finally(() => (saving.current = false));
+    request.catch(() => {}).finally(() => track(key, false));
   }
 
   // Memoized per failure: a new `fieldErrors` object tells the form to show a new set of errors.
   const view = useMemo(() => (save.error ? formErrorView(save.error, DUPLICATE_AGENT_NAME) : undefined), [save.error]);
 
-  return { onSubmit, pending: save.isPending, error: view?.message, fieldErrors: view?.fieldErrors, reset };
+  return { onSubmit, pending: inFlight.has(key), error: view?.message, fieldErrors: view?.fieldErrors, reset };
 }

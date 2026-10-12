@@ -2,14 +2,18 @@ import { KpiTile } from "@/ui";
 import { countDelta, percent, seconds } from "./format";
 import type { OverviewStats } from "./types";
 
-/** The four headline metrics of the window; a metric without data reads "—", never 0. */
-export function OverviewKpis({ stats }: { stats: OverviewStats | undefined }) {
+/**
+ * The four headline metrics of the window; a metric without data reads "—", never 0. While
+ * `loading`, the section is marked busy.
+ */
+export function OverviewKpis({ stats, loading = false }: { stats: OverviewStats | undefined; loading?: boolean }) {
   const period = stats?.periodDays === 7 || !stats ? "week" : `${stats.periodDays} days`;
   const p50 = stats?.latency.p50Ms ?? null;
   const p95 = stats?.latency.p95Ms ?? null;
   return (
     <section
       aria-label="Key metrics"
+      aria-busy={loading || undefined}
       className="grid grid-cols-[repeat(auto-fit,minmax(min(220px,100%),1fr))] gap-4"
     >
       <KpiTile

@@ -43,6 +43,34 @@ async function openTab(name: RegExp | string) {
   await userEvent.setup().click(await screen.findByRole("tab", { name }));
 }
 
+describe("Run report · header and active runs", () => {
+  it("copies the brief from the header", async () => {
+    renderReport(judgementFixture());
+    const user = userEvent.setup();
+
+    const header = (await screen.findByRole("heading", { level: 1 })).closest("header")!;
+    await user.click(await within(header).findByRole("button", { name: "Copy brief" }));
+
+    expect(await navigator.clipboard.readText()).toBe(judgeResultFixture().brief);
+  });
+
+  it("asks nothing of the judge while the run is active and shows only the passive Judgement card", async () => {
+    mockRunsApi([runFixture({ id: RUN_ID, status: "running", endedAt: null })], {
+      details: { [RUN_ID]: runDetailFixture({ id: RUN_ID, status: "running", endedAt: null }) },
+    });
+    const api = mockJudgementApi({ [RUN_ID]: judgementFixture() });
+    const { queryClient } = renderWithClient(<RunDetailContainer runId={RUN_ID} judgementPollMs={20} />);
+
+    const card = await screen.findByRole("region", { name: "Judgement" });
+    expect(card).toHaveTextContent("The judge scores the run once it finishes.");
+    expect(within(card).queryByRole("button")).not.toBeInTheDocument();
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    expect(api.gets[RUN_ID]).toBeUndefined();
+    expect(api.posts).toEqual([]);
+    expect(screen.queryByRole("button", { name: "Copy brief" })).not.toBeInTheDocument();
+  });
+});
+
 describe("Run report · judgement states", () => {
   it("offers to judge a run that was never judged", async () => {
     const { api } = renderReport({ status: "none" });
@@ -396,10 +424,13 @@ describe("Run report · trace, suggestions and handoff", () => {
 
   it("omits the Langfuse link without a Langfuse connection", async () => {
     mockLangfuseLookup("a-hotel", null);
-    renderReport({ status: "none" }, { trace: traceFixture() });
-
+    const { queryClient } = renderReport({ status: "none" }, { trace: traceFixture() });
     await screen.findByRole("region", { name: "Call recording" });
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    // Wait until the agent (it links no Langfuse connection) was fetched and nothing else loads.
+    await waitFor(() => {
+      expect(queryClient.getQueryState(["agents"])?.status).toBe("success");
+      expect(queryClient.isFetching()).toBe(0);
+    });
     expect(screen.queryByRole("link", { name: /Open trace in Langfuse/ })).not.toBeInTheDocument();
   });
 });

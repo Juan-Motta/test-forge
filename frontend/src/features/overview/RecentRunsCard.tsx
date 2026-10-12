@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { absoluteTime, relativeTime } from "@/features/connections/format";
 import { clock, runDurationMs, shortId } from "@/features/runs/format";
 import { TruncatedText } from "@/features/runs/TruncatedText";
@@ -25,21 +25,86 @@ const MATCHES: Record<RunFilter, (run: Run) => boolean> = {
 
 const SHOWN = 10;
 
+type Column = {
+  name: string;
+  /** Header width; the cells follow it (the table has a fixed layout). */
+  width: string;
+  /** Extra classes of this column's body cells. */
+  cellClassName?: string;
+  cell: (run: Run, now: number) => ReactNode;
+};
+
+const roundedScore = (run: Run) => (run.score === null || run.score === undefined ? null : Math.round(run.score));
+
 /**
- * Fixed widths for the short columns; scenario takes a fixed share and agent and persona split
- * the rest, all three ellipsized, so ids and names stay on one line. The minimum width fits the
- * card beside the insights column at 1280px and up; narrower, the card scrolls sideways.
+ * One definition per column: its header, width and body cell. Fixed widths for the short columns;
+ * scenario takes a fixed share and agent and persona split the rest, all three ellipsized, so ids
+ * and names stay on one line. The minimum width fits the card beside the insights column at
+ * 1280px and up; narrower, the card scrolls sideways.
  */
-const COLUMNS = [
-  { name: "Run", width: "w-[6.25rem]" },
-  { name: "Scenario", width: "w-[19%]" },
-  { name: "Agent", width: "" },
-  { name: "Persona", width: "" },
-  { name: "Duration", width: "w-[4.5rem]" },
-  { name: "Score", width: "w-[5.5rem]" },
-  { name: "Result", width: "w-[7rem]" },
-  { name: "When", width: "w-[7rem]" },
-] as const;
+const COLUMNS: readonly Column[] = [
+  {
+    name: "Run",
+    width: "w-[6.25rem]",
+    cellClassName: "whitespace-nowrap",
+    cell: (run) => (
+      <Link
+        href={`/runs/${encodeURIComponent(run.id)}`}
+        title={run.id}
+        aria-label={`Open run ${run.id}`}
+        className={cn("rounded font-mono text-xs text-agent hover:underline", focusRing)}
+      >
+        {shortId(run.id)}
+      </Link>
+    ),
+  },
+  { name: "Scenario", width: "w-[19%]", cellClassName: "font-medium", cell: (run) => <TruncatedText text={run.scenarioName} /> },
+  { name: "Agent", width: "", cellClassName: "text-muted", cell: (run) => <TruncatedText text={run.agentName} /> },
+  {
+    name: "Persona",
+    width: "",
+    cellClassName: "text-muted",
+    cell: (run) => (run.persona ? <TruncatedText text={run.persona} /> : "—"),
+  },
+  {
+    name: "Duration",
+    width: "w-[4.5rem]",
+    cellClassName: "whitespace-nowrap font-mono text-xs text-muted",
+    cell: (run, now) => {
+      const duration = runDurationMs(run, now);
+      return duration === null ? "—" : clock(duration);
+    },
+  },
+  {
+    name: "Score",
+    width: "w-[5.5rem]",
+    cell: (run) => (
+      <div className="flex items-center gap-2">
+        <span className="w-6 font-semibold tabular-nums">{roundedScore(run) ?? "—"}</span>
+        <ScoreBar score={roundedScore(run)} label={`Score of run ${shortId(run.id)}`} trackClassName="w-10" />
+      </div>
+    ),
+  },
+  {
+    name: "Result",
+    width: "w-[7rem]",
+    cellClassName: "whitespace-nowrap",
+    cell: (run) => {
+      const result = runResult(run);
+      return <Badge tone={result.tone}>{result.label}</Badge>;
+    },
+  },
+  {
+    name: "When",
+    width: "w-[7rem]",
+    cellClassName: "whitespace-nowrap text-dim",
+    cell: (run, now) => (
+      <time dateTime={run.createdAt} title={absoluteTime(run.createdAt)}>
+        {relativeTime(run.createdAt, now)}
+      </time>
+    ),
+  },
+];
 
 /** Whether a run matches the free-text search (scenario, agent, persona, run or thread id). */
 export function matchesSearch(run: Run, search: string): boolean {
@@ -88,52 +153,15 @@ export function RecentRunsCard({ runs, search, now }: { runs: Run[]; search: str
               </tr>
             </thead>
             <tbody>
-              {shown.map((run) => {
-                const label = shortId(run.id);
-                const duration = runDurationMs(run, now);
-                const result = runResult(run);
-                const score = run.score === null || run.score === undefined ? null : Math.round(run.score);
-                return (
-                  <tr key={run.id}>
-                    <td className={cn(cell, "whitespace-nowrap")}>
-                      <Link
-                        href={`/runs/${encodeURIComponent(run.id)}`}
-                        title={run.id}
-                        aria-label={`Open run ${run.id}`}
-                        className={cn("rounded font-mono text-xs text-agent hover:underline", focusRing)}
-                      >
-                        {label}
-                      </Link>
+              {shown.map((run) => (
+                <tr key={run.id}>
+                  {COLUMNS.map((column) => (
+                    <td key={column.name} className={cn(cell, column.cellClassName)}>
+                      {column.cell(run, now)}
                     </td>
-                    <td className={cn(cell, "font-medium")}>
-                      <TruncatedText text={run.scenarioName} />
-                    </td>
-                    <td className={cn(cell, "text-muted")}>
-                      <TruncatedText text={run.agentName} />
-                    </td>
-                    <td className={cn(cell, "text-muted")}>
-                      {run.persona ? <TruncatedText text={run.persona} /> : "—"}
-                    </td>
-                    <td className={cn(cell, "whitespace-nowrap font-mono text-xs text-muted")}>
-                      {duration === null ? "—" : clock(duration)}
-                    </td>
-                    <td className={cell}>
-                      <div className="flex items-center gap-2">
-                        <span className="w-6 font-semibold tabular-nums">{score ?? "—"}</span>
-                        <ScoreBar score={score} label={`Score of run ${label}`} trackClassName="w-10" />
-                      </div>
-                    </td>
-                    <td className={cn(cell, "whitespace-nowrap")}>
-                      <Badge tone={result.tone}>{result.label}</Badge>
-                    </td>
-                    <td className={cn(cell, "whitespace-nowrap text-dim")}>
-                      <time dateTime={run.createdAt} title={absoluteTime(run.createdAt)}>
-                        {relativeTime(run.createdAt, now)}
-                      </time>
-                    </td>
-                  </tr>
-                );
-              })}
+                  ))}
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>

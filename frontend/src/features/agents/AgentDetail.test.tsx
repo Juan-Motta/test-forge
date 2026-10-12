@@ -1,9 +1,11 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { HttpResponse } from "msw/http";
-import { afterEach, describe, expect, it } from "vitest";
+import { http, HttpResponse } from "msw/http";
+import { act } from "react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { connectionFixture, mockConnectionsApi } from "@/features/connections/testing";
 import { renderWithClient } from "@/test/render";
+import { apiUrl, server } from "@/test/server";
 import { AgentsContainer } from "./AgentsContainer";
 import { agentFixture, connectionTestFixture, mockAgentsApi } from "./testing";
 
@@ -181,5 +183,100 @@ describe("Agent detail: Langfuse and context", () => {
 
     const evaluator = await card("Evaluator and judge");
     expect(within(evaluator).getByRole("link", { name: "Open scenarios" })).toHaveAttribute("href", "/scenarios");
+  });
+});
+
+describe("Agent detail: saving and switching", () => {
+  const CONTEXT = "What this agent does — shared by all its scenarios";
+  const contextField = async () => within(await card("Agent context")).getByLabelText(CONTEXT);
+  const rail = () => screen.getByRole("complementary", { name: "Agents" });
+  const two = () => [agentFixture(), agentFixture({ id: "a-2", name: "Backup agent" })];
+
+  it("keeps Save working on another agent while the previous agent's save is still in flight", async () => {
+    mockConnectionsApi([]);
+    const api = mockAgentsApi(two());
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    server.use(
+      http.patch(apiUrl("/agents/a-2"), async () => {
+        await held;
+        return HttpResponse.json(agentFixture({ id: "a-2", name: "Backup agent", context: "Held." }));
+      }),
+    );
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    renderWithClient(<AgentsContainer />);
+    const user = userEvent.setup();
+
+    // "Backup agent" opens first (sorted by name).
+    await user.clear(await contextField());
+    await user.type(await contextField(), "Held.");
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(await screen.findByRole("button", { name: "Saving…" })).toBeInTheDocument();
+
+    await user.click(within(rail()).getByRole("button", { name: /Hotel booking assistant/ }));
+    await screen.findByRole("heading", { level: 1, name: "Hotel booking assistant" });
+    const save = screen.getByRole("button", { name: "Save changes" });
+    expect(save).toBeEnabled();
+    await user.clear(await contextField());
+    await user.type(await contextField(), "Books rooms.");
+    await user.click(save);
+
+    await waitFor(() =>
+      expect(api.requests).toContainEqual({ method: "PATCH", path: "/agents/a-hotel", body: { context: "Books rooms." } }),
+    );
+    release();
+  });
+
+  it("keeps unsaved edits when the agents list refetches in the background", async () => {
+    mockConnectionsApi([]);
+    const api = mockAgentsApi([agentFixture()]);
+    const { queryClient } = renderWithClient(<AgentsContainer />);
+    const user = userEvent.setup();
+
+    await user.clear(await contextField());
+    await user.type(await contextField(), "Draft.");
+    api.items[0] = { ...api.items[0], updatedAt: "2030-01-01T00:00:00Z" };
+    await act(() => queryClient.refetchQueries({ queryKey: ["agents"] }));
+
+    expect(await contextField()).toHaveValue("Draft.");
+  });
+
+  it("asks before switching agents over unsaved edits", async () => {
+    mockConnectionsApi([]);
+    mockAgentsApi(two());
+    const confirm = vi.spyOn(window, "confirm").mockReturnValueOnce(false).mockReturnValueOnce(true);
+    renderWithClient(<AgentsContainer />);
+    const user = userEvent.setup();
+
+    await user.clear(await contextField());
+    await user.type(await contextField(), "Draft.");
+    await user.click(within(rail()).getByRole("button", { name: /Hotel booking assistant/ }));
+
+    expect(confirm).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("heading", { level: 1, name: "Backup agent" })).toBeInTheDocument();
+    expect(await contextField()).toHaveValue("Draft.");
+
+    await user.click(within(rail()).getByRole("button", { name: /Hotel booking assistant/ }));
+    expect(confirm).toHaveBeenCalledTimes(2);
+    expect(await screen.findByRole("heading", { level: 1, name: "Hotel booking assistant" })).toBeInTheDocument();
+  });
+
+  it("shows the saved values after a save, with nothing left to discard", async () => {
+    mockConnectionsApi([]);
+    const api = mockAgentsApi(two());
+    const confirm = vi.spyOn(window, "confirm");
+    renderWithClient(<AgentsContainer />);
+    const user = userEvent.setup();
+
+    await user.clear(await contextField());
+    await user.type(await contextField(), "Saved.");
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(api.requests).toHaveLength(1));
+    await screen.findByText("Saved Backup agent.");
+    expect(await contextField()).toHaveValue("Saved.");
+
+    await user.click(within(rail()).getByRole("button", { name: /Hotel booking assistant/ }));
+    expect(await screen.findByRole("heading", { level: 1, name: "Hotel booking assistant" })).toBeInTheDocument();
+    expect(confirm).not.toHaveBeenCalled();
   });
 });

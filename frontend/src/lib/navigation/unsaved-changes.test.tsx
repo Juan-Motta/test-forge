@@ -30,4 +30,17 @@ describe("useUnsavedChangesGuard", () => {
     expect(confirmLeave()).toBe(true);
     expect(unload()).toBe(false);
   });
+
+  it("keeps the earlier guard when an overlapping later one ends", () => {
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    renderHook(() => useUnsavedChangesGuard(true, "Discard edits?"));
+    const launch = renderHook(() => useUnsavedChangesGuard(true, "A launch is in progress."));
+
+    expect(confirmLeave()).toBe(false);
+    expect(confirm).toHaveBeenLastCalledWith("A launch is in progress.");
+
+    launch.unmount();
+    expect(confirmLeave()).toBe(false);
+    expect(confirm).toHaveBeenLastCalledWith("Discard edits?");
+  });
 });

@@ -76,10 +76,32 @@ describe("level meter", () => {
     meter.cut(AGENT_CHANNEL, 1000);
     meter.cut(AGENT_CHANNEL, 5000);
     meter.cut(CALLER_CHANNEL, 2000);
-    expect(meter.cuts(AGENT_CHANNEL)).toEqual([1000, 5000]);
-    expect(meter.cuts(CALLER_CHANNEL)).toEqual([2000]);
+    expect(meter.cuts(AGENT_CHANNEL)).toEqual([
+      { n: 1, atMs: 1000 },
+      { n: 2, atMs: 5000 },
+    ]);
+    expect(meter.cuts(CALLER_CHANNEL)).toEqual([{ n: 1, atMs: 2000 }]);
     meter.push(CALLER_CHANNEL, tone(LEVEL_BIN_MS, 3277), 600_000);
     expect(meter.cuts(AGENT_CHANNEL)).toEqual([]);
+  });
+
+  it("numbers cuts over the whole run, so a cut keeps its number when older ones are forgotten", () => {
+    const meter = createLevelMeter();
+    meter.cut(AGENT_CHANNEL, 1000);
+    meter.cut(AGENT_CHANNEL, 2000);
+    meter.cut(AGENT_CHANNEL, 600_000);
+    expect(meter.cuts(AGENT_CHANNEL)).toEqual([{ n: 3, atMs: 600_000 }]);
+  });
+
+  it("knows when its last sample ends, or when it was last cut, in its own clock", () => {
+    const meter = createLevelMeter();
+    expect(meter.lastSampleMs()).toBeNull();
+    meter.push(AGENT_CHANNEL, tone(LEVEL_BIN_MS * 2, 3277), 1000);
+    expect(meter.lastSampleMs()).toBe(1000 + LEVEL_BIN_MS * 2);
+    meter.push(CALLER_CHANNEL, tone(LEVEL_BIN_MS, 3277), 1100);
+    expect(meter.lastSampleMs()).toBe(1000 + LEVEL_BIN_MS * 2);
+    meter.cut(AGENT_CHANNEL, 4000);
+    expect(meter.lastSampleMs()).toBe(4000);
   });
 
   it("forgets audio older than its history", () => {

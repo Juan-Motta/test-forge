@@ -156,13 +156,32 @@ async def check_connection(agent: Agent, *, local_target_host: str | None) -> Co
     check.latency_ms = round((time.monotonic() - started) * 1000)
     check.reachable = True
     check.step(f"Session ready in {check.latency_ms} ms")
+    await _close(check, session, events)
+    return check
+
+
+async def _close(
+    check: ConnectionCheck, session: TargetSession, events: AsyncIterator[ServerEvent]
+) -> None:
+    """Close like a run does; a failure is logged as a step, never raised."""
     reader = asyncio.create_task(_drain(events))
-    warnings = await close_session(session, reader, timeout_s=CLOSE_TIMEOUT_S)
+    try:
+        warnings = await close_session(session, reader, timeout_s=CLOSE_TIMEOUT_S)
+    except Exception as exc:
+        log.info("agent connection test close failed (%s)", type(exc).__name__)
+        check.step(f"Close failed ({type(exc).__name__})", ok=False)
+        await _disconnect(session)
+        reader.cancel()
+        with suppress(asyncio.CancelledError, Exception):
+            await reader
+        return
     for warning in warnings:
         check.step(f"Close: {warning}", ok=False)
-    code = session.close_code
+    try:
+        code = session.close_code
+    except Exception:
+        code = None
     check.step("Closed" if code is None else f"Closed (code {code})")
-    return check
 
 
 async def _disconnect(session: TargetSession | None) -> None:

@@ -80,6 +80,11 @@ describe("timeAxis", () => {
   it("splits the duration into evenly spaced clock ticks", () => {
     expect(timeAxis(252_000)).toEqual(["0:00", "1:03", "2:06", "3:09", "4:12"]);
   });
+
+  it("stays finite for a single tick or none", () => {
+    expect(timeAxis(252_000, 1)).toEqual(["0:00"]);
+    expect(timeAxis(252_000, 0)).toEqual([]);
+  });
 });
 
 function observation(overrides: Partial<TraceObservation>): TraceObservation {
@@ -102,6 +107,23 @@ function observation(overrides: Partial<TraceObservation>): TraceObservation {
 }
 
 describe("waterfallRows", () => {
+  it("keeps every bar inside the timeline, even an instant one at its very end", () => {
+    const rows = waterfallRows(
+      [
+        observation({ id: "end", startMs: 10_000, durationMs: 0 }),
+        observation({ id: "late", startMs: 9_990, durationMs: 0 }),
+        observation({ id: "whole", startMs: 0, durationMs: 10_000 }),
+      ],
+      10_000,
+    );
+    for (const row of rows) {
+      expect(row.left).toBeGreaterThanOrEqual(0);
+      expect(row.width).toBeGreaterThan(0);
+      expect(row.left + row.width).toBeLessThanOrEqual(100);
+    }
+    expect(rows.find((row) => row.id === "end")).toMatchObject({ left: 99.5, width: 0.5 });
+  });
+
   it("positions bars over the run duration and flags warnings and errors", () => {
     const rows = waterfallRows(
       [

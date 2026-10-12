@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { absoluteTime, relativeTime } from "@/features/connections/format";
 import { isJudging } from "@/features/judgements/format";
-import { isJudged, needsReview } from "@/features/overview/run-result";
+import { runResult } from "@/features/overview/run-result";
 import { Badge, Button, ScoreBar, buttonClasses, cn } from "@/ui";
 import { STATUS_LABELS, clock, endReasonLabel, isActive, latency, runDurationMs, shortId } from "./format";
 import { RunStatusChip } from "./RunStatusChip";
@@ -145,11 +145,15 @@ function RunScore({ run, label }: { run: Run; label: string }) {
   );
 }
 
-/** Judged runs: passed, or flagged for a human review (score under 60 or a must criterion failed). */
+/**
+ * The overview's verdict (`runResult`) for judged runs: passed, or flagged for a human review. A
+ * broken (failed, interrupted) or cancelled call is never "Passed"; its Status cell already says
+ * what happened, so this one is a dash, like a run in progress or unscored.
+ */
 function RunResult({ run }: { run: Run }) {
-  if (needsReview(run)) return <Badge tone="evaluator">Needs review</Badge>;
-  if (!isJudged(run) || run.score === null) return <span className="font-mono text-xs text-muted">—</span>;
-  return <Badge tone="success">Passed</Badge>;
+  const result = runResult(run);
+  if (result.kind === "passed" || result.kind === "review") return <Badge tone={result.tone}>{result.label}</Badge>;
+  return <span className="font-mono text-xs text-muted">—</span>;
 }
 
 /** "caller / agent" turns, or a dash while either is unknown. */

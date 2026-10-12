@@ -3,19 +3,24 @@ import { useId } from "react";
 import { SCORE_TEXT, ScoreBar, buttonClasses, cn, scoreTone } from "@/ui";
 import type { OverviewStats } from "./types";
 
-/** Weakest criteria and suggestions of the window; `stats` is undefined when they are unknown. */
-export function InsightsColumn({ stats }: { stats: OverviewStats | undefined }) {
+/**
+ * Weakest criteria and suggestions of the window; `stats` is undefined when they are unknown
+ * (still `loading`, or failed to load).
+ */
+export function InsightsColumn({ stats, loading = false }: { stats: OverviewStats | undefined; loading?: boolean }) {
+  const unknown = loading ? LOADING : UNKNOWN;
   return (
-    <div className="flex min-w-0 flex-[1_1_320px] flex-col gap-5">
-      <WeakestCriteria stats={stats} />
-      <Suggestions stats={stats} />
+    <div className="flex min-w-0 flex-[1_1_320px] flex-col gap-5" aria-busy={loading || undefined}>
+      <WeakestCriteria stats={stats} unknown={unknown} />
+      <Suggestions stats={stats} unknown={unknown} />
     </div>
   );
 }
 
 const UNKNOWN = "Unavailable until the metrics load.";
+const LOADING = "Loading metrics…";
 
-function WeakestCriteria({ stats }: { stats: OverviewStats | undefined }) {
+function WeakestCriteria({ stats, unknown }: { stats: OverviewStats | undefined; unknown: string }) {
   const headingId = "weakest-criteria";
   const criteria = stats?.weakestCriteria ?? [];
   return (
@@ -27,7 +32,7 @@ function WeakestCriteria({ stats }: { stats: OverviewStats | undefined }) {
         <span className="text-xs text-dim">{`Average judge score, last ${stats?.periodDays ?? 7} days`}</span>
       </div>
       {!stats ? (
-        <p className="text-sm text-muted">{UNKNOWN}</p>
+        <p className="text-sm text-muted">{unknown}</p>
       ) : criteria.length === 0 ? (
         <p className="text-sm text-muted">{`No judged criteria in the last ${stats.periodDays} days.`}</p>
       ) : (
@@ -52,7 +57,7 @@ function WeakestCriteria({ stats }: { stats: OverviewStats | undefined }) {
   );
 }
 
-function Suggestions({ stats }: { stats: OverviewStats | undefined }) {
+function Suggestions({ stats, unknown }: { stats: OverviewStats | undefined; unknown: string }) {
   const headingId = "handoff-suggestions";
   const open = stats?.suggestions.open ?? null;
   return (
@@ -65,7 +70,7 @@ function Suggestions({ stats }: { stats: OverviewStats | undefined }) {
         <Figure label="high impact" value={stats?.suggestions.highPriority ?? null} danger />
       </div>
       {!stats ? (
-        <p className="text-[13px] text-muted">{UNKNOWN}</p>
+        <p className="text-[13px] text-muted">{unknown}</p>
       ) : open === 0 ? (
         <p className="text-[13px] text-muted">No suggestions to hand off yet.</p>
       ) : (

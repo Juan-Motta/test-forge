@@ -57,4 +57,23 @@ describe("Tabs", () => {
     expect(screen.getByRole("tab", { name: /Suggestions/ })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("tab", { name: /Suggestions/ })).toHaveTextContent("3");
   });
+
+  it("falls back to the first tab when the controlled value is not among the tabs", () => {
+    render(<Tabs label="Report sections" tabs={TABS} value={"gone" as string} onChange={vi.fn()} />);
+
+    const first = screen.getByRole("tab", { name: "Transcript & scorecard" });
+    expect(first).toHaveAttribute("aria-selected", "true");
+    expect(first).toHaveAttribute("tabindex", "0");
+    expect(screen.getByRole("tabpanel", { name: "Transcript & scorecard" })).toHaveTextContent("Transcript body");
+  });
+
+  it("falls back to the first tab when its own selection disappears from the tabs", async () => {
+    const { rerender } = render(<Tabs label="Report sections" tabs={TABS} />);
+    await userEvent.click(screen.getByRole("tab", { name: /Suggestions/ }));
+
+    rerender(<Tabs label="Report sections" tabs={TABS.slice(0, 2)} />);
+
+    expect(screen.getByRole("tab", { name: "Transcript & scorecard" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tabpanel", { name: "Transcript & scorecard" })).toHaveTextContent("Transcript body");
+  });
 });

@@ -26,8 +26,10 @@ export function waterfallRows(observations: readonly TraceObservation[], duratio
   const ends = observations.map((item) => (item.startMs ?? 0) + (item.durationMs ?? 0));
   const total = Math.max(durationMs, ...ends, 1);
   return observations.map((item) => {
-    const left = round(Math.min(100, Math.max(0, ((item.startMs ?? 0) / total) * 100)));
-    const width = round(Math.max(MIN_WIDTH, Math.min(100 - left, ((item.durationMs ?? 0) / total) * 100)));
+    const start = Math.min(100, Math.max(0, ((item.startMs ?? 0) / total) * 100));
+    const width = round(Math.max(MIN_WIDTH, Math.min(100 - start, ((item.durationMs ?? 0) / total) * 100)));
+    // A bar never overflows: one widened to the minimum near the end is pulled back inside.
+    const left = round(Math.min(start, 100 - width));
     const flagged = isFlagged(item);
     const note = flagged
       ? (item.statusMessage ?? item.level.toLowerCase())

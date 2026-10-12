@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { cn } from "./cn";
 import { IconButton } from "./IconButton";
 import { CheckIcon, CopyIcon } from "./icons";
@@ -20,17 +20,29 @@ type CodeBlockProps = {
 
 type CopyState = "idle" | "copied" | "failed";
 
+/** How long the copy confirmation stays before the block returns to idle. */
+const CONFIRMATION_MS = 2000;
+
 /** Preformatted code on the code surface, optionally with a copy-to-clipboard button. */
 export function CodeBlock({ code, label, copyable = false, tone = "default", maxHeightClassName, className }: CodeBlockProps) {
   const [copy, setCopy] = useState<CopyState>("idle");
+  const reset = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  useEffect(() => () => clearTimeout(reset.current), []);
 
   async function onCopy() {
+    // Clear first so a repeated copy changes the live region and is announced again.
+    clearTimeout(reset.current);
+    setCopy("idle");
+    let next: CopyState;
     try {
       await navigator.clipboard.writeText(code);
-      setCopy("copied");
+      next = "copied";
     } catch {
-      setCopy("failed");
+      next = "failed";
     }
+    setCopy(next);
+    reset.current = setTimeout(() => setCopy("idle"), CONFIRMATION_MS);
   }
 
   return (

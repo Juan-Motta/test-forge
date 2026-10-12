@@ -18,10 +18,9 @@ type SegmentedControlProps<T extends string> = {
 /** One-of-many switch drawn as joined segments, with radio-group semantics and arrow keys. */
 export function SegmentedControl<T extends string>({ label, options, value, onChange, className }: SegmentedControlProps<T>) {
   const refs = useRef<Array<HTMLButtonElement | null>>([]);
-  const selected = Math.max(
-    0,
-    options.findIndex((option) => option.value === value),
-  );
+  // An unknown value checks nothing; the first option then stays the group's Tab stop.
+  const selected = options.findIndex((option) => option.value === value);
+  const tabStop = Math.max(0, selected);
 
   return (
     <div role="radiogroup" aria-label={label} className={cn("inline-flex gap-0.5 rounded-lg bg-sidebar p-[3px]", className)}>
@@ -36,7 +35,7 @@ export function SegmentedControl<T extends string>({ label, options, value, onCh
             type="button"
             role="radio"
             aria-checked={checked}
-            tabIndex={checked ? 0 : -1}
+            tabIndex={index === tabStop ? 0 : -1}
             onClick={() => onChange(option.value)}
             onKeyDown={(event) => {
               const next = rovingIndex(event, index, options.length);

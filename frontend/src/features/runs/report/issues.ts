@@ -79,5 +79,6 @@ export const DISAGREEMENT_SPREAD = 2;
 
 /** `count` evenly spaced clock labels from the start to the end of the run. */
 export function timeAxis(durationMs: number, count = 5): string[] {
+  if (count <= 1) return count === 1 ? [clock(0)] : [];
   return Array.from({ length: count }, (_, index) => clock((durationMs * index) / (count - 1)));
 }

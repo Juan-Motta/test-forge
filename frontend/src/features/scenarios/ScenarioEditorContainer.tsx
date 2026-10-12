@@ -2,14 +2,14 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAgents } from "@/features/agents/queries";
 import { canChat } from "@/features/connections/kinds";
 import { LaunchPanel } from "@/features/runs/LaunchPanel";
 import { useConnections } from "@/features/connections/queries";
 import { PageHeader } from "@/features/shell/PageHeader";
 import { ApiError, errorMessage, formErrorView } from "@/lib/api";
-import { confirmLeave } from "@/lib/navigation/unsaved-changes";
+import { confirmLeave, useUnsavedChangesGuard } from "@/lib/navigation/unsaved-changes";
 import { Alert, Button, Card, EmptyState, ScenariosIcon, Spinner, buttonClasses } from "@/ui";
 import { toChanges, toNewScenario, type ScenarioFormValues } from "./form-schema";
 import { useCreateScenario, useDuplicateScenario, useScenario, useScenarios, useUpdateScenario } from "./queries";
@@ -17,6 +17,7 @@ import { ScenarioEditor, type ConnectionOption } from "./ScenarioEditor";
 import { ScenarioLibraryRail } from "./ScenarioLibraryRail";
 import type { Scenario } from "./types";
 
+export const LAUNCH_LEAVE_MESSAGE = "Runs are still being launched. Leave this page anyway? You will not be taken to their live view.";
 export const DUPLICATE_SCENARIO_NAME = "A scenario with this name already exists for this agent.";
 const TTS_KINDS = new Set(["openai", "azure_openai"]);
 
@@ -47,6 +48,9 @@ export function ScenarioEditorContainer({ scenarioId }: ScenarioEditorContainerP
   // A ref, not mutation state: two clicks can land before React re-renders the disabled button.
   const saving = useRef(false);
   const save = scenarioId ? update : create;
+  // While the rail is launching, leaving would drop the launch's result (the batch to open).
+  const [launching, setLaunching] = useState(false);
+  useUnsavedChangesGuard(launching, LAUNCH_LEAVE_MESSAGE);
 
   // Memoized per failure: a new `fieldErrors` object tells the editor to show a new set of errors.
   const view = useMemo(
@@ -188,7 +192,13 @@ export function ScenarioEditorContainer({ scenarioId }: ScenarioEditorContainerP
             currentId={scenario.data?.id}
           />
         }
-        launch={<LaunchRail scenario={scenario.data} onLaunched={(batchId) => router.push(`/live?batchId=${encodeURIComponent(batchId)}`)} />}
+        launch={
+          <LaunchRail
+            scenario={scenario.data}
+            onLaunched={(batchId) => router.push(`/live?batchId=${encodeURIComponent(batchId)}`)}
+            onBusyChange={setLaunching}
+          />
+        }
       />
     );
     return body;
@@ -203,7 +213,18 @@ export function ScenarioEditorContainer({ scenarioId }: ScenarioEditorContainerP
 }
 
 /** Right rail: launches the saved scenario; a new one has to be saved first. */
-function LaunchRail({ scenario, onLaunched }: { scenario: Scenario | undefined; onLaunched: (batchId: string) => void }) {
+function LaunchRail({
+  scenario,
+  onLaunched,
+  onBusyChange,
+}: {
+  scenario: Scenario | undefined;
+  onLaunched: (batchId: string) => void;
+  onBusyChange: (busy: boolean) => void;
+}) {
+  // A panel unmounted mid-launch never reports the end of it; do not leave the page guarded.
+  // `onBusyChange` is a state setter, so this runs on unmount only.
+  useEffect(() => () => onBusyChange(false), [onBusyChange]);
   if (!scenario) {
     return (
       <aside aria-label="Launch" className="flex min-w-0 flex-col">
@@ -229,6 +250,7 @@ function LaunchRail({ scenario, onLaunched }: { scenario: Scenario | undefined; 
         <LaunchPanel
           scenarios={[{ id: scenario.id, name: scenario.name, maxDurationS: scenario.endConditions.maxDurationS }]}
           onLaunched={(batch) => onLaunched(batch.id)}
+          onBusyChange={onBusyChange}
         />
       </section>
     </aside>

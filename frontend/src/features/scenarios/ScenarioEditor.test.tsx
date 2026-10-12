@@ -8,6 +8,7 @@ import { renderWithClient } from "@/test/render";
 import { apiUrl, server } from "@/test/server";
 import { ScenarioEditorContainer } from "./ScenarioEditorContainer";
 import { mockRunsApi } from "@/features/runs/testing";
+import { confirmLeave } from "@/lib/navigation/unsaved-changes";
 import { mockScenariosApi, scenarioFixture } from "./testing";
 
 const nav = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn() }));
@@ -611,6 +612,43 @@ describe("Scenario editor: launch", () => {
     expect(runs.requests[0].body).toEqual({ scenarioIds: ["s-booking"], repetitions: 1, concurrency: 1 });
   });
 
+  it("asks before leaving the editor while the rail is still launching", async () => {
+    const api = setup();
+    mockRunsApi([], { scenarioNames: { "s-booking": "Booking with date change" } });
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    server.use(
+      http.post(apiUrl("/runs"), async () => {
+        await held;
+        return HttpResponse.json({ error: "gone" }, { status: 503 });
+      }),
+    );
+    const user = await renderEditor("s-booking");
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+
+    const rail = screen.getByRole("region", { name: "Launch a batch" });
+    await user.click(within(rail).getByRole("button", { name: "Launch 1 run" }));
+    await screen.findByRole("button", { name: "Launching…" });
+
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    await user.click(screen.getByRole("button", { name: "Duplicate" }));
+    // Rail links, New scenario, the breadcrumb and the sidebar all ask through `confirmLeave`
+    // (Next's Link only runs `onNavigate` under an App Router, which jsdom tests do not mount).
+    expect(confirmLeave()).toBe(false);
+
+    expect(confirm).toHaveBeenCalledTimes(3);
+    expect(confirm.mock.calls.every(([message]) => /launch/i.test(String(message)))).toBe(true);
+    expect(nav.push).not.toHaveBeenCalled();
+    expect(api.requests).toEqual([]);
+
+    release();
+    await screen.findByRole("button", { name: "Launch 1 run" });
+    confirm.mockClear();
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(confirm).not.toHaveBeenCalled();
+    expect(nav.push).toHaveBeenCalledWith("/scenarios");
+  });
+
   it("offers no launch while creating a scenario", async () => {
     setup([]);
     await renderEditor();
@@ -717,6 +755,28 @@ describe("Scenario editor: layout", () => {
 
     expect(window.confirm).toHaveBeenCalledTimes(1);
     expect(api.requests).toEqual([]);
+  });
+
+  it("shows a failed duplicate, stays on the scenario and lets the user try again", async () => {
+    setup();
+    let calls = 0;
+    server.use(
+      http.post(apiUrl("/scenarios/:id/duplicate"), () => {
+        calls += 1;
+        return HttpResponse.json({ detail: "Database unavailable" }, { status: 500 });
+      }),
+    );
+    const user = await renderEditor("s-booking");
+
+    await user.click(screen.getByRole("button", { name: "Duplicate" }));
+
+    expect(await screen.findByText(/Could not duplicate/)).toBeInTheDocument();
+    expect(nav.push).not.toHaveBeenCalled();
+    const button = screen.getByRole("button", { name: "Duplicate" });
+    expect(button).toBeEnabled();
+    await user.click(button);
+    await waitFor(() => expect(calls).toBe(2));
+    expect(nav.push).not.toHaveBeenCalled();
   });
 
   it("offers no Duplicate while creating a scenario", async () => {

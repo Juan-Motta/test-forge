@@ -29,7 +29,8 @@ export function OverviewContainer() {
   const live = useRuns({ status: "running", limit: 3 }, { refetchInterval: POLL_MS });
 
   let body;
-  if (recent.isPending || stats.isPending) {
+  // Only the runs gate the page; the metrics areas show their own loading and error.
+  if (recent.isPending) {
     body = <Spinner label="Loading overview" />;
   } else if (recent.isError) {
     body = <Alert title="Could not load runs">{errorMessage(recent.error)}</Alert>;
@@ -53,11 +54,11 @@ export function OverviewContainer() {
         {stats.isError ? (
           <Alert title="Some metrics could not be loaded">{errorMessage(stats.error)}</Alert>
         ) : null}
-        <OverviewKpis stats={stats.data} />
+        <OverviewKpis stats={stats.data} loading={stats.isPending} />
         <LiveNowCard runs={live.data?.items} total={live.data?.total ?? null} error={liveError} now={now} />
         <div className="flex flex-wrap items-start gap-5">
           <RecentRunsCard runs={recent.data?.items ?? []} search={search} now={now} />
-          <InsightsColumn stats={stats.data} />
+          <InsightsColumn stats={stats.data} loading={stats.isPending} />
         </div>
       </>
     );

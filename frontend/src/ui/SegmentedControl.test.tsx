@@ -47,4 +47,12 @@ describe("SegmentedControl", () => {
     expect(screen.getByRole("radio", { name: "Evaluator only" })).toHaveFocus();
     expect(screen.getByRole("radio", { name: "Evaluator only" })).toHaveAttribute("aria-checked", "true");
   });
+
+  it("checks nothing for an unknown value but keeps the first option reachable by Tab", () => {
+    render(<SegmentedControl label="Audio mix" options={MODES} value={"other" as "both"} onChange={() => {}} />);
+
+    for (const radio of screen.getAllByRole("radio")) expect(radio).toHaveAttribute("aria-checked", "false");
+    expect(screen.getByRole("radio", { name: "Both" })).toHaveAttribute("tabindex", "0");
+    expect(screen.getByRole("radio", { name: "Agent only" })).toHaveAttribute("tabindex", "-1");
+  });
 });

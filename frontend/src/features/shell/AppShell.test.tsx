@@ -114,8 +114,9 @@ describe("AppShell", () => {
 
     expect(screen.getByText("editor")).toBeInTheDocument();
     expect(screen.queryByText("Loading account")).not.toBeInTheDocument();
-    // The cached account is reused, not refetched because the sidebar remounted.
-    await new Promise((done) => setTimeout(done, 50));
+    // The cached account is reused, not refetched because the sidebar remounted: once every
+    // query has settled, the account was still asked for only once.
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     expect(calls.me).toBe(1);
   });
 

@@ -73,6 +73,33 @@ describe("Overview KPIs", () => {
   });
 });
 
+describe("Overview while the metrics load", () => {
+  it("shows the recent runs and the live strip without waiting for the metrics", async () => {
+    mockRunsApi([runFixture()]);
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    server.use(
+      http.get(apiUrl("/stats/overview"), async () => {
+        await held;
+        return HttpResponse.json(statsFixture());
+      }),
+    );
+    renderWithClient(<OverviewContainer />);
+
+    expect(await screen.findByRole("region", { name: "Recent runs" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: /Live now/ })).toBeInTheDocument();
+    expect(screen.queryByRole("status", { name: "Loading overview" })).not.toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Key metrics" })).toHaveAttribute("aria-busy", "true");
+    expect(kpi("Runs · last 7 days")).toHaveTextContent("—");
+    expect(screen.getAllByText("Loading metrics…").length).toBeGreaterThan(0);
+
+    release();
+    await waitFor(() => expect(kpi("Runs · last 7 days")).toHaveTextContent("128"));
+    expect(screen.getByRole("region", { name: "Key metrics" })).not.toHaveAttribute("aria-busy");
+    expect(screen.queryByText("Loading metrics…")).not.toBeInTheDocument();
+  });
+});
+
 describe("Overview live strip", () => {
   it("shows up to 3 running calls with their elapsed time and a way to listen in", async () => {
     mockRunsApi([

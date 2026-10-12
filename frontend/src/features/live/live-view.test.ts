@@ -99,6 +99,14 @@ describe("session cards", () => {
       "2:41 · 1 turn",
     );
   });
+
+  it("keeps the summary's turns and p50 where the live stats have nothing yet", () => {
+    const now = Date.parse("2026-10-10T12:04:12Z");
+    const done = runFixture({ endReason: "tts_failed", status: "failed", agentTurns: 2, callerTurns: 2, latencyP50Ms: 640 });
+    expect(sessionMeta(done, now, { turns: 0, p50Ms: null })).toBe("4:12 · 4 turns · p50 640 ms · Speech synthesis failed");
+    expect(sessionMeta(done, now, { turns: 5, p50Ms: null })).toBe("4:12 · 5 turns · p50 640 ms · Speech synthesis failed");
+    expect(sessionMeta(done, now, { turns: 0, p50Ms: 900 })).toBe("4:12 · 4 turns · p50 900 ms · Speech synthesis failed");
+  });
 });
 
 describe("batch progress", () => {

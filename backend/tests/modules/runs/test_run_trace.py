@@ -126,3 +126,15 @@ async def test_trace_of_a_run_in_progress_is_unavailable(app, user_client):
     run_id = await insert_run(app.state.sessionmaker, status="running")
     body = (await user_client.get(f"/api/runs/{run_id}/trace")).json()
     assert (body["available"], body["note"]) == (False, "The run is still in progress.")
+
+
+async def test_trace_with_no_usable_observations_is_unavailable_with_a_note(
+    app, user_client, tmp_path
+):
+    out = tmp_path / "artifacts"
+    out.mkdir()
+    (out / "langfuse.json").write_text(json.dumps(["not an observation", 42, None]))
+    run_id = await insert_run(app.state.sessionmaker, artifacts_dir=out, started_at=STARTED)
+    body = (await user_client.get(f"/api/runs/{run_id}/trace")).json()
+    assert (body["available"], body["observations"]) == (False, [])
+    assert body["note"] and "Langfuse" in body["note"]

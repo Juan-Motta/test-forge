@@ -73,4 +73,25 @@ describe("Runs table design", () => {
     expect(within(rows[1]).getByRole("meter")).toHaveAttribute("data-tone", "bad");
     expect(within(rows[2]).getByRole("meter")).toHaveAttribute("aria-valuetext", "Not scored");
   });
+
+  it("never calls a broken or cancelled call Passed, and leaves unscored runs blank", () => {
+    const judged = { judgementStatus: "completed" as const, score: 88 };
+    const runs = [
+      runFixture({ id: "r-failed-01", status: "failed", ...judged }),
+      runFixture({ id: "r-interrupt", status: "interrupted", ...judged }),
+      runFixture({ id: "r-cancelled", status: "cancelled", ...judged }),
+      runFixture({ id: "r-unscored1", status: "completed", judgementStatus: "completed", score: null }),
+      runFixture({ id: "r-running01", status: "running", endedAt: null }),
+    ];
+    render(<RunsTable runs={runs} onCancel={() => {}} now={Date.parse("2026-10-05T17:00:00Z")} />);
+
+    const headers = screen.getAllByRole("columnheader").map((cell) => cell.textContent);
+    const result = headers.indexOf("Result");
+    const cells = screen
+      .getAllByRole("row")
+      .slice(1)
+      .map((row) => within(row).getAllByRole("cell")[result].textContent);
+    // The Status column says what happened to the call; the Result is never "Passed" for it.
+    expect(cells).toEqual(["—", "—", "—", "—", "—"]);
+  });
 });

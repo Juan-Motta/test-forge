@@ -4,15 +4,19 @@ import { useEffect } from "react";
 
 export const LEAVE_MESSAGE = "You have unsaved changes. Leave this page and discard them?";
 
-/** The page currently holding unsaved changes, if any (one editor is visible at a time). */
-let pending: string | null = null;
+/**
+ * Active guards, oldest first; the newest one's message is asked. Each entry is its own object, so
+ * two guards with the same message stay independent.
+ */
+const pending: Array<{ message: string }> = [];
 
 /**
  * Asks before an in-app navigation (sidebar links, Cancel) would discard unsaved changes.
  * True when there is nothing to lose or the user agrees to leave.
  */
 export function confirmLeave(): boolean {
-  return pending === null || window.confirm(pending);
+  const latest = pending.at(-1);
+  return latest === undefined || window.confirm(latest.message);
 }
 
 /**
@@ -29,10 +33,12 @@ export function useUnsavedChangesGuard(dirty: boolean, message: string = LEAVE_M
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
       event.preventDefault();
     };
-    pending = message;
+    const entry = { message };
+    pending.push(entry);
     window.addEventListener("beforeunload", onBeforeUnload);
     return () => {
-      if (pending === message) pending = null;
+      const index = pending.indexOf(entry);
+      if (index !== -1) pending.splice(index, 1);
       window.removeEventListener("beforeunload", onBeforeUnload);
     };
   }, [dirty, message]);

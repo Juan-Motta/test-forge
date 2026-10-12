@@ -21,15 +21,20 @@ type LiveLanesProps = {
 /** The agent and evaluator audio of the last seconds, with the interruptions pinned on the agent's. */
 export function LiveLanes({ meter, active, startedMs, endedMs }: LiveLanesProps) {
   const tick = useNow(active ? LEVEL_BIN_MS : 1000);
-  const at = active || endedMs === null ? tick : endedMs;
+  // Bars live on the page's clock (the meter's); the run's end is on the server's. An ended run
+  // freezes on the meter's last sample, never on the server end time.
+  const frozen = !active && endedMs !== null;
+  const at = frozen ? (meter.lastSampleMs() ?? tick) : tick;
   const { agent, caller } = meter.levels(at, LANE_BINS);
   const windowStart = at - WINDOW_MS;
   const cuts = meter.cuts(AGENT_CHANNEL);
   const pins: LanePin[] = cuts
-    .map((cutAt, index) => ({ n: index + 1, at: (cutAt - windowStart) / WINDOW_MS, label: `Interruption ${index + 1}` }))
+    .map((cut) => ({ n: cut.n, at: (cut.atMs - windowStart) / WINDOW_MS, label: `Interruption ${cut.n}` }))
     // The clock ticks per bin: a cut within the current bin sits at the right edge.
     .filter((pin) => pin.at >= 0)
     .map((pin) => ({ ...pin, at: Math.min(1, pin.at) }));
+  // The axis counts run time: server end minus server start once ended, else the page's elapsed.
+  const elapsed = startedMs === null ? 0 : frozen ? endedMs - startedMs : at - startedMs;
 
   return (
     <div role="group" aria-label="Audio lanes" className="flex flex-col gap-2">
@@ -46,7 +51,7 @@ export function LiveLanes({ meter, active, startedMs, endedMs }: LiveLanesProps)
         tone="evaluator"
         values={caller}
         height={44}
-        axis={laneAxis(startedMs === null ? 0 : at - startedMs, WINDOW_MS)}
+        axis={laneAxis(elapsed, WINDOW_MS)}
       />
     </div>
   );

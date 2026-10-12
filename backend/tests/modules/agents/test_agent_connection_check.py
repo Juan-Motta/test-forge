@@ -142,3 +142,93 @@ async def test_a_rejected_handshake_is_unreachable(user_client, status):
         "ok": False,
         "message": f"The agent rejected the connection (HTTP {status})",
     }
+
+
+class _EarlyEndSession:
+    """A session whose event stream ends (or the socket closes) before it is ready."""
+
+    close_code = 1006
+
+    def __init__(self, ws, *, raises: bool):
+        self._ws = ws
+        self._raises = raises
+        self.disconnected = False
+
+    async def events(self):
+        if self._raises:
+            from websockets.exceptions import ConnectionClosed
+            from websockets.frames import Close
+
+            raise ConnectionClosed(Close(1006, ""), None)
+        return
+        yield  # an async generator that ends at once
+
+    async def disconnect(self):
+        self.disconnected = True
+        await self._ws.close()
+
+
+@pytest.mark.parametrize("raises", [True, False], ids=["connection-closed", "stream-end"])
+async def test_a_session_that_ends_before_ready_is_unreachable(
+    user_client, fake_realtime_server, monkeypatch, raises
+):
+    sessions: list[_EarlyEndSession] = []
+
+    def attach(spec, ws, protocol, pending):
+        sessions.append(_EarlyEndSession(ws, raises=raises))
+        return sessions[-1]
+
+    monkeypatch.setattr(connection_check, "attach_session", attach)
+    agent_id = await agent_for(user_client, fake_realtime_server.url)
+    response = await user_client.post(f"/api/agents/{agent_id}/test")
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert (body["reachable"], body["latencyMs"]) == (False, None)
+    assert body["log"][-1] == {
+        "ok": False,
+        "message": "The agent closed the connection before the session was ready",
+    }
+    assert sessions[0].disconnected
+
+
+async def test_a_failing_close_still_reports_a_reachable_agent(
+    user_client, fake_realtime_server, monkeypatch
+):
+    async def broken_close(session, reader, *, timeout_s):
+        raise RuntimeError("close exploded")
+
+    monkeypatch.setattr(connection_check, "close_session", broken_close)
+    agent_id = await agent_for(user_client, fake_realtime_server.url)
+    response = await user_client.post(f"/api/agents/{agent_id}/test")
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["reachable"] is True
+    assert body["log"][-1] == {"ok": False, "message": "Close failed (RuntimeError)"}
+    await fake_realtime_server.closed.wait()  # the socket was still disconnected
+
+
+async def test_an_unreadable_close_code_does_not_raise(
+    user_client, fake_realtime_server, monkeypatch
+):
+    real_attach = connection_check.attach_session
+
+    class NoCloseCode:
+        def __init__(self, inner):
+            self._inner = inner
+
+        def __getattr__(self, name):
+            return getattr(self._inner, name)
+
+        @property
+        def close_code(self):
+            raise RuntimeError("no close code")
+
+    monkeypatch.setattr(
+        connection_check,
+        "attach_session",
+        lambda *args: NoCloseCode(real_attach(*args)),
+    )
+    agent_id = await agent_for(user_client, fake_realtime_server.url)
+    body = (await user_client.post(f"/api/agents/{agent_id}/test")).json()
+    assert body["reachable"] is True
+    assert body["log"][-1] == {"ok": True, "message": "Closed"}

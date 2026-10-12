@@ -57,7 +57,15 @@ function CurrentNavigation(props: SharedNavigation) {
 }
 
 /** Wires the mobile drawer around the presentational sidebar. */
-function Navigation({ pathname, activeRuns, ...account }: SharedNavigation & { pathname: string }) {
+function Navigation({
+  pathname,
+  activeRuns,
+  user,
+  accountUnavailable,
+  onSignOut,
+  signingOut,
+  signOutError,
+}: SharedNavigation & { pathname: string }) {
   // The drawer stays open only on the route it was opened on, so any navigation closes it
   // (a link outside the drawer, browser back/forward, a redirect), not just its own links.
   const [menuOpenOn, setMenuOpenOn] = useState<string | null>(null);
@@ -80,7 +88,11 @@ function Navigation({ pathname, activeRuns, ...account }: SharedNavigation & { p
         pathname={pathname}
         environmentLabel={ENVIRONMENT_LABEL}
         badges={activeRuns ? { "/live": activeRuns } : undefined}
-        {...account}
+        user={user}
+        accountUnavailable={accountUnavailable}
+        onSignOut={onSignOut}
+        signingOut={signingOut}
+        signOutError={signOutError}
         onNavigate={() => setMenuOpenOn(null)}
         className={cn(
           "border-line-soft md:sticky md:top-0 md:flex md:h-screen md:w-60 md:shrink-0 md:border-r",

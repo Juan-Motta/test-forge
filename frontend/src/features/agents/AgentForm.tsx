@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useEffect, useId, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { get, useForm, useWatch, type Path } from "react-hook-form";
 import type { FieldErrors } from "@/lib/api";
 import { Alert, Badge, Button, Card, Field, Input, Select, Textarea } from "@/ui";
@@ -65,6 +65,8 @@ type AgentFormProps = {
   connectionCheck?: ReactNode;
   /** Cards only: cards shown after the form's own (e.g. where evaluator settings live). */
   extraCards?: ReactNode;
+  /** Told whether the form holds unsaved edits (false again once it unmounts). */
+  onDirtyChange?: (dirty: boolean) => void;
 };
 
 /** Presentational: validates locally and reports values; knows nothing about the API. */
@@ -82,6 +84,7 @@ export function AgentForm({
   connectionStatus,
   connectionCheck,
   extraCards,
+  onDirtyChange,
 }: AgentFormProps) {
   const editing = agent !== undefined;
   const {
@@ -92,8 +95,17 @@ export function AgentForm({
     setValue,
     clearErrors,
     control,
-    formState: { errors },
+    formState: { errors, isDirty },
   } = useForm<AgentFormValues>({ resolver: zodResolver(agentFormSchema), defaultValues: initialValues(agent) });
+
+  const dirtyHandler = useRef(onDirtyChange);
+  useEffect(() => {
+    dirtyHandler.current = onDirtyChange;
+  });
+  useEffect(() => {
+    dirtyHandler.current?.(isDirty);
+  }, [isDirty]);
+  useEffect(() => () => dirtyHandler.current?.(false), []);
 
   const importPanelId = useId();
   const importToggleId = useId();

@@ -411,7 +411,8 @@ async def get_trace(run_id: uuid.UUID, db: Db, runs: Manager) -> dict[str, Any]:
     path = _artifacts(run, runs) / TRACES_FILE
     observations = await asyncio.to_thread(read_json, path)
     note = None
-    if not isinstance(observations, list) or not observations:
+    usable = isinstance(observations, list) and any(isinstance(row, dict) for row in observations)
+    if not usable:
         note = await service.judgement_trace_note(db, run_id) or NO_TRACE_NOTE
     return build_trace(observations, origin=run.started_at, note=note)
 

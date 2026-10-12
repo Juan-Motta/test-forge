@@ -41,7 +41,9 @@ export function Tabs<T extends string>({
   const baseId = useId();
   const refs = useRef<Array<HTMLButtonElement | null>>([]);
   const [own, setOwn] = useState<T | undefined>(defaultValue);
-  const current = value ?? own ?? tabs[0]?.id;
+  const wanted = value ?? own;
+  // A selection that is no longer among the tabs falls back to the first one, so a tab is always selected.
+  const current = tabs.some((tab) => tab.id === wanted) ? wanted : tabs[0]?.id;
 
   function select(id: T) {
     if (value === undefined) setOwn(id);

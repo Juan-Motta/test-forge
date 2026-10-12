@@ -22,13 +22,21 @@ const MS_PER_SAMPLE = 1000 / SAMPLE_RATE;
 
 export type ChannelLevels = { agent: number[]; caller: number[] };
 
+/** One cut of a channel: its number over the whole run (1-based) and when it happened (ms). */
+export type LevelCut = { n: number; atMs: number };
+
 export type LevelMeter = {
   /** One frame of a channel, received at `nowMs`. */
   push(channel: number, pcm: ArrayBuffer, nowMs: number): void;
   /** Drops what `channel` queued after `nowMs` (e.g. the interrupted rest of an agent reply). */
   cut(channel: number, nowMs: number): void;
-  /** When `channel` was cut (ms), oldest first, within the meter's history. */
-  cuts(channel: number): number[];
+  /** The cuts of `channel` within the meter's history, oldest first, numbered over the whole run. */
+  cuts(channel: number): LevelCut[];
+  /**
+   * Where the last sample of any channel ends, or the last cut if later (ms, the meter's clock);
+   * null before anything arrived. An ended run's lanes freeze here.
+   */
+  lastSampleMs(): number | null;
   /** The last `count` bins of each channel, 0..1, ending with the bin that holds `nowMs`. */
   levels(nowMs: number, count: number): ChannelLevels;
 };
@@ -44,14 +52,20 @@ export function createLevelMeter(): LevelMeter {
   ]);
   /** Where each channel's next frame starts (ms). */
   const next = new Map<number, number>();
-  const cutTimes = new Map<number, number[]>();
+  const cutTimes = new Map<number, LevelCut[]>();
+  /** Cuts per channel since the meter was created, pruned ones included. */
+  const cutCounts = new Map<number, number>();
+  let last: number | null = null;
+  const reach = (ms: number) => {
+    last = last === null ? ms : Math.max(last, ms);
+  };
 
   function prune(nowMs: number) {
     const oldest = binOf(nowMs) - LEVEL_HISTORY_BINS;
     for (const channel of bins.values()) {
       for (const index of channel.keys()) if (index < oldest) channel.delete(index);
     }
-    for (const [channel, times] of cutTimes) cutTimes.set(channel, times.filter((at) => binOf(at) >= oldest));
+    for (const [channel, times] of cutTimes) cutTimes.set(channel, times.filter((cut) => binOf(cut.atMs) >= oldest));
   }
 
   function series(channel: Map<number, Bin>, last: number, count: number): number[] {
@@ -80,6 +94,7 @@ export function createLevelMeter(): LevelMeter {
         target.set(index, bin);
       }
       next.set(channel, start + count * MS_PER_SAMPLE);
+      reach(start + count * MS_PER_SAMPLE);
       prune(nowMs);
     },
     cut(channel, nowMs) {
@@ -88,11 +103,17 @@ export function createLevelMeter(): LevelMeter {
       const current = binOf(nowMs);
       for (const index of target.keys()) if (index > current) target.delete(index);
       next.delete(channel);
-      cutTimes.set(channel, [...(cutTimes.get(channel) ?? []), nowMs]);
+      const n = (cutCounts.get(channel) ?? 0) + 1;
+      cutCounts.set(channel, n);
+      cutTimes.set(channel, [...(cutTimes.get(channel) ?? []), { n, atMs: nowMs }]);
+      reach(nowMs);
       prune(nowMs);
     },
     cuts(channel) {
       return cutTimes.get(channel) ?? [];
+    },
+    lastSampleMs() {
+      return last;
     },
     levels(nowMs, count) {
       const last = binOf(nowMs);

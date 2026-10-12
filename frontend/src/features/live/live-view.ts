@@ -78,8 +78,9 @@ export function sessionMeta(run: Run, now: number, stats?: SessionStats): string
   const duration = runDurationMs(run, now);
   if (isActive(run.status) && duration === null) return "Starting…";
   const summaryTurns = run.agentTurns === null && run.callerTurns === null ? null : (run.agentTurns ?? 0) + (run.callerTurns ?? 0);
-  const turns = stats?.turns ?? summaryTurns;
-  const p50 = stats ? stats.p50Ms : run.latencyP50Ms;
+  // Field by field: a live value the stream has not produced yet never hides a known summary one.
+  const turns = stats && stats.turns > 0 ? stats.turns : summaryTurns;
+  const p50 = stats?.p50Ms ?? run.latencyP50Ms;
   return [
     duration === null ? null : clock(duration),
     turns === null || turns === 0 ? null : turnsText(turns),

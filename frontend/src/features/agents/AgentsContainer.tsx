@@ -5,6 +5,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { useConnections } from "@/features/connections/queries";
 import { PageHeader } from "@/features/shell/PageHeader";
 import { ApiError, errorMessage } from "@/lib/api";
+import { confirmLeave, useUnsavedChangesGuard } from "@/lib/navigation/unsaved-changes";
 import { AgentsIcon, Alert, Button, Card, Dialog, EmptyState, PlusIcon, Spinner, buttonClasses } from "@/ui";
 import { AgentForm } from "./AgentForm";
 import { AgentFormContainer, LANGFUSE_UNAVAILABLE_HINT, langfuseOptionsOf } from "./AgentFormContainer";
@@ -63,6 +64,12 @@ export function AgentsContainer({ scenarioCounts }: AgentsContainerProps = {}) {
   // The Delete button had focus; once the dialog is gone, hand focus to the page title.
   const titleRef = useRef<HTMLHeadingElement>(null);
   const focusTitle = useRef(false);
+  // The open agent's form holds unsaved edits: switching agents (or leaving the page) asks first.
+  const [dirty, setDirty] = useState(false);
+  useUnsavedChangesGuard(dirty);
+  // Bumped per agent after a successful save: the form remounts on what is stored now. A
+  // background refetch alone never remounts it, so it never discards edits.
+  const [formVersions, setFormVersions] = useState<Record<string, number>>({});
 
   const list = agents.data ?? [];
   const selected = list.find((agent) => agent.id === requestedId) ?? list[0];
@@ -76,6 +83,7 @@ export function AgentsContainer({ scenarioCounts }: AgentsContainerProps = {}) {
 
   function select(id: string) {
     if (id === selected?.id) return;
+    if (!confirmLeave()) return;
     save.reset();
     setRequestedId(id);
     writeAgentToAddress(id);
@@ -89,6 +97,7 @@ export function AgentsContainer({ scenarioCounts }: AgentsContainerProps = {}) {
       writeAgentToAddress(agent.id);
     } else {
       setNotice(outcome === "saved" ? `Saved ${agent.name}.` : "No changes to save.");
+      if (outcome === "saved") setFormVersions((current) => ({ ...current, [agent.id]: (current[agent.id] ?? 0) + 1 }));
     }
   }
 
@@ -211,8 +220,8 @@ export function AgentsContainer({ scenarioCounts }: AgentsContainerProps = {}) {
             <Spinner label="Loading connections" />
           ) : (
             <AgentForm
-              // A fresh form per agent and per saved version: it shows what is stored now.
-              key={`${selected.id}:${selected.updatedAt}`}
+              // A fresh form per agent and after each of its saves; not on a background refetch.
+              key={`${selected.id}:${formVersions[selected.id] ?? 0}`}
               layout="cards"
               formId={formId}
               agent={selected}
@@ -225,6 +234,7 @@ export function AgentsContainer({ scenarioCounts }: AgentsContainerProps = {}) {
               connectionStatus={<ReachabilityPill state={test} />}
               connectionCheck={<ConnectionCheck state={test} onRun={() => void runTest(selected)} />}
               extraCards={<EvaluatorNote />}
+              onDirtyChange={setDirty}
             />
           )}
         </div>
