@@ -249,9 +249,12 @@ def test_realtime_instructions_require_a_spoken_goodbye_before_hang_up(rule):
     from voice_eval.evaluator.prompt import realtime_instructions
 
     text = realtime_instructions(replace(BRIEF, hang_up_when=rule))
-    assert (
-        "always say a short goodbye out loud in the same response before calling `hang_up`" in text
-    )
+    for part in (
+        "you end the call: the agent never hangs up",
+        "say a short goodbye out loud and call `hang_up` in that same response",
+        "If the agent answers after you said goodbye, do not reply to it: just call `hang_up`",
+    ):
+        assert part in text, part
 
 
 def test_the_realtime_interruption_note_keeps_the_caller_in_its_role():

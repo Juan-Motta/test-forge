@@ -434,6 +434,12 @@ class SessionRunner:
             if not speech.attached:
                 await self._drop(speech)
         self._realtime_decided(speech, row)
+        if goodbye_asked and speech.hang_up is None and self.options.hang_up_when != "max_duration":
+            # The caller ends the call (the agent never does): the goodbye it was asked for closes
+            # the call even when the model forgets the tool, so goodbyes cannot ping-pong.
+            if said is not None:
+                await self._wait_until(said.is_set)
+            raise Stop("completed", "caller_hung_up")
         if speech.hang_up is not None:
             if self.options.hang_up_when == "max_duration":
                 self._warn("the caller tried to hang up; this scenario ends only at max duration")

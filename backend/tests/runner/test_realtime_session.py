@@ -355,3 +355,18 @@ async def test_a_second_silent_hang_up_ends_the_call(fake_live_server, tmp_path)
     assert (summary["status"], summary["reason"]) == ("completed", "caller_hung_up")
     assert caller.tool_outputs == [("call_a", SAY_GOODBYE_OUTPUT), ("call_b", HUNG_UP_OUTPUT)]
     assert len(caller.responses) == 3
+
+
+async def test_the_asked_for_goodbye_ends_the_call_even_without_the_tool(
+    fake_live_server, tmp_path
+):
+    from voice_eval.runner.session import SAY_GOODBYE_OUTPUT
+
+    caller = FakeRealtimeCaller([spoken("Hello"), [HangUp("call_silent", "done")], spoken("Bye")])
+    summary, _ = await run(fake_live_server.url, tmp_path, caller)
+
+    assert (summary["status"], summary["reason"]) == ("completed", "caller_hung_up")
+    assert caller.tool_outputs == [("call_silent", SAY_GOODBYE_OUTPUT)]
+    assert len(caller.responses) == 3  # no further turn: goodbyes cannot ping-pong
+    caller_rows = [r["text"] for r in transcript(tmp_path) if r["role"] == "caller"]
+    assert caller_rows == ["Hello", "Bye"]

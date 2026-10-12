@@ -120,8 +120,9 @@ def system_prompt(brief: CallerBrief) -> str:
 
 
 REALTIME_GOODBYE = (
-    "always say a short goodbye out loud in the same response before calling `hang_up`; never "
-    "hang up in silence."
+    "you end the call: the agent never hangs up. When you are done, say a short goodbye out loud "
+    "and call `hang_up` in that same response; never hang up in silence. If the agent answers "
+    "after you said goodbye, do not reply to it: just call `hang_up`."
 )
 REALTIME_HANG_UP_RULES = {
     "goal_or_goodbye": (
