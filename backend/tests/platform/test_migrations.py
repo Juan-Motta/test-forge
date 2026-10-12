@@ -20,6 +20,7 @@ TABLES = {
     "run_batches",
     "runs",
     "run_judgements",
+    "api_keys",
 }
 
 
@@ -33,6 +34,7 @@ async def _tables(url: str) -> set[str]:
 
 async def _schema_diff(url: str) -> list:
     import voice_eval.modules.agents.models  # noqa: F401 - registers the tables on Base
+    import voice_eval.modules.api_keys.models  # noqa: F401
     import voice_eval.modules.connections.models  # noqa: F401
     import voice_eval.modules.runs.models  # noqa: F401
     import voice_eval.modules.scenarios.models  # noqa: F401

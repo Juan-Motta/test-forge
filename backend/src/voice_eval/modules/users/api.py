@@ -104,7 +104,8 @@ async def login(
 async def logout(
     principal: Annotated[Principal, Depends(current_principal)], db: Db, settings: AppSettings
 ) -> Response:
-    await revoke_session(db, principal.session_id)
+    if principal.session_id is not None:  # an API key is revoked only from `/api/api-keys`
+        await revoke_session(db, principal.session_id)
     response = Response(status_code=status.HTTP_204_NO_CONTENT)
     response.delete_cookie(
         settings.session_cookie_name,

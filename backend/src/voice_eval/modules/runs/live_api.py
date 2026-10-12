@@ -1,9 +1,11 @@
 """Live WebSocket endpoints: `/api/runs/{id}/live` (one run) and `/api/runs/live?batchId=`.
 
-Browsers cannot set headers on a WebSocket, so the stream authenticates with the session cookie
-(the same resolution as HTTP requests) and, like any cookie-authenticated unsafe request, must
-come from one of `WEB_ORIGINS`. The connection is accepted first so the refusal can carry a close
-code: 4403 foreign or missing Origin, 4401 no valid session, 4404 unknown run or batch, 1013 the
+Browsers cannot set headers on a WebSocket, so they authenticate with the session cookie (the
+same resolution as HTTP requests) and, like any cookie-authenticated unsafe request, must come
+from one of `WEB_ORIGINS`. Other clients send `Authorization: Bearer <API key or session token>`
+instead; like a Bearer HTTP request, that skips the Origin check (a browser cannot attach the
+header). The connection is accepted first so the refusal can carry a close code: 4403 foreign or
+missing Origin (cookie only), 4401 not authenticated, 4404 unknown run or batch, 1013 the
 consumer was too slow. Message format: see `modules.runs.live`.
 """
 
@@ -19,7 +21,12 @@ from voice_eval.modules.runs.api import RunOut, camelize
 from voice_eval.modules.runs.domain import BatchNotFound, Run, RunNotFound
 from voice_eval.modules.runs.live import Subscriber, message
 from voice_eval.modules.runs.manager import RunManager, read_json
-from voice_eval.modules.users.deps import authenticate, origin_allowed
+from voice_eval.modules.users.deps import (
+    authenticate,
+    authenticate_bearer,
+    bearer_token,
+    origin_allowed,
+)
 from voice_eval.platform.settings import Settings
 
 CLOSE_UNAUTHENTICATED = 4401
@@ -31,9 +38,17 @@ router = APIRouter(prefix="/runs", tags=["runs"])
 
 
 async def _admit(websocket: WebSocket) -> bool:
-    """Accept, then close with the refusal code unless the Origin and the session are valid."""
+    """Accept, then close with the refusal code unless the caller is authenticated: by a Bearer
+    header, or by the session cookie from an allowed Origin."""
     await websocket.accept()
     settings: Settings = websocket.app.state.settings
+    if bearer := bearer_token(websocket.headers):
+        async with websocket.app.state.sessionmaker() as db:
+            principal = await authenticate_bearer(db, bearer)
+        if principal is None:
+            await websocket.close(CLOSE_UNAUTHENTICATED, "Not authenticated")
+            return False
+        return True
     origin = websocket.headers.get("origin")
     if origin is None or not origin_allowed(origin, settings):
         await websocket.close(CLOSE_FORBIDDEN_ORIGIN, "Origin not allowed")

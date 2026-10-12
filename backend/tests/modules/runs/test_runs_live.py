@@ -97,6 +97,19 @@ async def test_rejects_a_foreign_or_missing_origin(server, user_client):
     assert await close_code(url, {"Cookie": cookie}) == 4403
 
 
+async def test_an_api_key_header_authenticates_without_origin(server, user_client):
+    created = await user_client.post("/api/api-keys", json={"name": "ws"})
+    assert created.status_code == 201, created.text
+    key = created.json()["key"]
+    url = f"{server}/api/runs/{uuid.uuid4()}/live"
+    # authenticated (the run is unknown, so 4404), with or without an Origin
+    assert await close_code(url, {"Authorization": f"Bearer {key}"}) == 4404
+    assert await close_code(url, {"Authorization": f"Bearer {key}", "Origin": ORIGIN}) == 4404
+    assert await close_code(url, {"Authorization": "Bearer ve_aaaaaaaa_forged"}) == 4401
+    await user_client.delete(f"/api/api-keys/{created.json()['id']}")
+    assert await close_code(url, {"Authorization": f"Bearer {key}"}) == 4401
+
+
 async def test_unknown_run_or_batch_is_4404(server, user_client):
     headers = {"Origin": ORIGIN, "Cookie": cookie_of(user_client)}
     assert await close_code(f"{server}/api/runs/{uuid.uuid4()}/live", headers) == 4404

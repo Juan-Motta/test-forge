@@ -148,8 +148,8 @@ Speech is requested as `response_format="pcm"` (raw 24 kHz 16-bit mono), the tar
 
 FastAPI app over PostgreSQL 17 (SQLAlchemy 2 async + asyncpg, Alembic migrations). Layout:
 `voice_eval/platform/` (settings, database, app factory, migrations) and one package per
-business module under `voice_eval/modules/` (`users`, `connections`, `agents`,
-`scenarios`, `runs`).
+business module under `voice_eval/modules/` (`users`, `api_keys`, `connections`, `agents`,
+`scenarios`, `runs`, `judgements`).
 
 ### Running locally
 
@@ -229,9 +229,10 @@ stays `true` unless explicitly set to `false` (needed for plain-HTTP local devel
   after `SESSION_TTL_HOURS` (fixed, not sliding) and stop working when the user is deactivated.
   Activity (`last_seen_at`) is recorded at most once a minute. Every login attempt that reaches
   password verification also deletes up to 500 expired sessions.
-- Everything under `/api` requires a session except `/api/health` and `/api/auth/login`.
-  The cookie is checked first, then `Authorization: Bearer <token>`. Failures are `401` with
-  `WWW-Authenticate: Bearer`.
+- Everything under `/api` requires a session or an API key except `/api/health` and
+  `/api/auth/login`. The cookie is checked first, then `Authorization: Bearer <token>`, where
+  the token is an API key (`ve_...`, see below) or a session token. Failures are the same
+  `401 Not authenticated` with `WWW-Authenticate: Bearer`, whatever was wrong.
 - CSRF baseline: besides SameSite=Lax, a cookie-authenticated `POST/PUT/PATCH/DELETE` (and any
   login) whose `Origin` header is present but not in `WEB_ORIGINS` gets `403`. Bearer requests
   skip this check. CORS allows only `WEB_ORIGINS`, with credentials.
@@ -240,6 +241,49 @@ stays `true` unless explicitly set to `false` (needed for plain-HTTP local devel
 curl -s -H 'X-Client: cli' -H 'Content-Type: application/json' \
   -d '{"email":"you@example.com","password":"..."}' http://localhost:8000/api/auth/login
 curl -s -H "Authorization: Bearer $TOKEN" http://localhost:8000/api/auth/me
+```
+
+### API keys
+
+Personal API keys let CI, scripts or a coding agent call the API without a password login. A key
+acts as its owner (same permissions); every user sees and manages only their own keys.
+
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /api/api-keys` | `[{id, name, prefix, createdAt, lastUsedAt, expiresAt, revokedAt}]`, newest first, revoked ones included |
+| `POST /api/api-keys` | `{name (1-80), expiresInDays? (1-3650, omitted or null: never)}` -> `201`, the same fields plus `key` |
+| `DELETE /api/api-keys/{id}` | `204`, revokes the key (again: still `204`); `404` for an unknown id or another user's key |
+
+- Format `ve_<8 lowercase letters/digits>_<43 base62 characters>` (256 random bits). `key` is
+  returned once, by `POST`; afterwards only `prefix` (`ve_xxxxxxxx`) identifies it. Only the
+  SHA-256 of the whole key is stored (a random 256-bit secret needs no slow hash); the lookup
+  goes by prefix and compares hashes in constant time.
+- Send it as `Authorization: Bearer ve_...`. Like any Bearer request, it skips the Origin check.
+  A revoked or expired key, or a key of a deactivated user, gets the same `401` as a bad session
+  token. Use (`lastUsedAt`) is recorded at most once a minute. `POST /api/auth/logout` with a key
+  does nothing to the key; revoke it with `DELETE`.
+- Keys are managed by any principal of their owner: a browser session (Settings -> API keys in
+  the web app) or another key of the same user.
+
+#### Using the API with an API key
+
+Create a key in the web app (Settings -> API keys) and copy it: it is shown only once. Then, from
+the platform's URL (`http://localhost:3000` locally; `/api` reaches the backend):
+
+```bash
+export VE_URL=http://localhost:3000
+export VE_KEY=ve_...                       # the key you copied
+auth=(-H "Authorization: Bearer $VE_KEY")
+
+curl -s "${auth[@]}" "$VE_URL/api/runs"    # list runs, newest first
+
+# launch a scenario (twice); the batch lists its runs
+curl -s "${auth[@]}" -H 'Content-Type: application/json' \
+  -d '{"scenarioIds":["<scenario id>"],"repetitions":2}' "$VE_URL/api/runs"
+
+curl -s "${auth[@]}" "$VE_URL/api/runs/<run id>"              # poll until status is final
+curl -s "${auth[@]}" "$VE_URL/api/runs/<run id>/judgement"    # score, verdicts, result.brief
+curl -s "${auth[@]}" "$VE_URL/api/runs/<run id>/judgement" | jq -r .result.brief  # Markdown brief
 ```
 
 `GET /api/health` returns `{"status": "ok"}` after a database ping, or `503
@@ -592,8 +636,10 @@ stderr). It exits `1` for an unknown, ambiguous or unfinished run and `4` when a
 `GET /api/runs/{id}/live` (WebSocket) streams one run while it is running;
 `GET /api/runs/live?batchId=` streams a batch overview. Browsers cannot add headers to a
 WebSocket, so both authenticate with the session cookie (the same resolution as HTTP requests)
-and must come from one of `WEB_ORIGINS`. The server accepts the upgrade, then closes with `4403`
-(missing or foreign Origin), `4401` (no valid session) or `4404` (unknown run or batch).
+and must come from one of `WEB_ORIGINS`. Other clients may send `Authorization: Bearer <API key
+or session token>` instead, which skips the Origin check. The server accepts the upgrade, then
+closes with `4403` (cookie without an allowed Origin), `4401` (not authenticated) or `4404`
+(unknown run or batch).
 
 Text frames are JSON objects with a `type`, camelCase fields and `tMs` (milliseconds since the
 run started) where it applies:

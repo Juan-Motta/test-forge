@@ -1,4 +1,5 @@
-"""FastAPI application factory. Everything under `/api` requires a session by default."""
+"""FastAPI application factory. Everything under `/api` requires a session or an API key by
+default."""
 
 import asyncio
 import logging
@@ -12,6 +13,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
 from voice_eval.modules.agents import api as agents_api
+from voice_eval.modules.api_keys import api as api_keys_api
 from voice_eval.modules.connections import api as connections_api
 from voice_eval.modules.judgements import api as judgements_api
 from voice_eval.modules.judgements.coordinator import JudgementCoordinator
@@ -117,6 +119,7 @@ def create_app(
 
     protected = APIRouter(dependencies=[Depends(current_principal)])
     protected.include_router(users_api.protected_router)
+    protected.include_router(api_keys_api.router)
     protected.include_router(connections_api.router)
     protected.include_router(agents_api.router)
     protected.include_router(scenarios_api.router)
