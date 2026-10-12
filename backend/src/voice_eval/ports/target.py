@@ -63,6 +63,23 @@ class AgentBusy(ServerEvent):
 
 
 @dataclass(frozen=True, kw_only=True)
+class ItemTruncated(ServerEvent):
+    """The agent's server confirmed it truncated a conversation item's audio (and its text) at
+    `audio_end_ms`: what it will remember of that item after a reported barge-in."""
+
+    item_id: str
+    audio_end_ms: int | None
+
+
+@dataclass(frozen=True, kw_only=True)
+class ItemDeleted(ServerEvent):
+    """The agent's server confirmed it deleted a conversation item (a barge-in before any of
+    its audio played)."""
+
+    item_id: str
+
+
+@dataclass(frozen=True, kw_only=True)
 class ServerError(ServerEvent):
     message: str
 

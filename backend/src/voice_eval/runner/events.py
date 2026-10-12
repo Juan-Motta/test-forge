@@ -5,9 +5,12 @@ Types, in the order a run produces them: `run_started`, `protocol_detected`, the
 `caller_speaking` (the first frame of a decision's words was sent), `caller_decision_discarded`
 (the agent spoke again before a decision was said; the policy decides again), `agent_barge_in`
 (an agent turn started while the caller was mid-utterance), `caller_interrupted` (the caller cut
-the agent off: `agent_turn`, `audio_end_ms`, `heard_text`), and last `run_finished`. The
-`agent_transcript` of an interrupted turn also carries `interrupted`, `heard_text` and
-`audio_end_ms`.
+the agent off: `agent_turn`, `audio_end_ms`, `heard_text`), `interruption_confirmed` (the agent's
+server applied the cut to one reported audio item: `agent_turn`, `item_id`, `kind` = `truncated`
+| `deleted`, `audio_end_ms` as the server applied it; it may arrive after later turns), and last
+`run_finished`. The `agent_transcript` of an interrupted turn also carries `interrupted`,
+`heard_text`, `heard_text_estimated` (always true: the played share of the audio applied to the
+text), `audio_end_ms` and `interruption_confirmed` (as of that moment).
 `caller_speech_synthesized` (the decision's streamed synthesis ended) may come before or after
 its `caller_speaking`.
 `caller_decision`, `caller_speaking`, `caller_speech_synthesized` and `caller_decision_discarded`

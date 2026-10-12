@@ -2,13 +2,18 @@
 
 Text messages are JSON objects with a camelCase `type`: `snapshot` (first, always), `status`,
 `agentTranscript`, `callerDecision`, `callerSpeaking`, `callerDecisionDiscarded`, `agentBargeIn`,
-`callerInterrupted`, `turnEnded`, `warning`, `lagging`, and last `finished`. A `callerDecision`
-is only the evaluator's intent: its words join the transcript once `callerSpeaking` confirms they
-are being said, and a `callerDecisionDiscarded` one is never said. `callerInterrupted`
+`callerInterrupted`, `interruptionConfirmed`, `turnEnded`, `warning`, `lagging`, and last
+`finished`. A `callerDecision` is only the evaluator's intent: its words join the transcript
+once `callerSpeaking` confirms they are being said, and a `callerDecisionDiscarded` one is never
+said. `callerInterrupted`
 (`agentTurn`, `audioEndMs`, `heardText`) marks the caller cutting the agent off: agent audio
 already streamed past that point was never heard (a player should drop what it still queues), and
 the rest of that reply is not streamed. The agent line of an interrupted turn (`agentTranscript`
-and the snapshot) also carries `interrupted`, `heardText` and `audioEndMs`.
+and the snapshot) also carries `interrupted`, `heardText`, `heardTextEstimated` (always true: the
+heard text is the played share of the audio applied to the text, an estimate) and `audioEndMs`.
+`interruptionConfirmed` (`agentTurn`, `itemId`, `kind` = `truncated` | `deleted`, `audioEndMs`
+as the agent's server applied it) is sent once per reported audio item when the agent's server
+confirms it applied the cut; it may come after later turns, and never comes for an unconfirmed one.
 Audio goes out as binary frames: one channel byte (`0` agent, `1` caller) followed by the raw
 PCM16 little-endian 24 kHz mono chunk.
 
@@ -37,10 +42,11 @@ CALLER_CHANNEL = 1
 AUDIO_CHANNELS = {"agent_audio": AGENT_CHANNEL, "caller_audio": CALLER_CHANNEL}
 AUDIO_FRAMES_PER_SUBSCRIBER = 3000  # whole agent replies arrive in bursts; keep them all
 TEXT_MESSAGES_PER_SUBSCRIBER = 1000
-INTERRUPTION_MARKS = ("interrupted", "heard_text", "audio_end_ms")  # of an interrupted agent line
+# of an interrupted agent line (its confirmation streams as `interruptionConfirmed` messages)
+INTERRUPTION_MARKS = ("interrupted", "heard_text", "heard_text_estimated", "audio_end_ms")
 
 
-def message(kind: str, **fields: Any) -> str:
+def message(kind: str, /, **fields: Any) -> str:
     return json.dumps({"type": kind, **fields}, ensure_ascii=False)
 
 
@@ -183,6 +189,15 @@ class LiveHub:
                     agentTurn=data["agent_turn"],
                     audioEndMs=data["audio_end_ms"],
                     heardText=data["heard_text"],
+                )
+            case "interruption_confirmed":
+                text = message(
+                    "interruptionConfirmed",
+                    tMs=t_ms,
+                    agentTurn=data["agent_turn"],
+                    itemId=data["item_id"],
+                    kind=data["kind"],
+                    audioEndMs=data["audio_end_ms"],
                 )
             case "caller_decision":
                 text = message(

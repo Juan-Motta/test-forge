@@ -490,9 +490,20 @@ only what was heard. The rest of that reply is dropped (not counted, not streame
 a `caller_interrupted` event is published, and the policy gets only the heard part of the
 agent's text (proportional to played vs received audio, cut at a word boundary) marked as
 interrupted; the caller speaks right away and its audio streams as usual (server VAD may also
-fire). The agent row in `transcript.json` keeps the full text plus `interrupted: true`,
-`heard_text` and `audio_end_ms`; `summary.json` lists `interruptions` (`agent_turn`,
-`audio_end_ms`, `heard_chars`, `total_chars`).
+fire). The heard part is an estimate (no word/audio alignment), so the judge prompt presents
+it as "approximately heard" and tolerates a word or one list item around the cut. The Vivi
+relay sends no acknowledgement of its own, but it relays the provider's
+`conversation.item.truncated` `{item_id, content_index, audio_end_ms}` (or
+`conversation.item.deleted` `{item_id}` for an item reported with `audioEndMs: null`); the
+runner correlates them by item id with what it reported, until the run ends (late ones count),
+and publishes one `interruption_confirmed` event per item (`agent_turn`, `item_id`, `kind`,
+`audio_end_ms`). The agent row in `transcript.json` keeps the full text plus
+`interrupted: true`, `heard_text`, `heard_text_estimated: true`, `audio_end_ms` and
+`interruption_confirmed` (every reported item confirmed); `summary.json` lists `interruptions`
+(`agent_turn`, `audio_end_ms`, `heard_chars`, `total_chars`, `confirmation` = `truncated` |
+`deleted` | null until every reported item is confirmed, `confirmed_audio_end_ms` from the
+server (kept even when it differs from what was sent), `confirmed_at_ms`, and `items`
+`[{item_id, sent_audio_end_ms, confirmation, confirmed_audio_end_ms}]`).
 
 **Realtime evaluator** (scenario `evaluatorMode: realtime`). No policy or TTS: the scenario's
 voice connection hosts a session of the scenario's `realtimeModel` (OpenAI
@@ -533,7 +544,7 @@ at `maxDurationS`, or after `maxSilenceS` without agent audio or caller speech (
 even when the caller audio sender failed. Events (`run_started`, `protocol_detected`,
 `agent_audio`, `agent_transcript`, `turn_ended`, `caller_decision`, `caller_audio`, `warning`,
 `caller_speaking`, `caller_speech_synthesized`, `caller_decision_discarded`, `agent_barge_in`,
-`caller_interrupted`, `run_finished`) go in order to an injected async sink. For latency
+`caller_interrupted`, `interruption_confirmed`, `run_finished`) go in order to an injected async sink. For latency
 breakdowns `caller_decision` carries `started_ms` (run time the policy was asked) and
 `duration_ms`, `caller_speaking` carries `tts_first_chunk_ms` (synthesis start to first chunk),
 and `caller_speech_synthesized` (the stream ended) carries `tts_first_chunk_ms` and
@@ -676,12 +687,13 @@ run started) where it applies:
 | --- | --- |
 | `snapshot` | First message: `run {id, batchId, status, endReason}`, `transcript` so far (only caller lines actually spoken), `turns` so far |
 | `status` | `status` (`connecting`, `running`) |
-| `agentTranscript` | `turn`, `text`: what the agent said in a finished turn; an interrupted one adds `interrupted: true`, `heardText`, `audioEndMs` |
+| `agentTranscript` | `turn`, `text`: what the agent said in a finished turn; an interrupted one adds `interrupted: true`, `heardText` (an estimate), `heardTextEstimated: true`, `audioEndMs` |
 | `callerDecision` | `decisionId`, `say` (null: stay silent), `hangUp`, `reason` (the evaluator's own reason): an intent, not yet said |
 | `callerSpeaking` | `decisionId`, `say`, `reason`: the caller started saying that decision; only now it joins the transcript |
 | `callerDecisionDiscarded` | `decisionId`: the agent spoke again first, so that decision is never said (a new one follows) |
 | `agentBargeIn` | `callerTurn`: an agent turn started while the caller was mid-utterance |
 | `callerInterrupted` | `agentTurn`, `audioEndMs`, `heardText`: the caller cut the agent off; agent audio already streamed past this point was never heard (drop what is still queued) and the rest of that reply is not streamed |
+| `interruptionConfirmed` | `agentTurn`, `itemId`, `kind` (`truncated` \| `deleted`), `audioEndMs`: the agent's server confirmed it applied the cut to one reported audio item (may come after later turns; never for an unconfirmed one) |
 | `turnEnded` | `turn`, `firstAudioMs`, `endMs`, `playbackEndMs`, `latencyMs`, `endReason` |
 | `warning` | `message` |
 | `lagging` | `message`: audio frames were dropped for this consumer (text never is) |

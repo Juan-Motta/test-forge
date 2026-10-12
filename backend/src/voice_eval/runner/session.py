@@ -15,7 +15,11 @@ A scenario may make the caller barge in (legacy realtime only; see `runner.barge
 `after_ms` of agent turn N has played, the runner cuts the simulated playback, reports
 `playback.interrupted` for every audio item still playing, drops the rest of that reply (it never
 reaches live listeners nor `agent.wav`), and the policy decides on only the part of the agent's
-text that was heard; the caller then speaks without waiting for the cut reply to play.
+text that was heard; the caller then speaks without waiting for the cut reply to play. The heard
+text is an estimate (the played share of the audio applied to the text). The agent's server
+confirms each report by relaying `conversation.item.truncated` (or `.deleted` for an item that
+had not started): the runner correlates those by item id, until the run ends, and records them
+per interruption (`confirmation`, per-item detail) and on the interrupted transcript row.
 
 With a realtime caller (`realtime`, the scenario's realtime evaluator) no policy or TTS is used:
 a speech-to-speech model hears the agent's audio as it arrives (`runner.realtime`) and, at the
@@ -57,6 +61,8 @@ from voice_eval.ports.target import (
     AgentBusy,
     AudioDelta,
     Closed,
+    ItemDeleted,
+    ItemTruncated,
     Ready,
     ResponseDone,
     ResponseStarted,
@@ -195,6 +201,11 @@ class SessionRunner:
         self._cut_items: set[str] = set()
         self._cut_responses: set[str] = set()
         self.interruptions: list[dict[str, Any]] = []
+        # item id -> (agent turn, its report record) for every item reported as interrupted
+        self._reported: dict[str, tuple[int, dict[str, Any]]] = {}
+        self._confirmed_at: dict[str, float] = {}  # item id -> run time of its confirmation
+        # agent turn -> its interruption record and transcript row (None: no row), kept current
+        self._interrupted: dict[int, tuple[dict[str, Any], dict[str, Any] | None]] = {}
         self._feed: AgentAudioFeed | None = None
         self._cuts_noted = 0  # interruptions the realtime caller was told about
 
@@ -701,10 +712,16 @@ class SessionRunner:
             heard = text
         else:
             heard = heard_text(text, cut.fraction)
-            marks = {"interrupted": True, "heard_text": heard, "audio_end_ms": cut.audio_end_ms}
+            marks = {
+                "interrupted": True,
+                "heard_text": heard,
+                "heard_text_estimated": True,
+                "audio_end_ms": cut.audio_end_ms,
+            }
             row.update(marks)
             data.update(marks)
-            self._record_interruption(cut, heard, text)
+            self._record_interruption(cut, heard, text, row if text else None)
+            data["interruption_confirmed"] = row["interruption_confirmed"]
         if not text:
             self._warn("the agent turn had no transcript")
             if cut is None:
@@ -757,33 +774,90 @@ class SessionRunner:
         self._cut_items |= {item.item_id for item in items}
         self._cut_responses |= {item.response_id for item in items if item.response_id}
         self.detector.interrupt(turn, turn.first_audio_ms + position)
+        reported: list[ItemCut] = []
         for item in cuts:
             if item.response_id is None:
                 self._warn(f"agent audio item {item.item_id} has no response id: not reported")
                 continue
+            # Expect the confirmation before sending: the reader may get it during the await.
+            self._expect_confirmation(plan.agent_turn, item)
             try:
                 await self.session.send_playback_interrupted(
                     item.item_id, item.response_id, item.audio_end_ms
                 )
             except (ConnectionClosed, WebSocketException) as exc:
+                self._reported.pop(item.item_id, None)
                 self._warn(f"could not report the interruption ({type(exc).__name__})")
                 break
+            reported.append(item)
         return Cut(
             agent_turn=plan.agent_turn,
             audio_end_ms=played_ms(position_bytes(position)),
             fraction=position / received_ms if received_ms else 0.0,
             item_ids={item.item_id for item in items},
+            reported=tuple(reported),
         )
 
-    def _record_interruption(self, cut: Cut, heard: str, text: str) -> None:
-        self.interruptions.append(
+    def _expect_confirmation(self, agent_turn: int, item: ItemCut) -> None:
+        self._reported[item.item_id] = (
+            agent_turn,
             {
-                "agent_turn": cut.agent_turn,
-                "audio_end_ms": cut.audio_end_ms,
-                "heard_chars": len(heard),
-                "total_chars": len(text),
-            }
+                "item_id": item.item_id,
+                "sent_audio_end_ms": item.audio_end_ms,
+                "confirmation": None,
+                "confirmed_audio_end_ms": None,
+            },
         )
+
+    def _on_confirmation(self, item_id: str, kind: str, audio_end_ms: int | None) -> None:
+        """The agent's server applied a reported interruption to one item (first word counts)."""
+        reported = self._reported.get(item_id)
+        if reported is None or reported[1]["confirmation"] is not None:
+            return  # not an item the caller cut off, or already confirmed
+        agent_turn, item = reported
+        item["confirmation"], item["confirmed_audio_end_ms"] = kind, audio_end_ms
+        self._publish(
+            "interruption_confirmed",
+            {
+                "agent_turn": agent_turn,
+                "item_id": item_id,
+                "kind": kind,
+                "audio_end_ms": audio_end_ms,
+            },
+        )
+        self._confirmed_at[item_id] = self.events[-1]["t_ms"]
+        if (views := self._interrupted.get(agent_turn)) is not None:
+            self._refresh_confirmation(*views)
+
+    def _refresh_confirmation(self, record: dict[str, Any], row: dict[str, Any] | None) -> None:
+        """Confirmed only once every reported item is: `truncated` when any item was truncated
+        (its position is `confirmed_audio_end_ms`), `deleted` when all were deleted."""
+        items = record["items"]
+        confirmation = confirmed_end = confirmed_at = None
+        if items and all(item["confirmation"] for item in items):
+            truncated = [item for item in items if item["confirmation"] == "truncated"]
+            confirmation = "truncated" if truncated else "deleted"
+            confirmed_end = truncated[0]["confirmed_audio_end_ms"] if truncated else None
+            confirmed_at = max(self._confirmed_at[item["item_id"]] for item in items)
+        record["confirmation"] = confirmation
+        record["confirmed_audio_end_ms"] = confirmed_end
+        record["confirmed_at_ms"] = confirmed_at
+        if row is not None:
+            row["interruption_confirmed"] = confirmation is not None
+
+    def _record_interruption(
+        self, cut: Cut, heard: str, text: str, row: dict[str, Any] | None
+    ) -> None:
+        record: dict[str, Any] = {
+            "agent_turn": cut.agent_turn,
+            "audio_end_ms": cut.audio_end_ms,
+            "heard_chars": len(heard),
+            "total_chars": len(text),
+            "items": [self._reported[item.item_id][1] for item in cut.reported],
+        }
+        self._interrupted[cut.agent_turn] = (record, row)
+        self._refresh_confirmation(record, row)
+        self.interruptions.append(record)
         self._publish(
             "caller_interrupted",
             {"agent_turn": cut.agent_turn, "audio_end_ms": cut.audio_end_ms, "heard_text": heard},
@@ -925,6 +999,10 @@ class SessionRunner:
             case AgentBusy():
                 self.detector.on_busy(t)
                 self._last_activity_ms = t
+            case ItemTruncated(item_id=item_id, audio_end_ms=audio_end_ms):
+                self._on_confirmation(item_id, "truncated", audio_end_ms)
+            case ItemDeleted(item_id=item_id):
+                self._on_confirmation(item_id, "deleted", None)
             case ServerError(message=message):
                 self._warn(f"server error: {message}")
             case Closed():

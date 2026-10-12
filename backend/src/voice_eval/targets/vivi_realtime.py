@@ -9,7 +9,10 @@ Same endpoint URL as Live; the backend picks this path from the agent config. Co
 - there is no end-of-session event: the client closes the socket with code 1000;
 - a barge-in is reported like the web client does, one `playback.interrupted` per audio item
   still playing (the relay handles it before its allow-list: it cancels and truncates the
-  response itself, so the agent remembers only what was heard).
+  response itself, so the agent remembers only what was heard); it sends no acknowledgement of
+  its own but relays the provider's `conversation.item.truncated` (or `conversation.item.deleted`
+  for an item reported with a null `audioEndMs`), which this adapter surfaces as `ItemTruncated`
+  / `ItemDeleted` so a run can show the correction was applied.
 """
 
 import json
@@ -21,6 +24,8 @@ from voice_eval.audio import b64decode
 from voice_eval.ports.target import (
     AgentBusy,
     AudioDelta,
+    ItemDeleted,
+    ItemTruncated,
     Ready,
     ResponseDone,
     ResponseStarted,
@@ -125,6 +130,10 @@ def _text_or_none(value: Any) -> str | None:
     return value if isinstance(value, str) and value else None
 
 
+def _ms_or_none(value: Any) -> int | None:
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
 def _response_id(raw: dict[str, Any]) -> str | None:
     response = raw.get("response")
     return _text_or_none(response.get("id")) if isinstance(response, dict) else None
@@ -190,6 +199,11 @@ class ViviRealtimeClient(WebSocketTarget):
             case "conversation.item.input_audio_transcription.completed":
                 transcript = str(raw.get("transcript", ""))
                 self.transcript.set_text(str(raw.get("item_id")), transcript, role="user")
+            case "conversation.item.truncated" if _text_or_none(raw.get("item_id")):
+                end_ms = _ms_or_none(raw.get("audio_end_ms"))
+                return ItemTruncated(item_id=raw["item_id"], audio_end_ms=end_ms, raw=raw)
+            case "conversation.item.deleted" if _text_or_none(raw.get("item_id")):
+                return ItemDeleted(item_id=raw["item_id"], raw=raw)
             case "error" | "rate_limit_exhausted":
                 return ServerError(message=json.dumps(raw.get("error", raw)), raw=raw)
             case _ if kind.startswith(TOOL_EVENT_PREFIXES):

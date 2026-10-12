@@ -50,6 +50,7 @@ class Cut:
     audio_end_ms: int  # whole milliseconds of the turn that played
     fraction: float  # of the turn's received audio that played
     item_ids: set[str]
+    reported: tuple[ItemCut, ...] = ()  # the items reported to the agent in playback.interrupted
 
 
 def played_ms(audio_bytes: int) -> int:

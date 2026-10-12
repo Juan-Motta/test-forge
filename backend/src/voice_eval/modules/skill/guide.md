@@ -284,7 +284,7 @@ connections; never a secret).
 | `callerTurns`, `agentTurns` | Turns taken by each side. |
 | `latenciesMs` | Agent response latency of each reply, in ms. |
 | `turns` | One row per agent turn: `index`, `kind` (`reply`, `greeting`, `unprompted`), `callerEndMs`, `firstAudioMs`, `endMs`, `playbackEndMs`, `callerResumedMs`, `latencyMs`, `audioMs`, `responseCount`, `toolActivity`, `endReason` (`audio_gap`, `response_done`, `stalled`, `interrupted`). |
-| `interruptions` | Barge-ins the caller made: `agentTurn`, `audioEndMs`, `heardChars`, `totalChars`. |
+| `interruptions` | Barge-ins the caller made: `agentTurn`, `audioEndMs`, `heardChars`, `totalChars`, and whether the agent's server confirmed it applied the cut: `confirmation` (`truncated`, `deleted` when no reported item had played, or `null` until every reported item is confirmed), `confirmedAudioEndMs` (where the server truncated, which may differ from what was sent), `confirmedAtMs` (run clock), and `items` (one per item reported: `itemId`, `sentAudioEndMs`, `confirmation`, `confirmedAudioEndMs`). A confirmation counts until the run ends, even after later turns. |
 | `evaluatorMode`, `realtimeModel` | How the caller was played. |
 | `closeCode`, `closeReason`, `usageSeconds`, `finalUsageConfirmed` | How the agent session closed. |
 | `warnings` | Notable problems that did not fail the run (read them). |
@@ -304,16 +304,19 @@ are what the judge applies.
 - Caller row: `{"role": "caller", "text", "startMs", "endMs", "reason"}`; `reason` is the
   evaluator's own reason for saying it.
 - Agent row: `{"role": "agent", "text", "startMs", "endMs", "playbackEndMs", "latencyMs"}`. An
-  interrupted reply adds `"interrupted": true`, `"heardText"` (what the caller heard before
-  cutting in) and `"audioEndMs"` (how much of the reply's audio played). Only `heardText` reached
-  the caller; the rest of `text` was generated but never heard.
+  interrupted reply adds `"interrupted": true`, `"heardText"` (about what the caller heard
+  before cutting in), `"heardTextEstimated": true`, `"audioEndMs"` (how much of the reply's
+  audio played) and `"interruptionConfirmed"` (whether the agent's server confirmed it applied
+  the cut). `heardText` is an estimate: the played share of the audio applied to the text, cut
+  at a word boundary, so it can be off by a word or so around the cut. Only about `heardText`
+  reached the caller; the rest of `text` was generated but never heard.
 
 ```json
 [
   {"role": "agent", "text": "Hola, soy el asistente del banco. ¿En qué te ayudo?", "startMs": 410.2, "endMs": 3105.0, "playbackEndMs": 3420.5, "latencyMs": null},
   {"role": "caller", "text": "Perdí mi tarjeta de débito esta mañana.", "startMs": 3990.1, "endMs": 6120.7, "reason": "State the problem."},
   {"role": "agent", "text": "Lo siento. Para bloquearla necesito validar tu identidad y después…", "startMs": 7010.4, "endMs": 9800.0, "playbackEndMs": 9950.0, "latencyMs": 889.7,
-   "interrupted": true, "heardText": "Lo siento. Para bloquearla necesito validar tu identidad", "audioEndMs": 1500}
+   "interrupted": true, "heardText": "Lo siento. Para bloquearla necesito validar tu identidad", "heardTextEstimated": true, "audioEndMs": 1500, "interruptionConfirmed": true}
 ]
 ```
 
@@ -436,12 +439,13 @@ Text frames are JSON with a `type` and, where it applies, `tMs` (ms since the ru
 | --- | --- |
 | `snapshot` | Always first: `run {id, batchId, status, endReason}`, `transcript` so far, `turns` so far. |
 | `status` | `status` (`connecting`, `running`). |
-| `agentTranscript` | `turn`, `text`; an interrupted turn adds `interrupted`, `heardText`, `audioEndMs`. |
+| `agentTranscript` | `turn`, `text`; an interrupted turn adds `interrupted`, `heardText` (an estimate), `heardTextEstimated`, `audioEndMs`. |
 | `callerDecision` | `decisionId`, `say`, `hangUp`, `reason`: the evaluator's intent, not yet said. |
 | `callerSpeaking` | `decisionId`, `say`, `reason`: the caller started saying it (only now it joins the transcript). |
 | `callerDecisionDiscarded` | `decisionId`: the agent spoke again first; that decision is never said. |
 | `agentBargeIn` | `callerTurn`: the agent started talking while the caller was mid-utterance. |
 | `callerInterrupted` | `agentTurn`, `audioEndMs`, `heardText`: the caller cut the agent off. |
+| `interruptionConfirmed` | `agentTurn`, `itemId`, `kind` (`truncated` or `deleted`), `audioEndMs` (as the agent's server applied it): one per reported audio item, possibly after later turns; none when the server never confirms. |
 | `turnEnded` | `turn`, `firstAudioMs`, `endMs`, `playbackEndMs`, `latencyMs`, `endReason`. |
 | `warning` | `message`. |
 | `lagging` | `message`: audio frames were dropped for you (text never is). |

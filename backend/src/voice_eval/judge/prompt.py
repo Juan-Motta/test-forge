@@ -130,9 +130,11 @@ it. If the evidence a criterion needs is not there at all, set `observable` to f
 turn, C2 for the caller's second), a timing row (T4) or a trace (R2, optionally followed by \
 the observation name); `quote` holds the exact words or values you relied on.
 - The caller is simulated: never judge the caller, only the agent.
-- A turn marked [INTERRUPTED by the caller] was cut: the caller heard only the "heard by the \
-caller" part; the "generated but NOT heard" part never reached them. Judge what the agent later \
-says it said, or where it resumes, against the heard part only.
+- A turn marked [INTERRUPTED by the caller] was cut: the caller heard only about the \
+"approximately heard" part; the "generated but NOT heard" part never reached them. Judge what \
+the agent later says it said, or where it resumes, against the heard part only. The heard part \
+is an estimate: do not penalize a difference of a word or one list item around the cut; judge \
+claims clearly beyond it (or contradicting what the caller said they heard).
 
 ## How to judge each criterion
 - Judge exactly the criteria listed in <criteria>, one answer each, using the criterion id \
@@ -240,7 +242,7 @@ def render_transcript(transcript: list[dict[str, Any]]) -> str:
         label = f"{'A' if role == 'agent' else 'C'}{counters[role]}"
         line = f"{label} [{_clock(row.get('start_ms'))}] {role.upper()}: "
         if role == "agent" and row.get("interrupted"):
-            # The caller cut this reply: only the heard part reached them.
+            # The caller cut this reply: only (about) the heard part reached them.
             heard = row.get("heard_text") or ""
             at = row.get("audio_end_ms")
             when = (
@@ -248,8 +250,11 @@ def render_transcript(transcript: list[dict[str, Any]]) -> str:
                 if isinstance(at, int | float) and at
                 else "before any audio"
             )
+            confirmed = row.get("interruption_confirmed")
+            confirmation = "unknown" if confirmed is None else ("yes" if confirmed else "no")
             line += (
-                f"[INTERRUPTED by the caller {when}] heard by the caller: "
+                f"[INTERRUPTED by the caller {when}; correction confirmed by the agent's server: "
+                f"{confirmation}] approximately heard (estimated from the share of audio played): "
                 f'"{_clip(heard, MAX_ROW_CHARS)}" | generated but NOT heard: '
                 f'"{_clip(_unheard(row.get("text"), heard), MAX_ROW_CHARS)}"'
             )

@@ -188,6 +188,17 @@ def test_system_prompt_forces_english_free_text_with_verbatim_quotes():
         assert expected in text, expected
 
 
+def test_system_prompt_treats_the_heard_part_of_an_interruption_as_an_estimate():
+    text = " ".join(SYSTEM_PROMPT.split())
+    for expected in (
+        "[INTERRUPTED by the caller]",
+        "The heard part is an estimate: do not penalize a difference of a word or one list item "
+        "around the cut; judge claims clearly beyond it (or contradicting what the caller said "
+        "they heard).",
+    ):
+        assert expected in text, expected
+
+
 def test_an_interrupted_agent_turn_separates_heard_from_unheard_text():
     rows = [
         {"role": "caller", "text": "Count to thirty.", "start_ms": 0},
@@ -197,15 +208,35 @@ def test_an_interrupted_agent_turn_separates_heard_from_unheard_text():
             "start_ms": 2000,
             "interrupted": True,
             "heard_text": "One.  \nTwo.",
+            "heard_text_estimated": True,
             "audio_end_ms": 4021,
+            "interruption_confirmed": True,
         },
     ]
 
     line = render_transcript(rows).splitlines()[1]
 
-    assert "[INTERRUPTED by the caller after 4021 ms of audio]" in line
-    assert 'heard by the caller: "One. Two."' in line
-    assert 'generated but NOT heard: "Three. Four. Five."' in line
+    assert (
+        "[INTERRUPTED by the caller after 4021 ms of audio; correction confirmed by the agent's "
+        "server: yes] approximately heard (estimated from the share of audio played): "
+        '"One. Two." | generated but NOT heard: "Three. Four. Five."'
+    ) in line
+
+
+def test_an_unconfirmed_or_legacy_interruption_says_so():
+    row = {
+        "role": "agent",
+        "text": "One. Two.",
+        "interrupted": True,
+        "heard_text": "One.",
+        "audio_end_ms": 900,
+    }
+
+    unconfirmed = render_transcript([{**row, "interruption_confirmed": False}])
+    legacy = render_transcript([row])  # a run recorded before confirmations were captured
+
+    assert "correction confirmed by the agent's server: no]" in unconfirmed
+    assert "correction confirmed by the agent's server: unknown]" in legacy
 
 
 def test_an_interrupted_turn_without_audio_marks_nothing_heard():
@@ -221,6 +252,6 @@ def test_an_interrupted_turn_without_audio_marks_nothing_heard():
 
     line = render_transcript(rows)
 
-    assert "[INTERRUPTED by the caller before any audio]" in line
-    assert 'heard by the caller: ""' in line
+    assert "[INTERRUPTED by the caller before any audio; correction confirmed" in line
+    assert 'approximately heard (estimated from the share of audio played): ""' in line
     assert 'generated but NOT heard: "Hello there."' in line

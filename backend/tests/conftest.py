@@ -188,6 +188,12 @@ class FakeRealtimeServer:
     # `playback.interrupted` events received (as sent), and whether they stop the response
     playback_interruptions: list[dict] = field(default_factory=list)
     honor_interruptions: bool = True
+    # relay the provider's confirmation of each report (`conversation.item.truncated`, or
+    # `.deleted` for a null audioEndMs), after this delay, adding `truncate_offset_ms` to the
+    # truncated position (a server that disagrees with what was reported)
+    confirm_interruptions: bool = True
+    confirm_delay_s: float = 0.0
+    truncate_offset_ms: int = 0
     _cancelled: set[str] = field(default_factory=set)
 
     async def _send(self, ws: ServerConnection, event: dict) -> None:
@@ -335,6 +341,23 @@ class FakeRealtimeServer:
             self._cancelled.add(msg["responseId"])
         return None
 
+    async def _confirm(self, ws: ServerConnection, msg: dict) -> None:
+        """What OpenAI answers the relay's truncate/delete, relayed to the client."""
+        await asyncio.sleep(self.confirm_delay_s)
+        end = msg["audioEndMs"]
+        if end is None:
+            await self._send(ws, {"type": "conversation.item.deleted", "item_id": msg["itemId"]})
+            return
+        await self._send(
+            ws,
+            {
+                "type": "conversation.item.truncated",
+                "item_id": msg["itemId"],
+                "content_index": 0,
+                "audio_end_ms": end + self.truncate_offset_ms,
+            },
+        )
+
     async def _empty_response(self, ws: ServerConnection) -> None:
         self.responses += 1
         rid = f"resp_{self.responses}"
@@ -400,6 +423,8 @@ class FakeRealtimeServer:
                 if kind == "playback.interrupted":
                     if (violation := self._on_playback_interrupted(msg)) is not None:
                         self.protocol_violations.append(violation)
+                    elif self.confirm_interruptions:
+                        tasks.append(asyncio.create_task(_quietly(self._confirm(ws, msg))))
                     continue
                 if kind not in REALTIME_CLIENT_TYPES:
                     self.protocol_violations.append(f"type={kind}")

@@ -6,11 +6,14 @@ import pytest
 from voice_eval.ports.target import (
     AgentBusy,
     AudioDelta,
+    ItemDeleted,
+    ItemTruncated,
     NotSupportedError,
     Ready,
     ResponseDone,
     ResponseStarted,
     ServerError,
+    UnknownEvent,
 )
 from voice_eval.targets.detect import TargetSpec, open_target
 from voice_eval.targets.vivi_live import ViviLiveClient
@@ -235,6 +238,29 @@ def test_audio_and_response_events_carry_their_item_and_response_ids():
     started = client.normalize({"type": "response.created", "response": {"id": "resp_1"}})
     done = client.normalize({"type": "response.done", "response": {"id": "resp_1"}})
     assert (started.response_id, done.response_id) == ("resp_1", "resp_1")
+
+
+def test_relayed_truncate_and_delete_confirmations_are_target_events():
+    client, _ = _client()
+    truncated = client.normalize(
+        {
+            "type": "conversation.item.truncated",
+            "item_id": "item_a",
+            "content_index": 0,
+            "audio_end_ms": 1234,
+        }
+    )
+    assert isinstance(truncated, ItemTruncated)
+    assert (truncated.item_id, truncated.audio_end_ms) == ("item_a", 1234)
+    deleted = client.normalize({"type": "conversation.item.deleted", "item_id": "item_b"})
+    assert isinstance(deleted, ItemDeleted) and deleted.item_id == "item_b"
+    # without an item id there is nothing to correlate: kept as unknown
+    blank = client.normalize({"type": "conversation.item.deleted"})
+    assert isinstance(blank, UnknownEvent)
+    odd = client.normalize(
+        {"type": "conversation.item.truncated", "item_id": "item_c", "audio_end_ms": "x"}
+    )
+    assert isinstance(odd, ItemTruncated) and odd.audio_end_ms is None
 
 
 async def test_live_cannot_interrupt_playback():

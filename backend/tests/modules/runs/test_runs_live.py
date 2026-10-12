@@ -517,15 +517,24 @@ async def test_an_interruption_streams_and_marks_the_agent_line():
         "text": "Your balance is 20 dollars",
         "interrupted": True,
         "heard_text": "Your balance",
+        "heard_text_estimated": True,
         "audio_end_ms": 1200,
+        "interruption_confirmed": False,  # at that moment: the live message below confirms it
     }
     hub.event(run_id, RunEvent("agent_transcript", 4.0, agent))
+    confirmed = {"agent_turn": 1, "item_id": "item_a", "kind": "truncated", "audio_end_ms": 1190}
+    hub.event(run_id, RunEvent("interruption_confirmed", 4.5, confirmed))
     hub.event(run_id, RunEvent("agent_transcript", 5.0, {"turn": 1, "text": "Sure"}))
     snapshot = json.loads(await hub.subscribe(run_id).get())
     hub.finish(run_id, "completed", "caller_hung_up")
     texts = [json.loads(item) for item in await drain(sub) if isinstance(item, str)]
 
-    marked = {"interrupted": True, "heardText": "Your balance", "audioEndMs": 1200}
+    marked = {
+        "interrupted": True,
+        "heardText": "Your balance",
+        "heardTextEstimated": True,
+        "audioEndMs": 1200,
+    }
     assert texts[1:-1] == [
         {
             "type": "callerInterrupted",
@@ -535,6 +544,14 @@ async def test_an_interruption_streams_and_marks_the_agent_line():
             "heardText": "Your balance",
         },
         {"type": "agentTranscript", "tMs": 4.0, "turn": 0, "text": agent["text"], **marked},
+        {
+            "type": "interruptionConfirmed",
+            "tMs": 4.5,
+            "agentTurn": 1,
+            "itemId": "item_a",
+            "kind": "truncated",
+            "audioEndMs": 1190,
+        },
         {"type": "agentTranscript", "tMs": 5.0, "turn": 1, "text": "Sure"},
     ]
     assert snapshot["transcript"] == [

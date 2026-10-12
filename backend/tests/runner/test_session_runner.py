@@ -652,15 +652,42 @@ async def test_caller_interrupts_the_agent_on_the_playback_timeline(fake_realtim
     assert agent_row["role"] == "agent" and agent_row["text"] == full
     assert agent_row["interrupted"] is True
     assert (agent_row["heard_text"], agent_row["audio_end_ms"]) == (heard, cut.data["audio_end_ms"])
+    assert agent_row["heard_text_estimated"] is True
+    assert agent_row["interruption_confirmed"] is True
     assert "interrupted" not in rows[3]  # the next reply was not interrupted
-    assert summary["interruptions"] == [
-        {
-            "agent_turn": 1,
-            "audio_end_ms": cut.data["audio_end_ms"],
-            "heard_chars": len(heard),
-            "total_chars": len(full),
-        }
+    assert "interruption_confirmed" not in rows[3]
+
+    # The relay confirmed both reports: the played item truncated, the unplayed one deleted.
+    confirmed = sink.of("interruption_confirmed")
+    assert [(e.data["item_id"], e.data["kind"], e.data["audio_end_ms"]) for e in confirmed] == [
+        (first["itemId"], "truncated", first["audioEndMs"]),
+        (second["itemId"], "deleted", None),
     ]
+    assert all(e.data["agent_turn"] == 1 and e.t_ms >= cut.t_ms for e in confirmed)
+    (interruption,) = summary["interruptions"]
+    assert interruption == {
+        "agent_turn": 1,
+        "audio_end_ms": cut.data["audio_end_ms"],
+        "heard_chars": len(heard),
+        "total_chars": len(full),
+        "confirmation": "truncated",
+        "confirmed_audio_end_ms": first["audioEndMs"],
+        "confirmed_at_ms": confirmed[-1].t_ms,
+        "items": [
+            {
+                "item_id": first["itemId"],
+                "sent_audio_end_ms": first["audioEndMs"],
+                "confirmation": "truncated",
+                "confirmed_audio_end_ms": first["audioEndMs"],
+            },
+            {
+                "item_id": second["itemId"],
+                "sent_audio_end_ms": None,
+                "confirmation": "deleted",
+                "confirmed_audio_end_ms": None,
+            },
+        ],
+    }
     assert summary["turns"][0]["end_reason"] == "interrupted"
     assert summary["turns"][0]["playback_end_ms"] == pytest.approx(cut.t_ms, abs=60)
 
@@ -689,6 +716,64 @@ async def test_a_reply_still_streaming_is_cut_and_its_late_audio_dropped(
     assert agent_rows[0]["interrupted"] is True
     assert summary["agent_turns"] == 2
     assert summary["turns"][0]["audio_ms"] < 3000
+
+
+async def test_an_unconfirmed_interruption_is_recorded_as_such(fake_realtime_server, tmp_path):
+    fake = fake_realtime_server
+    fake.burst_audio_ms, fake.confirm_interruptions = 1500, False
+    policy = ScriptedPolicy(by_turn(say("Hello there"), say("Wait"), HANG_UP))
+    summary, sink = await run(fake.url, tmp_path, policy, opts=interrupting((1, 300)))
+
+    assert (summary["status"], summary["reason"]) == ("completed", "caller_hung_up")
+    (report,) = fake.playback_interruptions
+    assert sink.of("interruption_confirmed") == []
+    (interruption,) = summary["interruptions"]
+    assert interruption["confirmation"] is None
+    assert (interruption["confirmed_audio_end_ms"], interruption["confirmed_at_ms"]) == (None, None)
+    assert interruption["items"] == [
+        {
+            "item_id": report["itemId"],
+            "sent_audio_end_ms": report["audioEndMs"],
+            "confirmation": None,
+            "confirmed_audio_end_ms": None,
+        }
+    ]
+    agent_row = next(r for r in transcript(tmp_path) if r["role"] == "agent")
+    assert agent_row["heard_text_estimated"] is True
+    assert agent_row["interruption_confirmed"] is False
+
+
+async def test_a_late_confirmation_counts_and_a_differing_position_is_kept(
+    fake_realtime_server, tmp_path
+):
+    fake = fake_realtime_server
+    fake.burst_audio_ms = 1500
+    fake.confirm_delay_s, fake.truncate_offset_ms = 1.0, 37  # after the agent's next reply
+    policy = ScriptedPolicy(by_turn(say("Hello there"), say("Wait"), HANG_UP))
+    summary, sink = await run(fake.url, tmp_path, policy, opts=interrupting((1, 300)))
+
+    assert (summary["status"], summary["reason"]) == ("completed", "caller_hung_up")
+    (report,) = fake.playback_interruptions
+    (confirmed,) = sink.of("interruption_confirmed")
+    next_reply = sink.of("agent_transcript")[1]
+    assert confirmed.t_ms > next_reply.t_ms  # it arrived after the run moved on
+    assert confirmed.data == {
+        "agent_turn": 1,
+        "item_id": report["itemId"],
+        "kind": "truncated",
+        "audio_end_ms": report["audioEndMs"] + 37,
+    }
+    (interruption,) = summary["interruptions"]
+    assert interruption["confirmation"] == "truncated"
+    assert interruption["confirmed_audio_end_ms"] == report["audioEndMs"] + 37
+    assert interruption["confirmed_at_ms"] == confirmed.t_ms
+    (item,) = interruption["items"]
+    assert (item["sent_audio_end_ms"], item["confirmed_audio_end_ms"]) == (
+        report["audioEndMs"],
+        report["audioEndMs"] + 37,
+    )
+    agent_row = next(r for r in transcript(tmp_path) if r["role"] == "agent")
+    assert agent_row["interruption_confirmed"] is True
 
 
 async def test_no_interruption_when_the_reply_is_shorter(fake_realtime_server, tmp_path):
