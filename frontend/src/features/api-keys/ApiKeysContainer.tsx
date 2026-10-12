@@ -5,6 +5,7 @@ import { PageHeader } from "@/features/shell/PageHeader";
 import { errorMessage, formErrorView } from "@/lib/api";
 import { useNow } from "@/lib/time/use-now";
 import { Alert, Button, Dialog, EmptyState, PlusIcon, Spinner } from "@/ui";
+import { AgentSkillContainer } from "./AgentSkillContainer";
 import { ApiKeysTable } from "./ApiKeysTable";
 import { CreateApiKeyForm } from "./CreateApiKeyForm";
 import { CreatedApiKeyView } from "./CreatedApiKeyView";
@@ -150,6 +151,7 @@ export function ApiKeysContainer() {
         {notice}
       </p>
       {body}
+      <AgentSkillContainer />
 
       <Dialog
         open={creating}
