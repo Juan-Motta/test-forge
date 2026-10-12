@@ -193,8 +193,9 @@ each one. The file is optional: the container image has none and is configured o
 environment variables. The project must stay installed from its source tree (editable, uv's
 default), because `.env` and `alembic.ini` are found relative to it.
 `DATABASE_URL` must use `postgresql+asyncpg://`. `ENVIRONMENT` defaults to `production`
-(fail closed): `/docs` and `/openapi.json` are served only when it is exactly `development`, so
-set `ENVIRONMENT=development` in your local `.env` if you want them. `SESSION_COOKIE_SECURE`
+(fail closed). The API docs are public in every environment: Swagger UI at `/api/docs` (its
+"Authorize" button takes an API key as a Bearer token) and the schema at `/api/openapi.json`.
+`SESSION_COOKIE_SECURE`
 stays `true` unless explicitly set to `false` (needed for plain-HTTP local development).
 
 ### Authentication
@@ -295,14 +296,14 @@ password or an API key).
 
 ### Agent skill
 
-An AI agent holding an API key can learn the platform from the API itself:
+An AI agent can learn the platform from the API itself:
 
 | Endpoint | Purpose |
 | --- | --- |
 | `GET /api/skill` | `text/markdown; charset=utf-8`: a `SKILL.md` (Anthropic skill format) |
 | `GET /api/skill.zip` | `application/zip`: `voice-evaluator/SKILL.md` and `voice-evaluator/reference/openapi.json`, to unzip into an agent's skills directory |
 
-Both need authentication (API key or session) like the rest of the API. `SKILL.md` is YAML
+Both are public (no API key needed), like `/api/docs` and `/api/openapi.json`. `SKILL.md` is YAML
 frontmatter (`name: voice-evaluator`, a `description` of when to use it), then the curated guide
 `src/voice_eval/modules/skill/guide.md` (concepts, auth, costs and when to ask a human, the
 set-up / launch / follow / judge flows with example JSON, how to read summaries, transcripts and
@@ -316,8 +317,8 @@ or when the guide mentions an `/api/...` path the app no longer serves; keep `gu
 step with behavior changes (statuses, fields, flows).
 
 ```bash
-curl -s -H "Authorization: Bearer $VE_KEY" "$VE_URL/api/skill" > SKILL.md
-curl -s -H "Authorization: Bearer $VE_KEY" -o voice-evaluator-skill.zip "$VE_URL/api/skill.zip"
+curl -s "$VE_URL/api/skill" > SKILL.md
+curl -s -o voice-evaluator-skill.zip "$VE_URL/api/skill.zip"
 ```
 
 ### Provider connections

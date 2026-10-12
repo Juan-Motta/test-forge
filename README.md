@@ -80,7 +80,7 @@ services:
 | `POSTGRES_PASSWORD` | required | Database password, also used in `DATABASE_URL`. |
 | `VOICE_EVAL_MASTER_KEY` | required | Passphrase(s) or Fernet key(s) for provider secrets; comma-separated for rotation (see `backend/README.md`). |
 | `FRONTEND_PORT` | `3000` | Host port of the edge (the web console), bound to 127.0.0.1. |
-| `ENVIRONMENT` | `production` | `development` serves `/docs`, lifts the SSRF guard for connection tests and accepts `http://localhost` URLs. |
+| `ENVIRONMENT` | `production` | `development` lifts the SSRF guard for connection tests and accepts `http://localhost` URLs. The API docs are public in every environment: Swagger UI at `/api/docs`, schema at `/api/openapi.json`, agent skill at `/api/skill`. |
 | `POSTGRES_USER`, `POSTGRES_DB` | `voice_eval` | Database user and name. |
 | `WEB_ORIGINS` | `http://localhost:<FRONTEND_PORT>` | Browser origins the backend accepts (comma-separated). |
 | `RUNS_MAX_CONCURRENCY` | `3` | Evaluator conversations running at once across every batch (each is a paid agent session). |
@@ -136,8 +136,10 @@ separately, not that two public IPs are.
 - **TLS.** The stack serves plain HTTP on 127.0.0.1 only. If you expose it, put a TLS-terminating
   reverse proxy in front of the edge (see "Behind another proxy"), set
   `SESSION_COOKIE_SECURE=true` and set `WEB_ORIGINS` to the public `https://` origin.
-- **`ENVIRONMENT`.** Leave it at `production` unless you need `/docs` or need to test
-  connections against local services: `development` loosens those checks.
+- **`ENVIRONMENT`.** Leave it at `production` unless you need to test connections against
+  local services: `development` loosens those checks.
+- **Public docs.** `/api/docs` (Swagger UI), `/api/openapi.json` and `/api/skill(.zip)` are
+  readable without credentials; every other `/api` route still needs a session or an API key.
 - **Containers** run as non-root users (backend uid 10001 and edge uid 101 with read-only root
   filesystems, frontend `node`), with `no-new-privileges`; the edge also drops all capabilities.
   Only the edge is published to the host; the frontend, the backend and the database are not.

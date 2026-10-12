@@ -42,7 +42,9 @@ raw key is shown only once. A key acts as its owner. `GET /api/auth/me` checks w
 
 - `401 {"detail": "Not authenticated"}`: missing, wrong, revoked or expired key (the body is the
   same whatever was wrong). Do not retry with the same key; ask the human for a valid one.
-- `GET /api/health` and `POST /api/auth/login` are the only unauthenticated paths.
+- Public paths (no key): `GET /api/health`, `POST /api/auth/login`, this skill
+  (`GET /api/skill`, `GET /api/skill.zip`) and the Swagger UI at `/api/docs`
+  (schema: `/api/openapi.json`).
 - Never print, log or commit the key. Keep it in an environment variable.
 
 ## Conventions and errors
@@ -471,4 +473,4 @@ so ask the human to run it if you have no shell there. Each time costs 3 judge m
 
 `GET /api/skill` returns this document; `GET /api/skill.zip` returns the skill folder
 (`voice-evaluator/SKILL.md` and `voice-evaluator/reference/openapi.json`) to unzip into a skills
-directory. Both need the API key.
+directory. Both are public: no API key is needed to fetch them.

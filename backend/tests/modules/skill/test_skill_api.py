@@ -1,5 +1,5 @@
 """The agent skill: a SKILL.md (curated guide + endpoint reference generated from the live
-OpenAPI schema) and a zip of the skill folder, both behind authentication."""
+OpenAPI schema) and a zip of the skill folder, both public."""
 
 import io
 import json
@@ -10,7 +10,6 @@ from importlib import resources
 import yaml
 from httpx import ASGITransport, AsyncClient
 
-NOT_AUTHENTICATED = {"detail": "Not authenticated"}
 PARAM = re.compile(r"\{[^}/]+\}")
 GUIDE_PATH = re.compile(r"(?<![\w/.:])/api(?:/[A-Za-z0-9_.{}-]+)+")  # not a host's /api
 
@@ -33,19 +32,19 @@ def app_paths(app) -> set[str]:
 
     sockets = {"/api" + route.path for route in live_api.router.routes}
     assert sockets, "the live router declares its WebSocket routes"
-    return {normalized(path) for path in [*app.openapi()["paths"], *sockets]}
+    docs = {app.docs_url, app.openapi_url}  # Swagger UI and its schema are not operations
+    return {normalized(path) for path in [*app.openapi()["paths"], *sockets, *docs]}
 
 
 async def fresh_client(app) -> AsyncClient:
     return AsyncClient(transport=ASGITransport(app=app), base_url="https://testserver")
 
 
-async def test_skill_requires_authentication(app):
+async def test_skill_is_public(app):
     async with await fresh_client(app) as anonymous:
         for path in ("/api/skill", "/api/skill.zip"):
             response = await anonymous.get(path)
-            assert response.status_code == 401, path
-            assert response.json() == NOT_AUTHENTICATED
+            assert response.status_code == 200, path
 
 
 async def test_skill_is_markdown_with_frontmatter(user_client):

@@ -44,11 +44,8 @@ async def test_cors_allows_only_configured_origins(client):
     assert "access-control-allow-origin" not in denied.headers
 
 
-@pytest.mark.parametrize(
-    ("environment", "expected"),
-    [(None, 404), ("production", 404), ("test", 404), ("Development", 404), ("development", 200)],
-)
-async def test_api_docs_only_when_explicitly_development(environment, expected, monkeypatch):
+@pytest.mark.parametrize("environment", [None, "production", "development"])
+async def test_api_docs_are_public_in_every_environment(environment, monkeypatch):
     monkeypatch.delenv("ENVIRONMENT", raising=False)  # the unset case must not see the shell's
     overrides = {"environment": environment} if environment else {}
     settings = Settings(
@@ -59,7 +56,24 @@ async def test_api_docs_only_when_explicitly_development(environment, expected, 
     )
     app = create_app(settings)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="https://t") as client:
-        docs = await client.get("/docs")
-        schema = await client.get("/openapi.json")
+        docs = await client.get("/api/docs")
+        schema = await client.get("/api/openapi.json")
+        old = await client.get("/docs")
     await app.state.engine.dispose()
-    assert docs.status_code == schema.status_code == expected
+    # Under /api so the edge proxy reaches them; no credentials needed to read them.
+    assert docs.status_code == schema.status_code == 200
+    assert "swagger" in docs.text.lower()
+    assert old.status_code == 404
+    spec = schema.json()
+    # Swagger's "Authorize" takes an API key (or session token) as a Bearer token...
+    assert spec["components"]["securitySchemes"]["bearer"] == {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "An API key (`ve_…`) or a session token.",
+    }
+    assert spec["security"] == [{"bearer": []}]
+    # ...while the public operations say they need none.
+    assert spec["paths"]["/api/health"]["get"]["security"] == []
+    assert spec["paths"]["/api/auth/login"]["post"]["security"] == []
+    assert spec["paths"]["/api/skill"]["get"]["security"] == []
+    assert "security" not in spec["paths"]["/api/runs"]["get"]

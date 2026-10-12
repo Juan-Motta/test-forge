@@ -30,7 +30,7 @@ describe("Agent skill card", () => {
     const card = await skillCard();
     expect(
       within(card).getByText(
-        "Give an AI agent this skill so it knows every endpoint, the flows and how to read results. It needs an API key.",
+        "Give an AI agent this skill so it knows every endpoint, the flows and how to read results. Using the API itself needs an API key.",
       ),
     ).toBeInTheDocument();
     expect(within(card).getByRole("textbox", { name: "SKILL.md (Markdown)" })).toHaveValue(
@@ -41,7 +41,7 @@ describe("Agent skill card", () => {
     );
     expect(
       within(card).getByText(
-        `curl -H "Authorization: Bearer <your API key>" ${TEST_ORIGIN}/api/skill -o SKILL.md`,
+        `curl ${TEST_ORIGIN}/api/skill -o SKILL.md`,
       ),
     ).toBeInTheDocument();
   });
@@ -63,7 +63,7 @@ describe("Agent skill card", () => {
 
     await user.click(within(card).getByRole("button", { name: "Copy command" }));
     expect(await navigator.clipboard.readText()).toBe(
-      `curl -H "Authorization: Bearer <your API key>" ${TEST_ORIGIN}/api/skill -o SKILL.md`,
+      `curl ${TEST_ORIGIN}/api/skill -o SKILL.md`,
     );
     expect(status).toHaveTextContent("Copied");
   });

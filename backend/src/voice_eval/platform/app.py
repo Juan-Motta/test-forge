@@ -95,13 +95,13 @@ def create_app(
         await judgements.shutdown()  # unfinished judgements stay so for the next start
         await engine.dispose()
 
-    docs = settings.environment == "development"  # fail closed: anything else hides the docs
+    # Public API docs under /api (the edge only proxies /api to the backend), in every environment.
     app = FastAPI(
         title="voice-eval",
         lifespan=lifespan,
-        docs_url="/docs" if docs else None,
+        docs_url="/api/docs",
         redoc_url=None,
-        openapi_url="/openapi.json" if docs else None,
+        openapi_url="/api/openapi.json",
     )
     app.state.settings = settings
     app.state.secret_box = secret_box
@@ -126,14 +126,53 @@ def create_app(
     protected.include_router(scenarios_api.router)
     protected.include_router(runs_api.router)
     protected.include_router(judgements_api.router)
-    protected.include_router(skill_api.router)
     for router in extra_routers:
         protected.include_router(router)
 
     api = APIRouter(prefix="/api")
     api.include_router(health_router)
     api.include_router(users_api.public_router)
+    api.include_router(skill_api.router)  # public: the agent skill documents the API
     api.include_router(runs_live_api.router)  # WebSockets: authenticated by the handlers
     api.include_router(protected)
     app.include_router(api)
+    _document_bearer_auth(app)
     return app
+
+
+PUBLIC_OPERATIONS = {
+    ("get", "/api/health"),
+    ("post", "/api/auth/login"),
+    ("get", "/api/skill"),
+    ("get", "/api/skill.zip"),
+}
+
+
+def _document_bearer_auth(app: FastAPI) -> None:
+    """Add the Bearer scheme to the OpenAPI schema, so Swagger's "Authorize" takes an API key.
+
+    Authentication is enforced by `current_principal`, which reads the header itself, so FastAPI
+    does not infer a scheme: every operation needs it except the public ones, marked `[]`.
+    """
+    build = app.openapi
+
+    def openapi() -> dict:
+        if app.openapi_schema is not None:
+            return app.openapi_schema
+        schema = build()
+        schema.setdefault("components", {})["securitySchemes"] = {
+            "bearer": {
+                "type": "http",
+                "scheme": "bearer",
+                "description": "An API key (`ve_…`) or a session token.",
+            }
+        }
+        schema["security"] = [{"bearer": []}]
+        for path, item in schema.get("paths", {}).items():
+            for method, operation in item.items():
+                if (method, path) in PUBLIC_OPERATIONS:
+                    operation["security"] = []
+        app.openapi_schema = schema
+        return schema
+
+    app.openapi = openapi  # type: ignore[method-assign]

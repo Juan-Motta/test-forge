@@ -13,9 +13,9 @@ type AgentSkillCardProps = {
 
 type Copied = { target: string } | { failed: true } | null;
 
-/** Builds the ready-to-paste command that saves the skill with an API key. */
+/** Builds the ready-to-paste command that saves the (public) skill. */
 export function skillCurlCommand(origin: string): string {
-  return `curl -H "Authorization: Bearer <your API key>" ${origin}/api/skill -o SKILL.md`;
+  return `curl ${origin}/api/skill -o SKILL.md`;
 }
 
 /** Where an agent gets the skill: both URLs, a curl command and a session download. */
@@ -50,8 +50,7 @@ export function AgentSkillCard({ origin, onDownload, downloading, downloadError 
         }
       />
       <p className="text-sm text-muted">
-        Give an AI agent this skill so it knows every endpoint, the flows and how to read results. It needs an API
-        key.
+        Give an AI agent this skill so it knows every endpoint, the flows and how to read results. Using the API itself needs an API key.
       </p>
       <SkillUrl
         label="SKILL.md (Markdown)"
@@ -68,7 +67,7 @@ export function AgentSkillCard({ origin, onDownload, downloading, downloadError 
         onCopy={() => void copy("zip", zipUrl)}
       />
       <div className="flex flex-col gap-1.5">
-        <p className="text-xs font-medium text-muted">Save it with an API key</p>
+        <p className="text-xs font-medium text-muted">Save it</p>
         <div className="flex items-start gap-2">
           <pre className="min-w-0 flex-1 overflow-x-auto rounded-lg border border-line bg-raised px-3 py-2.5 font-mono text-xs whitespace-pre-wrap break-all">
             <code>{command}</code>
