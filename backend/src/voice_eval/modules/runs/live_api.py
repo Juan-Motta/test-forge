@@ -38,30 +38,29 @@ router = APIRouter(prefix="/runs", tags=["runs"])
 
 
 async def _admit(websocket: WebSocket) -> bool:
-    """Accept, then close with the refusal code unless the caller is authenticated: by a Bearer
-    header, or by the session cookie from an allowed Origin."""
+    """Accept, then close with the refusal code unless the caller is authenticated, in the same
+    order as HTTP requests: the session cookie from an allowed Origin first, then a Bearer header
+    (API key or session token)."""
     await websocket.accept()
     settings: Settings = websocket.app.state.settings
+    origin = websocket.headers.get("origin")
+    allowed = origin is not None and origin_allowed(origin, settings)
+    token = websocket.cookies.get(settings.session_cookie_name)
+    if token and allowed:
+        async with websocket.app.state.sessionmaker() as db:
+            if await authenticate(db, token) is not None:
+                return True
     if bearer := bearer_token(websocket.headers):
         async with websocket.app.state.sessionmaker() as db:
-            principal = await authenticate_bearer(db, bearer)
-        if principal is None:
-            await websocket.close(CLOSE_UNAUTHENTICATED, "Not authenticated")
-            return False
-        return True
-    origin = websocket.headers.get("origin")
-    if origin is None or not origin_allowed(origin, settings):
-        await websocket.close(CLOSE_FORBIDDEN_ORIGIN, "Origin not allowed")
-        return False
-    token = websocket.cookies.get(settings.session_cookie_name)
-    resolved = None
-    if token:
-        async with websocket.app.state.sessionmaker() as db:
-            resolved = await authenticate(db, token)
-    if resolved is None:
+            if await authenticate_bearer(db, bearer) is not None:
+                return True
         await websocket.close(CLOSE_UNAUTHENTICATED, "Not authenticated")
         return False
-    return True
+    if not allowed:
+        await websocket.close(CLOSE_FORBIDDEN_ORIGIN, "Origin not allowed")
+        return False
+    await websocket.close(CLOSE_UNAUTHENTICATED, "Not authenticated")
+    return False
 
 
 async def _pump(websocket: WebSocket, subscriber: Subscriber) -> None:

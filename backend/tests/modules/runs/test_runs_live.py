@@ -110,6 +110,17 @@ async def test_an_api_key_header_authenticates_without_origin(server, user_clien
     assert await close_code(url, {"Authorization": f"Bearer {key}"}) == 4401
 
 
+async def test_a_valid_cookie_wins_over_a_stale_bearer_header(server, user_client):
+    """Same order as HTTP: the session cookie from an allowed Origin first, then the Bearer."""
+    url = f"{server}/api/runs/{uuid.uuid4()}/live"
+    headers = {
+        "Origin": ORIGIN,
+        "Cookie": cookie_of(user_client),
+        "Authorization": "Bearer ve_aaaaaaaa_revokedorforgedkeyrevokedorforgedkeyrevoke",
+    }
+    assert await close_code(url, headers) == 4404  # authenticated by the cookie
+
+
 async def test_unknown_run_or_batch_is_4404(server, user_client):
     headers = {"Origin": ORIGIN, "Cookie": cookie_of(user_client)}
     assert await close_code(f"{server}/api/runs/{uuid.uuid4()}/live", headers) == 4404
