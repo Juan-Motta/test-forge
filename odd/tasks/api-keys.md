@@ -30,9 +30,9 @@ session cookie (browser) or a session Bearer token obtained by logging in with a
 - Docs: README "Using the API with an API key" (launch a run, poll it, get the judgement brief).
 
 ## Tasks
-- [ ] T1 Backend: model + migration 0012, service, auth resolution, endpoints, WS, tests, README — delegated
-- [ ] T2 Frontend: Settings → API keys page (list, create-once dialog, revoke) — delegated
-- [ ] T3 End-to-end check: create a key in the UI flow, call the API with it, revoke, see 401 — inline
+- [x] T1 Backend: model + migration 0012, service, auth resolution, endpoints, WS, tests, README — delegated
+- [x] T2 Frontend: Settings → API keys page (list, create-once dialog, revoke) — delegated
+- [x] T3 End-to-end check: create a key in the UI flow, call the API with it, revoke, see 401 — inline
 
 ## Acceptance criteria
 - A key authenticates REST and the live WS; revoked/expired keys get 401; the secret is never
@@ -40,4 +40,14 @@ session cookie (browser) or a session Bearer token obtained by logging in with a
 - Backend pytest + ruff, frontend vitest + lint + typecheck pass.
 
 ## Progress
-(none yet)
+- T2 ce9d4c1 (delegated; RED observed; vitest 380): Settings → API keys (table, create-once dialog
+  with copy + curl example, revoke with stuck-proof guard, nav entry).
+- T1 24d6871 (delegated; RED observed; pytest 911): `modules/api_keys` (key `ve_<8>_<43 base62>`,
+  SHA-256 only, prefix lookup + `hmac.compare_digest`), `authenticate_bearer` (exact key format →
+  API key, else session token), `last_used_at` ≤ once/min, deactivated users' keys stop working,
+  migration 0012, live WS Bearer support, README curl guide.
+- Review of ce9d4c1..24d6871 (1793 lines): APPROVED + acknowledged. Advisory fixed in bcccd47: the
+  live WS now admits a valid session cookie before a Bearer header, like HTTP (RED observed).
+  Accepted: the create form's duplicate-name mapping can't trigger (shared helper requires it).
+- T3 e2e against the stack: create 201 (prefix shown, key once) → GET /api/runs with the key 200 →
+  list via key has no `key` field → revoke 204 → same key 401 "Not authenticated".
