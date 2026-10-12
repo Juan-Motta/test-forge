@@ -12,6 +12,18 @@ async function findRow(name: string) {
 }
 
 describe("API keys list", () => {
+  it("keeps the keys table in a titled panel and links the API docs in a new tab", async () => {
+    mockApiKeysApi([apiKeyFixture()]);
+    renderWithClient(<ApiKeysContainer />);
+
+    const panel = await screen.findByRole("region", { name: "Your keys" });
+    expect(await within(panel).findByRole("table", { name: "API keys" })).toBeInTheDocument();
+    const docs = screen.getByRole("link", { name: "API docs (opens in a new tab)" });
+    expect(docs).toHaveAttribute("href", "/api/docs");
+    expect(docs).toHaveAttribute("target", "_blank");
+    expect(docs).toHaveAttribute("rel", expect.stringContaining("noopener"));
+  });
+
   it("shows each key with its prefix, dates and status", async () => {
     mockApiKeysApi([
       apiKeyFixture({ lastUsedAt: new Date(Date.now() - 2.5 * 3_600_000).toISOString() }),

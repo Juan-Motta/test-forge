@@ -31,3 +31,19 @@ export type NewAgent = {
 
 /** Omitted fields are kept; `null` clears `origin` or `langfuseConnectionId`. */
 export type AgentChanges = Partial<NewAgent>;
+
+/** One step of a connection check, in order. */
+export type ConnectionLogLine = { ok: boolean; message: string };
+
+/**
+ * `POST /api/agents/{id}/test`: the agent's socket was opened and closed once its session was
+ * ready (no audio sent). An unreachable agent is a 200 with `reachable: false`.
+ */
+export type AgentConnectionTest = {
+  reachable: boolean;
+  /** Connect plus ready, when reachable. */
+  latencyMs: number | null;
+  /** `live` or `realtime`, once detected. */
+  protocol: string | null;
+  log: ConnectionLogLine[];
+};

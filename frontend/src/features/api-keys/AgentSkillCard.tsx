@@ -1,7 +1,7 @@
 "use client";
 
 import { type ReactNode, useId, useState } from "react";
-import { Alert, Button, Card, CardHeader, CheckIcon, CopyIcon, Input } from "@/ui";
+import { Alert, Button, Card, CardHeader, CheckIcon, CodeBlock, CopyIcon, Input } from "@/ui";
 
 type AgentSkillCardProps = {
   /** This deployment's origin, for the URLs and the command. */
@@ -69,9 +69,7 @@ export function AgentSkillCard({ origin, onDownload, downloading, downloadError 
       <div className="flex flex-col gap-1.5">
         <p className="text-xs font-medium text-muted">Save it</p>
         <div className="flex items-start gap-2">
-          <pre className="min-w-0 flex-1 overflow-x-auto rounded-lg border border-line bg-raised px-3 py-2.5 font-mono text-xs whitespace-pre-wrap break-all">
-            <code>{command}</code>
-          </pre>
+          <CodeBlock code={command} label="Command to save the skill" tone="command" className="min-w-0 flex-1 break-all" />
           <Button
             variant="secondary"
             aria-label="Copy command"

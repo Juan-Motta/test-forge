@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { PageHeader } from "@/features/shell/PageHeader";
 import { errorMessage, formErrorView } from "@/lib/api";
 import { useNow } from "@/lib/time/use-now";
-import { Alert, Button, Dialog, EmptyState, PlusIcon, Spinner } from "@/ui";
+import { Alert, Button, Card, CardHeader, Dialog, EmptyState, PlusIcon, Spinner, buttonClasses } from "@/ui";
 import { AgentSkillContainer } from "./AgentSkillContainer";
 import { ApiKeysTable } from "./ApiKeysTable";
 import { CreateApiKeyForm } from "./CreateApiKeyForm";
@@ -23,6 +23,7 @@ export function ApiKeysContainer() {
   const revoke = useRevokeApiKey();
   const refresh = useRefreshApiKeys();
   const now = useNow(60_000);
+  const keysHeadingId = useId();
   const [creating, setCreating] = useState(false);
   // The full secret lives only here, only while the one-time view is open.
   const [secret, setSecret] = useState<string | null>(null);
@@ -124,14 +125,21 @@ export function ApiKeysContainer() {
     );
   } else {
     body = (
-      <ApiKeysTable
-        apiKeys={list}
-        now={now}
-        onRevoke={(key) => {
-          revoke.reset();
-          showRevoke(key);
-        }}
-      />
+      <Card aria-labelledby={keysHeadingId}>
+        <CardHeader
+          id={keysHeadingId}
+          title="Your keys"
+          actions={<span className="text-xs text-dim">{list.length === 1 ? "1 key" : `${list.length} keys`}</span>}
+        />
+        <ApiKeysTable
+          apiKeys={list}
+          now={now}
+          onRevoke={(key) => {
+            revoke.reset();
+            showRevoke(key);
+          }}
+        />
+      </Card>
     );
   }
 
@@ -139,12 +147,25 @@ export function ApiKeysContainer() {
     <>
       <PageHeader
         titleRef={titleRef}
+        eyebrow="Settings"
         title="API keys"
         description="Keys act as you on the API. The full key is shown once, when it is created."
         actions={
-          <Button icon={<PlusIcon size={16} />} onClick={openCreate}>
-            Create API key
-          </Button>
+          <>
+            {/* Served by the backend (Swagger UI), so a plain link, not a client-side one. */}
+            <a
+              href="/api/docs"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="API docs (opens in a new tab)"
+              className={buttonClasses("secondary", "no-underline")}
+            >
+              API docs <span aria-hidden="true">↗</span>
+            </a>
+            <Button icon={<PlusIcon size={16} />} onClick={openCreate}>
+              Create API key
+            </Button>
+          </>
         }
       />
       <p role="status" className="sr-only">

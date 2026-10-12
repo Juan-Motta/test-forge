@@ -17,14 +17,17 @@ async function openCreate() {
   return { user, dialog };
 }
 
+/** The selected agent's inline form; its "Save changes" button sits in the page header. */
 async function openEdit(name = "Hotel booking assistant") {
   const user = userEvent.setup();
   renderWithClient(<AgentsContainer />);
-  await user.click(await screen.findByRole("button", { name: `Edit ${name}` }));
-  const dialog = await screen.findByRole("dialog", { name: `Edit ${name}` });
+  await screen.findByRole("heading", { level: 1, name });
+  const dialog = await screen.findByRole("form", { name: "Agent settings" });
   await within(dialog).findByLabelText("Name");
   return { user, dialog };
 }
+
+const saveChanges = () => screen.getByRole("button", { name: "Save changes" });
 
 describe("Create agent", () => {
   it("creates an agent with the camelCase payload and shows it in the list", async () => {
@@ -62,7 +65,7 @@ describe("Create agent", () => {
         },
       },
     ]);
-    expect(await screen.findByRole("row", { name: /Hotel desk/ })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: "Hotel desk" })).toBeInTheDocument();
   });
 
   it("checks fields locally, describes the errors and focuses the first one", async () => {
@@ -173,11 +176,11 @@ describe("Edit agent", () => {
     expect(within(dialog).getByLabelText("Langfuse connection")).toHaveValue("c-lf");
     await user.clear(within(dialog).getByLabelText("Channel ID"));
     await user.type(within(dialog).getByLabelText("Channel ID"), "hotel-prod");
-    await user.clear(within(dialog).getByLabelText("Origin (optional)"));
+    await user.clear(within(dialog).getByLabelText("Origin header"));
     await user.selectOptions(within(dialog).getByLabelText("Langfuse connection"), "None");
-    await user.click(within(dialog).getByRole("button", { name: "Save changes" }));
+    await user.click(saveChanges());
 
-    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Saved Hotel booking assistant."));
     expect(api.requests).toEqual([
       {
         method: "PATCH",
@@ -187,15 +190,47 @@ describe("Edit agent", () => {
     ]);
   });
 
-  it("closes without a request when nothing changed", async () => {
+  it("sends no request when nothing changed and says so", async () => {
     mockConnectionsApi([]);
     const api = mockAgentsApi([agentFixture()]);
+    const { user } = await openEdit();
+
+    await user.click(saveChanges());
+
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("No changes to save."));
+    expect(api.requests).toEqual([]);
+  });
+
+  it("puts a taken name on the inline name field and keeps the edits", async () => {
+    mockConnectionsApi([]);
+    mockAgentsApi([agentFixture(), agentFixture({ id: "a-2", name: "Backup agent" })]);
+    const { user, dialog } = await openEdit("Backup agent");
+
+    const name = within(dialog).getByLabelText("Name");
+    await user.clear(name);
+    await user.type(name, "Hotel booking assistant");
+    await user.click(saveChanges());
+
+    await waitFor(() =>
+      expect(within(dialog).getByLabelText("Name")).toHaveAccessibleDescription(
+        expect.stringContaining("An agent with this name already exists."),
+      ),
+    );
+    expect(within(dialog).getByLabelText("Name")).toHaveValue("Hotel booking assistant");
+  });
+
+  it("refreshes the form with the saved values", async () => {
+    mockConnectionsApi([]);
+    mockAgentsApi([agentFixture()]);
     const { user, dialog } = await openEdit();
 
-    await user.click(within(dialog).getByRole("button", { name: "Save changes" }));
+    const name = within(dialog).getByLabelText("Name");
+    await user.clear(name);
+    await user.type(name, "Hotel desk");
+    await user.click(saveChanges());
 
-    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-    expect(api.requests).toEqual([]);
+    expect(await screen.findByRole("heading", { level: 1, name: "Hotel desk" })).toBeInTheDocument();
+    expect(within(screen.getByRole("form", { name: "Agent settings" })).getByLabelText("Name")).toHaveValue("Hotel desk");
   });
 });
 
@@ -281,9 +316,9 @@ describe("Import from cURL", () => {
     expect(summary).toHaveTextContent("Filled: WebSocket URL, channel ID, origin.");
     expect(summary).toHaveTextContent("No userId query parameter; enter the user ID yourself.");
 
-    await user.click(within(dialog).getByRole("button", { name: "Save changes" }));
+    await user.click(saveChanges());
 
-    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    await waitFor(() => expect(api.requests).toHaveLength(1));
     expect(api.requests).toEqual([
       {
         method: "PATCH",
@@ -326,9 +361,9 @@ describe("Import from cURL", () => {
     const url = within(dialog).getByLabelText("WebSocket URL");
     await user.clear(url);
     await user.type(url, "ws://host.docker.internal:8000");
-    await user.click(within(dialog).getByRole("button", { name: "Save changes" }));
+    await user.click(saveChanges());
 
-    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    await waitFor(() => expect(api.requests).toHaveLength(1));
     expect(api.requests[0].body).toEqual({ baseUrl: "ws://host.docker.internal:8000" });
   });
 

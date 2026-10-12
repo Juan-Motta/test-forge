@@ -39,11 +39,9 @@ describe("Agent skill card", () => {
     expect(within(card).getByRole("textbox", { name: "Skill folder (.zip)" })).toHaveValue(
       `${TEST_ORIGIN}/api/skill.zip`,
     );
-    expect(
-      within(card).getByText(
-        `curl ${TEST_ORIGIN}/api/skill -o SKILL.md`,
-      ),
-    ).toBeInTheDocument();
+    expect(within(card).getByRole("region", { name: "Command to save the skill" })).toHaveTextContent(
+      `curl ${TEST_ORIGIN}/api/skill -o SKILL.md`,
+    );
   });
 
   it("copies each URL and the command, announcing it", async () => {

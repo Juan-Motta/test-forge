@@ -1,6 +1,6 @@
 import { http, HttpResponse } from "msw/http";
 import { apiUrl, server } from "@/test/server";
-import type { Agent, AgentProtocol } from "./types";
+import type { Agent, AgentConnectionTest, AgentProtocol } from "./types";
 
 /** A stored agent as the API returns it. */
 export function agentFixture(overrides: Partial<Agent> = {}): Agent {
@@ -25,7 +25,24 @@ export type RecordedRequest = { method: string; path: string; body: unknown };
 type MockOptions = {
   /** How many scenarios reference an agent; a positive count makes DELETE answer 409. */
   scenarioCount?: (agentId: string) => number;
+  /** Answer of `POST /agents/{id}/test`; a `Response` is returned as is (e.g. a 500). */
+  connectionTest?: (agentId: string) => AgentConnectionTest | Response;
 };
+
+/** A reachable agent's connection check, as `POST /api/agents/{id}/test` returns it. */
+export function connectionTestFixture(overrides: Partial<AgentConnectionTest> = {}): AgentConnectionTest {
+  return {
+    reachable: true,
+    latencyMs: 142,
+    protocol: "realtime",
+    log: [
+      { ok: true, message: "Connected to wss://agent.example.com/ws" },
+      { ok: true, message: "Detected the realtime protocol" },
+      { ok: true, message: "Session ready in 142 ms" },
+    ],
+    ...overrides,
+  };
+}
 
 const nameTaken = () => HttpResponse.json({ detail: "Agent name already in use" }, { status: 409 });
 const notFound = () => HttpResponse.json({ detail: "Agent not found" }, { status: 404 });
@@ -88,6 +105,13 @@ export function mockAgentsApi(initial: Agent[] = [], options: MockOptions = {}) 
       if (used > 0) return HttpResponse.json({ detail: `Agent is used by ${used} scenario(s)` }, { status: 409 });
       state.items = state.items.filter((item) => item.id !== id);
       return new HttpResponse(null, { status: 204 });
+    }),
+    http.post(apiUrl("/agents/:id/test"), async ({ request, params }) => {
+      const id = String(params.id);
+      await record(request, `/agents/${id}/test`);
+      if (!state.items.some((item) => item.id === id)) return notFound();
+      const result = options.connectionTest?.(id) ?? connectionTestFixture();
+      return result instanceof Response ? result : HttpResponse.json(result);
     }),
   );
   return state;

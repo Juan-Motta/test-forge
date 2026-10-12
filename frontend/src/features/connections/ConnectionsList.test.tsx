@@ -10,8 +10,9 @@ import { connectionFixture, mockConnectionsApi } from "./testing";
 const passed = { at: "2026-10-08T09:00:00Z", ok: true, detail: "HTTP 200: credentials accepted" };
 const failed = { at: "2026-10-08T09:00:00Z", ok: false, detail: "HTTP 401: credentials rejected" };
 
+/** Each connection is a card (`article`) named by its heading. */
 async function findRow(name: string) {
-  return screen.findByRole("row", { name: new RegExp(name) });
+  return screen.findByRole("article", { name: new RegExp(name) });
 }
 
 describe("Connections list", () => {
@@ -86,7 +87,7 @@ describe("Connections list", () => {
 
     await user.click(within(await findRow("OpenAI prod")).getByRole("button", { name: "Test OpenAI prod" }));
 
-    await waitFor(() => expect(within(screen.getByRole("row", { name: /OpenAI prod/ })).getByText("Failed")).toBeInTheDocument());
+    await waitFor(() => expect(within(screen.getByRole("article", { name: /OpenAI prod/ })).getByText("Failed")).toBeInTheDocument());
     expect(screen.getByText("HTTP 401: credentials rejected")).toBeInTheDocument();
     expect(api.requests).toEqual([{ method: "POST", path: "/connections/c-openai/test", body: undefined }]);
   });
@@ -123,27 +124,39 @@ describe("Connections list", () => {
     dialog = screen.getByRole("dialog", { name: "Delete “OpenAI prod”?" });
     await user.click(within(dialog).getByRole("button", { name: "Delete connection" }));
 
-    await waitFor(() => expect(screen.queryByRole("row", { name: /OpenAI prod/ })).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole("article", { name: /OpenAI prod/ })).not.toBeInTheDocument());
     expect(api.requests).toEqual([{ method: "DELETE", path: "/connections/c-openai", body: undefined }]);
-    expect(screen.getByRole("row", { name: /Backup/ })).toBeInTheDocument();
+    expect(screen.getByRole("article", { name: /Backup/ })).toBeInTheDocument();
   });
 
-  it("keeps table semantics explicit so the phone card layout cannot drop them", async () => {
-    mockConnectionsApi([connectionFixture(), connectionFixture({ id: "c-2", name: "Backup" })]);
+  it("lists each connection as a card named by the connection, with where it points", async () => {
+    mockConnectionsApi([
+      connectionFixture(),
+      connectionFixture({
+        id: "c-lf",
+        name: "Traces",
+        kind: "langfuse",
+        config: { host: "https://cloud.langfuse.com", publicKey: "pk-lf-1" },
+      }),
+      connectionFixture({
+        id: "c-speech",
+        name: "Speech EU",
+        kind: "azure_speech",
+        config: { region: "westeurope", endpoint: null, voice: null },
+      }),
+    ]);
     renderWithClient(<ConnectionsContainer />);
 
-    const table = await screen.findByRole("table", { name: "Provider connections" });
-    expect(table).toHaveAttribute("role", "table");
-    for (const group of table.querySelectorAll("thead, tbody")) expect(group).toHaveAttribute("role", "rowgroup");
-    const headers = within(table).getAllByRole("columnheader");
-    expect(headers).toHaveLength(6);
-    for (const header of headers) expect(header).toHaveAttribute("role", "columnheader");
-    const row = within(table).getByRole("row", { name: /Backup/ });
-    expect(row).toHaveAttribute("role", "row");
-    expect(within(row).getByRole("rowheader", { name: "Backup" })).toHaveAttribute("role", "rowheader");
-    const cells = within(row).getAllByRole("cell");
-    expect(cells).toHaveLength(5);
-    for (const cell of cells) expect(cell).toHaveAttribute("role", "cell");
+    const list = await screen.findByRole("list", { name: "Provider connections" });
+    const cards = within(list).getAllByRole("article");
+    expect(cards.map((card) => within(card).getByRole("heading").textContent)).toEqual([
+      "OpenAI prod",
+      "Traces",
+      "Speech EU",
+    ]);
+    expect(within(cards[0]).getByText("https://api.openai.com/v1")).toBeInTheDocument();
+    expect(within(cards[1]).getByText("https://cloud.langfuse.com")).toBeInTheDocument();
+    expect(within(cards[2]).getByText("westeurope")).toBeInTheDocument();
   });
 
   it("shows every row being tested while two tests run at once", async () => {
@@ -215,7 +228,7 @@ describe("Connections list", () => {
 
     expect(await within(dialog).findByRole("alert")).toHaveTextContent("Database unavailable");
     expect(within(dialog).getByRole("button", { name: "Delete connection" })).toBeEnabled();
-    expect(screen.getByRole("row", { name: /OpenAI prod/ })).toBeInTheDocument();
+    expect(screen.getByRole("article", { name: /OpenAI prod/ })).toBeInTheDocument();
 
     await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
     await user.click(screen.getByRole("button", { name: "Delete OpenAI prod" }));
@@ -243,11 +256,11 @@ describe("Connections list", () => {
 
     await user.click(screen.getByRole("button", { name: "Delete Backup" }));
     release();
-    await waitFor(() => expect(screen.queryByRole("row", { name: /OpenAI prod/ })).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole("article", { name: /OpenAI prod/ })).not.toBeInTheDocument());
     const dialog = screen.getByRole("dialog", { name: "Delete “Backup”?" });
     await user.click(await within(dialog).findByRole("button", { name: "Delete connection" }));
 
-    await waitFor(() => expect(screen.queryByRole("row", { name: /Backup/ })).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole("article", { name: /Backup/ })).not.toBeInTheDocument());
     expect(api.items).toEqual([]);
   });
 

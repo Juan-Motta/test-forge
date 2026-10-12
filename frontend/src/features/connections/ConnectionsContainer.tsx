@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { PageHeader } from "@/features/shell/PageHeader";
 import { Alert, Button, ConnectionsIcon, Dialog, EmptyState, PlusIcon, Spinner } from "@/ui";
 import { ConnectionFormContainer } from "./ConnectionFormContainer";
-import { ConnectionsTable } from "./ConnectionsTable";
+import { ConnectionsList } from "./ConnectionsList";
 import { DeleteConnectionDialog } from "./DeleteConnectionDialog";
 import { errorMessage } from "./errors";
 import { useConnections, useDeleteConnection, useTestStoredConnection } from "./queries";
@@ -125,7 +125,7 @@ export function ConnectionsContainer() {
     );
   } else {
     body = (
-      <ConnectionsTable
+      <ConnectionsList
         connections={list}
         onEdit={(connection) => setEditing({ type: "edit", connection })}
         onTest={(connection) => void testRow(connection)}
@@ -142,6 +142,7 @@ export function ConnectionsContainer() {
     <>
       <PageHeader
         titleRef={titleRef}
+        eyebrow="Settings"
         title="Connections"
         description="Credentials for the providers runs use. Secrets are write-only: only a hint is ever shown."
         actions={

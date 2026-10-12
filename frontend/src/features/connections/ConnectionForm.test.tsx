@@ -53,7 +53,7 @@ describe("Create connection", () => {
         },
       },
     ]);
-    const row = await screen.findByRole("row", { name: /Main OpenAI/ });
+    const row = await screen.findByRole("article", { name: /Main OpenAI/ });
     expect(within(row).getByText("••••zz9q")).toBeInTheDocument();
     expect(document.body.innerHTML).not.toContain(CANARY);
   });
@@ -278,7 +278,7 @@ describe("Edit connection", () => {
 
     await waitFor(() => expect(api.requests).toHaveLength(1));
     expect(api.requests[0]).toEqual({ method: "PATCH", path: "/connections/c-openai", body: { name: "OpenAI main" } });
-    expect(await screen.findByRole("row", { name: /OpenAI main/ })).toBeInTheDocument();
+    expect(await screen.findByRole("article", { name: /OpenAI main/ })).toBeInTheDocument();
   });
 
   it("sends a newly typed secret and the changed config, and never shows the secret afterwards", async () => {

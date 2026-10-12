@@ -41,7 +41,7 @@ const CELL = "align-top md:px-4 md:py-3.5";
  */
 export function ApiKeysTable({ apiKeys, onRevoke, now }: ApiKeysTableProps) {
   return (
-    <div className="md:overflow-x-auto md:rounded-xl md:border md:border-line md:bg-panel">
+    <div className="md:-mx-5 md:-mb-5 md:overflow-x-auto md:border-t md:border-line">
       <table role="table" className="w-full text-sm max-md:block">
         <caption className="sr-only">API keys</caption>
         <thead role="rowgroup" className="border-b border-line max-md:sr-only">

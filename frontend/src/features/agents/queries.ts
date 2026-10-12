@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError } from "@/lib/api";
-import { createAgent, deleteAgent, listAgents, updateAgent } from "./api";
+import { createAgent, deleteAgent, listAgents, testAgentConnection, updateAgent } from "./api";
 import type { Agent, AgentChanges } from "./types";
 
 export const agentsQueryKey = ["agents"] as const;
@@ -50,4 +50,9 @@ export function useDeleteAgent() {
       return queryClient.invalidateQueries({ queryKey: agentsQueryKey });
     },
   });
+}
+
+/** Dials the agent once (no audio); the result is kept by the caller, per agent, for the session. */
+export function useTestAgentConnection() {
+  return useMutation({ mutationFn: (agent: Agent) => testAgentConnection(agent.id) });
 }

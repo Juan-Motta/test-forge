@@ -19,9 +19,10 @@ describe("Agents with scenario counts", () => {
     mockScenariosApi([scenarioFixture(), scenarioFixture({ id: "s-2", name: "Cancel" })], { agents: [hotel, support] });
     renderWithClient(<AgentsWithScenarioCounts />);
 
-    const row = await screen.findByRole("row", { name: /Hotel booking assistant/ });
-    await waitFor(() => expect(within(row).getByText("2 scenarios")).toBeInTheDocument());
-    expect(within(screen.getByRole("row", { name: /Support triage/ })).getByText("0 scenarios")).toBeInTheDocument();
+    const rail = await screen.findByRole("complementary", { name: "Agents" });
+    const row = await within(rail).findByRole("button", { name: /Hotel booking assistant/ });
+    await waitFor(() => expect(row).toHaveTextContent("2 scenarios"));
+    expect(within(rail).getByRole("button", { name: /Support triage/ })).toHaveTextContent("0 scenarios");
   });
 
   it("refuses to delete an agent its scenarios use, with the backend's count", async () => {
@@ -43,7 +44,7 @@ describe("Agents with scenario counts", () => {
     );
   });
 
-  it("leaves the column out when the scenarios cannot be loaded", async () => {
+  it("leaves the scenario count out when the scenarios cannot be loaded", async () => {
     mockConnectionsApi([]);
     mockAgentsApi([hotel]);
     let failed = false;
@@ -55,8 +56,8 @@ describe("Agents with scenario counts", () => {
     );
     renderWithClient(<AgentsWithScenarioCounts />);
 
-    await screen.findByRole("row", { name: /Hotel booking assistant/ });
+    const rail = await screen.findByRole("complementary", { name: "Agents" });
     await waitFor(() => expect(failed).toBe(true));
-    expect(screen.queryByRole("columnheader", { name: "Scenarios" })).not.toBeInTheDocument();
+    expect(within(rail).getByRole("button", { name: /Hotel booking assistant/ })).not.toHaveTextContent("scenario");
   });
 });
