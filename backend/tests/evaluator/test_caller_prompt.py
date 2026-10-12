@@ -227,3 +227,39 @@ def test_realtime_instructions_follow_the_hang_up_rule(rule, expected):
     from voice_eval.evaluator.prompt import realtime_instructions
 
     assert expected in realtime_instructions(replace(BRIEF, hang_up_when=rule))
+
+
+def test_realtime_instructions_frame_the_caller_and_the_agent_roles():
+    from voice_eval.evaluator.prompt import realtime_instructions
+
+    text = realtime_instructions(BRIEF)
+    for part in [
+        "The other voice on the line is the agent",
+        "Never do the agent's job",
+        "never say you will continue, count, look something up or do the work",
+        "never apologize for being interrupted",
+    ]:
+        assert part in text, part
+
+
+@pytest.mark.parametrize("rule", ["goal_or_goodbye", "goodbye"])
+def test_realtime_instructions_require_a_spoken_goodbye_before_hang_up(rule):
+    from dataclasses import replace
+
+    from voice_eval.evaluator.prompt import realtime_instructions
+
+    text = realtime_instructions(replace(BRIEF, hang_up_when=rule))
+    assert (
+        "always say a short goodbye out loud in the same response before calling `hang_up`" in text
+    )
+
+
+def test_the_realtime_interruption_note_keeps_the_caller_in_its_role():
+    from voice_eval.evaluator.prompt import REALTIME_JUST_INTERRUPTED
+
+    for part in [
+        "You (the caller) just cut the agent off",
+        "it was the agent speaking, not you",
+        "Do not apologize and do not continue its task",
+    ]:
+        assert part in REALTIME_JUST_INTERRUPTED, part

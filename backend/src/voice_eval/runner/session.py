@@ -21,7 +21,9 @@ With a realtime caller (`realtime`, the scenario's realtime evaluator) no policy
 a speech-to-speech model hears the agent's audio as it arrives (`runner.realtime`) and, at the
 same playback-aware moment the pipeline caller would speak, answers by voice; its audio streams
 to the agent from the first chunk and its output transcript is the caller's transcript row. It
-ends the call with its `hang_up` tool (after its goodbye played). On an interrupted turn it hears
+ends the call with its `hang_up` tool (after its goodbye played); a hang-up without any spoken
+audio is refused once, and the caller asked at once to say its goodbye out loud (a second silent
+hang-up ends the call anyway). On an interrupted turn it hears
 only the audio that played before the cut, plus a note that it cut the agent off.
 """
 
@@ -89,6 +91,7 @@ POLL_S = 0.05
 REALTIME_REASON = "realtime"  # the caller rows' reason: the realtime model gives none
 HUNG_UP_OUTPUT = "the call has ended"
 HANG_UP_REFUSED_OUTPUT = "the call cannot end yet: keep talking"
+SAY_GOODBYE_OUTPUT = "the call has not ended: say a short goodbye out loud first, then hang up"
 
 
 @dataclass
@@ -406,10 +409,10 @@ class SessionRunner:
             if await self._realtime_turn(caller):
                 await self._agent_turn()
 
-    async def _realtime_turn(self, caller: RealtimeCaller) -> bool:
+    async def _realtime_turn(self, caller: RealtimeCaller, *, goodbye_asked: bool = False) -> bool:
         """One caller response; False when the agent started speaking before its first audio
         (the response is cancelled and the agent's turn collected). Raises `Stop` on hang-up."""
-        speech = await self._realtime_response(caller)
+        speech = await self._realtime_response(caller, noted=not goodbye_asked)
         said: asyncio.Event | None = None
         row: dict[str, Any] | None = None
         try:
@@ -435,6 +438,10 @@ class SessionRunner:
             if self.options.hang_up_when == "max_duration":
                 self._warn("the caller tried to hang up; this scenario ends only at max duration")
                 await self._answer_tool(caller, speech.hang_up.call_id, HANG_UP_REFUSED_OUTPUT)
+            elif not speech.has_audio and not goodbye_asked:
+                self._warn("the caller hung up without a word; it was asked to say goodbye first")
+                await self._answer_tool(caller, speech.hang_up.call_id, SAY_GOODBYE_OUTPUT)
+                return await self._realtime_turn(caller, goodbye_asked=True)
             else:
                 if said is not None:
                     await self._wait_until(said.is_set)
@@ -442,13 +449,18 @@ class SessionRunner:
                 raise Stop("completed", "caller_hung_up")
         return True
 
-    async def _realtime_response(self, caller: RealtimeCaller) -> RealtimeSpeech:
-        """Start the caller's response once it heard everything the agent said so far."""
+    async def _realtime_response(
+        self, caller: RealtimeCaller, *, noted: bool = True
+    ) -> RealtimeSpeech:
+        """Start the caller's response once it heard everything the agent said so far; `noted`
+        False sends no opening or interruption note (a retry of the same turn)."""
         assert self._feed is not None
         feed = self._feed
         await self._wait_until(lambda: feed.idle)
         note = None
-        if self._agent_turns == 0 and self.caller_turns == 0:
+        if not noted:
+            pass
+        elif self._agent_turns == 0 and self.caller_turns == 0:
             note = REALTIME_OPENING
         elif len(self.interruptions) > self._cuts_noted:
             self._cuts_noted = len(self.interruptions)

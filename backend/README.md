@@ -429,12 +429,17 @@ else `alloy`), server turn detection off, low reasoning effort when the model ta
 `hang_up(reason)` tool and instructions built from the brief like the pipeline prompt. The
 agent's audio is appended to the session as it arrives (`input_audio_buffer.append`); at the
 moment the pipeline caller would speak (agent turn ended, played back, grace; same re-check if
-the agent spoke again, which cancels the response) the runner commits it and sends
-`response.create`. The response's audio streams to the agent from its first chunk; its output
+the agent spoke again, which cancels the response and removes its output items from the
+model's conversation: `conversation.item.delete`, or `conversation.item.truncate` to the audio
+already streamed) the runner commits it and sends `response.create`. The response's audio streams to the agent from its first chunk; its output
 transcript becomes the caller's row (`reason` `realtime`). `caller_speaking.tts_first_chunk_ms`
 and `caller_decision.duration_ms` are the time from `response.create` to the first audio;
 `caller_decision` (`say` = transcript) is published once the response is done. A `hang_up` call
-ends the run after the goodbye played (refused with a warning under `max_duration`). On an
+ends the run after the goodbye played (refused with a warning under `max_duration`); a
+`hang_up` with no spoken audio is answered once with "say a short goodbye out loud first" and a
+new response is requested at once (a second silent one ends the call). The instructions keep
+the roles apart: the model is the caller, never does the agent's task and, after cutting the
+agent off, speaks as the one who interrupted. On an
 interrupted turn the agent audio is held and only the part that played is appended, plus a
 note that the caller cut in. Connection, auth or model errors fail the run with `reason`
 `realtime_failed` and a message without keys or provider text; an Azure connection without

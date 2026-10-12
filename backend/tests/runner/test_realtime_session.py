@@ -322,3 +322,36 @@ async def test_the_response_is_cancelled_when_the_agent_speaks_first(
     caller_rows = [r["text"] for r in transcript(tmp_path) if r["role"] == "caller"]
     assert caller_rows == ["Hello", "Bye"]
     assert caller.responses[2]["heard"] > caller.responses[1]["heard"]  # it heard the follow-up
+
+
+async def test_a_silent_hang_up_is_sent_back_for_a_spoken_goodbye(fake_live_server, tmp_path):
+    from voice_eval.runner.session import HUNG_UP_OUTPUT, SAY_GOODBYE_OUTPUT
+
+    caller = FakeRealtimeCaller(
+        [spoken("Hello"), [HangUp("call_silent", "done")], spoken("Bye", hang_up=True)]
+    )
+    summary, sink = await run(fake_live_server.url, tmp_path, caller)
+
+    assert (summary["status"], summary["reason"]) == ("completed", "caller_hung_up")
+    assert caller.tool_outputs == [
+        ("call_silent", SAY_GOODBYE_OUTPUT),
+        ("call_Bye", HUNG_UP_OUTPUT),
+    ]
+    silent, goodbye = caller.responses[1], caller.responses[2]
+    assert goodbye["heard"] == silent["heard"]  # asked again at once, no agent turn between
+    assert goodbye["note"] is None
+    caller_rows = [r["text"] for r in transcript(tmp_path) if r["role"] == "caller"]
+    assert caller_rows == ["Hello", "Bye"]
+
+
+async def test_a_second_silent_hang_up_ends_the_call(fake_live_server, tmp_path):
+    from voice_eval.runner.session import HUNG_UP_OUTPUT, SAY_GOODBYE_OUTPUT
+
+    caller = FakeRealtimeCaller(
+        [spoken("Hello"), [HangUp("call_a", "done")], [HangUp("call_b", "done")]]
+    )
+    summary, _ = await run(fake_live_server.url, tmp_path, caller)
+
+    assert (summary["status"], summary["reason"]) == ("completed", "caller_hung_up")
+    assert caller.tool_outputs == [("call_a", SAY_GOODBYE_OUTPUT), ("call_b", HUNG_UP_OUTPUT)]
+    assert len(caller.responses) == 3

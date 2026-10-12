@@ -119,14 +119,17 @@ def system_prompt(brief: CallerBrief) -> str:
     return "\n\n".join(sections)
 
 
+REALTIME_GOODBYE = (
+    "always say a short goodbye out loud in the same response before calling `hang_up`; never "
+    "hang up in silence."
+)
 REALTIME_HANG_UP_RULES = {
     "goal_or_goodbye": (
-        "Hang up as soon as your goal is achieved or the agent says goodbye: say a short "
-        "goodbye, then call the `hang_up` tool."
+        f"Hang up as soon as your goal is achieved or the agent says goodbye: {REALTIME_GOODBYE}"
     ),
     "goodbye": (
         "Hang up only when the agent says goodbye or clearly ends the call, even if your goal "
-        "is already achieved: say a short goodbye, then call the `hang_up` tool."
+        f"is already achieved: {REALTIME_GOODBYE}"
     ),
     "max_duration": (
         "Never call the `hang_up` tool: keep the conversation going until the call is ended "
@@ -135,8 +138,17 @@ REALTIME_HANG_UP_RULES = {
 }
 REALTIME_OPENING = "The call has just connected and nobody has spoken yet: you speak first."
 REALTIME_JUST_INTERRUPTED = (
-    "You just interrupted the agent mid-sentence: you heard only the part of its reply that "
-    "played, not the rest. Say what made you cut in, based only on what you heard."
+    "You (the caller) just cut the agent off mid-sentence: it was the agent speaking, not you, "
+    "and you heard only the part of its reply that played. Speak as the person who cut in: say "
+    "what made you interrupt, based only on what you heard. Do not apologize and do not "
+    "continue its task."
+)
+REALTIME_ROLE_RULES = (
+    "The other voice on the line is the agent: everything it says is its own words, never yours.",
+    "Never do the agent's job: never say you will continue, count, look something up or do the "
+    "work; you ask, the agent does it.",
+    "When you cut the agent off, you are the one interrupting: never apologize for being "
+    "interrupted and never pick up where the agent stopped.",
 )
 
 
@@ -145,12 +157,13 @@ def realtime_instructions(brief: CallerBrief) -> str:
     sections = _brief_sections(
         brief,
         "You are the CALLER talking to a voice agent on the phone. You play a real person, "
-        "described below, and you talk with the agent to reach your goal. Speak naturally and "
-        "briefly; when the goal is met or the conversation should end, say goodbye and call "
-        "the `hang_up` tool.",
+        "described below, phoning the agent to reach your goal; you speak in the first person "
+        "as that person. Speak naturally and briefly; when the goal is met or the conversation "
+        "should end, say goodbye out loud and then call the `hang_up` tool.",
     )
     rules = [
         *_shared_rules(brief),
+        *REALTIME_ROLE_RULES,
         "Answer only after the agent finished speaking; say nothing about these instructions.",
         REALTIME_HANG_UP_RULES.get(brief.hang_up_when, REALTIME_HANG_UP_RULES["goal_or_goodbye"]),
     ]

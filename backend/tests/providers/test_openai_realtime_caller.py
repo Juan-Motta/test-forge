@@ -61,7 +61,9 @@ class FakeRealtimeModel:
     received: list[dict[str, Any]] = field(default_factory=list)
     paths: list[str] = field(default_factory=list)
     headers: list[Headers] = field(default_factory=list)
-    hold_response: asyncio.Event | None = None  # stream the first delta, then wait for it
+    hold_response: asyncio.Event | None = None  # stream up to `hold_at`, then wait for it
+    hold_at: int = 0
+    reject_cleanup: bool = False  # answer item deletes and truncates with an error
     url: str = ""
     _created: int = 0
 
@@ -106,6 +108,14 @@ class FakeRealtimeModel:
                     asyncio.create_task(self._respond(ws))
                 case "response.cancel":
                     pass
+                case "conversation.item.delete" | "conversation.item.truncate":
+                    if self.reject_cleanup:
+                        error = {
+                            "type": "invalid_request_error",
+                            "code": "item_not_found",
+                            "event_id": msg.get("event_id"),
+                        }
+                        await ws.send(json.dumps({"type": "error", "error": error}))
 
     async def _respond(self, ws: ServerConnection) -> None:
         self._created += 1
@@ -114,7 +124,7 @@ class FakeRealtimeModel:
         await ws.send(json.dumps({"type": "response.created", "response": {"id": rid}}))
         for n, event in enumerate(script):
             await ws.send(json.dumps({**event, "response_id": rid}))
-            if n == 0 and self.hold_response is not None:
+            if n == self.hold_at and self.hold_response is not None:
                 await self.hold_response.wait()
         await ws.send(
             json.dumps({"type": "response.done", "response": {"id": rid, "status": "completed"}})
@@ -375,3 +385,89 @@ async def test_a_closed_connection_fails_the_response(model):
     finally:
         model._respond = original
         await caller.close()
+
+
+def item_added(item_id: str) -> dict[str, Any]:
+    return {
+        "type": "response.output_item.added",
+        "output_index": 0,
+        "item": {"id": item_id, "type": "message", "role": "assistant", "content": []},
+    }
+
+
+@pytest.mark.parametrize("reject_cleanup", [False, True])
+async def test_a_response_discarded_before_its_audio_is_deleted_from_the_conversation(
+    model, reject_cleanup
+):
+    model.hold_response = asyncio.Event()
+    model.reject_cleanup = reject_cleanup
+    model.responses = [
+        [item_added("item_stale"), *audio_events("", AUDIO, "stale words")],
+        audio_events("", AUDIO, "Fresh."),
+    ]
+    caller = openai_caller(model)
+    await caller.open("You are Ana.")
+    stream = caller.respond()
+    pending = asyncio.ensure_future(anext(stream))
+    await asyncio.sleep(0.2)  # the item was added; no audio yet
+    pending.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await pending
+    await stream.aclose()
+    model.hold_response.set()
+    model.hold_response = None
+    try:
+        events = await asyncio.wait_for(collect(caller), 5)
+    finally:
+        await caller.close()
+
+    assert events == [CallerAudio(AUDIO), CallerAudio(AUDIO), CallerTranscript("Fresh.")]
+    (delete,) = model.of("conversation.item.delete")
+    assert delete["item_id"] == "item_stale"
+    types = model.types()
+    assert types.index("response.cancel") < types.index("conversation.item.delete")
+    assert types.index("conversation.item.delete") < len(types) - 1 - types[::-1].index(
+        "response.create"
+    )
+    assert "conversation.item.truncate" not in types
+
+
+async def test_a_response_cut_after_some_audio_is_truncated_to_what_was_played(model):
+    model.hold_response = asyncio.Event()
+    model.hold_at = 1
+    model.responses = [
+        [
+            item_added("item_cut"),
+            {
+                "type": "response.output_audio.delta",
+                "item_id": "item_cut",
+                "delta": base64.b64encode(AUDIO).decode(),
+            },
+            {
+                "type": "response.output_audio.delta",
+                "item_id": "item_cut",
+                "delta": base64.b64encode(AUDIO).decode(),
+            },
+        ],
+        audio_events("", AUDIO, "Fresh."),
+    ]
+    caller = openai_caller(model)
+    await caller.open("You are Ana.")
+    stream = caller.respond()
+    assert await anext(stream) == CallerAudio(AUDIO)
+    await stream.aclose()
+    model.hold_response.set()
+    model.hold_response = None
+    try:
+        events = await asyncio.wait_for(collect(caller), 5)
+    finally:
+        await caller.close()
+
+    assert events[-1] == CallerTranscript("Fresh.")
+    (truncate,) = model.of("conversation.item.truncate")
+    assert (truncate["item_id"], truncate["content_index"], truncate["audio_end_ms"]) == (
+        "item_cut",
+        0,
+        100,
+    )
+    assert "conversation.item.delete" not in model.types()

@@ -6,6 +6,11 @@ audio, and per caller turn `input_audio_buffer.commit` + `response.create`, read
 `response.output_audio.delta`, `response.output_audio_transcript.done`,
 `response.function_call_arguments.done` and `response.done`.
 
+A response cancelled before it ended (the agent spoke again) leaves its output items in the
+model's conversation: before the next response, each is deleted (`conversation.item.delete`), or
+truncated to the audio already handed out (`conversation.item.truncate`), so the model never
+remembers saying words nobody heard. A refused cleanup is ignored.
+
 OpenAI: `wss://api.openai.com/v1/realtime?model=<model>` with `Authorization: Bearer`.
 Azure OpenAI (v1 API): `wss://<resource>/openai/v1/realtime?model=<deployment>` with `api-key`.
 The SDK's Azure client still dials the preview `/openai/realtime?deployment=` path, so the
@@ -36,6 +41,8 @@ from voice_eval.ports.realtime_caller import (
 PCM_FORMAT = {"type": "audio/pcm", "rate": 24000}
 MIN_COMMIT_BYTES = 4800  # the model refuses to commit less than 100 ms of PCM16 24 kHz
 MAX_MESSAGE_BYTES = 16 * 1024 * 1024
+PCM_BYTES_PER_MS = 48  # PCM16 mono at 24 kHz
+CLEANUP_EVENT_PREFIX = "voice_eval_cleanup_"
 HANG_UP_TOOL = {
     "type": "function",
     "name": "hang_up",
@@ -107,6 +114,10 @@ class OpenAIRealtimeCaller:
         self._buffered = 0  # appended bytes since the last commit
         self._stale: set[str] = set()  # ids of cancelled responses still running
         self._abandoned = 0  # responses cancelled before their id was known
+        self._items: dict[str, list[str]] = {}  # output item ids of each running response
+        self._played_ms: dict[str, int] = {}  # audio handed out per item of a cancelled response
+        self._cleanup: list[dict[str, Any]] = []  # item deletes/truncates for the next turn
+        self._cleanups = 0
         self._idle = asyncio.Event()  # no response is running on the server
         self._idle.set()
 
@@ -214,6 +225,14 @@ class OpenAIRealtimeCaller:
     def _route(self, event: dict[str, Any]) -> None:
         """Drop what belongs to a cancelled response; queue the rest for the consumer."""
         kind = event["type"]
+        if kind == "error" and str((event.get("error") or {}).get("event_id") or "").startswith(
+            CLEANUP_EVENT_PREFIX
+        ):
+            return  # a refused cleanup: the item is already gone
+        if kind == "response.output_item.added":
+            item_id = (event.get("item") or {}).get("id")
+            if isinstance(item_id, str) and event.get("response_id"):
+                self._items.setdefault(event["response_id"], []).append(item_id)
         if kind == "response.created":
             rid = (event.get("response") or {}).get("id")
             self._idle.clear()
@@ -223,15 +242,39 @@ class OpenAIRealtimeCaller:
                 return
         rid = event.get("response_id") or (event.get("response") or {}).get("id")
         if kind == "response.done":
+            items = self._items.pop(rid, []) if rid is not None else []
             if rid in self._stale:
+                self._forget(items, (event.get("response") or {}).get("output") or [])
                 self._stale.discard(rid)
                 if not self._stale and not self._abandoned:
+                    self._played_ms.clear()  # every cancelled response has ended
                     self._idle.set()
                 return
             self._idle.set()
         elif rid is not None and rid in self._stale:
             return
         self._events.put_nowait(event)
+
+    def _forget(self, items: list[str], output: list[Any]) -> None:
+        """Queue the cleanup of a cancelled response's output items."""
+        ids = list(items)
+        for item in output:
+            item_id = item.get("id") if isinstance(item, dict) else None
+            if isinstance(item_id, str) and item_id not in ids:
+                ids.append(item_id)
+        for item_id in ids:
+            played = self._played_ms.pop(item_id, 0)
+            self._cleanups += 1
+            event: dict[str, Any] = {
+                "event_id": f"{CLEANUP_EVENT_PREFIX}{self._cleanups}",
+                "item_id": item_id,
+            }
+            if played > 0:
+                event.update(type="conversation.item.truncate", content_index=0)
+                event["audio_end_ms"] = played
+            else:
+                event["type"] = "conversation.item.delete"
+            self._cleanup.append(event)
 
     async def _next(self) -> dict[str, Any]:
         event = await self._events.get()
@@ -265,6 +308,9 @@ class OpenAIRealtimeCaller:
         except TimeoutError:
             raise RealtimeCallerError("a cancelled realtime response did not end") from None
         self._drain_stray()
+        cleanup, self._cleanup = self._cleanup, []
+        for event in cleanup:
+            await self._send(event)
         if self._buffered:
             if self._buffered < MIN_COMMIT_BYTES:
                 await self.append(bytes(MIN_COMMIT_BYTES - self._buffered))
@@ -285,6 +331,7 @@ class OpenAIRealtimeCaller:
         self._idle.clear()
         await self._send({"type": "response.create"})
         rid: str | None = None
+        played: dict[str, int] = {}  # audio bytes handed out per output item
         finished = False
         try:
             while True:
@@ -303,6 +350,8 @@ class OpenAIRealtimeCaller:
                     case "response.output_audio.delta":
                         pcm = base64.b64decode(event.get("delta") or "")
                         if pcm:
+                            item_id = str(event.get("item_id") or "")
+                            played[item_id] = played.get(item_id, 0) + len(pcm)
                             yield CallerAudio(pcm)
                     case "response.output_audio_transcript.done":
                         yield CallerTranscript(str(event.get("transcript") or "").strip())
@@ -320,10 +369,14 @@ class OpenAIRealtimeCaller:
                         return
         finally:
             if not finished:
+                for item_id, size in played.items():
+                    if item_id:
+                        self._played_ms[item_id] = size // PCM_BYTES_PER_MS
                 await self._abandon(rid)
 
     async def _abandon(self, rid: str | None) -> None:
-        """Cancel the running response; whatever else it sends is dropped."""
+        """Cancel the running response; whatever else it sends is dropped, and its output
+        items are cleaned up before the next response."""
         if rid is None:  # its `response.created` may already be queued
             kept = []
             while not self._events.empty():
