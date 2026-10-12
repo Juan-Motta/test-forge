@@ -33,7 +33,7 @@ realtime evaluator mode that listens to the agent's audio and answers by voice w
 - [x] T2 Realtime evaluator mode (backend): scenario `evaluatorMode`, realtime caller adapter,
       runner integration (playback wait, interruptions, hang-up tool, transcripts, events) — delegated
 - [x] T3 Frontend: evaluator mode in the scenario editor; transcript/live unchanged — delegated
-- [ ] T4 Real runs: compare pipeline vs realtime latency on a local-agent scenario (paid; ask) — inline
+- [x] T4 Real runs: compare pipeline vs realtime latency on a local-agent scenario (paid; ask) — inline
 
 ## Acceptance criteria
 - Pipeline caller: time from decision to first caller audio ≈ TTS first-chunk time (measured).
@@ -60,4 +60,15 @@ realtime evaluator mode that listens to the agent's audio and answers by voice w
   cancelled but its partial output item is not deleted (model context may keep unheard words);
   feed-append failure and abandoned-before-created paths untested; idle gate cleared after send →
   fixed in 87c0ec1.
-- Stack rebuilt. Next: T4 real runs (ask).
+- Stack rebuilt.
+- T4 (user-approved): same interruption scenario vs the local agent, batch ee85f6d4.
+  - Pipeline 7f17d1f9: opening 2.0 s decision + 1.25 s first TTS chunk; after the cut 3.0 s
+    (decision 1.3 s + first chunk 1.7 s); normal turns 459–522 ms after playback (grace-bound).
+    Agent claimed "hasta el número 14" (heard 3); after the caller corrected it, resumed 4–8.
+    Judge 70, mustFailed (claim criterion 1).
+  - Realtime 21ff4bb1 (gpt-realtime-2.1-mini): opening first audio 0.55 s; after the cut 1.4 s
+    (first audio 0.9 s). Agent claimed "hasta el número 20", resumed 21–25. Judge 44, mustFailed.
+    Realtime caller issues: role confusion in C2 ("me cortaste ahí… luego te sigo desde ahí"),
+    and it hung up via the tool without a spoken goodbye (no caller row after A2).
+  - Both runs: an empty, cancelled agent response after the opening (server VAD split).
+- Next: tighten the realtime caller (role framing, speak a goodbye before hang_up) — ask.
