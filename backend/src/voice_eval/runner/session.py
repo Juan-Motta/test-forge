@@ -720,7 +720,9 @@ class SessionRunner:
             }
             row.update(marks)
             data.update(marks)
-            self._record_interruption(cut, heard, text, row if text else None)
+            self._record_interruption(
+                cut, heard, text, row
+            )  # also when the reply had no transcript
             data["interruption_confirmed"] = row["interruption_confirmed"]
         if not text:
             self._warn("the agent turn had no transcript")

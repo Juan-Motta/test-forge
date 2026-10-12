@@ -192,6 +192,7 @@ class FakeRealtimeServer:
     # `.deleted` for a null audioEndMs), after this delay, adding `truncate_offset_ms` to the
     # truncated position (a server that disagrees with what was reported)
     confirm_interruptions: bool = True
+    silent_transcript: bool = False  # burst replies: audio without any transcript
     confirm_delay_s: float = 0.0
     truncate_offset_ms: int = 0
     _cancelled: set[str] = field(default_factory=set)
@@ -245,7 +246,7 @@ class FakeRealtimeServer:
                     "delta": delta,
                 }
                 await self._send(ws, audio)
-        for word in text.split():
+        for word in [] if self.silent_transcript else text.split():
             if self.burst_audio_ms:
                 await self._send(
                     ws,
@@ -282,7 +283,7 @@ class FakeRealtimeServer:
             {
                 "type": "response.output_audio_transcript.done",
                 "item_id": item_id,
-                "transcript": text,
+                "transcript": "" if self.silent_transcript else text,
             },
         )
         await self._send(ws, {"type": "response.done", "response": {"id": rid}})

@@ -743,6 +743,22 @@ async def test_an_unconfirmed_interruption_is_recorded_as_such(fake_realtime_ser
     assert agent_row["interruption_confirmed"] is False
 
 
+async def test_an_interrupted_reply_without_transcript_still_completes(
+    fake_realtime_server, tmp_path
+):
+    fake = fake_realtime_server
+    fake.burst_audio_ms, fake.silent_transcript = 1500, True
+    policy = ScriptedPolicy(by_turn(say("Hello there"), say("Wait"), HANG_UP))
+    summary, _ = await run(fake.url, tmp_path, policy, opts=interrupting((1, 300)))
+
+    assert (summary["status"], summary["reason"]) == ("completed", "caller_hung_up")
+    (interruption,) = summary["interruptions"]
+    assert interruption["confirmation"] == "truncated"
+    agent_row = next(r for r in transcript(tmp_path) if r["role"] == "agent")
+    assert agent_row["interrupted"] is True
+    assert agent_row["interruption_confirmed"] is True
+
+
 async def test_a_late_confirmation_counts_and_a_differing_position_is_kept(
     fake_realtime_server, tmp_path
 ):
