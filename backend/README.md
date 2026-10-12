@@ -484,6 +484,22 @@ them again.
 | `GET /api/runs/{id}/judgement` | `{status, result, traceStats, traceNote, error, model, attempt, createdAt, updatedAt, completedAt}`, or `{status: "none"}` |
 | `POST /api/runs/{id}/judgement` | `202`; re-judge (next `attempt`, replaces the result); `409` while the run or its judgement is in progress |
 
+#### Measuring judge stability
+
+```bash
+uv run voice-eval judge-stability <run id or prefix> [--times 3] [--json]
+docker compose exec backend voice-eval judge-stability <run id or prefix>   # in the container
+```
+
+Judges one finished run `--times` times (2-10, default 3) on the same evidence: the transcript,
+summary and Langfuse traces are read once (a single fetch, no polling), then the run's
+evaluator connection is called once per time. **Each time is one paid model call**; the count is
+printed before the first one. Nothing is stored: the run's judgement and `langfuse.json` are left
+as they are. The report lists, per criterion, the band and verdict of every sample, the band
+spread (highest minus lowest) and the verdict flips, then the overall scores (spread and mean)
+and how many criteria moved by two bands or more. `--json` prints it as JSON (progress goes to
+stderr). It exits `1` for an unknown, ambiguous or unfinished run and `4` when a judgement fails.
+
 ### Live stream
 
 `GET /api/runs/{id}/live` (WebSocket) streams one run while it is running;

@@ -21,13 +21,14 @@ import json
 import logging
 import uuid
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Protocol
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from voice_eval.judge.domain import JudgeError
+from voice_eval.judge.domain import JudgeError, JudgeResult
 from voice_eval.judge.service import judge_run
 from voice_eval.modules.agents.models import AgentRecord
 from voice_eval.modules.connections.domain import CHAT_MODEL, UnsupportedConnection
@@ -43,7 +44,11 @@ from voice_eval.modules.runs.domain import Run, RunNotFound
 from voice_eval.modules.runs.manager import is_judgeable, read_json
 from voice_eval.platform.secrets import SecretBox
 from voice_eval.ports.judge import RunJudgeModel
-from voice_eval.providers.langfuse_traces import TraceFetchError, digest_observations
+from voice_eval.providers.langfuse_traces import (
+    TraceDigest,
+    TraceFetchError,
+    digest_observations,
+)
 
 log = logging.getLogger(__name__)
 
@@ -91,6 +96,70 @@ def _uuid(value: Any) -> uuid.UUID | None:
         return uuid.UUID(str(value)) if value else None
     except ValueError:
         return None
+
+
+@dataclass(frozen=True)
+class JudgeInputs:
+    """Everything `judge_run` needs for one stored run, besides the model."""
+
+    run: Run
+    transcript: list[dict[str, Any]]
+    summary: dict[str, Any]
+    trace_digest: TraceDigest | None
+    trace_note: str | None
+    model_name: str
+
+    @property
+    def trace_stats(self) -> dict[str, Any] | None:
+        return (
+            self.trace_digest.to_prompt_dict()["stats"] if self.trace_digest is not None else None
+        )
+
+
+def _read_evidence(run: Run) -> tuple[Path | None, Any, dict[str, Any]]:
+    """The run's artifacts dir, its transcript (as read) and its summary (the stored one when
+    `summary.json` is missing or invalid)."""
+    artifacts = Path(run.artifacts_dir) if run.artifacts_dir else None
+    transcript = read_json(artifacts / "transcript.json") if artifacts else None
+    summary = read_json(artifacts / "summary.json") if artifacts else None
+    if not isinstance(summary, dict):
+        summary = run.summary or {}
+    return artifacts, transcript, summary
+
+
+def _judge_inputs(
+    run: Run,
+    transcript: Any,
+    summary: dict[str, Any],
+    observations: list[dict[str, Any]],
+    note: str | None,
+) -> JudgeInputs:
+    evaluator = run.snapshot["connections"]["evaluator"]
+    return JudgeInputs(
+        run=run,
+        transcript=transcript if isinstance(transcript, list) else [],
+        summary=summary,
+        trace_digest=digest_observations(observations, origin=run.started_at)
+        if observations
+        else None,
+        trace_note=note,
+        model_name=evaluator.get("chat_model") or CHAT_MODEL,
+    )
+
+
+async def judge_inputs(model: RunJudgeModel, inputs: JudgeInputs) -> JudgeResult:
+    """One judgement of prepared inputs (stores nothing). Raises `JudgeError`."""
+    return await judge_run(
+        model,
+        snapshot=inputs.run.snapshot,
+        transcript=inputs.transcript,
+        summary=inputs.summary,
+        trace_digest=inputs.trace_digest,
+        trace_note=inputs.trace_note,
+        run_id=str(inputs.run.id),
+        thread_id=inputs.run.thread_id,
+        model_name=inputs.model_name,
+    )
 
 
 class JudgementCoordinator:
@@ -234,52 +303,28 @@ class JudgementCoordinator:
             except RunNotFound:
                 return  # deleted meanwhile, with its judgement
             connection_id = await self._langfuse_connection(db, run)
-        artifacts = Path(run.artifacts_dir) if run.artifacts_dir else None
-        transcript = read_json(artifacts / "transcript.json") if artifacts else None
-        summary = read_json(artifacts / "summary.json") if artifacts else None
-        if not isinstance(summary, dict):
-            summary = run.summary or {}
+        artifacts, transcript, summary = _read_evidence(run)
 
-        digest, note = None, NO_CONNECTION_NOTE
+        observations, note = [], NO_CONNECTION_NOTE
         if connection_id is not None:
             async with self.sessionmaker() as db:
                 if not await service.mark_collecting(db, run_id, attempt):
                     return  # superseded by a re-judge
             observations, note = await self._collect_traces(run, connection_id)
-            if observations:
-                if artifacts is not None:
-                    await self._save_observations(artifacts, observations)
-                digest = digest_observations(observations, origin=run.started_at)
+            if observations and artifacts is not None:
+                await self._save_observations(artifacts, observations)
+        inputs = _judge_inputs(run, transcript, summary, observations, note)
 
-        stats = digest.to_prompt_dict()["stats"] if digest is not None else None
         async with self.sessionmaker() as db:
             if not await service.mark_judging(
-                db, run_id, attempt, trace_stats=stats, trace_note=note
+                db, run_id, attempt, trace_stats=inputs.trace_stats, trace_note=note
             ):
                 return
 
-        evaluator = run.snapshot["connections"]["evaluator"]
-        model_name = evaluator.get("chat_model") or CHAT_MODEL
-        async with self.sessionmaker() as db:
-            try:
-                model = await self.build_judge(db, uuid.UUID(evaluator["id"]))
-            except Exception as exc:
-                raise JudgementFailed(
-                    f"the evaluator connection could not be used ({_detail(exc)})"
-                ) from None
+        model = await self.evaluator(run)
         try:
             async with self._slots:
-                result = await judge_run(
-                    model,
-                    snapshot=run.snapshot,
-                    transcript=transcript if isinstance(transcript, list) else [],
-                    summary=summary,
-                    trace_digest=digest,
-                    trace_note=note,
-                    run_id=str(run.id),
-                    thread_id=run.thread_id,
-                    model_name=model_name,
-                )
+                result = await judge_inputs(model, inputs)
         except JudgeError as exc:
             raise JudgementFailed(str(exc)) from None
         async with self.sessionmaker() as db:
@@ -288,8 +333,34 @@ class JudgementCoordinator:
                 run_id,
                 attempt,
                 result=result.model_dump(mode="json", by_alias=True),
-                model=model_name,
+                model=inputs.model_name,
             )
+
+    # --- judging without storing (voice-eval judge-stability) -----------------------------
+
+    async def prepare(self, run_id: uuid.UUID) -> JudgeInputs:
+        """The judge's inputs for a stored run, as `_judge` gathers them, but read-only: the
+        traces are fetched once (no polling), nothing is written to the database or the
+        artifacts. Raises `RunNotFound`."""
+        async with self.sessionmaker() as db:
+            run = await runs.get_run(db, run_id)
+            connection_id = await self._langfuse_connection(db, run)
+        _, transcript, summary = _read_evidence(run)
+        observations, note = [], NO_CONNECTION_NOTE
+        if connection_id is not None:
+            observations, note = await self._collect_traces(run, connection_id, poll=False)
+        return _judge_inputs(run, transcript, summary, observations, note)
+
+    async def evaluator(self, run: Run) -> RunJudgeModel:
+        """The judge model of the run's evaluator connection; `JudgementFailed` when unusable."""
+        evaluator = run.snapshot["connections"]["evaluator"]
+        async with self.sessionmaker() as db:
+            try:
+                return await self.build_judge(db, uuid.UUID(evaluator["id"]))
+            except Exception as exc:
+                raise JudgementFailed(
+                    f"the evaluator connection could not be used ({_detail(exc)})"
+                ) from None
 
     async def _langfuse_connection(self, db: AsyncSession, run: Run) -> uuid.UUID | None:
         """From the snapshot; runs launched before it kept the id fall back to the agent row."""
@@ -302,9 +373,10 @@ class JudgementCoordinator:
         return record.langfuse_connection_id if record is not None else None
 
     async def _collect_traces(
-        self, run: Run, connection_id: uuid.UUID
+        self, run: Run, connection_id: uuid.UUID, *, poll: bool = True
     ) -> tuple[list[dict[str, Any]], str | None]:
-        """The run's observations (possibly none) and a note when they are missing."""
+        """The run's observations (possibly none) and a note when they are missing; without
+        `poll`, from a single fetch."""
         async with self.sessionmaker() as db:
             try:
                 reader = await self.build_trace_reader(db, connection_id)
@@ -333,7 +405,7 @@ class JudgementCoordinator:
                 previous = len(observations)
                 if stable >= STABLE_POLLS:
                     break
-            if self.now() + timedelta(seconds=POLL_INTERVAL_S) > deadline:
+            if not poll or self.now() + timedelta(seconds=POLL_INTERVAL_S) > deadline:
                 break
             await self.sleep(POLL_INTERVAL_S)
 
