@@ -7,7 +7,6 @@ status: `completed`, `failed`, `cancelled`, or `interrupted` (the server stopped
 
 import math
 import re
-import statistics
 import uuid
 from dataclasses import asdict, dataclass
 from datetime import datetime
@@ -96,7 +95,12 @@ class Run:
         numbers = [v for v in values if _is_number(v)] if isinstance(values, list) else []
         if not numbers:
             return None
-        median = statistics.median(numbers)
+        ordered = sorted(numbers)
+        middle = len(ordered) // 2
+        # Halve before adding so two huge finite values never overflow to inf.
+        median = (
+            ordered[middle] if len(ordered) % 2 else ordered[middle - 1] / 2 + ordered[middle] / 2
+        )
         return round(median) if math.isfinite(median) else None
 
     @property
