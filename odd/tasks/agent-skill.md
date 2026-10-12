@@ -33,9 +33,22 @@ The user wants coding/ops agents to contextualize themselves from the API itself
   path that no longer exists.
 
 ## Tasks
-- [ ] T1 Backend: guide content, OpenAPI-generated reference, endpoints, drift tests, README — delegated
-- [ ] T2 Frontend: "Agent skill" card on the API keys page — delegated
-- [ ] T3 Check: fetch the skill with an API key and read it as an agent would — inline
+- [x] T1 Backend: guide content, OpenAPI-generated reference, endpoints, drift tests, README — delegated
+- [x] T2 Frontend: "Agent skill" card on the API keys page — delegated
+- [x] T3 Check: fetch the skill with an API key and read it as an agent would — inline
 
 ## Progress
-(none yet)
+- T2 acd9d11 (delegated; RED observed; vitest 384): "Agent skill" card (URLs, copy, curl, zip
+  download; the download uses its own fetch because `apiFetch` only parses JSON).
+- T1 0db17ea (delegated; RED observed; pytest 920): `modules/skill` (`guide.md` 474 lines written
+  from the code + reference generated from `app.openapi()`), `GET /api/skill` (text/markdown,
+  ~1,100 lines) and `GET /api/skill.zip` (SKILL.md + reference/openapi.json), authenticated; drift
+  tests. guide.md ships in the wheel and the Docker image.
+- Review (1305 lines): APPROVED + acknowledged. Fixed in a follow-up test commit: coverage check
+  now matches reference headings exactly; the hidden-route test restores the shared app. Dismissed
+  with evidence: the zip URL uses the same origin + /api as `apiFetch`. Open suggestion: the
+  "served by" origin comes from request.base_url (correct behind the edge proxy).
+- T3: with an API key, /api/skill 200 text/markdown, /api/skill.zip 200 (2 files), no auth 401;
+  read the skill: frontmatter, concepts, auth, costs & human approval, flows with real shapes,
+  statuses/end reasons, summary/transcript fields incl. interruptions, judge v2 interpretation,
+  live WS, API keys, CLI, generated endpoint reference.
