@@ -79,4 +79,12 @@ rendering.
   answered in Spanish). Across runs 2–3 (same prompt) the email criteria are bimodal: 4×band 5,
   2×band 2 — a single sample is not reliable for this run.
 - User decision (2026-10-11): median of 3 samples per judgement (3 gpt-6-luna calls per run), plus
-  threshold anchors and forced English. Route: delegated writer (in progress).
+  threshold anchors and forced English. Route: delegated writer.
+- 6516b95 (RED observed; pytest 781): `judge_run` runs 3 samples concurrently, per-criterion
+  median_low band (evidence/tags/cap from the median sample), majority-unobservable rule, run text
+  from the median-score sample, ≥2 successful samples required; `samples` + `sampleBands` fields;
+  threshold anchors; English enforced; CLI says 3N calls. Reviewed with 2d96aac/05a284e (500
+  lines): APPROVED + acknowledged. Advisory fixed in 5102ae1: threshold anchors left 4-of-10 misses
+  uncovered (now "more than one but fewer than half" → 3, "half or more but not all" → 2); empty
+  error-list guard. Backend rebuilt.
+- Next: final stability run (3 judgements × 3 samples = 9 paid calls, ask).
