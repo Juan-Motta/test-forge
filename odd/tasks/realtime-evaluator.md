@@ -92,4 +92,10 @@ realtime evaluator mode that listens to the agent's audio and answers by voice w
 - Re-run f03cb819: completed, caller_hung_up, no loop. Role confusion persists with
   gpt-realtime-2.1-mini ("Me interrumpiste…", "hasta el diecisiete escuchaste tú", odd last line);
   agent claimed 17 (heard 1–2).
+- Experiment (user-requested; REALTIME_MODEL temporarily `gpt-realtime-2.1`, uncommitted): run
+  b2979c01 completed, caller_hung_up. The caller stayed in role: C2 "Solo alcancé a escuchar hasta
+  'número dos'. ¿Hasta qué número alcanzaste a decir?", C3 "Continúa desde donde te quedaste".
+  Final turn: silent hang-up → goodbye asked → closed without a spoken goodbye. Latency: opening
+  first audio 0.85 s; after the cut 1.9 s; normal turn 1.6 s after playback. Agent claimed "hasta
+  el número 15" even after being told the caller heard up to 2. Judge 62, mustFailed.
 
