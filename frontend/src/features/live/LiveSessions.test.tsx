@@ -16,7 +16,16 @@ vi.mock("next/navigation", () => ({
 }));
 
 const now = new Date().toISOString();
-const booking = runFixture({ id: "r-1", batchId: "b-9", status: "running", endReason: null, endedAt: null, startedAt: now, createdAt: "2026-10-05T10:00:00Z" });
+const booking = runFixture({
+  id: "r-1",
+  batchId: "b-9",
+  status: "running",
+  endReason: null,
+  endedAt: null,
+  startedAt: now,
+  createdAt: "2026-10-05T10:00:00Z",
+  persona: "Laura",
+});
 const cancel = runFixture({
   id: "r-2",
   batchId: "b-9",
@@ -68,6 +77,27 @@ describe("Live sessions", () => {
     expect(session(/Booking with date change/)).toHaveAttribute("aria-pressed", "true");
     expect(await screen.findByRole("heading", { level: 2, name: "Booking with date change" })).toBeInTheDocument();
     await waitFor(() => expect(socketFor("/api/runs/r-1/live")).toHaveLength(1));
+    expect(screen.getByText("All active runs")).toBeInTheDocument();
+    expect(session(/Booking with date change/)).toHaveTextContent("Laura");
+    expect(session(/Booking with date change/)).toHaveTextContent("Live");
+    expect(session(/Cancel within 24h/)).toHaveTextContent("Connecting");
+    expect(session(/Group booking/)).toHaveTextContent("Queued");
+
+    // The focused card shows what its stream says: turns so far, and the audio levels.
+    const stream = socketFor("/api/runs/r-1/live")[0];
+    act(() => {
+      stream.open();
+      stream.send({
+        type: "snapshot",
+        run: { id: "r-1", status: "running" },
+        transcript: [{ role: "agent", text: "Hello", turn: 0, tMs: 1000 }],
+        turns: [],
+      });
+      stream.audio(0, Array(2400).fill(16384));
+    });
+    await waitFor(() => expect(session(/Booking with date change/)).toHaveTextContent("1 turn"));
+    expect(within(session(/Booking with date change/)).getByText("Recent audio levels")).toBeInTheDocument();
+    expect(within(session(/Cancel within 24h/)).queryByText("Recent audio levels")).not.toBeInTheDocument();
 
     await user.click(session(/Cancel within 24h/));
     expect(await screen.findByRole("heading", { level: 2, name: "Cancel within 24h" })).toBeInTheDocument();
@@ -92,8 +122,12 @@ describe("Live sessions", () => {
         runs: [booking, cancel, queued],
       });
     });
-    expect(await screen.findByRole("heading", { level: 1, name: "Hotel regression" })).toBeInTheDocument();
-    expect(screen.getByText("Concurrency 2 · 3 runs")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: "Live sessions" })).toBeInTheDocument();
+    expect(await screen.findByText(/^Batch b-9 · Hotel regression · started \d\d:\d\d$/)).toBeInTheDocument();
+    expect(screen.getByText("Concurrency 2 · 3 runs total")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: /^Batch progress/ })).toHaveAccessibleName(
+      "Batch progress: 0 completed, 2 running, 1 queued, 0 failed",
+    );
 
     act(() => {
       overview.send({ type: "finished", runId: "r-2", status: "failed", reason: "tts_failed" });
@@ -102,7 +136,9 @@ describe("Live sessions", () => {
     expect(session(/Cancel within 24h/)).toHaveTextContent("Failed");
     expect(session(/Cancel within 24h/)).toHaveTextContent("Speech synthesis failed");
     expect(session(/Group booking/)).toHaveTextContent("Connecting");
-    expect(screen.getByText("1 finished")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: /^Batch progress/ })).toHaveAccessibleName(
+      "Batch progress: 0 completed, 2 running, 0 queued, 1 failed",
+    );
 
     act(() => overview.send({ type: "batchFinished", batchId: "b-9" }));
     expect(screen.getByText("Batch finished")).toBeInTheDocument();
@@ -117,9 +153,26 @@ describe("Live sessions", () => {
     const user = userEvent.setup();
 
     await user.click(await screen.findByRole("button", { name: "Stop all" }));
+    const dialog = await screen.findByRole("dialog", { name: "Stop the whole batch?" });
+    expect(api.requests).toEqual([]);
+    await user.click(within(dialog).getByRole("button", { name: "Stop all" }));
     await waitFor(() =>
       expect(api.requests).toContainEqual({ method: "POST", path: "/runs/batches/b-9/cancel", body: undefined }),
     );
+  });
+
+  it("keeps the batch running when the stop is not confirmed", async () => {
+    nav.search = "batchId=b-9";
+    const api = mockRunsApi([booking, cancel, queued], {
+      batches: [batchFixture({ id: "b-9", label: "Hotel regression", status: "running", total: 3 })],
+    });
+    renderWithClient(<LiveContainer />);
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: "Stop all" }));
+    await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Keep running" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(api.requests).toEqual([]);
   });
 
   it("says when no call is in progress", async () => {

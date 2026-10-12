@@ -1,7 +1,8 @@
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { mockRunsApi, runFixture } from "@/features/runs/testing";
+import { mockRunsApi, runFixture, snapshotFixture } from "@/features/runs/testing";
+import type { RunDetail } from "@/features/runs/types";
 import { installFakeAudio, installFakeSockets } from "@/lib/live/testing";
 import { renderWithClient } from "@/test/render";
 import { LiveRunPanel } from "./LiveRunPanel";
@@ -21,8 +22,8 @@ const snapshot = {
   turns: [{ turn: 0, latencyMs: null }],
 };
 
-async function renderPanel() {
-  const api = mockRunsApi([running]);
+async function renderPanel(detail: Partial<RunDetail> = {}) {
+  const api = mockRunsApi([running], { details: { "r-1": detail } });
   const view = renderWithClient(<LiveRunPanel runId="r-1" />);
   await screen.findByRole("heading", { name: "Booking with date change" });
   const socket = sockets.latest();
@@ -213,15 +214,15 @@ describe("Live run", () => {
       socket.audio(0, [16384]);
       socket.audio(1, [-8192]);
     });
-    await user.click(screen.getByRole("button", { name: "Agent only" }));
-    expect(screen.getByRole("button", { name: "Agent only" })).toHaveAttribute("aria-pressed", "true");
+    await user.click(screen.getByRole("radio", { name: "Agent only" }));
+    expect(screen.getByRole("radio", { name: "Agent only" })).toHaveAttribute("aria-checked", "true");
     act(() => {
       socket.audio(0, [16384]);
       socket.audio(1, [-8192]);
     });
     expect(context.scheduled.map((item) => item.samples[0])).toEqual([0.5, -0.25, 0.5]);
 
-    await user.click(screen.getByRole("button", { name: "Evaluator only" }));
+    await user.click(screen.getByRole("radio", { name: "Evaluator only" }));
     act(() => socket.audio(0, [16384]));
     expect(context.scheduled).toHaveLength(3);
 
@@ -288,4 +289,79 @@ describe("Live run", () => {
     expect(screen.getByRole("button", { name: "Listen" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Stop listening" })).not.toBeInTheDocument();
   });
+
+  it("draws both audio lanes from the live frames, whether or not anyone listens", async () => {
+    const { socket } = await renderPanel();
+    expect(litBars("Agent")).toBe(0);
+    act(() => {
+      socket.audio(0, Array(2400).fill(16384));
+      socket.audio(1, Array(2400).fill(-8192));
+    });
+    await waitFor(() => expect(litBars("Agent")).toBeGreaterThan(0));
+    expect(litBars("Evaluator")).toBeGreaterThan(0);
+    expect(audio.contexts).toHaveLength(0);
+    const lanes = screen.getByRole("group", { name: "Audio lanes" });
+    expect(within(lanes).getByText("now")).toBeInTheDocument();
+  });
+
+  it("pins each interruption on the agent lane", async () => {
+    const { socket } = await renderPanel();
+    const lanes = screen.getByRole("group", { name: "Audio lanes" });
+    expect(within(lanes).queryByText("Cuts")).not.toBeInTheDocument();
+    act(() => {
+      socket.send(snapshot);
+      socket.audio(0, Array(2400).fill(16384));
+      socket.send({ type: "callerInterrupted", tMs: 3600, agentTurn: 1, audioEndMs: 1500, heardText: "Hello, how" });
+    });
+    expect(within(lanes).getByText("Cuts")).toBeInTheDocument();
+    expect(within(lanes).getByText("1")).toBeInTheDocument();
+  });
+
+  it("times the call against the scenario's maximum and names the evaluator", async () => {
+    await renderPanel({ snapshot: snapshotFixture({ evaluatorMode: "realtime", realtimeModel: "gpt-realtime-2.1-mini" }) });
+    expect(screen.getByText("/ 6:00 max")).toBeInTheDocument();
+    expect(screen.getByText("Realtime evaluator · gpt-realtime-2.1-mini")).toBeInTheDocument();
+  });
+
+  it("lists the evaluator's goals as its plan", async () => {
+    const base = snapshotFixture();
+    const scenario = { ...base.scenario, criteria: [{ text: "Confirms the new dates" }] } as typeof base.scenario;
+    await renderPanel({ snapshot: { ...base, scenario } });
+    const goals = within(screen.getByRole("region", { name: "Evaluator goals" })).getAllByRole("listitem");
+    expect(goals.map((goal) => goal.textContent)).toEqual(["Book a double room for 3 nights.", "Confirms the new dates"]);
+  });
+
+  it("sums up latency, turns and interruptions, and flags slow turns", async () => {
+    const { socket } = await renderPanel();
+    act(() => {
+      socket.send(snapshot);
+      socket.send({ type: "turnEnded", tMs: 7000, turn: 1, latencyMs: 640 });
+      socket.send({ type: "agentTranscript", tMs: 7100, turn: 1, text: "For which dates?" });
+      socket.send({ type: "turnEnded", tMs: 9000, turn: 2, latencyMs: 2600 });
+      socket.send({ type: "agentTranscript", tMs: 9100, turn: 2, text: "Let me check." });
+      socket.send({ type: "callerInterrupted", tMs: 9600, agentTurn: 3, audioEndMs: 500, heardText: "Let" });
+    });
+    const metrics = screen.getByRole("region", { name: "Call metrics" });
+    expect(within(metrics).getByRole("group", { name: "Avg agent latency" })).toHaveTextContent("1.6s");
+    expect(within(metrics).getByRole("group", { name: "Slowest turn" })).toHaveTextContent("2.6s");
+    expect(within(metrics).getByRole("group", { name: "Turns" })).toHaveTextContent("3");
+    expect(within(metrics).getByRole("group", { name: "Interruptions" })).toHaveTextContent("10 confirmed");
+    const lines = transcriptLines();
+    expect(lines[1]).toContain("640 ms");
+    expect(lines[1]).not.toContain("slow");
+    expect(lines[2]).toContain("2.6 s · slow");
+  });
+
+  it("keeps the warnings visible", async () => {
+    const { socket } = await renderPanel();
+    act(() => socket.send({ type: "warning", message: "The agent sent audio in an unexpected format" }));
+    expect(screen.getByRole("region", { name: "Warnings" })).toHaveTextContent("The agent sent audio in an unexpected format");
+  });
 });
+
+/** Bars of a lane drawn above the minimum (silent) height. */
+function litBars(lane: "Agent" | "Evaluator"): number {
+  const label = within(screen.getByRole("group", { name: "Audio lanes" })).getByText(`${lane} audio levels`);
+  const bars = label.parentElement?.querySelectorAll<HTMLElement>("[data-bar]") ?? [];
+  return Array.from(bars).filter((bar) => bar.style.height !== "3px").length;
+}

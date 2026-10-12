@@ -1,32 +1,47 @@
-import { clock, endReasonLabel, isActive, runDurationMs } from "@/features/runs/format";
-import { RunStatusChip } from "@/features/runs/RunStatusChip";
 import type { Run } from "@/features/runs/types";
-import { cn, focusRing } from "@/ui";
+import { dominantTones, type ChannelLevels } from "@/lib/live/levels";
+import { Badge, Waveform, cn, focusRing } from "@/ui";
+import { sessionChip, sessionMeta, type SessionStats } from "./live-view";
+
+type SessionCardProps = {
+  run: Run;
+  selected: boolean;
+  now: number;
+  onSelect: () => void;
+  /** Recent audio levels; only the focused run streams its audio, so only its card has them. */
+  levels?: ChannelLevels;
+  /** Turns and latency from the focused run's stream. */
+  stats?: SessionStats;
+};
 
 /** One session in the live list: pick it to focus (and listen to) that run. */
-export function SessionCard({ run, selected, now, onSelect }: { run: Run; selected: boolean; now: number; onSelect: () => void }) {
-  const duration = runDurationMs(run, now);
-  let meta: string;
-  if (run.status === "queued") meta = "Starts when a slot frees up";
-  else if (isActive(run.status)) meta = duration === null ? "Starting…" : clock(duration);
-  else meta = [duration === null ? null : clock(duration), endReasonLabel(run.endReason)].filter(Boolean).join(" · ");
+export function SessionCard({ run, selected, now, onSelect, levels, stats }: SessionCardProps) {
+  const chip = sessionChip(run);
+  const wave = levels && run.status === "running" ? dominantTones(levels) : null;
+  const who = [run.persona, run.agentName].filter(Boolean).join(" · ");
+
   return (
     <button
       type="button"
       aria-pressed={selected}
       onClick={onSelect}
       className={cn(
-        "flex w-full flex-col gap-1.5 rounded-xl border p-3.5 text-left transition-colors",
+        "flex h-full w-full flex-col gap-2.5 rounded-[10px] border px-4 py-3.5 text-left transition-colors",
         focusRing,
         selected ? "border-evaluator bg-active" : "border-line bg-panel hover:bg-raised",
       )}
     >
-      <span className="flex items-start justify-between gap-2">
-        <span className="min-w-0 truncate text-sm font-semibold">{run.scenarioName}</span>
-        <RunStatusChip status={run.status} />
+      <span className="flex w-full items-start justify-between gap-2">
+        <span className="flex min-w-0 flex-col gap-[3px]">
+          <span className="truncate text-sm font-semibold">{run.scenarioName}</span>
+          <span className="truncate text-xs text-muted">{who}</span>
+        </span>
+        <Badge tone={chip.tone}>{chip.label}</Badge>
       </span>
-      <span className="text-xs text-muted">{run.agentName}</span>
-      <span className="font-mono text-xs text-dim">{meta}</span>
+      {wave ? (
+        <Waveform values={wave.values} tones={wave.tones} height={26} label="Recent audio levels" className="w-full" />
+      ) : null}
+      <span className="font-mono text-xs text-dim">{sessionMeta(run, now, selected ? stats : undefined)}</span>
     </button>
   );
 }
