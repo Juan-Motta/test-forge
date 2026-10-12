@@ -133,6 +133,17 @@ describe("Run detail", () => {
     expect(await screen.findByText(label)).toBeInTheDocument();
   });
 
+  it.each([
+    ["gpt-realtime-2.1", "Realtime evaluator · gpt-realtime-2.1"],
+    ["gpt-realtime-2.1-mini", "Realtime evaluator · gpt-realtime-2.1-mini"],
+  ] as const)("names the realtime model %s the run was launched with", async (realtimeModel, label) => {
+    const launched = runDetailFixture({ snapshot: snapshotFixture({ evaluatorMode: "realtime", realtimeModel }) });
+    mockRunsApi([run], { details: { "r-1": launched } });
+    renderWithClient(<RunDetailContainer runId="r-1" />);
+
+    expect(await screen.findByText(label)).toBeInTheDocument();
+  });
+
   it("copies the thread id", async () => {
     mockRunsApi([run], { details: { "r-1": detail } });
     renderWithClient(<RunDetailContainer runId="r-1" />);

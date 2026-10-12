@@ -108,6 +108,7 @@ describe("Scenario editor: create", () => {
           evaluatorConnectionId: "c-azure-chat",
           voiceOverride: "coral",
           evaluatorMode: "pipeline",
+          realtimeModel: "gpt-realtime-2.1-mini",
           goal: "Get a late check-out at 2 pm.",
           instructions: "Ask about the fee.",
           facts: [{ key: "Room", value: "412" }],
@@ -148,6 +149,43 @@ describe("Scenario editor: create", () => {
     await user.click(screen.getByRole("button", { name: "Create scenario" }));
     await waitFor(() => expect(api.requests).toHaveLength(1));
     expect(api.requests[0].body).toMatchObject({ evaluatorMode: "realtime", voiceOverride: "marin" });
+  });
+
+  it("offers the realtime model only for the realtime evaluator and sends the chosen one", async () => {
+    const api = setup([]);
+    const user = await renderEditor();
+    await fillMinimum(user);
+
+    expect(screen.queryByRole("group", { name: "Realtime model" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("radio", { name: "Realtime" }));
+
+    const models = screen.getByRole("group", { name: "Realtime model" });
+    const mini = within(models).getByRole("radio", { name: "gpt-realtime-2.1-mini" });
+    const full = within(models).getByRole("radio", { name: "gpt-realtime-2.1" });
+    expect(mini).toBeChecked();
+    expect(mini).toHaveAccessibleDescription(expect.stringContaining("slipped out of the caller role"));
+    expect(full).toHaveAccessibleDescription(expect.stringContaining("~3x the audio cost ($32 / $64 per 1M tokens)"));
+    await user.click(full);
+    await user.click(screen.getByRole("button", { name: "Create scenario" }));
+
+    await waitFor(() => expect(api.requests).toHaveLength(1));
+    expect(api.requests[0].body).toMatchObject({ evaluatorMode: "realtime", realtimeModel: "gpt-realtime-2.1" });
+  });
+
+  it("keeps the chosen realtime model while the pipeline evaluator hides it", async () => {
+    const api = setup([scenarioFixture({ evaluatorMode: "realtime", realtimeModel: "gpt-realtime-2.1" })]);
+    const user = await renderEditor("s-booking");
+
+    expect(screen.getByRole("radio", { name: "gpt-realtime-2.1" })).toBeChecked();
+    await user.click(screen.getByRole("radio", { name: "Pipeline" }));
+    expect(screen.queryByRole("group", { name: "Realtime model" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("radio", { name: "Realtime" }));
+    expect(screen.getByRole("radio", { name: "gpt-realtime-2.1" })).toBeChecked();
+    await user.click(screen.getByRole("radio", { name: "gpt-realtime-2.1-mini" }));
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() => expect(api.requests).toHaveLength(1));
+    expect(api.requests[0].body).toEqual({ realtimeModel: "gpt-realtime-2.1-mini" });
   });
 
   it("drops the realtime voice error when switching back to the pipeline evaluator", async () => {

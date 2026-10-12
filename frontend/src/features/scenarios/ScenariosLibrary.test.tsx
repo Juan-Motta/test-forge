@@ -39,6 +39,8 @@ const refund = scenarioFixture({
   name: "Refund dispute",
   tags: ["regression"],
   persona: { name: "Raúl", locale: "es-MX", temperament: "angry", notes: "" },
+  evaluatorMode: "realtime",
+  realtimeModel: "gpt-realtime-2.1",
 });
 
 function item(name: string) {
@@ -65,10 +67,10 @@ describe("Scenarios library", () => {
     expect(within(first).getByText("Hurried")).toBeInTheDocument();
     expect(within(first).getByText("2 criteria")).toBeInTheDocument();
     expect(within(first).queryByText(/Interrupts/)).not.toBeInTheDocument();
-    expect(within(first).queryByText("Realtime")).not.toBeInTheDocument();
+    expect(within(first).queryByText(/Realtime/)).not.toBeInTheDocument();
     const second = within(hotelGroup).getByRole("listitem", { name: "Cancel within 24h" });
     expect(within(second).getByText("Interrupts 2 replies")).toBeInTheDocument();
-    expect(within(second).getByText("Realtime")).toBeInTheDocument();
+    expect(within(second).getByText("Realtime mini")).toBeInTheDocument();
     expect(within(first).getByRole("link", { name: "Open Booking with date change" })).toHaveAttribute(
       "href",
       "/scenarios/s-booking",
@@ -77,6 +79,7 @@ describe("Scenarios library", () => {
     const supportGroup = screen.getByRole("region", { name: "Support triage" });
     expect(within(supportGroup).getByRole("listitem", { name: "Refund dispute" })).toBeInTheDocument();
     expect(within(supportGroup).getByText("Angry")).toBeInTheDocument();
+    expect(within(supportGroup).getByText("Realtime 2.1")).toBeInTheDocument();
   });
 
   it("filters by agent and by tag", async () => {

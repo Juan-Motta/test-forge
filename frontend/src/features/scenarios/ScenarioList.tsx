@@ -104,7 +104,9 @@ function ScenarioItem({
             {interruptions > 0 ? (
               <Badge tone="agent">{interruptions === 1 ? "Interrupts 1 reply" : `Interrupts ${interruptions} replies`}</Badge>
             ) : null}
-            {scenario.evaluatorMode === "realtime" ? <Badge tone="evaluator">Realtime</Badge> : null}
+            {scenario.evaluatorMode === "realtime" ? (
+              <Badge tone="evaluator">{scenario.realtimeModel === "gpt-realtime-2.1" ? "Realtime 2.1" : "Realtime mini"}</Badge>
+            ) : null}
             <span aria-hidden="true">·</span>
             <time dateTime={scenario.updatedAt} title={absoluteTime(scenario.updatedAt)}>
               Updated {relativeTime(scenario.updatedAt)}

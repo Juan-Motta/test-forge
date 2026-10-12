@@ -19,7 +19,8 @@ export function RunMeta({ run }: { run: RunDetail }) {
   const [copied, setCopied] = useState(false);
   const reason = endReasonLabel(run.endReason);
   const mode = run.snapshot?.scenario?.evaluatorMode;
-  const evaluator = mode ? EVALUATOR_LABELS[mode] : undefined;
+  const realtimeModel = mode === "realtime" ? run.snapshot?.scenario?.realtimeModel : undefined;
+  const evaluator = mode ? [EVALUATOR_LABELS[mode], realtimeModel].filter(Boolean).join(" · ") : undefined;
 
   async function copy() {
     try {

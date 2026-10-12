@@ -14,13 +14,14 @@ import { FactsEditor } from "./FactsEditor";
 import { InterruptionsEditor } from "./InterruptionsEditor";
 import {
   EVALUATOR_MODE_LABELS,
+  REALTIME_MODEL_LABELS,
   HANG_UP_LABELS,
   initialValues,
   scenarioFormSchema,
   TEMPERAMENT_LABELS,
   type ScenarioFormValues,
 } from "./form-schema";
-import { EVALUATOR_MODES, HANG_UP_RULES, REALTIME_VOICES, TEMPERAMENTS, type Scenario } from "./types";
+import { EVALUATOR_MODES, HANG_UP_RULES, REALTIME_MODELS, REALTIME_VOICES, TEMPERAMENTS, type Scenario } from "./types";
 
 const NO_SERVER_ERRORS: FieldErrors = {};
 
@@ -257,6 +258,43 @@ export function ScenarioEditor({
             })}
           </div>
         </fieldset>
+        {evaluatorMode === "realtime" ? (
+          <fieldset className="flex flex-col gap-2">
+            <legend className="mb-1.5 text-xs font-medium text-muted">Realtime model</legend>
+            <div className="grid gap-2 md:grid-cols-2">
+              {REALTIME_MODELS.map((model) => {
+                const labelId = `realtime-model-${model}`;
+                const descriptionId = `${labelId}-description`;
+                return (
+                  <label key={model} className="cursor-pointer">
+                    <input
+                      type="radio"
+                      value={model}
+                      aria-labelledby={labelId}
+                      aria-describedby={descriptionId}
+                      className="peer sr-only"
+                      {...registerField("realtimeModel")}
+                    />
+                    <span
+                      className={cn(
+                        "flex h-full flex-col gap-1 rounded-lg border border-line-strong p-3 text-sm",
+                        "peer-checked:border-evaluator peer-checked:bg-evaluator/15",
+                        "peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-evaluator",
+                      )}
+                    >
+                      <span id={labelId} className="font-mono font-medium">
+                        {model}
+                      </span>
+                      <span id={descriptionId} className="text-xs text-muted">
+                        {REALTIME_MODEL_LABELS[model]}
+                      </span>
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          </fieldset>
+        ) : null}
         <div className="grid gap-4 md:grid-cols-2">
           <Field
             label="Evaluator voice (TTS connection)"

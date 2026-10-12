@@ -66,7 +66,8 @@ describe("Create connection", () => {
         "API version": "2025-03-01-preview",
         "TTS deployment": "my-tts",
         "Chat deployment": "my-chat",
-        "Realtime deployment": "my-realtime",
+        "Realtime deployment (gpt-realtime-2.1-mini)": "my-realtime",
+        "Realtime deployment (gpt-realtime-2.1)": "my-realtime-full",
         "API key": "azure-openai-key-123",
       },
       config: {
@@ -76,6 +77,7 @@ describe("Create connection", () => {
         ttsVoice: "alloy",
         chatDeployment: "my-chat",
         realtimeDeployment: "my-realtime",
+        realtimeFullDeployment: "my-realtime-full",
       },
       secrets: { apiKey: "azure-openai-key-123" },
     },
@@ -387,18 +389,21 @@ describe("Form edge cases", () => {
     );
   });
 
-  it("explains the optional realtime deployment of an Azure OpenAI connection", async () => {
+  it("explains the optional realtime deployments of an Azure OpenAI connection", async () => {
     mockConnectionsApi([]);
     const { user, dialog } = await openCreate();
 
-    expect(within(dialog).queryByLabelText("Realtime deployment")).not.toBeInTheDocument();
+    expect(within(dialog).queryByLabelText(/Realtime deployment/)).not.toBeInTheDocument();
     await user.selectOptions(within(dialog).getByLabelText("Provider"), "azure_openai");
-    expect(within(dialog).getByLabelText("Realtime deployment")).toHaveAccessibleDescription(
-      expect.stringContaining("gpt-realtime-2.1-mini"),
+    expect(within(dialog).getByLabelText("Realtime deployment (gpt-realtime-2.1-mini)")).toHaveAccessibleDescription(
+      expect.stringContaining("realtime model gpt-realtime-2.1-mini"),
+    );
+    expect(within(dialog).getByLabelText("Realtime deployment (gpt-realtime-2.1)")).toHaveAccessibleDescription(
+      expect.stringContaining("realtime model gpt-realtime-2.1."),
     );
   });
 
-  it("adds a realtime deployment to a stored Azure OpenAI connection", async () => {
+  it("adds realtime deployments to a stored Azure OpenAI connection", async () => {
     const stored = connectionFixture({
       id: "c-azure",
       name: "Azure",
@@ -408,8 +413,10 @@ describe("Form edge cases", () => {
     const api = mockConnectionsApi([stored]);
     const { user, dialog } = await openEdit("Azure");
 
-    expect(within(dialog).getByLabelText("Realtime deployment")).toHaveValue("");
-    await user.type(within(dialog).getByLabelText("Realtime deployment"), "rt-mini");
+    expect(within(dialog).getByLabelText("Realtime deployment (gpt-realtime-2.1-mini)")).toHaveValue("");
+    expect(within(dialog).getByLabelText("Realtime deployment (gpt-realtime-2.1)")).toHaveValue("");
+    await user.type(within(dialog).getByLabelText("Realtime deployment (gpt-realtime-2.1-mini)"), "rt-mini");
+    await user.type(within(dialog).getByLabelText("Realtime deployment (gpt-realtime-2.1)"), "rt-full");
     await user.click(within(dialog).getByRole("button", { name: "Save changes" }));
 
     await waitFor(() => expect(api.requests).toHaveLength(1));
@@ -423,6 +430,7 @@ describe("Form edge cases", () => {
           ttsDeployment: "tts",
           ttsVoice: "alloy",
           realtimeDeployment: "rt-mini",
+          realtimeFullDeployment: "rt-full",
         },
       },
     });

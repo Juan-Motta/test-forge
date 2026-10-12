@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { initialValues, parseTags, scenarioFormSchema, toChanges, weightTotal } from "./form-schema";
+import { initialValues, parseTags, scenarioFormSchema, toChanges, toNewScenario, weightTotal } from "./form-schema";
 import { scenarioFixture } from "./testing";
 
 describe("scenario form helpers", () => {
@@ -80,5 +80,22 @@ describe("scenario form helpers", () => {
     expect(toChanges(scenario, { ...initialValues(scenario), evaluatorMode: "realtime" })).toEqual({
       evaluatorMode: "realtime",
     });
+  });
+
+  it("defaults to the mini realtime model and sends a different one only when it changes", () => {
+    expect(initialValues(undefined).realtimeModel).toBe("gpt-realtime-2.1-mini");
+    expect(toNewScenario(initialValues(undefined)).realtimeModel).toBe("gpt-realtime-2.1-mini");
+    const legacy = scenarioFixture();
+    delete (legacy as Partial<typeof legacy>).realtimeModel;
+    expect(initialValues(legacy).realtimeModel).toBe("gpt-realtime-2.1-mini");
+    expect(initialValues(scenarioFixture({ realtimeModel: "gpt-realtime-2.1" })).realtimeModel).toBe("gpt-realtime-2.1");
+
+    const scenario = scenarioFixture({ evaluatorMode: "realtime" });
+    expect(toChanges(scenario, initialValues(scenario))).toEqual({});
+    expect(toChanges(scenario, { ...initialValues(scenario), realtimeModel: "gpt-realtime-2.1" })).toEqual({
+      realtimeModel: "gpt-realtime-2.1",
+    });
+    const result = scenarioFormSchema.safeParse({ ...initialValues(scenario), realtimeModel: "gpt-4o-realtime" });
+    expect(result.success).toBe(false);
   });
 });

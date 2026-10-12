@@ -90,6 +90,8 @@ export type RunSnapshot = {
     endConditions: { maxDurationS: number; maxSilenceS: number; hangUpWhen: string };
     /** Absent on runs launched before the realtime evaluator existed. */
     evaluatorMode?: "pipeline" | "realtime";
+    /** The realtime evaluator's model; absent on pipeline runs and runs launched before the choice existed. */
+    realtimeModel?: "gpt-realtime-2.1-mini" | "gpt-realtime-2.1";
   };
   agent: { id: string; name: string; protocol: string };
   connections: { tts: { id: string; name: string }; evaluator: { id: string; name: string; chatModel: string | null } };

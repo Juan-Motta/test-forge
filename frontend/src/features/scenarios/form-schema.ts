@@ -1,9 +1,11 @@
 import { z } from "zod";
 import {
   CRITERION_KINDS,
+  DEFAULT_REALTIME_MODEL,
   EVALUATOR_MODES,
   EVIDENCE_SOURCES,
   HANG_UP_RULES,
+  REALTIME_MODELS,
   REALTIME_VOICES,
   TEMPERAMENTS,
   type CriterionKind,
@@ -11,6 +13,7 @@ import {
   type EvidenceSource,
   type HangUpWhen,
   type NewScenario,
+  type RealtimeModel,
   type Scenario,
   type ScenarioChanges,
   type Temperament,
@@ -31,6 +34,8 @@ export type ScenarioFormValues = {
   evaluatorConnectionId: string;
   voiceOverride: string;
   evaluatorMode: EvaluatorMode;
+  /** Kept while the pipeline evaluator is selected, so switching back restores it. */
+  realtimeModel: RealtimeModel;
   goal: string;
   instructions: string;
   facts: { key: string; value: string }[];
@@ -65,8 +70,13 @@ export const EVALUATOR_MODE_LABELS: Record<EvaluatorMode, { label: string; descr
   realtime: {
     label: "Realtime",
     description:
-      "A speech-to-speech model (gpt-realtime-2.1-mini) hears the agent and answers by voice: lower latency and more natural, but it costs more (audio $10 in / $20 out per 1M tokens vs $12 out for TTS).",
+      "A speech-to-speech model hears the agent and answers by voice: lower latency and more natural, but it costs more (audio from $10 in / $20 out per 1M tokens vs $12 out for TTS).",
   },
+};
+export const REALTIME_MODEL_LABELS: Record<RealtimeModel, string> = {
+  "gpt-realtime-2.1-mini":
+    "Cheaper (audio $10 in / $20 out per 1M tokens); in tests it sometimes slipped out of the caller role.",
+  "gpt-realtime-2.1": "Keeps the caller role reliably; ~3x the audio cost ($32 / $64 per 1M tokens).",
 };
 export const realtimeVoiceMessage = `The realtime evaluator needs one of its voices: ${REALTIME_VOICES.join(", ")}.`;
 
@@ -150,6 +160,7 @@ export const scenarioFormSchema = z
       .trim()
       .refine((value) => !value || IDENTIFIER.test(value), "Use only letters, digits and . _ : - (up to 100 characters)."),
     evaluatorMode: z.enum(EVALUATOR_MODES),
+    realtimeModel: z.enum(REALTIME_MODELS),
     goal: text(MAX.goal, "Describe what the caller wants."),
     instructions: text(MAX.instructions),
     facts: z
@@ -246,6 +257,7 @@ export function initialValues(scenario: Scenario | undefined, defaultAgentId = "
       evaluatorConnectionId: "",
       voiceOverride: "",
       evaluatorMode: "pipeline",
+      realtimeModel: DEFAULT_REALTIME_MODEL,
       goal: "",
       instructions: "",
       facts: [],
@@ -264,6 +276,7 @@ export function initialValues(scenario: Scenario | undefined, defaultAgentId = "
     evaluatorConnectionId: scenario.evaluatorConnectionId ?? "",
     voiceOverride: scenario.voiceOverride ?? "",
     evaluatorMode: scenario.evaluatorMode ?? "pipeline",
+    realtimeModel: scenario.realtimeModel ?? DEFAULT_REALTIME_MODEL,
     goal: scenario.goal,
     instructions: scenario.instructions,
     facts: scenario.facts.map((fact) => ({ ...fact })),
@@ -302,6 +315,7 @@ export function toNewScenario(values: ScenarioFormValues): NewScenario {
     evaluatorConnectionId: values.evaluatorConnectionId || null,
     voiceOverride: values.voiceOverride.trim() || null,
     evaluatorMode: values.evaluatorMode,
+    realtimeModel: values.realtimeModel,
     goal: values.goal.trim(),
     instructions: values.instructions.trim(),
     facts: values.facts.map((fact) => ({ key: fact.key.trim(), value: fact.value.trim() })),

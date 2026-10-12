@@ -12,7 +12,7 @@ export function errorAt(errors: FormErrors<ScenarioFormValues>, path: string): s
 }
 
 const KNOWN_PATH =
-  /^(agentId|name|tags|context|persona\.(name|locale|temperament|notes)|ttsConnectionId|evaluatorConnectionId|voiceOverride|evaluatorMode|goal|instructions|facts(\.\d+\.(key|value))?|criteria(\.\d+\.(text|kind|source|weight))?|endConditions\.(maxDurationS|maxSilenceS|hangUpWhen)|interruptions(\.\d+\.(agentTurn|afterS))?)$/;
+  /^(agentId|name|tags|context|persona\.(name|locale|temperament|notes)|ttsConnectionId|evaluatorConnectionId|voiceOverride|evaluatorMode|realtimeModel|goal|instructions|facts(\.\d+\.(key|value))?|criteria(\.\d+\.(text|kind|source|weight))?|endConditions\.(maxDurationS|maxSilenceS|hangUpWhen)|interruptions(\.\d+\.(agentTurn|afterS))?)$/;
 const LISTS = new Set(["facts", "criteria", "interruptions"]);
 
 /**
