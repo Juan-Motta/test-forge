@@ -1,4 +1,5 @@
 import type { ComponentType } from "react";
+import { KeyIcon } from "@/features/api-keys/KeyIcon";
 import {
   AgentsIcon,
   ConnectionsIcon,
@@ -28,6 +29,7 @@ export const NAV_PRIMARY: NavItem[] = [
 export const NAV_SECONDARY: NavItem[] = [
   { href: "/settings", label: "Settings", icon: SettingsIcon },
   { href: "/settings/connections", label: "Connections", icon: ConnectionsIcon, nested: true },
+  { href: "/settings/api-keys", label: "API keys", icon: KeyIcon, nested: true },
 ];
 
 /** The most specific item matching the path (exact or ancestor), or null. */

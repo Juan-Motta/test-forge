@@ -29,6 +29,7 @@ describe("activeHref", () => {
     ["/settings", "/settings"],
     ["/settings/connections", "/settings/connections"],
     ["/settings/connections/abc", "/settings/connections"],
+    ["/settings/api-keys", "/settings/api-keys"],
     ["/unknown", null],
   ])("%s -> %s", (pathname, expected) => {
     expect(activeHref(pathname, ALL)).toBe(expected);
@@ -40,7 +41,7 @@ describe("Sidebar", () => {
     const nav = renderSidebar("/runs");
 
     expect(nav.getByRole("link", { name: "Runs & reports" })).toHaveAttribute("aria-current", "page");
-    for (const name of ["Overview", "Live sessions", "Scenarios", "Agents", "Settings", "Connections"]) {
+    for (const name of ["Overview", "Live sessions", "Scenarios", "Agents", "Settings", "Connections", "API keys"]) {
       expect(nav.getByRole("link", { name })).not.toHaveAttribute("aria-current");
     }
   });
@@ -49,6 +50,16 @@ describe("Sidebar", () => {
     const nav = renderSidebar("/settings/connections");
 
     expect(nav.getByRole("link", { name: "Connections" })).toHaveAttribute("aria-current", "page");
+    expect(nav.getByRole("link", { name: "Settings" })).not.toHaveAttribute("aria-current");
+  });
+
+  it("lists API keys under Settings, next to Connections, and marks it on its page", () => {
+    const nav = renderSidebar("/settings/api-keys");
+    const links = nav.getAllByRole("link").map((link) => link.textContent);
+
+    expect(links.indexOf("API keys")).toBe(links.indexOf("Connections") + 1);
+    expect(nav.getByRole("link", { name: "API keys" })).toHaveAttribute("href", "/settings/api-keys");
+    expect(nav.getByRole("link", { name: "API keys" })).toHaveAttribute("aria-current", "page");
     expect(nav.getByRole("link", { name: "Settings" })).not.toHaveAttribute("aria-current");
   });
 
