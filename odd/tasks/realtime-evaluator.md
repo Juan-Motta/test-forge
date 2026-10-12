@@ -71,4 +71,15 @@ realtime evaluator mode that listens to the agent's audio and answers by voice w
     Realtime caller issues: role confusion in C2 ("me cortaste ahí… luego te sigo desde ahí"),
     and it hung up via the tool without a spoken goodbye (no caller row after A2).
   - Both runs: an empty, cancelled agent response after the opening (server VAD split).
-- Next: tighten the realtime caller (role framing, speak a goodbye before hang_up) — ask.
+- 33aa150 (delegated; RED observed; pytest 885): role rules + interruption note rewritten, audible
+  goodbye required (one retry when hang_up comes without audio), cancelled responses' output items
+  deleted/truncated before the next response.
+- Re-run realtime 6e8d5fbc (user-approved): goodbye retry worked (warning logged, then spoken
+  goodbye). Role better at C2 but C3 still dictated the numbers itself and accepted the agent's
+  false "17" (heard "1, 2"); the pipeline caller had corrected it. Agent memory bug again (claimed
+  17). Judge 46, mustFailed; latency criterion not observable (T3 had no latency value).
+  Latency: opening first audio 0.85 s; after the cut 1.3 s; normal turns ~1.3 s after playback end
+  (the realtime caller can only start after hearing the whole turn, while the pipeline caller
+  prepares during the agent's playback and starts ~0.5 s after it).
+- Conclusion: pipeline stays the default; realtime helps only at the opening and right after a cut,
+  and follows the script less reliably.
