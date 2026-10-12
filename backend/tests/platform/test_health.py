@@ -76,4 +76,5 @@ async def test_api_docs_are_public_in_every_environment(environment, monkeypatch
     assert spec["paths"]["/api/health"]["get"]["security"] == []
     assert spec["paths"]["/api/auth/login"]["post"]["security"] == []
     assert spec["paths"]["/api/skill"]["get"]["security"] == []
+    assert spec["paths"]["/api/skill.zip"]["get"]["security"] == []
     assert "security" not in spec["paths"]["/api/runs"]["get"]
