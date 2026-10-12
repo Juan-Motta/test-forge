@@ -32,8 +32,18 @@ HINT_MASK = "••••"
 HINT_MIN_SECRET_LENGTH = 12
 LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1"})
 CHAT_MODEL = "gpt-6-luna"  # the evaluator's only model (Azure: a deployment of it)
-REALTIME_MODEL = "gpt-realtime-2.1-mini"  # the realtime evaluator's model (Azure: a deployment)
 LEGACY_CONFIG_KEYS = frozenset({"chat_model", "chatModel"})  # once configurable, now ignored
+
+
+class RealtimeModel(StrEnum):
+    """The realtime evaluator's models a scenario chooses from (Azure: a deployment of each)."""
+
+    MINI = "gpt-realtime-2.1-mini"
+    FULL = "gpt-realtime-2.1"
+
+
+REALTIME_MODELS = tuple(model.value for model in RealtimeModel)
+DEFAULT_REALTIME_MODEL = RealtimeModel.MINI
 
 
 class ConnectionKind(StrEnum):
@@ -177,11 +187,6 @@ class OpenAIConfig(_Model):
         """The evaluator's model: fixed, not configurable."""
         return CHAT_MODEL
 
-    @property
-    def realtime_model(self) -> str:
-        """The realtime evaluator's model: fixed, not configurable."""
-        return REALTIME_MODEL
-
 
 class AzureOpenAIConfig(_Model):
     endpoint: str
@@ -192,8 +197,16 @@ class AzureOpenAIConfig(_Model):
     chat_deployment: Identifier | None = None
     # A gpt-realtime-2.1-mini deployment, for scenarios with the realtime evaluator.
     realtime_deployment: Identifier | None = None
+    # A gpt-realtime-2.1 deployment, for realtime scenarios that choose the full model.
+    realtime_full_deployment: Identifier | None = None
 
     check_endpoint = field_validator("endpoint")(check_url)
+
+    def realtime_deployment_for(self, model: str) -> str | None:
+        """The deployment of the realtime `model`, or None when the connection has none."""
+        if model == RealtimeModel.FULL:
+            return self.realtime_full_deployment
+        return self.realtime_deployment
 
 
 class AzureSpeechConfig(_Model):

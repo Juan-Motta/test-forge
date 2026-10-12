@@ -43,6 +43,7 @@ FIELDS = {
     "endConditions",
     "interruptions",
     "evaluatorMode",
+    "realtimeModel",
     "createdAt",
     "updatedAt",
 }
@@ -640,3 +641,33 @@ async def test_the_realtime_evaluator_needs_a_realtime_voice(user_client, agent_
     assert both.status_code == 200, both.text
     assert (await user_client.patch(url, json={"voiceOverride": "nova"})).status_code == 422
     assert (await user_client.patch(url, json={"voiceOverride": None})).status_code == 200
+
+
+async def test_the_realtime_model_defaults_to_mini_and_is_stored(user_client, agent_id):
+    body = await create(user_client, agent_id)
+    assert body["realtimeModel"] == "gpt-realtime-2.1-mini"
+    url = f"/api/scenarios/{body['id']}"
+    patched = await user_client.patch(url, json={"realtimeModel": "gpt-realtime-2.1"})
+    assert patched.status_code == 200, patched.text
+    assert patched.json()["realtimeModel"] == "gpt-realtime-2.1"
+    assert (await user_client.get(url)).json()["realtimeModel"] == "gpt-realtime-2.1"
+    copy = await user_client.post(f"{url}/duplicate")
+    assert copy.json()["realtimeModel"] == "gpt-realtime-2.1"
+    full = await create(
+        user_client,
+        agent_id,
+        name="Full",
+        evaluatorMode="realtime",
+        realtimeModel="gpt-realtime-2.1",
+    )
+    assert full["realtimeModel"] == "gpt-realtime-2.1"
+    assert (await user_client.patch(url, json={"realtimeModel": None})).status_code == 422
+
+
+@pytest.mark.parametrize("value", ["gpt-realtime", "gpt-4o-realtime-preview", "", 3])
+async def test_an_unknown_realtime_model_is_rejected(user_client, agent_id, value):
+    response = await user_client.post(
+        "/api/scenarios", json=scenario(agent_id, realtimeModel=value)
+    )
+    assert response.status_code == 422, response.text
+    assert locs(response) == [["body", "realtimeModel"]]

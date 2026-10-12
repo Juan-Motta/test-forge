@@ -18,6 +18,7 @@ from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from voice_eval.modules.agents.models import AgentRecord
+from voice_eval.modules.connections.domain import DEFAULT_REALTIME_MODEL, RealtimeModel
 from voice_eval.modules.scenarios.domain import (
     MAX_NAME_LENGTH,
     MAX_TAG_LENGTH,
@@ -69,6 +70,11 @@ class ScenarioRecord(Base):
         default=EvaluatorMode.PIPELINE.value,
         server_default=EvaluatorMode.PIPELINE.value,
     )
+    realtime_model: Mapped[str] = mapped_column(
+        String(40),
+        default=DEFAULT_REALTIME_MODEL.value,
+        server_default=DEFAULT_REALTIME_MODEL.value,
+    )
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL")
     )
@@ -97,4 +103,5 @@ class ScenarioRecord(Base):
             updated_at=self.updated_at,
             interruptions=[Interruption.model_validate(item) for item in self.interruptions],
             evaluator_mode=EvaluatorMode(self.evaluator_mode),
+            realtime_model=RealtimeModel(self.realtime_model),
         )

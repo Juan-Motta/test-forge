@@ -159,6 +159,7 @@ class SessionRunner:
     out_dir: Path
     options: SessionOptions = field(default_factory=SessionOptions)
     realtime: RealtimeCaller | None = None  # the realtime evaluator, instead of policy + TTS
+    realtime_model: str | None = None  # the realtime evaluator's model, for the summary
 
     def __post_init__(self) -> None:
         self.session: TargetSession | None = None
@@ -979,6 +980,7 @@ class SessionRunner:
             "final_usage_confirmed": self.closed.final_usage_confirmed if self.closed else None,
             "interruptions": self.interruptions,
             "evaluator_mode": "pipeline" if self.realtime is None else "realtime",
+            "realtime_model": None if self.realtime is None else self.realtime_model,
             "warnings": self.warnings,
             "event_counts": dict(Counter(e["type"] for e in self.events)),
         }

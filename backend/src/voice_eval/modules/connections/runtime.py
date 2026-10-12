@@ -11,8 +11,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from voice_eval.modules.connections.domain import (
+    DEFAULT_REALTIME_MODEL,
     ConnectionKind,
     ConnectionNotFound,
+    RealtimeModel,
     UnsupportedConnection,
     parse_config,
     reveal,
@@ -122,12 +124,13 @@ async def build_realtime_caller(
     secret_box: SecretBox,
     allow_local_http: bool = False,
     voice: str | None = None,
+    model: str = DEFAULT_REALTIME_MODEL,
 ) -> RealtimeCaller:
-    """The realtime evaluator for the stored connection `connection_id` (not connected yet).
+    """The realtime evaluator `model` on the stored connection `connection_id` (not connected yet).
 
     `voice` overrides the connection's voice; a voice the realtime model lacks becomes its
     default. Raises `ConnectionNotFound`, `UnsupportedConnection` for kinds without a realtime
-    model (and Azure OpenAI without a realtime deployment), and `SecretDecryptionError`.
+    model (and Azure OpenAI without a deployment of `model`), and `SecretDecryptionError`.
     """
     record = await db.get(ConnectionRecord, connection_id, populate_existing=True)
     if record is None:
@@ -136,24 +139,32 @@ async def build_realtime_caller(
     if kind not in (ConnectionKind.OPENAI, ConnectionKind.AZURE_OPENAI):
         raise UnsupportedConnection(f"{kind.value} connections have no realtime model")
     config = parse_config(kind, record.config, allow_local_http=allow_local_http)
-    if kind is ConnectionKind.AZURE_OPENAI and config.realtime_deployment is None:
-        raise UnsupportedConnection(
-            "this azure_openai connection has no realtime deployment: set one to use the "
-            "realtime evaluator"
-        )
+    deployment = None
+    if kind is ConnectionKind.AZURE_OPENAI:
+        deployment = config.realtime_deployment_for(model)
+        if deployment is None and model == RealtimeModel.FULL:
+            raise UnsupportedConnection(
+                f"this azure_openai connection has no {model} deployment: set its realtime "
+                f"full deployment to use {model}"
+            )
+        if deployment is None:
+            raise UnsupportedConnection(
+                "this azure_openai connection has no realtime deployment: set one to use the "
+                "realtime evaluator"
+            )
     secrets = reveal(open_secrets(secret_box, record))
     chosen = realtime_voice(voice or config.tts_voice)
     if kind is ConnectionKind.OPENAI:
         return build_openai_realtime_caller(
             api_key=secrets["api_key"],
-            model=config.realtime_model,
+            model=model,
             voice=chosen,
             base_url=config.base_url,
         )
     return build_azure_openai_realtime_caller(
         api_key=secrets["api_key"],
         endpoint=config.endpoint,
-        deployment=config.realtime_deployment,
+        deployment=deployment,
         voice=chosen,
     )
 

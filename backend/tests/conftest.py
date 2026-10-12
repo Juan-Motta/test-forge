@@ -552,8 +552,8 @@ async def _no_provider_in_tests(db, connection_id):
 def _offline_realtime(build):
     """Resolve the connection like a run does (its errors stay), never return a live caller."""
 
-    async def build_offline(db, connection_id, voice):
-        await build(db, connection_id, voice)
+    async def build_offline(db, connection_id, voice, model):
+        await build(db, connection_id, voice, model)
         raise RuntimeError("tests never contact a realtime model")
 
     return build_offline

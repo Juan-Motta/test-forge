@@ -175,12 +175,12 @@ async def test_a_voice_override_replaces_the_connection_voice(app, user_client):
     assert synth.voice == "nova"
 
 
-async def build_realtime(app, connection_id, voice=None):
+async def build_realtime(app, connection_id, voice=None, model="gpt-realtime-2.1-mini"):
     from voice_eval.modules.connections.runtime import build_realtime_caller
 
     async with app.state.sessionmaker() as session:
         return await build_realtime_caller(
-            session, connection_id, secret_box=app.state.secret_box, voice=voice
+            session, connection_id, secret_box=app.state.secret_box, voice=voice, model=model
         )
 
 
@@ -241,3 +241,45 @@ async def test_realtime_caller_needs_an_openai_kind(app, user_client):
     )
     with pytest.raises(UnsupportedConnection, match="realtime"):
         await build_realtime(app, connection_id)
+
+
+async def test_realtime_caller_uses_the_chosen_openai_model(app, user_client):
+    connection_id = await create(
+        user_client,
+        {"name": "rt full", "kind": "openai", "config": {}, "secrets": {"apiKey": KEY}},
+    )
+    caller = await build_realtime(app, connection_id, model="gpt-realtime-2.1")
+    assert caller.url == "wss://api.openai.com/v1/realtime?model=gpt-realtime-2.1"
+
+
+async def test_realtime_caller_uses_the_azure_deployment_of_the_chosen_model(app, user_client):
+    config = {
+        "endpoint": "https://res.openai.azure.com",
+        "apiVersion": "2025-03-01-preview",
+        "ttsDeployment": "my-tts",
+        "realtimeDeployment": "rt-mini",
+    }
+    mini_only = await create(
+        user_client,
+        {
+            "name": "azure mini",
+            "kind": "azure_openai",
+            "config": config,
+            "secrets": {"apiKey": KEY},
+        },
+    )
+    with pytest.raises(UnsupportedConnection, match="no gpt-realtime-2.1 deployment"):
+        await build_realtime(app, mini_only, model="gpt-realtime-2.1")
+    both = await create(
+        user_client,
+        {
+            "name": "azure both",
+            "kind": "azure_openai",
+            "config": {**config, "realtimeFullDeployment": "rt-full"},
+            "secrets": {"apiKey": KEY},
+        },
+    )
+    full = await build_realtime(app, both, model="gpt-realtime-2.1")
+    assert full.url == "wss://res.openai.azure.com/openai/v1/realtime?model=rt-full"
+    mini = await build_realtime(app, both)
+    assert mini.url == "wss://res.openai.azure.com/openai/v1/realtime?model=rt-mini"

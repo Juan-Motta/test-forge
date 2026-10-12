@@ -258,7 +258,7 @@ edit applies to the next run without restarting anything.
 | Kind | `config` (camelCase) | `secrets` |
 | --- | --- | --- |
 | `openai` | `baseUrl` (default `https://api.openai.com/v1`), `ttsModel` (`gpt-4o-mini-tts`), `ttsVoice` (`alloy`) | `apiKey` |
-| `azure_openai` | `endpoint`, `apiVersion`, `ttsDeployment`, `ttsVoice` (`alloy`), `chatDeployment` (optional, a `gpt-6-luna` deployment; without it the connection cannot be the evaluator), `realtimeDeployment` (optional, a `gpt-realtime-2.1-mini` deployment; without it realtime-evaluator runs on this connection fail) | `apiKey` |
+| `azure_openai` | `endpoint`, `apiVersion`, `ttsDeployment`, `ttsVoice` (`alloy`), `chatDeployment` (optional, a `gpt-6-luna` deployment; without it the connection cannot be the evaluator), `realtimeDeployment` (optional, a `gpt-realtime-2.1-mini` deployment; without it realtime-evaluator runs on this connection fail), `realtimeFullDeployment` (optional, a `gpt-realtime-2.1` deployment; without it realtime runs of scenarios that choose `gpt-realtime-2.1` on this connection fail) | `apiKey` |
 | `azure_speech` | exactly one of `region` (e.g. `eastus`) or `endpoint`; `voice` (e.g. `es-MX-DaliaNeural`) | `key` |
 | `langfuse` | `host`, `publicKey` | `secretKey` |
 
@@ -365,7 +365,9 @@ two-level: the agent's `context` applies to all its scenarios, the scenario's ad
   `PATCH`), `evaluatorMode` (`pipeline` default: chat policy + TTS; `realtime`: the
   speech-to-speech realtime evaluator, see Session runner; with `realtime` a `voiceOverride`
   must be one of alloy, ash, ballad, coral, echo, sage, shimmer, verse, marin, cedar, else 422
-  on `voiceOverride`; the run snapshot keeps it as `evaluator_mode`). Responses add `id`, `agent: {id, name}`,
+  on `voiceOverride`; the run snapshot keeps it as `evaluator_mode`), `realtimeModel`
+  (`gpt-realtime-2.1-mini` default, or `gpt-realtime-2.1`, else 422; used only by the realtime
+  evaluator; the run snapshot keeps it as `realtime_model`). Responses add `id`, `agent: {id, name}`,
   `createdAt`, `updatedAt`.
 
 ### Evaluator (caller policy)
@@ -421,9 +423,11 @@ fire). The agent row in `transcript.json` keeps the full text plus `interrupted:
 `audio_end_ms`, `heard_chars`, `total_chars`).
 
 **Realtime evaluator** (scenario `evaluatorMode: realtime`). No policy or TTS: the scenario's
-voice connection hosts a `gpt-realtime-2.1-mini` session (OpenAI
-`wss://api.openai.com/v1/realtime?model=gpt-realtime-2.1-mini` with `Authorization: Bearer`;
-Azure OpenAI `wss://<resource>/openai/v1/realtime?model=<realtimeDeployment>` with `api-key`),
+voice connection hosts a session of the scenario's `realtimeModel` (OpenAI
+`wss://api.openai.com/v1/realtime?model=<realtimeModel>` with `Authorization: Bearer`; Azure
+OpenAI `wss://<resource>/openai/v1/realtime?model=<deployment>` with `api-key`, the deployment
+being `realtimeDeployment` for `gpt-realtime-2.1-mini` and `realtimeFullDeployment` for
+`gpt-realtime-2.1`),
 configured with PCM16 24 kHz in and out, the scenario's realtime voice (else the connection's,
 else `alloy`), server turn detection off, low reasoning effort when the model takes it, a
 `hang_up(reason)` tool and instructions built from the brief like the pipeline prompt. The
@@ -443,7 +447,8 @@ agent off, speaks as the one who interrupted. On an
 interrupted turn the agent audio is held and only the part that played is appended, plus a
 note that the caller cut in. Connection, auth or model errors fail the run with `reason`
 `realtime_failed` and a message without keys or provider text; an Azure connection without
-`realtimeDeployment` fails the run at setup. `summary.json` has `evaluator_mode`.
+a deployment of the chosen model fails the run at setup. `summary.json` has `evaluator_mode`
+and `realtime_model` (null for pipeline runs).
 
 It ends on the caller's hang-up (after the agent's last reply
 has finished playing, and after a farewell has been spoken), when the agent closes the session,

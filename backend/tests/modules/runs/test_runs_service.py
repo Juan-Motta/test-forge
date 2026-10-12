@@ -150,3 +150,14 @@ async def test_the_snapshot_keeps_the_evaluator_mode(db, factory):
     async with db() as session:
         (plan,) = await service.plan_runs(session, [uuid.UUID(created["id"])])
     assert snapshot(plan)["scenario"]["evaluator_mode"] == "realtime"
+
+
+async def test_the_snapshot_keeps_the_realtime_model(db, factory):
+    default = await factory.scenario("Default")
+    full = await factory.scenario(
+        "Full", evaluatorMode="realtime", realtimeModel="gpt-realtime-2.1"
+    )
+    async with db() as session:
+        plans = await service.plan_runs(session, [uuid.UUID(default["id"]), uuid.UUID(full["id"])])
+    models = {plan.scenario.name: snapshot(plan)["scenario"]["realtime_model"] for plan in plans}
+    assert models == {"Default": "gpt-realtime-2.1-mini", "Full": "gpt-realtime-2.1"}

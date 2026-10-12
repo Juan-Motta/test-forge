@@ -14,6 +14,7 @@ from typing import Annotated, Any
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
 from pydantic.alias_generators import to_camel
 
+from voice_eval.modules.connections.domain import DEFAULT_REALTIME_MODEL, RealtimeModel
 from voice_eval.ports.policy import CallerBrief
 from voice_eval.ports.realtime_caller import REALTIME_VOICES
 
@@ -229,6 +230,8 @@ class Scenario:
     updated_at: datetime
     interruptions: list[Interruption] = field(default_factory=list)
     evaluator_mode: EvaluatorMode = EvaluatorMode.PIPELINE
+    # Used only by the realtime evaluator.
+    realtime_model: RealtimeModel = DEFAULT_REALTIME_MODEL
 
 
 class ScenarioNotFound(Exception):

@@ -49,6 +49,7 @@ WRITABLE = frozenset(
         "end_conditions",
         "interruptions",
         "evaluator_mode",
+        "realtime_model",
     }
 )
 COPIED = WRITABLE - {"name"}

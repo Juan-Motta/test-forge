@@ -147,11 +147,11 @@ class OneShotRealtimeCaller:
 async def test_a_realtime_scenario_runs_with_the_realtime_caller_only(
     app, user_client, factory, fake_live_server
 ):
-    built: list[tuple[str, uuid.UUID, str | None]] = []
+    built: list[tuple[str, uuid.UUID, str | None, str]] = []
     callers: list[OneShotRealtimeCaller] = []
 
-    async def build_realtime_caller(db, connection_id, voice):
-        built.append(("realtime", connection_id, voice))
+    async def build_realtime_caller(db, connection_id, voice, model):
+        built.append(("realtime", connection_id, voice, model))
         callers.append(OneShotRealtimeCaller())
         return callers[-1]
 
@@ -163,7 +163,9 @@ async def test_a_realtime_scenario_runs_with_the_realtime_caller_only(
     manager.build_policy = no_pipeline
     manager.build_synthesizer = no_pipeline
     manager.session_overrides = {"silence_gap_ms": 300, "settle_ms": 300, "playback_grace_ms": 50}
-    scenario = await factory.scenario(evaluatorMode="realtime", voiceOverride="marin")
+    scenario = await factory.scenario(
+        evaluatorMode="realtime", voiceOverride="marin", realtimeModel="gpt-realtime-2.1"
+    )
     async with app.state.sessionmaker() as db:
         await db.execute(update(AgentRecord).values(base_url=fake_live_server.url))
         await db.commit()
@@ -176,12 +178,13 @@ async def test_a_realtime_scenario_runs_with_the_realtime_caller_only(
         return (await user_client.get(f"/api/runs/{run_id}")).json()["status"] == "completed"
 
     await wait_for(finished, within_s=30)
-    assert built == [("realtime", uuid.UUID(await factory.openai()), "marin")]
+    assert built == [("realtime", uuid.UUID(await factory.openai()), "marin", "gpt-realtime-2.1")]
     (caller,) = callers
     assert "Learn the current account balance." in caller.instructions
     assert caller.heard > 0 and caller.closed
     detail = (await user_client.get(f"/api/runs/{run_id}")).json()
     assert detail["summary"]["evaluatorMode"] == "realtime"
+    assert detail["summary"]["realtimeModel"] == "gpt-realtime-2.1"
     caller_rows = [r for r in detail["transcript"] if r["role"] == "caller"]
     assert [(r["text"], r["reason"]) for r in caller_rows] == [("Thanks, bye", "realtime")]
 
@@ -215,3 +218,36 @@ async def test_an_azure_connection_without_a_realtime_deployment_fails_the_run(
     assert detail["endReason"] == "setup_failed"
     assert "no realtime deployment" in detail["error"]
     assert "sk-azure" not in detail["error"]
+
+
+async def test_an_azure_connection_without_the_full_realtime_deployment_fails_the_run(
+    app, user_client, factory
+):
+    azure = await factory.post(
+        "/api/connections",
+        {
+            "name": "Azure mini only",
+            "kind": "azure_openai",
+            "config": {
+                "endpoint": "https://res.openai.azure.com",
+                "apiVersion": "2025-03-01-preview",
+                "ttsDeployment": "tts",
+                "chatDeployment": "chat",
+                "realtimeDeployment": "rt-mini",
+            },
+            "secrets": {"apiKey": "sk-azure-abcdefghijkl"},
+        },
+    )
+    scenario = await factory.scenario(
+        evaluatorMode="realtime", realtimeModel="gpt-realtime-2.1", ttsConnectionId=azure["id"]
+    )
+    response = await user_client.post("/api/runs", json={"scenarioIds": [scenario["id"]]})
+    run_id = response.json()["runs"][0]["id"]
+
+    async def failed() -> bool:
+        return (await user_client.get(f"/api/runs/{run_id}")).json()["status"] == "failed"
+
+    await wait_for(failed, within_s=10)
+    detail = (await user_client.get(f"/api/runs/{run_id}")).json()
+    assert detail["endReason"] == "setup_failed"
+    assert "no gpt-realtime-2.1 deployment" in detail["error"]

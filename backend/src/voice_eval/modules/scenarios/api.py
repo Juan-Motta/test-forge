@@ -9,7 +9,11 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_vali
 from pydantic.alias_generators import to_camel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from voice_eval.modules.connections.domain import Identifier
+from voice_eval.modules.connections.domain import (
+    DEFAULT_REALTIME_MODEL,
+    Identifier,
+    RealtimeModel,
+)
 from voice_eval.modules.scenarios import service
 from voice_eval.modules.scenarios.domain import (
     MAX_CONTEXT_LENGTH,
@@ -82,6 +86,7 @@ class ScenarioOut(CamelModel):
     end_conditions: EndConditions
     interruptions: list[Interruption]
     evaluator_mode: EvaluatorMode
+    realtime_model: RealtimeModel
     created_at: datetime
     updated_at: datetime
 
@@ -105,6 +110,7 @@ class ScenarioOut(CamelModel):
             end_conditions=scenario.end_conditions,
             interruptions=scenario.interruptions,
             evaluator_mode=scenario.evaluator_mode,
+            realtime_model=scenario.realtime_model,
             created_at=scenario.created_at,
             updated_at=scenario.updated_at,
         )
@@ -126,6 +132,7 @@ class CreateIn(StrictCamelModel, ScenarioRules):
     end_conditions: EndConditions = Field(default_factory=EndConditions)
     interruptions: Interruptions = []
     evaluator_mode: EvaluatorMode = EvaluatorMode.PIPELINE
+    realtime_model: RealtimeModel = DEFAULT_REALTIME_MODEL
 
 
 class UpdateIn(StrictCamelModel, ScenarioRules):
@@ -150,6 +157,7 @@ class UpdateIn(StrictCamelModel, ScenarioRules):
     end_conditions: EndConditions | None = None
     interruptions: Interruptions | None = None
     evaluator_mode: EvaluatorMode | None = None
+    realtime_model: RealtimeModel | None = None
 
     @field_validator(
         "agent_id",
@@ -164,6 +172,7 @@ class UpdateIn(StrictCamelModel, ScenarioRules):
         "end_conditions",
         "interruptions",
         "evaluator_mode",
+        "realtime_model",
     )
     @classmethod
     def required_when_present(cls, value: Any) -> Any:

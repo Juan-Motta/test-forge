@@ -132,7 +132,7 @@ def options(**overrides) -> SessionOptions:
     return SessionOptions(**{**base, **overrides})
 
 
-async def run(url, tmp_path, caller, opts=None, brief=BRIEF):
+async def run(url, tmp_path, caller, opts=None, brief=BRIEF, model="gpt-realtime-2.1-mini"):
     sink = ListSink()
     runner = SessionRunner(
         TargetSpec(url, "chan-test", "user-test"),
@@ -143,6 +143,7 @@ async def run(url, tmp_path, caller, opts=None, brief=BRIEF):
         out_dir=tmp_path / "run",
         options=opts or options(),
         realtime=caller,
+        realtime_model=model,
     )
     summary = await runner.run()
     return summary, sink
@@ -193,6 +194,11 @@ async def test_the_realtime_caller_opens_hears_the_agent_and_hangs_up(
     assert all(s.data["tts_first_chunk_ms"] is not None for s in speaking)
     assert all(d.data["reason"] == "realtime" for d in decisions)
     assert summary["caller_turns"] == 3
+    saved = json.loads((tmp_path / "run" / "summary.json").read_text())
+    assert (saved["evaluator_mode"], saved["realtime_model"]) == (
+        "realtime",
+        "gpt-realtime-2.1-mini",
+    )
 
 
 async def test_the_caller_answers_only_after_the_agent_playback(fake_live_server, tmp_path):

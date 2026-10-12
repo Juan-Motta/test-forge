@@ -78,10 +78,30 @@ def test_realtime_deployment_is_optional_and_configurable():
     assert error_locs(info) == [("config", "realtimeDeployment")]
 
 
-def test_the_openai_realtime_model_is_fixed():
-    from voice_eval.modules.connections.domain import REALTIME_MODEL
+def test_realtime_full_deployment_is_optional_and_configurable():
+    assert config("azure_openai", AZURE).realtime_full_deployment is None
+    parsed = config("azure_openai", {**AZURE, "realtimeFullDeployment": "rt-full"})
+    assert parsed.realtime_full_deployment == "rt-full"
+    with pytest.raises(InvalidConnectionInput) as info:
+        config("azure_openai", {**AZURE, "realtimeFullDeployment": "a/b"})
+    assert error_locs(info) == [("config", "realtimeFullDeployment")]
 
-    assert REALTIME_MODEL == "gpt-realtime-2.1-mini"
+
+def test_azure_realtime_deployments_follow_the_model():
+    parsed = config(
+        "azure_openai",
+        {**AZURE, "realtimeDeployment": "rt-mini", "realtimeFullDeployment": "rt-full"},
+    )
+    assert parsed.realtime_deployment_for("gpt-realtime-2.1-mini") == "rt-mini"
+    assert parsed.realtime_deployment_for("gpt-realtime-2.1") == "rt-full"
+    assert config("azure_openai", AZURE).realtime_deployment_for("gpt-realtime-2.1") is None
+
+
+def test_the_realtime_models_are_a_fixed_set_with_mini_by_default():
+    from voice_eval.modules.connections.domain import DEFAULT_REALTIME_MODEL, REALTIME_MODELS
+
+    assert REALTIME_MODELS == ("gpt-realtime-2.1-mini", "gpt-realtime-2.1")
+    assert DEFAULT_REALTIME_MODEL == "gpt-realtime-2.1-mini"
 
 
 def test_the_openai_chat_model_is_fixed_and_legacy_values_are_ignored():

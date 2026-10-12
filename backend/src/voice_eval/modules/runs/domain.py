@@ -192,6 +192,7 @@ def snapshot(plan: RunPlan) -> dict[str, Any]:
             "interruptions": [item.model_dump(mode="json") for item in scenario.interruptions],
             "voice_override": scenario.voice_override,
             "evaluator_mode": scenario.evaluator_mode.value,
+            "realtime_model": scenario.realtime_model.value,
         },
         "agent": {
             "id": str(agent.id),

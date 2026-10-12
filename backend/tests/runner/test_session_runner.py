@@ -201,6 +201,7 @@ async def test_artifacts_are_written_without_audio_payloads(fake_live_server, tm
     assert [e["type"] for e in events] == sink.types()
     assert all("pcm" not in e and "delta" not in e and "audio" not in e for e in events)
     assert json.loads((out / "summary.json").read_text()) == summary
+    assert (summary["evaluator_mode"], summary["realtime_model"]) == ("pipeline", None)
     assert summary["thread_id"] and summary["session_id"] == "sess-fake"
     assert summary["final_usage_confirmed"] is True
     assert (out / "caller.wav").stat().st_size > len(SPEECH)

@@ -12,7 +12,8 @@ or `failed` after the agent spoke at least once, is handed to the judgement coor
 (`judgements`, when one is wired) to be scored.
 
 A scenario with the realtime evaluator (`evaluator_mode` "realtime" in its snapshot) builds a
-realtime caller from its voice connection instead of the policy and the synthesizer.
+realtime caller of its `realtime_model` from its voice connection instead of the policy and the
+synthesizer.
 
 The factories (`build_policy`, `build_synthesizer`, `build_realtime_caller`) and the whole
 `drive` step are attributes, so tests replace them and never contact a provider.
@@ -29,7 +30,7 @@ from typing import Any, Protocol
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from voice_eval.modules.connections.domain import UnsupportedConnection
+from voice_eval.modules.connections.domain import DEFAULT_REALTIME_MODEL, UnsupportedConnection
 from voice_eval.modules.connections.runtime import (
     build_caller_policy,
     build_realtime_caller,
@@ -73,7 +74,9 @@ class RunSetupError(Exception):
 Drive = Callable[[RunJob, EventSink], Awaitable[dict[str, Any]]]
 PolicyFactory = Callable[[AsyncSession, uuid.UUID], Awaitable[CallerPolicy]]
 SynthesizerFactory = Callable[[AsyncSession, uuid.UUID, str | None], Awaitable[SpeechSynthesizer]]
-RealtimeCallerFactory = Callable[[AsyncSession, uuid.UUID, str | None], Awaitable[RealtimeCaller]]
+RealtimeCallerFactory = Callable[
+    [AsyncSession, uuid.UUID, str | None, str], Awaitable[RealtimeCaller]
+]
 
 
 def read_json(path: Path) -> Any:
@@ -312,10 +315,12 @@ class RunManager:
         policy: CallerPolicy | None = None
         synthesizer: SpeechSynthesizer | None = None
         realtime: RealtimeCaller | None = None
+        model: str | None = None
         async with self.sessionmaker() as db:
             if evaluator_mode(snapshot) == "realtime":
+                model = realtime_model(snapshot)
                 try:  # the voice connection hosts the realtime model too
-                    realtime = await self.build_realtime_caller(db, tts_id, voice)
+                    realtime = await self.build_realtime_caller(db, tts_id, voice, model)
                 except Exception as exc:
                     raise _provider_error("voice", exc) from None
             else:
@@ -345,6 +350,7 @@ class RunManager:
                 **self.session_overrides,
             ),
             realtime=realtime,
+            realtime_model=model,
         )
         return await runner.run()
 
@@ -354,7 +360,7 @@ class RunManager:
         )
 
     async def _build_realtime_caller(
-        self, db: AsyncSession, connection_id: uuid.UUID, voice: str | None
+        self, db: AsyncSession, connection_id: uuid.UUID, voice: str | None, model: str
     ) -> RealtimeCaller:
         return await build_realtime_caller(
             db,
@@ -362,6 +368,7 @@ class RunManager:
             secret_box=self.secret_box,
             allow_local_http=self.allow_local_http,
             voice=voice,
+            model=model,
         )
 
     async def _build_synthesizer(
@@ -394,6 +401,11 @@ def run_target_spec(
 def evaluator_mode(snapshot: dict[str, Any]) -> str:
     """The scenario's evaluator (snapshots from before it was chosen are pipeline runs)."""
     return snapshot["scenario"].get("evaluator_mode") or "pipeline"
+
+
+def realtime_model(snapshot: dict[str, Any]) -> str:
+    """The scenario's realtime model (snapshots from before it was chosen used the default)."""
+    return snapshot["scenario"].get("realtime_model") or DEFAULT_REALTIME_MODEL.value
 
 
 def interruptions_from_snapshot(snapshot: dict[str, Any]) -> tuple[Interruption, ...]:
