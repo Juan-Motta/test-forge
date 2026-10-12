@@ -12,6 +12,7 @@ from voice_eval.modules.runs.domain import (
     ScenariosNotRunnable,
     brief_from_snapshot,
     sanitize_error,
+    snapshot,
 )
 
 
@@ -54,6 +55,16 @@ async def test_create_batch_interleaves_runs_with_their_snapshot(db, factory):
     assert brief.agent_context == "Answers balance questions for retail customers."
     assert batch.runs[0].snapshot["connections"]["evaluator"]["chat_model"] == "gpt-6-luna"
     assert "secrets" not in str(batch.runs[0].snapshot)
+    assert batch.runs[0].snapshot["scenario"]["interruptions"] == []
+
+
+async def test_the_snapshot_keeps_the_scenario_interruptions(db, factory):
+    created = await factory.scenario(
+        "Interrupting", interruptions=[{"agentTurn": 2, "afterMs": 1200}]
+    )
+    async with db() as session:
+        (plan,) = await service.plan_runs(session, [uuid.UUID(created["id"])])
+    assert snapshot(plan)["scenario"]["interruptions"] == [{"agent_turn": 2, "after_ms": 1200}]
 
 
 async def test_the_batch_completes_when_its_last_run_ends(db, factory):

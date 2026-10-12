@@ -35,6 +35,9 @@ class Settings(BaseSettings):
     login_window_minutes: int = Field(default=15, gt=0)
     runs_max_concurrency: int = Field(default=3, ge=1, le=50)  # live sessions, every batch
     runs_data_dir: Path = Path("/data/runs")  # artifacts of each run: <dir>/<run id>/
+    # Set when the backend runs in a container: agents configured on `localhost`/`127.0.0.1`
+    # are dialled through this host instead (compose sets `host.docker.internal`).
+    local_target_host: str | None = None
 
     @field_validator("database_url")
     @classmethod
@@ -42,6 +45,11 @@ class Settings(BaseSettings):
         if not value.startswith("postgresql+asyncpg://"):
             raise ValueError("DATABASE_URL must start with postgresql+asyncpg://")
         return value
+
+    @field_validator("local_target_host")
+    @classmethod
+    def _blank_is_unset(cls, value: str | None) -> str | None:
+        return (value or "").strip() or None
 
     @field_validator("web_origins", mode="before")
     @classmethod

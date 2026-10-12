@@ -72,12 +72,12 @@ async def _commit(db: AsyncSession, name: str) -> None:
         raise
 
 
-async def _validate(db: AsyncSession, fields: dict[str, Any], *, allow_local_ws: bool) -> None:
+async def _validate(db: AsyncSession, fields: dict[str, Any]) -> None:
     """Normalize `fields` in place; raise `InvalidAgentInput` with every error found."""
     errors: list[dict[str, Any]] = []
     if "base_url" in fields:
         try:
-            fields["base_url"] = check_base_url(fields["base_url"], allow_local_ws=allow_local_ws)
+            fields["base_url"] = check_base_url(fields["base_url"])
         except InvalidAgentInput as exc:
             errors += exc.errors
     connection_id = fields.get("langfuse_connection_id")
@@ -116,11 +116,10 @@ async def create_agent(
     *,
     fields: dict[str, Any],
     created_by: uuid.UUID | None,
-    allow_local_ws: bool,
 ) -> Agent:
     """`fields` holds every writable field (snake_case), already shape-validated."""
     fields = {key: value for key, value in fields.items() if key in WRITABLE}
-    await _validate(db, fields, allow_local_ws=allow_local_ws)
+    await _validate(db, fields)
     await _ensure_name_free(db, fields["name"])
     record = AgentRecord(id=uuid.uuid4(), created_by=created_by, **fields)
     db.add(record)
@@ -134,12 +133,11 @@ async def update_agent(
     agent_id: uuid.UUID,
     *,
     changes: dict[str, Any],
-    allow_local_ws: bool,
 ) -> Agent:
     """Apply the given fields only; omitted ones are kept."""
     record = await _load(db, agent_id)
     changes = {key: value for key, value in changes.items() if key in WRITABLE}
-    await _validate(db, changes, allow_local_ws=allow_local_ws)
+    await _validate(db, changes)
     name = changes.get("name")
     if name is not None and name != record.name:
         await _ensure_name_free(db, name)

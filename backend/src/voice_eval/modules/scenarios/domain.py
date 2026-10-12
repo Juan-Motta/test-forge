@@ -6,7 +6,7 @@ Validation errors carry the field location and a message, never the submitted va
 """
 
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
 from typing import Annotated, Any
@@ -31,6 +31,9 @@ MAX_FACT_VALUE_LENGTH = 500
 MAX_CRITERIA = 30
 MAX_CRITERION_TEXT_LENGTH = 500
 CRITERIA_WEIGHT_TOTAL = 100
+MAX_INTERRUPTIONS = 10
+MIN_INTERRUPT_AFTER_MS = 300
+MAX_INTERRUPT_AFTER_MS = 60000
 COPY_SUFFIX = " (copy)"
 
 
@@ -117,9 +120,18 @@ class EndConditions(_Model):
     hang_up_when: HangUpWhen = HangUpWhen.GOAL_OR_GOODBYE
 
 
+class Interruption(_Model):
+    """The caller barges in on the agent's `agent_turn`-th reply (from 1) once `after_ms` of it
+    has played, like a person cutting the agent off mid-sentence."""
+
+    agent_turn: int = Field(ge=1)
+    after_ms: int = Field(ge=MIN_INTERRUPT_AFTER_MS, le=MAX_INTERRUPT_AFTER_MS)
+
+
 Tags = Annotated[list[Tag], Field(max_length=MAX_TAGS)]
 Facts = Annotated[list[Fact], Field(max_length=MAX_FACTS)]
 Criteria = Annotated[list[Criterion], Field(min_length=1, max_length=MAX_CRITERIA)]
+Interruptions = Annotated[list[Interruption], Field(max_length=MAX_INTERRUPTIONS)]
 
 
 def unique_tags(tags: list[str]) -> list[str]:
@@ -145,6 +157,13 @@ def check_criteria(criteria: list[Criterion]) -> list[Criterion]:
     return criteria
 
 
+def check_interruptions(interruptions: list[Interruption]) -> list[Interruption]:
+    turns = [interruption.agent_turn for interruption in interruptions]
+    if len(set(turns)) != len(turns):
+        raise ValueError("each agent turn can be interrupted only once")
+    return interruptions
+
+
 class ScenarioRules(BaseModel):
     """Mixin of the cross-item rules, for any request model that has these fields."""
 
@@ -162,6 +181,11 @@ class ScenarioRules(BaseModel):
     @classmethod
     def _check_criteria(cls, value: list[Criterion] | None) -> list[Criterion] | None:
         return None if value is None else check_criteria(value)
+
+    @field_validator("interruptions", check_fields=False)
+    @classmethod
+    def _check_interruptions(cls, value: list[Interruption] | None) -> list[Interruption] | None:
+        return None if value is None else check_interruptions(value)
 
 
 @dataclass(frozen=True)
@@ -188,6 +212,7 @@ class Scenario:
     end_conditions: EndConditions
     created_at: datetime
     updated_at: datetime
+    interruptions: list[Interruption] = field(default_factory=list)
 
 
 class ScenarioNotFound(Exception):

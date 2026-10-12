@@ -30,7 +30,8 @@ class CallerBrief:
 @dataclass(frozen=True)
 class Utterance:
     role: Literal["agent", "caller"]
-    text: str
+    text: str  # for an interrupted agent turn, only what the caller heard before cutting in
+    interrupted: bool = False  # the caller cut the agent off at the end of `text`
 
 
 @dataclass(frozen=True)

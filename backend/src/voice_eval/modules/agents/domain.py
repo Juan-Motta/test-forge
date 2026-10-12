@@ -21,7 +21,9 @@ MAX_CHANNEL_ID_LENGTH = 200
 MAX_USER_ID_LENGTH = 200
 MAX_ORIGIN_LENGTH = 300
 CHANNEL_ID_PATTERN = r"^[A-Za-z0-9._~-]+$"  # URL-path-safe (RFC 3986 unreserved characters)
-LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1"})
+# Hosts on this machine (or, from the backend container, the host it runs on): plain ws:// is
+# accepted for them in every environment, for agents under test running locally.
+LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "host.docker.internal"})
 
 
 class AgentProtocol(StrEnum):
@@ -92,8 +94,8 @@ def _split(value: str) -> tuple[Any, str]:
     return parts, host
 
 
-def check_base_url(value: str, *, allow_local_ws: bool) -> str:
-    """The agent's WebSocket base URL: `wss://` (local `ws://` only in development).
+def check_base_url(value: str) -> str:
+    """The agent's WebSocket base URL: `wss://`, or `ws://` to a local host (`LOCAL_HOSTS`).
 
     Raises `InvalidAgentInput` located at `baseUrl`.
     """
@@ -102,10 +104,11 @@ def check_base_url(value: str, *, allow_local_ws: bool) -> str:
         if len(value) > MAX_URL_LENGTH:
             raise ValueError("URL is too long")
         parts, host = _split(value)
-        local_ws = parts.scheme == "ws" and host in LOCAL_HOSTS and allow_local_ws
+        local_ws = parts.scheme == "ws" and host.lower() in LOCAL_HOSTS
         if parts.scheme != "wss" and not local_ws:
             raise ValueError(
-                "URL must use wss (ws://localhost is accepted only when ENVIRONMENT=development)"
+                "URL must use wss (ws:// is accepted only for localhost, 127.0.0.1 and "
+                "host.docker.internal)"
             )
     except ValueError as exc:
         raise InvalidAgentInput(

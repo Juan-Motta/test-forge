@@ -118,6 +118,24 @@ def test_conversation_prompt_lists_both_sides_in_order():
     assert "Caller turns so far: 1" in prompt
 
 
+def test_an_interrupted_agent_line_shows_only_what_was_heard_and_where_you_cut_in():
+    state = PolicyState(
+        brief=BRIEF,
+        conversation=(
+            Utterance("caller", "Quiero salir más tarde."),
+            Utterance("agent", "Claro, el horario de salida", interrupted=True),
+        ),
+        caller_turns=1,
+    )
+    prompt = conversation_prompt(state)
+    assert "AGENT: Claro, el horario de salida… [you interrupted the agent here]" in prompt
+    assert "You just interrupted the agent" in prompt
+    plain = conversation_prompt(
+        PolicyState(brief=BRIEF, conversation=(Utterance("agent", "Hola"),))
+    )
+    assert "interrupt" not in plain
+
+
 def test_messages_are_system_then_user():
     state = PolicyState(brief=BRIEF)
     assert build_messages(state) == [

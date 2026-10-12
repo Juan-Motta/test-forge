@@ -479,3 +479,41 @@ async def test_a_failing_live_publish_never_breaks_the_run(app, user_client, fac
     await wait_for(status_is(user_client, run_id, "running"))
     drive.release.set()
     await wait_for(status_is(user_client, run_id, "completed"))
+
+
+async def test_an_interruption_streams_and_marks_the_agent_line():
+    hub = LiveHub()
+    run_id = uuid.uuid4()
+    hub.open(run_id, uuid.uuid4())
+    sub = hub.subscribe(run_id)
+    cut = {"agent_turn": 1, "audio_end_ms": 1200, "heard_text": "Your balance"}
+    hub.event(run_id, RunEvent("caller_interrupted", 3.0, cut))
+    agent = {
+        "turn": 0,
+        "text": "Your balance is 20 dollars",
+        "interrupted": True,
+        "heard_text": "Your balance",
+        "audio_end_ms": 1200,
+    }
+    hub.event(run_id, RunEvent("agent_transcript", 4.0, agent))
+    hub.event(run_id, RunEvent("agent_transcript", 5.0, {"turn": 1, "text": "Sure"}))
+    snapshot = json.loads(await hub.subscribe(run_id).get())
+    hub.finish(run_id, "completed", "caller_hung_up")
+    texts = [json.loads(item) for item in await drain(sub) if isinstance(item, str)]
+
+    marked = {"interrupted": True, "heardText": "Your balance", "audioEndMs": 1200}
+    assert texts[1:-1] == [
+        {
+            "type": "callerInterrupted",
+            "tMs": 3.0,
+            "agentTurn": 1,
+            "audioEndMs": 1200,
+            "heardText": "Your balance",
+        },
+        {"type": "agentTranscript", "tMs": 4.0, "turn": 0, "text": agent["text"], **marked},
+        {"type": "agentTranscript", "tMs": 5.0, "turn": 1, "text": "Sure"},
+    ]
+    assert snapshot["transcript"] == [
+        {"role": "agent", "text": agent["text"], "turn": 0, "tMs": 4.0, **marked},
+        {"role": "agent", "text": "Sure", "turn": 1, "tMs": 5.0},
+    ]

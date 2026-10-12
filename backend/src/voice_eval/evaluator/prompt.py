@@ -7,7 +7,7 @@ conversation so far. The model must answer with `DECISION_SCHEMA` (structured ou
 import json
 from typing import Any
 
-from voice_eval.ports.policy import CallerBrief, CallerDecision, PolicyState
+from voice_eval.ports.policy import CallerBrief, CallerDecision, PolicyState, Utterance
 
 MAX_SAY_LENGTH = 2000
 
@@ -106,9 +106,24 @@ def system_prompt(brief: CallerBrief) -> str:
     return "\n\n".join(sections)
 
 
+INTERRUPTED_MARK = "… [you interrupted the agent here]"
+JUST_INTERRUPTED = (
+    "You just interrupted the agent mid-sentence: you heard only what is shown above, not the "
+    "rest of its reply. Say what made you cut in, based only on what you heard."
+)
+
+
+def _line(utterance: Utterance) -> str:
+    if utterance.role != "agent":
+        return f"YOU: {utterance.text}"
+    if utterance.interrupted:
+        return f"AGENT: {utterance.text}{INTERRUPTED_MARK}"
+    return f"AGENT: {utterance.text}"
+
+
 def conversation_prompt(state: PolicyState) -> str:
     if state.conversation:
-        lines = [f"{'AGENT' if u.role == 'agent' else 'YOU'}: {u.text}" for u in state.conversation]
+        lines = [_line(u) for u in state.conversation]
         transcript = "Conversation so far:\n" + "\n".join(lines)
     else:
         transcript = "The call has just connected and nobody has spoken yet: you speak first."
@@ -116,6 +131,8 @@ def conversation_prompt(state: PolicyState) -> str:
         f"Elapsed: {state.elapsed_s:.0f} s of {state.brief.max_duration_s:.0f} s. "
         f"Caller turns so far: {state.caller_turns}."
     )
+    if state.conversation and state.conversation[-1].interrupted:
+        status = f"{status}\n{JUST_INTERRUPTED}"
     return f"{transcript}\n\n{status}\nDecide your next turn."
 
 

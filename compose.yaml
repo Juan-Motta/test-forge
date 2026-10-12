@@ -48,6 +48,11 @@ services:
       # Live evaluator conversations at once, across every batch (each is a paid agent session).
       RUNS_MAX_CONCURRENCY: ${RUNS_MAX_CONCURRENCY:-3}
       RUNS_DATA_DIR: /data/runs
+      # Agents configured on localhost/127.0.0.1 run on the host machine: dial them through it.
+      LOCAL_TARGET_HOST: ${LOCAL_TARGET_HOST:-host.docker.internal}
+    # Makes host.docker.internal resolve on Linux too (Docker Desktop provides it already).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       db:
         condition: service_healthy

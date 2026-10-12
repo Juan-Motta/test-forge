@@ -143,6 +143,8 @@ REALTIME_CLIENT_TYPES = frozenset(
         "response.cancel",
     }
 )
+# Handled by the Vivi relay itself before its allow-list (the web client's barge-in report).
+PLAYBACK_INTERRUPTED_FIELDS = {"type", "itemId", "responseId", "contentIndex", "audioEndMs"}
 
 
 @dataclass
@@ -176,6 +178,17 @@ class FakeRealtimeServer:
     empty_before_reply: dict[int, float | None] = field(default_factory=dict)
     # caller audio turn -> after the reply, another spoken response this many seconds later
     follow_up_after: dict[int, float] = field(default_factory=dict)
+    # > 0: every spoken response streams this much audio per item in 100 ms deltas, one every
+    # `pace_s` (5x faster than real time by default), each item's text sent before its audio
+    paced_audio_ms: int = 0
+    pace_s: float = 0.02
+    items_per_response: int = 1
+    # words of each spoken item (default: "agent response number <n>")
+    item_text: str | None = None
+    # `playback.interrupted` events received (as sent), and whether they stop the response
+    playback_interruptions: list[dict] = field(default_factory=list)
+    honor_interruptions: bool = True
+    _cancelled: set[str] = field(default_factory=set)
 
     async def _send(self, ws: ServerConnection, event: dict) -> None:
         await ws.send(json.dumps({**event, "turn_id": f"turn-{self.responses}"}))
@@ -208,6 +221,9 @@ class FakeRealtimeServer:
             await asyncio.sleep(self.tick_s)
             await self._response(ws, "speech")
             return
+        if self.paced_audio_ms or self.items_per_response > 1 or self.item_text:
+            await self._items_response(ws, rid)
+            return
         item_id = self._item_id()
         text = f"agent response number {self.responses}"
         item = {"id": item_id, "type": "message", "role": "assistant", "content": []}
@@ -216,7 +232,12 @@ class FakeRealtimeServer:
         if self.burst_audio_ms:
             delta = base64.b64encode(b"\x10\x00" * (DELTA_BYTES // 2)).decode()
             for _ in range(self.burst_audio_ms * 2 * 24 // DELTA_BYTES):
-                audio = {"type": "response.output_audio.delta", "item_id": item_id, "delta": delta}
+                audio = {
+                    "type": "response.output_audio.delta",
+                    "item_id": item_id,
+                    "response_id": rid,
+                    "delta": delta,
+                }
                 await self._send(ws, audio)
         for word in text.split():
             if self.burst_audio_ms:
@@ -235,6 +256,7 @@ class FakeRealtimeServer:
                 {
                     "type": "response.output_audio.delta",
                     "item_id": item_id,
+                    "response_id": rid,
                     "delta": delta,
                     "playbackInterruptionSupported": True,
                 },
@@ -258,6 +280,60 @@ class FakeRealtimeServer:
             },
         )
         await self._send(ws, {"type": "response.done", "response": {"id": rid}})
+
+    async def _items_response(self, ws: ServerConnection, rid: str) -> None:
+        """`items_per_response` audio items, each paced (`paced_audio_ms`) or in one burst."""
+        audio_ms = self.paced_audio_ms or self.burst_audio_ms or 400
+        delta = base64.b64encode(b"\x10\x00" * 2400).decode()  # 100 ms
+        self.agent_audio_started.append(time.monotonic())
+        for _ in range(self.items_per_response):
+            if rid in self._cancelled:
+                break
+            item_id = self._item_id()
+            text = self.item_text or f"agent response number {self.responses}"
+            item = {"id": item_id, "type": "message", "role": "assistant", "content": []}
+            await self._send(ws, {"type": "conversation.item.added", "item": item})
+            await self._send(
+                ws,
+                {
+                    "type": "response.output_audio_transcript.delta",
+                    "item_id": item_id,
+                    "delta": text,
+                },
+            )
+            for _ in range(audio_ms // 100):
+                if rid in self._cancelled:
+                    break
+                await self._send(
+                    ws,
+                    {
+                        "type": "response.output_audio.delta",
+                        "item_id": item_id,
+                        "response_id": rid,
+                        "delta": delta,
+                        "playbackInterruptionSupported": True,
+                    },
+                )
+                if self.paced_audio_ms:
+                    await asyncio.sleep(self.pace_s)
+            done = {"type": "response.output_audio_transcript.done", "item_id": item_id}
+            await self._send(ws, {**done, "transcript": text})
+        status = "cancelled" if rid in self._cancelled else "completed"
+        await self._send(ws, {"type": "response.done", "response": {"id": rid, "status": status}})
+
+    def _on_playback_interrupted(self, msg: dict) -> str | None:
+        """Record a barge-in report; the reason it violates the contract, if it does."""
+        self.playback_interruptions.append(msg)
+        end = msg.get("audioEndMs")
+        if set(msg) != PLAYBACK_INTERRUPTED_FIELDS or msg.get("contentIndex") != 0:
+            return "playback.interrupted fields"
+        if end is not None and (not isinstance(end, int) or isinstance(end, bool) or end < 0):
+            return "playback.interrupted audioEndMs"
+        if not isinstance(msg.get("itemId"), str) or not isinstance(msg.get("responseId"), str):
+            return "playback.interrupted ids"
+        if self.honor_interruptions:
+            self._cancelled.add(msg["responseId"])
+        return None
 
     async def _empty_response(self, ws: ServerConnection) -> None:
         self.responses += 1
@@ -321,6 +397,10 @@ class FakeRealtimeServer:
                 msg = json.loads(raw)
                 kind = msg.get("type")
                 self.received_types.append(kind)
+                if kind == "playback.interrupted":
+                    if (violation := self._on_playback_interrupted(msg)) is not None:
+                        self.protocol_violations.append(violation)
+                    continue
                 if kind not in REALTIME_CLIENT_TYPES:
                     self.protocol_violations.append(f"type={kind}")
                     await ws.close(

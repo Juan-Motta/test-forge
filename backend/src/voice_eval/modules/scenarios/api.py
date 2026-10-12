@@ -22,6 +22,8 @@ from voice_eval.modules.scenarios.domain import (
     EndConditions,
     Fact,
     Facts,
+    Interruption,
+    Interruptions,
     InvalidScenarioInput,
     Persona,
     Scenario,
@@ -77,6 +79,7 @@ class ScenarioOut(CamelModel):
     facts: list[Fact]
     criteria: list[Criterion]
     end_conditions: EndConditions
+    interruptions: list[Interruption]
     created_at: datetime
     updated_at: datetime
 
@@ -98,6 +101,7 @@ class ScenarioOut(CamelModel):
             facts=scenario.facts,
             criteria=scenario.criteria,
             end_conditions=scenario.end_conditions,
+            interruptions=scenario.interruptions,
             created_at=scenario.created_at,
             updated_at=scenario.updated_at,
         )
@@ -117,6 +121,7 @@ class CreateIn(StrictCamelModel, ScenarioRules):
     facts: Facts = []
     criteria: Criteria
     end_conditions: EndConditions = Field(default_factory=EndConditions)
+    interruptions: Interruptions = []
 
 
 class UpdateIn(StrictCamelModel, ScenarioRules):
@@ -139,6 +144,7 @@ class UpdateIn(StrictCamelModel, ScenarioRules):
     facts: Facts | None = None
     criteria: Criteria | None = None
     end_conditions: EndConditions | None = None
+    interruptions: Interruptions | None = None
 
     @field_validator(
         "agent_id",
@@ -151,6 +157,7 @@ class UpdateIn(StrictCamelModel, ScenarioRules):
         "facts",
         "criteria",
         "end_conditions",
+        "interruptions",
     )
     @classmethod
     def required_when_present(cls, value: Any) -> Any:

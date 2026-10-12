@@ -79,6 +79,7 @@ def create_app(
         max_concurrency=settings.runs_max_concurrency,
         allow_local_http=development,
         judgements=judgements,
+        local_target_host=settings.local_target_host,
     )
 
     @asynccontextmanager

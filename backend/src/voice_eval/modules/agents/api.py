@@ -30,10 +30,8 @@ from voice_eval.modules.agents.domain import (
 )
 from voice_eval.modules.users.deps import Principal, current_principal
 from voice_eval.platform.db import get_db_session
-from voice_eval.platform.settings import Settings, app_settings
 
 Db = Annotated[AsyncSession, Depends(get_db_session)]
-AppSettings = Annotated[Settings, Depends(app_settings)]
 
 Name = Annotated[
     str, StringConstraints(strip_whitespace=True, min_length=1, max_length=MAX_NAME_LENGTH)
@@ -151,10 +149,6 @@ def _not_found() -> HTTPException:
     return HTTPException(status.HTTP_404_NOT_FOUND, "Agent not found")
 
 
-def _local_ws(settings: Settings) -> bool:
-    return settings.environment == "development"
-
-
 router = APIRouter(prefix="/agents", tags=["agents"])
 
 
@@ -168,14 +162,12 @@ async def create_agent(
     body: CreateIn,
     principal: Annotated[Principal, Depends(current_principal)],
     db: Db,
-    settings: AppSettings,
 ) -> AgentOut:
     try:
         created = await service.create_agent(
             db,
             fields=body.model_dump(),
             created_by=principal.user.id,
-            allow_local_ws=_local_ws(settings),
         )
     except InvalidAgentInput as exc:
         raise _invalid(exc) from None
@@ -195,15 +187,12 @@ async def get_agent(agent_id: uuid.UUID, db: Db) -> AgentOut:
 
 
 @router.patch("/{agent_id}", response_model=AgentOut)
-async def update_agent(
-    agent_id: uuid.UUID, body: UpdateIn, db: Db, settings: AppSettings
-) -> AgentOut:
+async def update_agent(agent_id: uuid.UUID, body: UpdateIn, db: Db) -> AgentOut:
     try:
         updated = await service.update_agent(
             db,
             agent_id,
             changes=body.model_dump(exclude_unset=True),
-            allow_local_ws=_local_ws(settings),
         )
     except AgentNotFound:
         raise _not_found() from None

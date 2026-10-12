@@ -189,6 +189,7 @@ def snapshot(plan: RunPlan) -> dict[str, Any]:
             "facts": [fact.model_dump(mode="json") for fact in scenario.facts],
             "criteria": [criterion.model_dump(mode="json") for criterion in scenario.criteria],
             "end_conditions": scenario.end_conditions.model_dump(mode="json"),
+            "interruptions": [item.model_dump(mode="json") for item in scenario.interruptions],
             "voice_override": scenario.voice_override,
         },
         "agent": {

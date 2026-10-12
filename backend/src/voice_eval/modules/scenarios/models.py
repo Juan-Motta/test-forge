@@ -4,7 +4,16 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, String, Text, UniqueConstraint, func
+from sqlalchemy import (
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+    text,
+)
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -16,6 +25,7 @@ from voice_eval.modules.scenarios.domain import (
     Criterion,
     EndConditions,
     Fact,
+    Interruption,
     Persona,
     Scenario,
 )
@@ -50,6 +60,9 @@ class ScenarioRecord(Base):
     facts: Mapped[list[dict[str, Any]]] = mapped_column(JSONB)
     criteria: Mapped[list[dict[str, Any]]] = mapped_column(JSONB)
     end_conditions: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    interruptions: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSONB, default=list, server_default=text("'[]'::jsonb")
+    )
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL")
     )
@@ -76,4 +89,5 @@ class ScenarioRecord(Base):
             end_conditions=EndConditions.model_validate(self.end_conditions),
             created_at=self.created_at,
             updated_at=self.updated_at,
+            interruptions=[Interruption.model_validate(item) for item in self.interruptions],
         )

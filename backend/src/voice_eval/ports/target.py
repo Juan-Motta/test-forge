@@ -28,6 +28,8 @@ class Ready(ServerEvent):
 @dataclass(frozen=True, kw_only=True)
 class AudioDelta(ServerEvent):
     pcm: bytes
+    item_id: str | None = None  # the conversation item it belongs to, when the protocol says
+    response_id: str | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -45,10 +47,14 @@ class TranscriptUpdate(ServerEvent):
 class ResponseStarted(ServerEvent):
     """Explicit start of one agent response (a turn may hold several)."""
 
+    response_id: str | None = None
+
 
 @dataclass(frozen=True, kw_only=True)
 class ResponseDone(ServerEvent):
     """Explicit end of one agent response."""
+
+    response_id: str | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -93,6 +99,7 @@ class TargetSession(Protocol):
     agent_speaks_first: bool  # the agent greets without being asked
     explicit_turn_end: bool  # the protocol signals response start/end
     supports_text: bool  # caller turns may be sent as text
+    supports_playback_interruption: bool  # the caller may report a barge-in on agent audio
 
     @property
     def close_code(self) -> int | None: ...
@@ -114,6 +121,13 @@ class TargetSession(Protocol):
 
     async def request_agent_turn(self) -> None:
         """Ask the agent to speak without caller input (NotSupportedError if unable)."""
+        ...
+
+    async def send_playback_interrupted(
+        self, item_id: str, response_id: str, audio_end_ms: int | None
+    ) -> None:
+        """Report that the caller cut the agent's audio item after `audio_end_ms` ms of playback
+        (None: not played at all). NotSupportedError if the protocol has no such report."""
         ...
 
     async def close(self) -> dict[str, Any]:

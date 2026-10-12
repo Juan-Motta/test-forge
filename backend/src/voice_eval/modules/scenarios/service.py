@@ -46,6 +46,7 @@ WRITABLE = frozenset(
         "facts",
         "criteria",
         "end_conditions",
+        "interruptions",
     }
 )
 COPIED = WRITABLE - {"name"}

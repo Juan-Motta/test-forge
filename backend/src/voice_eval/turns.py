@@ -23,13 +23,16 @@ class AgentTurn:
     tool_activity: bool | None = None
     end_reason: str | None = None
     caller_resumed_ms: float | None = None  # when the next caller turn actually started
+    cut_ms: float | None = None  # the caller interrupted the playback at this time
 
     @property
     def playback_end_ms(self) -> float | None:
-        """When the agent audio would finish playing: it plays back-to-back from the first delta."""
+        """When the agent audio would finish playing: it plays back-to-back from the first delta
+        (or when the caller cut it off)."""
         if self.first_audio_ms is None:
             return None
-        return self.first_audio_ms + self.audio_bytes / BYTES_PER_MS
+        end = self.first_audio_ms + self.audio_bytes / BYTES_PER_MS
+        return end if self.cut_ms is None else min(end, self.cut_ms)
 
     @property
     def latency_ms(self) -> float | None:
@@ -87,6 +90,14 @@ class AgentTurnDetector:
             return False
         self._close(turn, "audio_gap")
         return True
+
+    def interrupt(self, turn: AgentTurn, cut_ms: float) -> None:
+        """The caller cut `turn` off at `cut_ms`: it ends there, open or already completed."""
+        turn.cut_ms = cut_ms
+        if turn is self._current:
+            self._close(turn, "interrupted")
+        else:
+            turn.end_reason = "interrupted"
 
     def _close(self, turn: AgentTurn, reason: str) -> None:
         turn.end_ms = turn.last_activity_ms

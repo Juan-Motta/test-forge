@@ -34,8 +34,10 @@ from voice_eval.modules.runs.live import LiveHub
 from voice_eval.platform.secrets import SecretBox
 from voice_eval.ports.policy import CallerPolicy
 from voice_eval.ports.tts import SpeechSynthesizer
+from voice_eval.runner.barge_in import Interruption
 from voice_eval.runner.events import EventSink, RunEvent
 from voice_eval.runner.session import SessionOptions, SessionRunner
+from voice_eval.targets.connection import dial_base_url
 from voice_eval.targets.detect import TargetSpec
 
 log = logging.getLogger(__name__)
@@ -112,8 +114,10 @@ class RunManager:
         max_concurrency: int,
         allow_local_http: bool = False,
         judgements: JudgementScheduler | None = None,
+        local_target_host: str | None = None,
     ) -> None:
         self.sessionmaker = sessionmaker
+        self.local_target_host = local_target_host
         self.judgements = judgements
         self.secret_box = secret_box
         self.data_dir = data_dir
@@ -304,16 +308,10 @@ class RunManager:
                 )
             except Exception as exc:
                 raise _provider_error("voice", exc) from None
-        agent = snapshot["agent"]
         end = snapshot["scenario"]["end_conditions"]
         runner = SessionRunner(
-            TargetSpec(
-                base_url=agent["base_url"],
-                channel_id=agent["channel_id"],
-                user_id=agent["user_id"],
-                thread_id=job.thread_id,
-                origin=agent["origin"],
-                protocol=agent["protocol"],
+            run_target_spec(
+                snapshot["agent"], job.thread_id, local_target_host=self.local_target_host
             ),
             brief=brief_from_snapshot(snapshot),
             policy=policy,
@@ -324,6 +322,7 @@ class RunManager:
                 max_duration_s=end["max_duration_s"],
                 max_silence_s=end["max_silence_s"],
                 hang_up_when=end["hang_up_when"],
+                interruptions=interruptions_from_snapshot(snapshot),
                 **self.session_overrides,
             ),
         )
@@ -344,6 +343,27 @@ class RunManager:
             allow_local_http=self.allow_local_http,
             voice=voice,
         )
+
+
+def run_target_spec(
+    agent: dict[str, Any], thread_id: str, *, local_target_host: str | None
+) -> TargetSpec:
+    """The target of one run from its agent snapshot, dialled through `local_target_host` when
+    the agent is on a loopback host (the Origin header is sent as configured)."""
+    return TargetSpec(
+        base_url=dial_base_url(agent["base_url"], local_target_host),
+        channel_id=agent["channel_id"],
+        user_id=agent["user_id"],
+        thread_id=thread_id,
+        origin=agent["origin"],
+        protocol=agent["protocol"],
+    )
+
+
+def interruptions_from_snapshot(snapshot: dict[str, Any]) -> tuple[Interruption, ...]:
+    """The scenario's barge-ins (snapshots from before they existed have none)."""
+    items = snapshot["scenario"].get("interruptions") or []
+    return tuple(Interruption(item["agent_turn"], item["after_ms"]) for item in items)
 
 
 def is_judgeable(status: RunStatus, summary: dict[str, Any] | None) -> bool:

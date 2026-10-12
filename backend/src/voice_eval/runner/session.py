@@ -9,6 +9,12 @@ again: if the agent started speaking since the policy decided, the caller waits 
 and the policy decides again on the new text. The run ends when the caller hangs up, the agent
 ends the session, or an end condition (max duration, max silence) is reached; it always closes
 the session and writes its artifacts.
+
+A scenario may make the caller barge in (legacy realtime only; see `runner.barge_in`): once
+`after_ms` of agent turn N has played, the runner cuts the simulated playback, reports
+`playback.interrupted` for every audio item still playing, drops the rest of that reply (it never
+reaches live listeners nor `agent.wav`), and the policy decides on only the part of the agent's
+text that was heard; the caller then speaks without waiting for the cut reply to play.
 """
 
 import asyncio
@@ -22,6 +28,7 @@ from typing import Any
 
 from websockets.exceptions import ConnectionClosed, WebSocketException
 
+from voice_eval.audio import BYTES_PER_MS
 from voice_eval.caller_stream import CallerAudioStream
 from voice_eval.ports.policy import (
     CallerBrief,
@@ -45,6 +52,16 @@ from voice_eval.ports.target import (
 )
 from voice_eval.ports.tts import SpeechSynthesizer, SynthesisError
 from voice_eval.runner.artifacts import write_artifacts
+from voice_eval.runner.barge_in import (
+    AudioItem,
+    Cut,
+    Interruption,
+    ItemCut,
+    heard_text,
+    playback_cuts,
+    played_ms,
+    position_bytes,
+)
 from voice_eval.runner.common import close_session, make_detector, rounded, turn_record
 from voice_eval.runner.events import EventSink, RunEvent
 from voice_eval.targets.detect import ProtocolDetectionError, TargetSpec, open_target
@@ -71,6 +88,7 @@ class SessionOptions:
     playback_grace_ms: int = 400
     tts_timeout_s: float = 30
     sink_drain_timeout_s: float = 10  # then the artifacts are written without the sink
+    interruptions: tuple[Interruption, ...] = ()  # the caller barges in on these agent turns
 
 
 class Stop(Exception):
@@ -88,11 +106,16 @@ class AgentTextTracker:
 
     def __init__(self) -> None:
         self._seen: dict[str, str] = {}
+        self._ignored: set[str] = set()
+
+    def ignore(self, message_ids: set[str]) -> None:
+        """Never report these messages again (the rest of a reply the caller cut off)."""
+        self._ignored |= message_ids
 
     def take(self, messages: list[TranscriptMessage]) -> str:
         parts = []
         for message in messages:
-            if message.role != "assistant":
+            if message.role != "assistant" or message.message_id in self._ignored:
                 continue
             old = self._seen.get(message.message_id, "")
             if message.text == old:
@@ -141,6 +164,12 @@ class SessionRunner:
         self._started_at = datetime.now(UTC)
         self._reader: asyncio.Task[None] | None = None
         self._sender: asyncio.Task[None] | None = None
+        self._plans = {plan.agent_turn: plan for plan in self.options.interruptions}
+        self._agent_turns = 0  # agent turns reported to the policy
+        self._items: dict[int, list[AudioItem]] = {}  # id(agent turn) -> its audio items
+        self._cut_items: set[str] = set()
+        self._cut_responses: set[str] = set()
+        self.interruptions: list[dict[str, Any]] = []
 
     def _now_ms(self) -> float:
         return (time.monotonic() - self._t0) * 1000
@@ -236,6 +265,12 @@ class SessionRunner:
             raise Stop(
                 "failed", "connect_failed", f"could not connect ({type(exc).__name__})"
             ) from None
+        if self._plans and not self.session.supports_playback_interruption:
+            self._plans = {}
+            self._warn(
+                f"interruptions are not supported on the {self.session.protocol} protocol; "
+                "the caller will not interrupt the agent"
+            )
         self.detector = make_detector(
             self.session,
             silence_gap_ms=self.options.silence_gap_ms,
@@ -394,17 +429,17 @@ class SessionRunner:
 
         False when it said nothing at all (a response with no audio and no transcript, e.g. a
         cancelled or tool-only one): those turns are dropped, so the evaluator never hears them
-        and they never count as agent turns.
+        and they never count as agent turns. When the scenario interrupts this turn and its
+        audio is longer than the interruption point, the turn ends at that point of playback.
         """
-        await self._wait_until(
-            lambda: (
-                len(self.detector.completed_turns) > self._reported_turns
-                and not self.detector.agent_speaking
-            ),
-            check_silence=True,
-        )
+        plan = self._plans.get(self._agent_turns + 1)
+        due: list[AgentTurn] = []
+        await self._wait_until(lambda: self._turn_over(plan, due), check_silence=True)
         assert self.session is not None
+        cut = await self._cut(plan, due[0]) if plan is not None and due else None
         text = self._text.take(self.session.transcript_messages())
+        if cut is not None:
+            self._text.ignore(cut.item_ids)
         new_turns = self.detector.completed_turns[self._reported_turns :]
         silent = [turn for turn in new_turns if not turn.audio_bytes]
         if silent and (not text or len(silent) < len(new_turns)):
@@ -415,6 +450,7 @@ class SessionRunner:
         if not new_turns:
             self._warn("the agent response had no audio and no transcript; waiting for its reply")
             return False
+        self._agent_turns += 1
         for turn in new_turns:
             self._publish(
                 "turn_ended",
@@ -428,13 +464,99 @@ class SessionRunner:
                 },
             )
         last = new_turns[-1]
+        row = _agent_row(text, last, new_turns[0])
+        data: dict[str, Any] = {"turn": self._reported_turns - 1, "text": text}
+        if cut is None:
+            heard = text
+        else:
+            heard = heard_text(text, cut.fraction)
+            marks = {"interrupted": True, "heard_text": heard, "audio_end_ms": cut.audio_end_ms}
+            row.update(marks)
+            data.update(marks)
+            self._record_interruption(cut, heard, text)
         if not text:
             self._warn("the agent turn had no transcript")
-            return True
-        self.conversation.append(Utterance("agent", text))
-        self.transcript.append(_agent_row(text, last, new_turns[0]))
-        self._publish("agent_transcript", {"turn": self._reported_turns - 1, "text": text})
+            if cut is None:
+                return True
+        # An interrupted turn: the policy hears only what played before the caller cut in.
+        self.conversation.append(Utterance("agent", heard, interrupted=cut is not None))
+        self.transcript.append(row)
+        self._publish("agent_transcript", data)
         return True
+
+    def _next_audio_turn(self) -> AgentTurn | None:
+        """The first unreported agent turn that has audio (still open or already completed)."""
+        turns = self.detector.completed_turns[self._reported_turns :]
+        if self.detector.current_turn is not None:
+            turns = [*turns, self.detector.current_turn]
+        return next((t for t in turns if t.audio_bytes and t.first_audio_ms is not None), None)
+
+    def _turn_over(self, plan: Interruption | None, due: list[AgentTurn]) -> bool:
+        """Whether to stop waiting for the agent: its turn ended, or it is time to cut it off.
+
+        A turn whose audio is longer than the interruption point is cut once that point has
+        played, even when it already ended (its audio arrives faster than it plays); `due` then
+        receives it.
+        """
+        if plan is not None:
+            turn = self._next_audio_turn()
+            if turn is not None and turn.audio_bytes / BYTES_PER_MS > plan.after_ms:
+                assert turn.first_audio_ms is not None
+                if self._now_ms() - turn.first_audio_ms < plan.after_ms:
+                    return False
+                due.append(turn)
+                return True
+        return (
+            len(self.detector.completed_turns) > self._reported_turns
+            and not self.detector.agent_speaking
+        )
+
+    async def _cut(self, plan: Interruption, turn: AgentTurn) -> Cut:
+        """Cut `turn`'s playback now: drop the rest of it and report it to the agent."""
+        assert self.session is not None and turn.first_audio_ms is not None
+        now = self._now_ms()
+        received_ms = turn.audio_bytes / BYTES_PER_MS
+        position = min(now - turn.first_audio_ms, received_ms)
+        items = self._items.get(id(turn), [])
+        cuts = playback_cuts(items, position)
+        if not cuts and items:  # all received audio played (the stream lagged): stop the last
+            last = items[-1]
+            cuts = [ItemCut(last.item_id, last.response_id, played_ms(last.audio_bytes))]
+        # Before any await: from now on the reader drops whatever else arrives for this reply.
+        self._cut_items |= {item.item_id for item in items}
+        self._cut_responses |= {item.response_id for item in items if item.response_id}
+        self.detector.interrupt(turn, turn.first_audio_ms + position)
+        for item in cuts:
+            if item.response_id is None:
+                self._warn(f"agent audio item {item.item_id} has no response id: not reported")
+                continue
+            try:
+                await self.session.send_playback_interrupted(
+                    item.item_id, item.response_id, item.audio_end_ms
+                )
+            except (ConnectionClosed, WebSocketException) as exc:
+                self._warn(f"could not report the interruption ({type(exc).__name__})")
+                break
+        return Cut(
+            agent_turn=plan.agent_turn,
+            audio_end_ms=played_ms(position_bytes(position)),
+            fraction=position / received_ms if received_ms else 0.0,
+            item_ids={item.item_id for item in items},
+        )
+
+    def _record_interruption(self, cut: Cut, heard: str, text: str) -> None:
+        self.interruptions.append(
+            {
+                "agent_turn": cut.agent_turn,
+                "audio_end_ms": cut.audio_end_ms,
+                "heard_chars": len(heard),
+                "total_chars": len(text),
+            }
+        )
+        self._publish(
+            "caller_interrupted",
+            {"agent_turn": cut.agent_turn, "audio_end_ms": cut.audio_end_ms, "heard_text": heard},
+        )
 
     async def _agent_spoke_again(self) -> bool:
         """Hold until the agent is quiet and its audio has played; True if it said more meanwhile.
@@ -525,12 +647,16 @@ class SessionRunner:
 
     def _on_event(self, t: float, event: ServerEvent) -> None:
         match event:
-            case AudioDelta(pcm=pcm):
+            case AudioDelta(pcm=pcm, item_id=item_id, response_id=response_id):
+                if item_id in self._cut_items or response_id in self._cut_responses:
+                    return  # the rest of a reply the caller cut off: never played
                 self.agent_pcm += pcm
                 opening = self.detector.current_turn is None
                 self.detector.on_agent_audio(t, len(pcm))
                 if opening:
                     self._on_agent_turn_opened()
+                if item_id is not None:
+                    self._track_item(item_id, response_id, len(pcm))
                 self._last_activity_ms = t
                 self._agent_chunks += 1
                 self._publish("agent_audio", {"chunk": self._agent_chunks, "bytes": len(pcm)}, pcm)
@@ -547,6 +673,10 @@ class SessionRunner:
                 self._ready.set()
             case TranscriptUpdate(role="assistant"):
                 self.detector.on_caption_change(t)
+            case ResponseStarted(response_id=response_id) if response_id in self._cut_responses:
+                pass
+            case ResponseDone(response_id=response_id) if response_id in self._cut_responses:
+                pass  # the end of a reply the caller cut off: its turn is already over
             case ResponseStarted():
                 opening = self.detector.current_turn is None
                 self.detector.on_response_started(t)
@@ -563,6 +693,18 @@ class SessionRunner:
                 self._warn(f"server error: {message}")
             case Closed():
                 self.closed = event
+
+    def _track_item(self, item_id: str, response_id: str | None, nbytes: int) -> None:
+        """Count the audio of each conversation item of the open agent turn, in arrival order."""
+        turn = self.detector.current_turn
+        if turn is None:
+            return
+        items = self._items.setdefault(id(turn), [])
+        item = next((i for i in reversed(items) if i.item_id == item_id), None)
+        if item is None:
+            item = AudioItem(item_id, response_id)
+            items.append(item)
+        item.audio_bytes += nbytes
 
     def _on_agent_turn_opened(self) -> None:
         """The agent starting while the caller is mid-utterance barges in: record it.
@@ -600,6 +742,7 @@ class SessionRunner:
             "close_reason": session.close_reason if session else None,
             "usage_seconds": self.closed.usage_seconds if self.closed else None,
             "final_usage_confirmed": self.closed.final_usage_confirmed if self.closed else None,
+            "interruptions": self.interruptions,
             "warnings": self.warnings,
             "event_counts": dict(Counter(e["type"] for e in self.events)),
         }

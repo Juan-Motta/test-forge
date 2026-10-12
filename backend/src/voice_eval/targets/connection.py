@@ -8,7 +8,7 @@ import logging
 import uuid
 from collections.abc import AsyncIterator, Iterable
 from typing import Any
-from urllib.parse import quote, urlencode
+from urllib.parse import quote, urlencode, urlsplit, urlunsplit
 
 from websockets.asyncio.client import ClientConnection, connect
 from websockets.exceptions import ConnectionClosed
@@ -19,6 +19,22 @@ log = logging.getLogger(__name__)
 
 MAX_INCOMING_BYTES = 8 * 1024 * 1024
 BINARY_FRAME_TYPE = "binary.frame"
+LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1"})
+
+
+def dial_base_url(base_url: str, local_target_host: str | None) -> str:
+    """The base URL to dial: a loopback host becomes `local_target_host` when one is set.
+
+    Inside the backend container `localhost` is the container itself; an agent running on the
+    machine that hosts it is reached through an alias of that machine (`host.docker.internal`).
+    Scheme, port, path and query are kept.
+    """
+    parts = urlsplit(base_url)
+    host = parts.hostname
+    if not local_target_host or host is None or host.lower() not in LOOPBACK_HOSTS:
+        return base_url
+    netloc = local_target_host if parts.port is None else f"{local_target_host}:{parts.port}"
+    return urlunsplit(parts._replace(netloc=netloc))
 
 
 def realtime_url(base_url: str, channel_id: str, user_id: str, thread_id: str) -> str:

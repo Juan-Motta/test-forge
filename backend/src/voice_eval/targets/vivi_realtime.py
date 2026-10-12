@@ -6,7 +6,10 @@ Same endpoint URL as Live; the backend picks this path from the agent config. Co
 - the agent never speaks first; server VAD answers caller audio, `response.create` answers text;
 - an agent response runs from `response.created` to `response.done`, and a tool call produces
   several responses in a row, with `response.processing` ticks while the tool runs;
-- there is no end-of-session event: the client closes the socket with code 1000.
+- there is no end-of-session event: the client closes the socket with code 1000;
+- a barge-in is reported like the web client does, one `playback.interrupted` per audio item
+  still playing (the relay handles it before its allow-list: it cancels and truncates the
+  response itself, so the agent remembers only what was heard).
 """
 
 import json
@@ -41,8 +44,10 @@ CLIENT_EVENT_TYPES = frozenset(
         "conversation.item.truncate",
         "response.create",
         "response.cancel",
+        "playback.interrupted",
     }
 )
+PLAYBACK_INTERRUPTED = "playback.interrupted"
 TOOL_EVENT_PREFIXES = ("response.processing", "response.function_call_arguments.")
 TRANSCRIPT_ROLES = ("user", "assistant")
 
@@ -116,11 +121,21 @@ def _input_text(item: dict[str, Any]) -> str | None:
     return "".join(texts) if texts else None
 
 
+def _text_or_none(value: Any) -> str | None:
+    return value if isinstance(value, str) and value else None
+
+
+def _response_id(raw: dict[str, Any]) -> str | None:
+    response = raw.get("response")
+    return _text_or_none(response.get("id")) if isinstance(response, dict) else None
+
+
 class ViviRealtimeClient(WebSocketTarget):
     protocol = "realtime"
     agent_speaks_first = False
     explicit_turn_end = True
     supports_text = True
+    supports_playback_interruption = True
 
     def __init__(
         self,
@@ -155,11 +170,16 @@ class ViviRealtimeClient(WebSocketTarget):
                 self._ready = True
                 return Ready(session_id=self.session_id or "", raw=raw)
             case "response.created":
-                return ResponseStarted(raw=raw)
+                return ResponseStarted(response_id=_response_id(raw), raw=raw)
             case "response.done":
-                return ResponseDone(raw=raw)
+                return ResponseDone(response_id=_response_id(raw), raw=raw)
             case "response.output_audio.delta":
-                return AudioDelta(pcm=b64decode(raw.get("delta", "")), raw=raw)
+                return AudioDelta(
+                    pcm=b64decode(raw.get("delta", "")),
+                    item_id=_text_or_none(raw.get("item_id")),
+                    response_id=_text_or_none(raw.get("response_id")),
+                    raw=raw,
+                )
             case "conversation.item.added" | "conversation.item.created":
                 self.transcript.on_item(item)
             case "response.output_audio_transcript.delta":
@@ -199,6 +219,22 @@ class ViviRealtimeClient(WebSocketTarget):
 
     async def request_agent_turn(self) -> None:
         await self.send_event({"type": "response.create"})
+
+    async def send_playback_interrupted(
+        self, item_id: str, response_id: str, audio_end_ms: int | None
+    ) -> None:
+        """The web client's barge-in report for one item: exactly these fields, content 0."""
+        if audio_end_ms is not None and audio_end_ms < 0:
+            raise ValueError("audioEndMs must be a non-negative integer or null")
+        await self.send_event(
+            {
+                "type": PLAYBACK_INTERRUPTED,
+                "itemId": item_id,
+                "responseId": response_id,
+                "contentIndex": 0,
+                "audioEndMs": audio_end_ms,
+            }
+        )
 
     async def close(self) -> dict[str, Any]:
         """No end-of-session event exists: close the socket normally (1000)."""

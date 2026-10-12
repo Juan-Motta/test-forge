@@ -6,7 +6,6 @@ import pytest
 from sqlalchemy import select
 
 from voice_eval.modules.agents.models import AgentRecord
-from voice_eval.platform.settings import app_settings
 
 AGENT = {
     "name": "Vivi dev",
@@ -119,7 +118,7 @@ async def test_duplicate_name_is_409(user_client):
         ({"context": "x" * 20001}, ["body", "context"]),
         ({"protocol": "grpc"}, ["body", "protocol"]),
         ({"baseUrl": "ws://agents.example.com"}, ["body", "baseUrl"]),
-        ({"baseUrl": "ws://localhost:8000"}, ["body", "baseUrl"]),
+        ({"baseUrl": "ws://10.0.0.5:8000"}, ["body", "baseUrl"]),  # ws only to local hosts
         ({"baseUrl": "wss://user:pw@agents.example.com"}, ["body", "baseUrl"]),
         ({"baseUrl": "wss://agents.example.com?x=1"}, ["body", "baseUrl"]),
         ({"channelId": " "}, ["body", "channelId"]),
@@ -148,14 +147,9 @@ async def test_validation_errors_do_not_echo_the_input(user_client):
     assert "secret-pw" not in response.text
 
 
-async def test_local_ws_is_accepted_in_development(app, user_client, settings):
-    app.dependency_overrides[app_settings] = lambda: settings.model_copy(
-        update={"environment": "development"}
-    )
-    try:
-        body = await create(user_client, baseUrl="ws://localhost:8000")
-    finally:
-        app.dependency_overrides.pop(app_settings, None)
+async def test_local_ws_is_accepted_outside_development(user_client, settings):
+    assert settings.environment != "development"
+    body = await create(user_client, baseUrl="ws://localhost:8000")
     assert body["baseUrl"] == "ws://localhost:8000"
 
 

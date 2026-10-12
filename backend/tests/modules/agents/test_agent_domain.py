@@ -68,7 +68,7 @@ def test_target_spec_accepts_an_explicit_thread_id_and_encodes_the_user_id():
     ],
 )
 def test_base_url_accepts_wss(value, expected):
-    assert check_base_url(value, allow_local_ws=False) == expected
+    assert check_base_url(value) == expected
 
 
 @pytest.mark.parametrize(
@@ -76,7 +76,8 @@ def test_base_url_accepts_wss(value, expected):
     [
         "ws://agents.example.com",  # plain ws to a remote host
         "https://agents.example.com",
-        "ws://localhost:8000",  # local ws outside development
+        "ws://10.0.0.1",  # plain ws to a private (non-local) host
+        "ws://localhost.example.com",
         "wss://user:pass@agents.example.com",
         "wss://agents.example.com?x=1",
         "wss://agents.example.com#frag",
@@ -89,21 +90,17 @@ def test_base_url_accepts_wss(value, expected):
 )
 def test_base_url_rejects(value):
     with pytest.raises(InvalidAgentInput) as info:
-        check_base_url(value, allow_local_ws=False)
+        check_base_url(value)
     assert [e["loc"] for e in info.value.errors] == [["baseUrl"]]
     assert value not in str(info.value.errors) or not value
 
 
-@pytest.mark.parametrize("value", ["ws://localhost:8000", "ws://127.0.0.1:9000/x"])
-def test_local_ws_is_accepted_only_in_development(value):
-    assert check_base_url(value, allow_local_ws=True) == value
-    with pytest.raises(InvalidAgentInput):
-        check_base_url(value, allow_local_ws=False)
-
-
-def test_local_ws_never_extends_to_remote_hosts():
-    with pytest.raises(InvalidAgentInput):
-        check_base_url("ws://10.0.0.1", allow_local_ws=True)
+@pytest.mark.parametrize(
+    "value",
+    ["ws://localhost:8000", "ws://127.0.0.1:9000/x", "ws://host.docker.internal:8000"],
+)
+def test_local_ws_is_accepted_in_every_environment(value):
+    assert check_base_url(value) == value
 
 
 @pytest.mark.parametrize(

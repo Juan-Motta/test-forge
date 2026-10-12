@@ -9,9 +9,10 @@ from collections.abc import Callable
 
 import pytest
 
-from voice_eval.ports.policy import CallerBrief, CallerDecision, PolicyState
+from voice_eval.ports.policy import CallerBrief, CallerDecision, PolicyState, Utterance
 from voice_eval.ports.tts import SynthesisError
 from voice_eval.runner.artifacts import ARTIFACT_NAMES
+from voice_eval.runner.barge_in import Interruption
 from voice_eval.runner.events import RunEvent
 from voice_eval.runner.session import SessionOptions, SessionRunner
 from voice_eval.targets.detect import TargetSpec
@@ -564,3 +565,116 @@ async def test_an_agent_reply_during_the_caller_utterance_is_a_barge_in(
     assert barge_ins and barge_ins[0].data["caller_turn"] == 1
     caller_speech = [e.t_ms for e in sink.of("caller_audio")]
     assert caller_speech[0] < barge_ins[0].t_ms < caller_speech[-1]
+
+
+# --- barge-in -----------------------------------------------------------------------------
+
+WORDS = "one two three four five six seven eight nine ten"
+
+
+def interrupting(*cuts: tuple[int, int], **overrides) -> SessionOptions:
+    return options(interruptions=tuple(Interruption(turn, ms) for turn, ms in cuts), **overrides)
+
+
+async def test_caller_interrupts_the_agent_on_the_playback_timeline(fake_realtime_server, tmp_path):
+    fake = fake_realtime_server
+    fake.burst_audio_ms, fake.items_per_response, fake.item_text = 1500, 2, WORDS
+    policy = ScriptedPolicy(by_turn(say("Hello there"), say("Sorry, one question"), HANG_UP))
+    summary, sink = await run(fake.url, tmp_path, policy, opts=interrupting((1, 1000)))
+
+    assert (summary["status"], summary["reason"]) == ("completed", "caller_hung_up")
+    assert fake.protocol_violations == []
+    # The two items of the reply arrived at once; at 1 s of playback the first one is playing
+    # and the second has not started.
+    first, second = fake.playback_interruptions
+    assert (first["type"], first["responseId"], first["contentIndex"]) == (
+        "playback.interrupted",
+        "resp_1",
+        0,
+    )
+    assert 1000 <= first["audioEndMs"] < 1500
+    assert second["responseId"] == "resp_1" and second["audioEndMs"] is None
+    assert first["itemId"] != second["itemId"]
+
+    (cut,) = sink.of("caller_interrupted")
+    full = f"{WORDS} {WORDS}"
+    heard = cut.data["heard_text"]
+    assert cut.data["agent_turn"] == 1
+    assert cut.data["audio_end_ms"] == first["audioEndMs"]
+    assert full.startswith(heard) and 6 <= len(heard.split()) <= 10  # ~1/3 of the audio
+    turn = sink.of("turn_ended")[0].data
+    assert 1000 <= cut.t_ms - turn["first_audio_ms"] < 1500  # cut on the playback timeline
+
+    # The policy hears only what was heard, marked as interrupted, and speaks right away.
+    assert policy.states[1].conversation[-1] == Utterance("agent", heard, interrupted=True)
+    spoke = sink.of("caller_speaking")[1]
+    assert spoke.t_ms - cut.t_ms < 1000
+    assert spoke.t_ms < turn["first_audio_ms"] + 3000  # long before the reply would have ended
+
+    rows = transcript(tmp_path)
+    agent_row = rows[1]
+    assert agent_row["role"] == "agent" and agent_row["text"] == full
+    assert agent_row["interrupted"] is True
+    assert (agent_row["heard_text"], agent_row["audio_end_ms"]) == (heard, cut.data["audio_end_ms"])
+    assert "interrupted" not in rows[3]  # the next reply was not interrupted
+    assert summary["interruptions"] == [
+        {
+            "agent_turn": 1,
+            "audio_end_ms": cut.data["audio_end_ms"],
+            "heard_chars": len(heard),
+            "total_chars": len(full),
+        }
+    ]
+    assert summary["turns"][0]["end_reason"] == "interrupted"
+    assert summary["turns"][0]["playback_end_ms"] == pytest.approx(cut.t_ms, abs=60)
+
+
+async def test_a_reply_still_streaming_is_cut_and_its_late_audio_dropped(
+    fake_realtime_server, tmp_path
+):
+    fake = fake_realtime_server
+    fake.paced_audio_ms = 3000  # 100 ms deltas, 5x faster than real time
+    fake.honor_interruptions = False  # the server keeps streaming the cut reply for a while
+    policy = ScriptedPolicy(by_turn(say("Hello there"), say("Wait"), HANG_UP))
+    summary, sink = await run(fake.url, tmp_path, policy, opts=interrupting((1, 300)))
+
+    assert (summary["status"], summary["reason"]) == ("completed", "caller_hung_up")
+    assert fake.protocol_violations == []
+    (report,) = fake.playback_interruptions
+    assert 300 <= report["audioEndMs"] < 600
+    (cut,) = sink.of("caller_interrupted")
+    late = [e for e in sink.of("agent_audio") if cut.t_ms < e.t_ms < cut.t_ms + 250]
+    assert late == []  # the rest of the cut reply never reaches live listeners
+    agent_rows = [r for r in transcript(tmp_path) if r["role"] == "agent"]
+    assert [r["text"] for r in agent_rows] == [
+        "agent response number 1",
+        "agent response number 2",
+    ]
+    assert agent_rows[0]["interrupted"] is True
+    assert summary["agent_turns"] == 2
+    assert summary["turns"][0]["audio_ms"] < 3000
+
+
+async def test_no_interruption_when_the_reply_is_shorter(fake_realtime_server, tmp_path):
+    fake_realtime_server.burst_audio_ms = 500
+    policy = ScriptedPolicy(by_turn(say("Hello there"), HANG_UP))
+    summary, sink = await run(
+        fake_realtime_server.url, tmp_path, policy, opts=interrupting((1, 1000))
+    )
+
+    assert (summary["status"], summary["reason"]) == ("completed", "caller_hung_up")
+    assert fake_realtime_server.playback_interruptions == []
+    assert sink.of("caller_interrupted") == []
+    assert summary["interruptions"] == []
+    assert policy.states[1].conversation[-1] == Utterance("agent", "agent response number 1")
+
+
+async def test_live_targets_skip_interruptions_with_a_warning(fake_live_server, tmp_path):
+    fake_live_server.burst_audio_ms = 1500
+    policy = ScriptedPolicy(by_turn(HANG_UP))
+    summary, sink = await run(fake_live_server.url, tmp_path, policy, opts=interrupting((1, 300)))
+
+    assert (summary["status"], summary["reason"]) == ("completed", "caller_hung_up")
+    assert sink.of("caller_interrupted") == []
+    assert any("not supported" in w for w in summary["warnings"])
+    assert summary["interruptions"] == []

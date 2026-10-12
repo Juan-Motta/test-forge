@@ -41,6 +41,7 @@ FIELDS = {
     "facts",
     "criteria",
     "endConditions",
+    "interruptions",
     "createdAt",
     "updatedAt",
 }
@@ -142,6 +143,7 @@ async def test_create_returns_the_scenario(user_client, agent_id):
     }
     assert (body["ttsConnectionId"], body["voiceOverride"]) == (None, None)
     assert body["evaluatorConnectionId"] is None
+    assert body["interruptions"] == []
 
 
 async def test_criterion_ids_are_kept_when_given(user_client, agent_id):
@@ -555,3 +557,43 @@ async def test_agent_rename_shows_in_the_summary(user_client, agent_id):
     await user_client.patch(f"/api/agents/{agent_id}", json={"name": "Vivi prod"})
     got = (await user_client.get(f"/api/scenarios/{body['id']}")).json()
     assert got["agent"] == {"id": agent_id, "name": "Vivi prod"}
+
+
+INTERRUPTIONS = [{"agentTurn": 2, "afterMs": 1500}, {"agentTurn": 1, "afterMs": 300}]
+
+
+async def test_interruptions_are_stored_read_patched_and_duplicated(user_client, agent_id):
+    body = await create(user_client, agent_id, interruptions=INTERRUPTIONS)
+    assert body["interruptions"] == INTERRUPTIONS
+    url = f"/api/scenarios/{body['id']}"
+    assert (await user_client.get(url)).json()["interruptions"] == INTERRUPTIONS
+    copy = await user_client.post(f"{url}/duplicate")
+    assert copy.json()["interruptions"] == INTERRUPTIONS
+    patched = await user_client.patch(
+        url, json={"interruptions": [{"agentTurn": 3, "afterMs": 60000}]}
+    )
+    assert patched.status_code == 200, patched.text
+    assert patched.json()["interruptions"] == [{"agentTurn": 3, "afterMs": 60000}]
+    cleared = await user_client.patch(url, json={"interruptions": []})
+    assert cleared.json()["interruptions"] == []
+    assert (await user_client.patch(url, json={"interruptions": None})).status_code == 422
+
+
+@pytest.mark.parametrize(
+    "interruptions",
+    [
+        [{"agentTurn": 0, "afterMs": 1000}],
+        [{"agentTurn": 1, "afterMs": 299}],
+        [{"agentTurn": 1, "afterMs": 60001}],
+        [{"agentTurn": 1}],
+        [{"agentTurn": 1, "afterMs": 1000, "extra": True}],
+        [{"agentTurn": 1, "afterMs": 1000}, {"agentTurn": 1, "afterMs": 2000}],
+        [{"agentTurn": n, "afterMs": 1000} for n in range(1, 12)],
+    ],
+)
+async def test_invalid_interruptions_are_rejected(user_client, agent_id, interruptions):
+    response = await user_client.post(
+        "/api/scenarios", json=scenario(agent_id, interruptions=interruptions)
+    )
+    assert response.status_code == 422, response.text
+    assert all(loc[:2] == ["body", "interruptions"] for loc in locs(response))

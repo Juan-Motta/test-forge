@@ -120,6 +120,7 @@ class ViviLiveClient(WebSocketTarget):
     agent_speaks_first = True
     explicit_turn_end = False
     supports_text = False
+    supports_playback_interruption = False
 
     def __init__(
         self,
@@ -162,6 +163,11 @@ class ViviLiveClient(WebSocketTarget):
 
     async def request_agent_turn(self) -> None:
         raise NotSupportedError("the Live protocol has no way to request an agent turn")
+
+    async def send_playback_interrupted(
+        self, item_id: str, response_id: str, audio_end_ms: int | None
+    ) -> None:
+        raise NotSupportedError("the Live protocol has no client playback interruption")
 
     async def close(self) -> dict[str, Any]:
         """Ask the server to end the session gracefully; it answers with `voice.closed`."""

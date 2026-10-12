@@ -193,3 +193,55 @@ async def _take(session, n):
         count += 1
         if count == n:
             return
+
+
+async def test_playback_interruption_is_one_strict_event_per_item():
+    client, ws = _client()
+    assert client.supports_playback_interruption
+    await client.send_playback_interrupted("item_a", "resp_1", 1234)
+    await client.send_playback_interrupted("item_b", "resp_1", None)
+    assert ws.sent == [
+        {
+            "type": "playback.interrupted",
+            "itemId": "item_a",
+            "responseId": "resp_1",
+            "contentIndex": 0,
+            "audioEndMs": 1234,
+        },
+        {
+            "type": "playback.interrupted",
+            "itemId": "item_b",
+            "responseId": "resp_1",
+            "contentIndex": 0,
+            "audioEndMs": None,
+        },
+    ]
+    with pytest.raises(ValueError):
+        await client.send_playback_interrupted("item_a", "resp_1", -1)
+
+
+def test_audio_and_response_events_carry_their_item_and_response_ids():
+    client, _ = _client()
+    delta = client.normalize(
+        {
+            "type": "response.output_audio.delta",
+            "item_id": "item_a",
+            "response_id": "resp_1",
+            "delta": "AAA=",
+        }
+    )
+    assert isinstance(delta, AudioDelta)
+    assert (delta.item_id, delta.response_id) == ("item_a", "resp_1")
+    started = client.normalize({"type": "response.created", "response": {"id": "resp_1"}})
+    done = client.normalize({"type": "response.done", "response": {"id": "resp_1"}})
+    assert (started.response_id, done.response_id) == ("resp_1", "resp_1")
+
+
+async def test_live_cannot_interrupt_playback():
+    client = ViviLiveClient("wss://h", "c", "u")
+    ws = FakeSocket()
+    client.attach(ws)  # type: ignore[arg-type]
+    assert not client.supports_playback_interruption
+    with pytest.raises(NotSupportedError):
+        await client.send_playback_interrupted("item_a", "resp_1", 10)
+    assert ws.sent == []

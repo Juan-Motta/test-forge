@@ -318,8 +318,13 @@ a fresh UUID4 `threadId` (`voice_eval.modules.agents.domain.target_spec` builds 
   scenarios; up to 20000 characters, may be empty), `protocol` (`auto` default, `live`,
   `realtime`), `baseUrl`, `channelId`, `userId`, `origin`, `langfuseConnectionId`; responses add
   `id`, `createdAt`, `updatedAt`.
-- `baseUrl` must be `wss://` with a host and no credentials, query string, fragment or spaces
-  (`ws://localhost` and `ws://127.0.0.1` only when `ENVIRONMENT=development`). `channelId`
+- `baseUrl` must be `wss://` with a host and no credentials, query string, fragment or spaces;
+  plain `ws://` is accepted for local hosts only (`localhost`, `127.0.0.1`,
+  `host.docker.internal`), in every environment. When `LOCAL_TARGET_HOST` is set (compose sets
+  `host.docker.internal`, with `extra_hosts: host.docker.internal:host-gateway`), runs dial a
+  `localhost`/`127.0.0.1` agent through that host instead, keeping port and path, because inside
+  the backend container `localhost` is the container itself; `origin` is still sent as
+  configured. `channelId`
   (up to 200) allows only URL-path-safe characters (`A-Z a-z 0-9 . _ ~ -`); `userId` (up to 200)
   is any printable text and is URL-encoded when used. `origin` is optional and must be an
   `http(s)` origin: scheme, host and port only.
@@ -354,7 +359,10 @@ two-level: the agent's `context` applies to all its scenarios, the scenario's ad
   kind (must|should), source (transcript|trace|timing), weight (1-100)}`, weights must total
   exactly 100; `id` is generated when missing and kept afterwards), `endConditions`
   `{maxDurationS (30-1800, default 360), maxSilenceS (5-120, default 15), hangUpWhen
-  (goal_or_goodbye default, goodbye, max_duration)}`. Responses add `id`, `agent: {id, name}`,
+  (goal_or_goodbye default, goodbye, max_duration)}`, `interruptions` (up to 10 `{agentTurn
+  (>= 1), afterMs (300-60000)}`, default `[]`, one per agent turn: the caller barges in on the
+  agent's Nth reply once `afterMs` of it has played; see Session runner; replaced as a whole on
+  `PATCH`). Responses add `id`, `agent: {id, name}`,
   `createdAt`, `updatedAt`.
 
 ### Evaluator (caller policy)
@@ -384,7 +392,26 @@ list with a warning. Right before the caller speaks (or hangs up) the runner che
 the agent started speaking since the decision, the caller waits until that reply has ended and
 played, the decision is discarded (`caller_decision_discarded`) and the policy decides again on
 the new text. An agent turn that starts while the caller is mid-utterance is recorded as
-`agent_barge_in`; the utterance is not cut. It ends on the caller's hang-up (after the agent's last reply
+`agent_barge_in`; the utterance is not cut.
+
+**Barge-in** (scenario `interruptions`, legacy realtime only; on Live the run warns and never
+interrupts). Agent audio arrives faster than real time, so the runner simulates its playback:
+a turn plays back to back from its first audio delta, item after item (`item_id`/`response_id`
+of each `response.output_audio.delta`). Once `afterMs` of agent turn N (from 1) has played, and
+only if the turn has more audio than that, the runner cuts it like the Vivi web client: one
+`playback.interrupted` `{itemId, responseId, contentIndex: 0, audioEndMs}` per item still
+playing (`audioEndMs` = played samples / 24, never above received bytes / 48; `null` for items
+not started yet). The relay then cancels and truncates the reply itself, so the agent remembers
+only what was heard. The rest of that reply is dropped (not counted, not streamed live, not in
+`agent.wav`), the turn ends there (`end_reason` `interrupted`, `playback_end_ms` at the cut),
+a `caller_interrupted` event is published, and the policy gets only the heard part of the
+agent's text (proportional to played vs received audio, cut at a word boundary) marked as
+interrupted; the caller speaks right away and its audio streams as usual (server VAD may also
+fire). The agent row in `transcript.json` keeps the full text plus `interrupted: true`,
+`heard_text` and `audio_end_ms`; `summary.json` lists `interruptions` (`agent_turn`,
+`audio_end_ms`, `heard_chars`, `total_chars`).
+
+It ends on the caller's hang-up (after the agent's last reply
 has finished playing, and after a farewell has been spoken), when the agent closes the session,
 at `maxDurationS`, or after `maxSilenceS` without agent audio or caller speech (the
 `max_duration` rule ignores the caller's hang-up). Every run closes the session and writes
@@ -394,7 +421,7 @@ at `maxDurationS`, or after `maxSilenceS` without agent audio or caller speech (
 `evaluator_failed`, `caller_audio_failed`, plus `error` for failures) to an injected directory,
 even when the caller audio sender failed. Events (`run_started`, `protocol_detected`,
 `agent_audio`, `agent_transcript`, `turn_ended`, `caller_decision`, `caller_audio`, `warning`,
-`caller_decision_discarded`, `agent_barge_in`, `run_finished`) go in order to an injected async sink; audio events carry PCM chunks that never
+`caller_decision_discarded`, `agent_barge_in`, `caller_interrupted`, `run_finished`) go in order to an injected async sink; audio events carry PCM chunks that never
 reach `events.jsonl`. A sink that has not taken every event 10 s after the run ended
 (`sink_drain_timeout_s`) is abandoned with a warning, so it never holds the artifacts back. The probe shares its detector, close and artifact helpers
 (`voice_eval.runner.common`, `voice_eval.runner.artifacts`).
@@ -531,11 +558,12 @@ run started) where it applies:
 | --- | --- |
 | `snapshot` | First message: `run {id, batchId, status, endReason}`, `transcript` so far (only caller lines actually spoken), `turns` so far |
 | `status` | `status` (`connecting`, `running`) |
-| `agentTranscript` | `turn`, `text`: what the agent said in a finished turn |
+| `agentTranscript` | `turn`, `text`: what the agent said in a finished turn; an interrupted one adds `interrupted: true`, `heardText`, `audioEndMs` |
 | `callerDecision` | `decisionId`, `say` (null: stay silent), `hangUp`, `reason` (the evaluator's own reason): an intent, not yet said |
 | `callerSpeaking` | `decisionId`, `say`, `reason`: the caller started saying that decision; only now it joins the transcript |
 | `callerDecisionDiscarded` | `decisionId`: the agent spoke again first, so that decision is never said (a new one follows) |
 | `agentBargeIn` | `callerTurn`: an agent turn started while the caller was mid-utterance |
+| `callerInterrupted` | `agentTurn`, `audioEndMs`, `heardText`: the caller cut the agent off; agent audio already streamed past this point was never heard (drop what is still queued) and the rest of that reply is not streamed |
 | `turnEnded` | `turn`, `firstAudioMs`, `endMs`, `playbackEndMs`, `latencyMs`, `endReason` |
 | `warning` | `message` |
 | `lagging` | `message`: audio frames were dropped for this consumer (text never is) |
