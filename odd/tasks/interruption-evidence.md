@@ -22,7 +22,7 @@ Out of scope: word/audio alignment, re-implementing the provider's correction, c
       by item id with each `playback.interrupted`; summary/transcript/live/judge fields; heard text
       marked approximate in the judge prompt + tolerance rule; README + skill guide — delegated
 - [ ] T2 Frontend: transcript + live show "≈ heard" and confirmation status — delegated
-- [ ] T3 Update the interruption scenarios' criteria (pipeline + realtime copies) — inline
+- [x] T3 Update the interruption scenarios' criteria (pipeline + realtime copies) — inline
 
 ## Contract
 - `summary.interruptions[]` adds `confirmation`: `"truncated" | "deleted" | null`,
@@ -37,4 +37,9 @@ Out of scope: word/audio alignment, re-implementing the provider's correction, c
   word or one item around the cut; judge claims clearly beyond the heard part.
 
 ## Progress
-(none yet)
+- T3 (inline, via API): both interruption scenarios (7d8b1fb0 pipeline, 78f6b4e4 realtime) now say
+  (must 40) "does not claim to have communicated numbers the caller did not hear; may say it is not
+  sure where it stopped" and (must 35) "resumes from a conservative point (at or before the last
+  heard number) or admits it does not know and asks; never continues from an unheard number".
+  Criterion ids and weights kept.
+- T1/T2: delegated writers in progress.
