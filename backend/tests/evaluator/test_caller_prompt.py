@@ -187,3 +187,43 @@ def test_parse_decision(text, expected):
 def test_parse_decision_rejects_malformed_output(text):
     with pytest.raises(MalformedDecision):
         parse_decision(text)
+
+
+# --- realtime evaluator ---------------------------------------------------------------------
+
+
+def test_realtime_instructions_carry_the_brief_and_the_spoken_rules():
+    from voice_eval.evaluator.prompt import realtime_instructions
+
+    text = realtime_instructions(BRIEF)
+    for part in [
+        "Voice receptionist of Hotel Mirador.",
+        "The guest is a loyalty member.",
+        "Lucía",
+        "es-MX",
+        "Calls from her car.",
+        "Get a late check-out at 2 pm.",
+        "Ask about the fee before accepting.",
+        "- Room: 412",
+        "reveal only when asked",
+        "You are the CALLER talking to a voice agent",
+        "`hang_up`",
+    ]:
+        assert part in text, part
+    assert "JSON" not in text and "hangUp" not in text
+
+
+@pytest.mark.parametrize(
+    ("rule", "expected"),
+    [
+        ("goal_or_goodbye", "as soon as your goal is achieved"),
+        ("goodbye", "only when the agent says goodbye"),
+        ("max_duration", "Never call the `hang_up` tool"),
+    ],
+)
+def test_realtime_instructions_follow_the_hang_up_rule(rule, expected):
+    from dataclasses import replace
+
+    from voice_eval.evaluator.prompt import realtime_instructions
+
+    assert expected in realtime_instructions(replace(BRIEF, hang_up_when=rule))

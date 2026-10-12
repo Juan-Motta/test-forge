@@ -42,6 +42,7 @@ FIELDS = {
     "criteria",
     "endConditions",
     "interruptions",
+    "evaluatorMode",
     "createdAt",
     "updatedAt",
 }
@@ -597,3 +598,45 @@ async def test_invalid_interruptions_are_rejected(user_client, agent_id, interru
     )
     assert response.status_code == 422, response.text
     assert all(loc[:2] == ["body", "interruptions"] for loc in locs(response))
+
+
+async def test_the_evaluator_mode_defaults_to_pipeline_and_is_stored(user_client, agent_id):
+    body = await create(user_client, agent_id)
+    assert body["evaluatorMode"] == "pipeline"
+    url = f"/api/scenarios/{body['id']}"
+    patched = await user_client.patch(url, json={"evaluatorMode": "realtime"})
+    assert patched.status_code == 200, patched.text
+    assert patched.json()["evaluatorMode"] == "realtime"
+    assert (await user_client.get(url)).json()["evaluatorMode"] == "realtime"
+    copy = await user_client.post(f"{url}/duplicate")
+    assert copy.json()["evaluatorMode"] == "realtime"
+    realtime = await create(
+        user_client, agent_id, name="Realtime", evaluatorMode="realtime", voiceOverride="marin"
+    )
+    assert (realtime["evaluatorMode"], realtime["voiceOverride"]) == ("realtime", "marin")
+    assert (await user_client.patch(url, json={"evaluatorMode": None})).status_code == 422
+    bad = await user_client.post(
+        "/api/scenarios", json=scenario(agent_id, name="Bad", evaluatorMode="duplex")
+    )
+    assert bad.status_code == 422
+
+
+async def test_the_realtime_evaluator_needs_a_realtime_voice(user_client, agent_id):
+    refused = await user_client.post(
+        "/api/scenarios",
+        json=scenario(agent_id, evaluatorMode="realtime", voiceOverride="nova"),
+    )
+    assert refused.status_code == 422, refused.text
+    assert locs(refused) == [["body", "voiceOverride"]]
+
+    body = await create(user_client, agent_id, voiceOverride="nova")  # fine for the pipeline
+    url = f"/api/scenarios/{body['id']}"
+    switched = await user_client.patch(url, json={"evaluatorMode": "realtime"})
+    assert switched.status_code == 422
+    assert locs(switched) == [["body", "voiceOverride"]]
+    both = await user_client.patch(
+        url, json={"evaluatorMode": "realtime", "voiceOverride": "cedar"}
+    )
+    assert both.status_code == 200, both.text
+    assert (await user_client.patch(url, json={"voiceOverride": "nova"})).status_code == 422
+    assert (await user_client.patch(url, json={"voiceOverride": None})).status_code == 200

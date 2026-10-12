@@ -258,7 +258,7 @@ edit applies to the next run without restarting anything.
 | Kind | `config` (camelCase) | `secrets` |
 | --- | --- | --- |
 | `openai` | `baseUrl` (default `https://api.openai.com/v1`), `ttsModel` (`gpt-4o-mini-tts`), `ttsVoice` (`alloy`) | `apiKey` |
-| `azure_openai` | `endpoint`, `apiVersion`, `ttsDeployment`, `ttsVoice` (`alloy`), `chatDeployment` (optional, a `gpt-6-luna` deployment; without it the connection cannot be the evaluator) | `apiKey` |
+| `azure_openai` | `endpoint`, `apiVersion`, `ttsDeployment`, `ttsVoice` (`alloy`), `chatDeployment` (optional, a `gpt-6-luna` deployment; without it the connection cannot be the evaluator), `realtimeDeployment` (optional, a `gpt-realtime-2.1-mini` deployment; without it realtime-evaluator runs on this connection fail) | `apiKey` |
 | `azure_speech` | exactly one of `region` (e.g. `eastus`) or `endpoint`; `voice` (e.g. `es-MX-DaliaNeural`) | `key` |
 | `langfuse` | `host`, `publicKey` | `secretKey` |
 
@@ -362,7 +362,10 @@ two-level: the agent's `context` applies to all its scenarios, the scenario's ad
   (goal_or_goodbye default, goodbye, max_duration)}`, `interruptions` (up to 10 `{agentTurn
   (>= 1), afterMs (300-60000)}`, default `[]`, one per agent turn: the caller barges in on the
   agent's Nth reply once `afterMs` of it has played; see Session runner; replaced as a whole on
-  `PATCH`). Responses add `id`, `agent: {id, name}`,
+  `PATCH`), `evaluatorMode` (`pipeline` default: chat policy + TTS; `realtime`: the
+  speech-to-speech realtime evaluator, see Session runner; with `realtime` a `voiceOverride`
+  must be one of alloy, ash, ballad, coral, echo, sage, shimmer, verse, marin, cedar, else 422
+  on `voiceOverride`; the run snapshot keeps it as `evaluator_mode`). Responses add `id`, `agent: {id, name}`,
   `createdAt`, `updatedAt`.
 
 ### Evaluator (caller policy)
@@ -416,6 +419,26 @@ interrupted; the caller speaks right away and its audio streams as usual (server
 fire). The agent row in `transcript.json` keeps the full text plus `interrupted: true`,
 `heard_text` and `audio_end_ms`; `summary.json` lists `interruptions` (`agent_turn`,
 `audio_end_ms`, `heard_chars`, `total_chars`).
+
+**Realtime evaluator** (scenario `evaluatorMode: realtime`). No policy or TTS: the scenario's
+voice connection hosts a `gpt-realtime-2.1-mini` session (OpenAI
+`wss://api.openai.com/v1/realtime?model=gpt-realtime-2.1-mini` with `Authorization: Bearer`;
+Azure OpenAI `wss://<resource>/openai/v1/realtime?model=<realtimeDeployment>` with `api-key`),
+configured with PCM16 24 kHz in and out, the scenario's realtime voice (else the connection's,
+else `alloy`), server turn detection off, low reasoning effort when the model takes it, a
+`hang_up(reason)` tool and instructions built from the brief like the pipeline prompt. The
+agent's audio is appended to the session as it arrives (`input_audio_buffer.append`); at the
+moment the pipeline caller would speak (agent turn ended, played back, grace; same re-check if
+the agent spoke again, which cancels the response) the runner commits it and sends
+`response.create`. The response's audio streams to the agent from its first chunk; its output
+transcript becomes the caller's row (`reason` `realtime`). `caller_speaking.tts_first_chunk_ms`
+and `caller_decision.duration_ms` are the time from `response.create` to the first audio;
+`caller_decision` (`say` = transcript) is published once the response is done. A `hang_up` call
+ends the run after the goodbye played (refused with a warning under `max_duration`). On an
+interrupted turn the agent audio is held and only the part that played is appended, plus a
+note that the caller cut in. Connection, auth or model errors fail the run with `reason`
+`realtime_failed` and a message without keys or provider text; an Azure connection without
+`realtimeDeployment` fails the run at setup. `summary.json` has `evaluator_mode`.
 
 It ends on the caller's hang-up (after the agent's last reply
 has finished playing, and after a farewell has been spoken), when the agent closes the session,

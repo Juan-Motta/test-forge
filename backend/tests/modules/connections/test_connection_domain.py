@@ -69,6 +69,21 @@ def test_chat_deployment_is_configurable():
         assert error_locs(info) == [("config", "chatDeployment")]
 
 
+def test_realtime_deployment_is_optional_and_configurable():
+    assert config("azure_openai", AZURE).realtime_deployment is None
+    parsed = config("azure_openai", {**AZURE, "realtimeDeployment": "rt-mini"})
+    assert parsed.realtime_deployment == "rt-mini"
+    with pytest.raises(InvalidConnectionInput) as info:
+        config("azure_openai", {**AZURE, "realtimeDeployment": "a/b"})
+    assert error_locs(info) == [("config", "realtimeDeployment")]
+
+
+def test_the_openai_realtime_model_is_fixed():
+    from voice_eval.modules.connections.domain import REALTIME_MODEL
+
+    assert REALTIME_MODEL == "gpt-realtime-2.1-mini"
+
+
 def test_the_openai_chat_model_is_fixed_and_legacy_values_are_ignored():
     # Rows stored while the model was configurable still parse; their value is not used.
     stored = {"base_url": "https://api.openai.com/v1", "tts_model": "t", "chat_model": "gpt-4.1"}

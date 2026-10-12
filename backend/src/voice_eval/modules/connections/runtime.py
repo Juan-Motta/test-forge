@@ -24,14 +24,17 @@ from voice_eval.platform.secrets import SecretBox
 from voice_eval.platform.settings import Settings
 from voice_eval.ports.judge import RunJudgeModel
 from voice_eval.ports.policy import CallerPolicy
+from voice_eval.ports.realtime_caller import RealtimeCaller, realtime_voice
 from voice_eval.ports.tts import SpeechSynthesizer
 from voice_eval.providers.factory import (
     build_azure_openai_judge,
     build_azure_openai_policy,
+    build_azure_openai_realtime_caller,
     build_azure_openai_synthesizer,
     build_langfuse_trace_reader,
     build_openai_judge,
     build_openai_policy,
+    build_openai_realtime_caller,
     build_openai_synthesizer,
 )
 
@@ -109,6 +112,49 @@ async def build_synthesizer(
         api_version=config.api_version,
         deployment=config.tts_deployment,
         voice=voice or config.tts_voice,
+    )
+
+
+async def build_realtime_caller(
+    db: AsyncSession,
+    connection_id: uuid.UUID,
+    *,
+    secret_box: SecretBox,
+    allow_local_http: bool = False,
+    voice: str | None = None,
+) -> RealtimeCaller:
+    """The realtime evaluator for the stored connection `connection_id` (not connected yet).
+
+    `voice` overrides the connection's voice; a voice the realtime model lacks becomes its
+    default. Raises `ConnectionNotFound`, `UnsupportedConnection` for kinds without a realtime
+    model (and Azure OpenAI without a realtime deployment), and `SecretDecryptionError`.
+    """
+    record = await db.get(ConnectionRecord, connection_id, populate_existing=True)
+    if record is None:
+        raise ConnectionNotFound(str(connection_id))
+    kind = ConnectionKind(record.kind)
+    if kind not in (ConnectionKind.OPENAI, ConnectionKind.AZURE_OPENAI):
+        raise UnsupportedConnection(f"{kind.value} connections have no realtime model")
+    config = parse_config(kind, record.config, allow_local_http=allow_local_http)
+    if kind is ConnectionKind.AZURE_OPENAI and config.realtime_deployment is None:
+        raise UnsupportedConnection(
+            "this azure_openai connection has no realtime deployment: set one to use the "
+            "realtime evaluator"
+        )
+    secrets = reveal(open_secrets(secret_box, record))
+    chosen = realtime_voice(voice or config.tts_voice)
+    if kind is ConnectionKind.OPENAI:
+        return build_openai_realtime_caller(
+            api_key=secrets["api_key"],
+            model=config.realtime_model,
+            voice=chosen,
+            base_url=config.base_url,
+        )
+    return build_azure_openai_realtime_caller(
+        api_key=secrets["api_key"],
+        endpoint=config.endpoint,
+        deployment=config.realtime_deployment,
+        voice=chosen,
     )
 
 

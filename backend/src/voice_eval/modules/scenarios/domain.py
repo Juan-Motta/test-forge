@@ -15,6 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_vali
 from pydantic.alias_generators import to_camel
 
 from voice_eval.ports.policy import CallerBrief
+from voice_eval.ports.realtime_caller import REALTIME_VOICES
 
 # Column sizes shared by the models, the API schemas and the use cases (migrations keep literals).
 MAX_NAME_LENGTH = 160
@@ -57,6 +58,13 @@ class EvidenceSource(StrEnum):
     TRANSCRIPT = "transcript"
     TRACE = "trace"
     TIMING = "timing"
+
+
+class EvaluatorMode(StrEnum):
+    """Who plays the caller: a chat model + TTS voice, or a speech-to-speech realtime model."""
+
+    PIPELINE = "pipeline"
+    REALTIME = "realtime"
 
 
 class HangUpWhen(StrEnum):
@@ -157,6 +165,13 @@ def check_criteria(criteria: list[Criterion]) -> list[Criterion]:
     return criteria
 
 
+def voice_error(mode: str, voice_override: str | None) -> str | None:
+    """Why `voice_override` cannot be used by the `mode` evaluator, or None."""
+    if mode == EvaluatorMode.REALTIME and voice_override and voice_override not in REALTIME_VOICES:
+        return f"the realtime evaluator needs one of its voices: {', '.join(REALTIME_VOICES)}"
+    return None
+
+
 def check_interruptions(interruptions: list[Interruption]) -> list[Interruption]:
     turns = [interruption.agent_turn for interruption in interruptions]
     if len(set(turns)) != len(turns):
@@ -213,6 +228,7 @@ class Scenario:
     created_at: datetime
     updated_at: datetime
     interruptions: list[Interruption] = field(default_factory=list)
+    evaluator_mode: EvaluatorMode = EvaluatorMode.PIPELINE
 
 
 class ScenarioNotFound(Exception):

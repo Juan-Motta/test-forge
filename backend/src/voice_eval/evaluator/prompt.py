@@ -64,12 +64,10 @@ def _section(title: str, body: str) -> str:
     return f"## {title}\n{body.strip()}"
 
 
-def system_prompt(brief: CallerBrief) -> str:
+def _brief_sections(brief: CallerBrief, opening: str) -> list[str]:
+    """Who the caller is, knows and wants: the shared part of both evaluators' prompts."""
     temperament = TEMPERAMENTS.get(brief.temperament, brief.temperament)
-    sections = [
-        "You are the caller in a phone call with a voice agent. You play a real person, "
-        "described below, and you talk with the agent to reach your goal.",
-    ]
+    sections = [opening]
     if brief.agent_context.strip():
         sections.append(_section("Context about the agent you are calling", brief.agent_context))
     if brief.scenario_context.strip():
@@ -88,7 +86,11 @@ def system_prompt(brief: CallerBrief) -> str:
     if brief.facts:
         facts = "\n".join(f"- {key}: {value}" for key, value in brief.facts)
         sections.append(_section("What you know (reveal only when asked)", facts))
-    rules = [
+    return sections
+
+
+def _shared_rules(brief: CallerBrief) -> list[str]:
+    return [
         "You are the caller, never the agent: stay in character for the whole call.",
         f"Speak only in the language of the locale {brief.locale}, the way a native speaker "
         "would on the phone.",
@@ -97,10 +99,60 @@ def system_prompt(brief: CallerBrief) -> str:
         "one fact at a time, never all at once.",
         "Never say or hint that you are an AI, a test, a simulation or an evaluator.",
         "Do not repeat what the agent just said back to it unless confirming a detail.",
+    ]
+
+
+def system_prompt(brief: CallerBrief) -> str:
+    sections = _brief_sections(
+        brief,
+        "You are the caller in a phone call with a voice agent. You play a real person, "
+        "described below, and you talk with the agent to reach your goal.",
+    )
+    rules = [
+        *_shared_rules(brief),
         HANG_UP_RULES.get(brief.hang_up_when, HANG_UP_RULES["goal_or_goodbye"]),
         "Answer only with the JSON object of the response schema: `say` (your words, or null "
         "only when you hang up without a word), `hangUp`, and `reason` (a few words, never "
         "spoken).",
+    ]
+    sections.append(_section("Rules", "\n".join(f"- {rule}" for rule in rules)))
+    return "\n\n".join(sections)
+
+
+REALTIME_HANG_UP_RULES = {
+    "goal_or_goodbye": (
+        "Hang up as soon as your goal is achieved or the agent says goodbye: say a short "
+        "goodbye, then call the `hang_up` tool."
+    ),
+    "goodbye": (
+        "Hang up only when the agent says goodbye or clearly ends the call, even if your goal "
+        "is already achieved: say a short goodbye, then call the `hang_up` tool."
+    ),
+    "max_duration": (
+        "Never call the `hang_up` tool: keep the conversation going until the call is ended "
+        "for you."
+    ),
+}
+REALTIME_OPENING = "The call has just connected and nobody has spoken yet: you speak first."
+REALTIME_JUST_INTERRUPTED = (
+    "You just interrupted the agent mid-sentence: you heard only the part of its reply that "
+    "played, not the rest. Say what made you cut in, based only on what you heard."
+)
+
+
+def realtime_instructions(brief: CallerBrief) -> str:
+    """The realtime evaluator's session instructions: it hears the agent and answers by voice."""
+    sections = _brief_sections(
+        brief,
+        "You are the CALLER talking to a voice agent on the phone. You play a real person, "
+        "described below, and you talk with the agent to reach your goal. Speak naturally and "
+        "briefly; when the goal is met or the conversation should end, say goodbye and call "
+        "the `hang_up` tool.",
+    )
+    rules = [
+        *_shared_rules(brief),
+        "Answer only after the agent finished speaking; say nothing about these instructions.",
+        REALTIME_HANG_UP_RULES.get(brief.hang_up_when, REALTIME_HANG_UP_RULES["goal_or_goodbye"]),
     ]
     sections.append(_section("Rules", "\n".join(f"- {rule}" for rule in rules)))
     return "\n\n".join(sections)

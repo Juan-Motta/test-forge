@@ -32,6 +32,7 @@ HINT_MASK = "••••"
 HINT_MIN_SECRET_LENGTH = 12
 LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1"})
 CHAT_MODEL = "gpt-6-luna"  # the evaluator's only model (Azure: a deployment of it)
+REALTIME_MODEL = "gpt-realtime-2.1-mini"  # the realtime evaluator's model (Azure: a deployment)
 LEGACY_CONFIG_KEYS = frozenset({"chat_model", "chatModel"})  # once configurable, now ignored
 
 
@@ -176,6 +177,11 @@ class OpenAIConfig(_Model):
         """The evaluator's model: fixed, not configurable."""
         return CHAT_MODEL
 
+    @property
+    def realtime_model(self) -> str:
+        """The realtime evaluator's model: fixed, not configurable."""
+        return REALTIME_MODEL
+
 
 class AzureOpenAIConfig(_Model):
     endpoint: str
@@ -184,6 +190,8 @@ class AzureOpenAIConfig(_Model):
     tts_voice: Identifier = "alloy"
     # A gpt-6-luna deployment; without it the connection cannot evaluate.
     chat_deployment: Identifier | None = None
+    # A gpt-realtime-2.1-mini deployment, for scenarios with the realtime evaluator.
+    realtime_deployment: Identifier | None = None
 
     check_endpoint = field_validator("endpoint")(check_url)
 

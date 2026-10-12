@@ -173,3 +173,71 @@ async def test_a_voice_override_replaces_the_connection_voice(app, user_client):
             session, connection_id, secret_box=app.state.secret_box, voice="nova"
         )
     assert synth.voice == "nova"
+
+
+async def build_realtime(app, connection_id, voice=None):
+    from voice_eval.modules.connections.runtime import build_realtime_caller
+
+    async with app.state.sessionmaker() as session:
+        return await build_realtime_caller(
+            session, connection_id, secret_box=app.state.secret_box, voice=voice
+        )
+
+
+async def test_realtime_caller_uses_the_openai_realtime_model(app, user_client):
+    connection_id = await create(
+        user_client,
+        {
+            "name": "rt",
+            "kind": "openai",
+            "config": {"ttsVoice": "nova"},
+            "secrets": {"apiKey": KEY},
+        },
+    )
+    caller = await build_realtime(app, connection_id)  # building never connects
+    assert caller.url == "wss://api.openai.com/v1/realtime?model=gpt-realtime-2.1-mini"
+    assert caller.headers == {"Authorization": f"Bearer {KEY}"}
+    assert caller.voice == "alloy"  # nova is no realtime voice
+    assert (await build_realtime(app, connection_id, voice="cedar")).voice == "cedar"
+
+
+async def test_realtime_caller_uses_the_azure_realtime_deployment(app, user_client):
+    config = {
+        "endpoint": "https://res.openai.azure.com",
+        "apiVersion": "2025-03-01-preview",
+        "ttsDeployment": "my-tts",
+        "ttsVoice": "verse",
+    }
+    without = await create(
+        user_client,
+        {"name": "azure", "kind": "azure_openai", "config": config, "secrets": {"apiKey": KEY}},
+    )
+    with pytest.raises(UnsupportedConnection, match="no realtime deployment"):
+        await build_realtime(app, without)
+    with_deployment = await create(
+        user_client,
+        {
+            "name": "azure rt",
+            "kind": "azure_openai",
+            "config": {**config, "realtimeDeployment": "rt-mini"},
+            "secrets": {"apiKey": KEY},
+        },
+    )
+    caller = await build_realtime(app, with_deployment)
+    assert caller.url == "wss://res.openai.azure.com/openai/v1/realtime?model=rt-mini"
+    assert caller.headers == {"api-key": KEY}
+    assert caller.voice == "verse"
+
+
+async def test_realtime_caller_needs_an_openai_kind(app, user_client):
+    connection_id = await create(
+        user_client,
+        {
+            "name": "speech",
+            "kind": "azure_speech",
+            "config": {"region": "eastus"},
+            "secrets": {"key": KEY},
+        },
+    )
+    with pytest.raises(UnsupportedConnection, match="realtime"):
+        await build_realtime(app, connection_id)

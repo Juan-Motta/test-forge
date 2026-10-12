@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING
 from voice_eval.config import ConfigError, TtsSettings, require
 from voice_eval.ports.judge import RunJudgeModel
 from voice_eval.ports.policy import CallerPolicy
+from voice_eval.ports.realtime_caller import RealtimeCaller
 from voice_eval.ports.tts import SpeechSynthesizer
 
 if TYPE_CHECKING:
@@ -25,6 +26,24 @@ def build_azure_openai_synthesizer(
     from voice_eval.providers.openai_tts import OpenAISpeechSynthesizer
 
     return OpenAISpeechSynthesizer.for_azure(api_key, endpoint, api_version, deployment, voice)
+
+
+def build_openai_realtime_caller(
+    *, api_key: str, model: str, voice: str, base_url: str
+) -> RealtimeCaller:
+    from voice_eval.providers.openai_realtime_caller import OpenAIRealtimeCaller
+
+    return OpenAIRealtimeCaller.for_openai(api_key, model=model, voice=voice, base_url=base_url)
+
+
+def build_azure_openai_realtime_caller(
+    *, api_key: str, endpoint: str, deployment: str, voice: str
+) -> RealtimeCaller:
+    from voice_eval.providers.openai_realtime_caller import OpenAIRealtimeCaller
+
+    return OpenAIRealtimeCaller.for_azure(
+        api_key, endpoint=endpoint, deployment=deployment, voice=voice
+    )
 
 
 def build_openai_policy(*, api_key: str, model: str, base_url: str | None = None) -> CallerPolicy:

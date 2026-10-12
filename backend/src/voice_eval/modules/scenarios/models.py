@@ -24,6 +24,7 @@ from voice_eval.modules.scenarios.domain import (
     AgentSummary,
     Criterion,
     EndConditions,
+    EvaluatorMode,
     Fact,
     Interruption,
     Persona,
@@ -63,6 +64,11 @@ class ScenarioRecord(Base):
     interruptions: Mapped[list[dict[str, Any]]] = mapped_column(
         JSONB, default=list, server_default=text("'[]'::jsonb")
     )
+    evaluator_mode: Mapped[str] = mapped_column(
+        String(20),
+        default=EvaluatorMode.PIPELINE.value,
+        server_default=EvaluatorMode.PIPELINE.value,
+    )
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL")
     )
@@ -90,4 +96,5 @@ class ScenarioRecord(Base):
             created_at=self.created_at,
             updated_at=self.updated_at,
             interruptions=[Interruption.model_validate(item) for item in self.interruptions],
+            evaluator_mode=EvaluatorMode(self.evaluator_mode),
         )

@@ -26,6 +26,7 @@ from voice_eval.modules.scenarios.domain import (
     ScenarioNotFound,
     copy_name,
     resolve_evaluator,
+    voice_error,
 )
 from voice_eval.modules.scenarios.models import NAME_UNIQUE_CONSTRAINT, ScenarioRecord
 
@@ -47,6 +48,7 @@ WRITABLE = frozenset(
         "criteria",
         "end_conditions",
         "interruptions",
+        "evaluator_mode",
     }
 )
 COPIED = WRITABLE - {"name"}
@@ -137,6 +139,12 @@ async def _validate(db: AsyncSession, fields: dict[str, Any]) -> None:
         raise InvalidScenarioInput(errors)
 
 
+def _check_voice(mode: str, voice_override: str | None) -> None:
+    """The voice override must suit the evaluator mode the scenario ends up with."""
+    if msg := voice_error(mode, voice_override):
+        raise InvalidScenarioInput([{"type": "value_error", "loc": ["voiceOverride"], "msg": msg}])
+
+
 async def _ensure_name_free(
     db: AsyncSession, agent_id: uuid.UUID, name: str, *, besides: uuid.UUID | None = None
 ) -> None:
@@ -174,6 +182,7 @@ async def create_scenario(
 ) -> Scenario:
     """`fields` holds every writable field (snake_case), already shape-validated."""
     fields = {key: _json(value) for key, value in fields.items() if key in WRITABLE}
+    _check_voice(fields["evaluator_mode"], fields.get("voice_override"))
     await _validate(db, fields)
     await _ensure_name_free(db, fields["agent_id"], fields["name"])
     record = ScenarioRecord(id=uuid.uuid4(), created_by=created_by, **fields)
@@ -188,6 +197,10 @@ async def update_scenario(
     """Apply the given fields only; structured parts given are replaced as a whole."""
     record = await _fetch(db, scenario_id)
     changes = {key: _json(value) for key, value in changes.items() if key in WRITABLE}
+    _check_voice(
+        changes.get("evaluator_mode", record.evaluator_mode),
+        changes.get("voice_override", record.voice_override),
+    )
     await _validate(db, changes)
     agent_id = changes.get("agent_id", record.agent_id)
     name = changes.get("name", record.name)
