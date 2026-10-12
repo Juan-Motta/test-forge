@@ -63,6 +63,13 @@ export const KINDS: Record<ConnectionKind, KindDefinition> = {
         required: false,
         hint: "A gpt-6-luna deployment the evaluator uses to decide what the caller says. Without it this connection cannot be the evaluator.",
       },
+      {
+        key: "realtimeDeployment",
+        label: "Realtime deployment",
+        format: "identifier",
+        required: false,
+        hint: "A gpt-realtime-2.1-mini deployment for scenarios that use the realtime evaluator. Without it those scenarios fail on this connection.",
+      },
     ],
     secret: { key: "apiKey", label: "API key" },
   },

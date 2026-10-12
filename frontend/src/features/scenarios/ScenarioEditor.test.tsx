@@ -107,6 +107,7 @@ describe("Scenario editor: create", () => {
           ttsConnectionId: "c-openai",
           evaluatorConnectionId: "c-azure-chat",
           voiceOverride: "coral",
+          evaluatorMode: "pipeline",
           goal: "Get a late check-out at 2 pm.",
           instructions: "Ask about the fee.",
           facts: [{ key: "Room", value: "412" }],
@@ -120,6 +121,50 @@ describe("Scenario editor: create", () => {
       },
     ]);
   }, 15_000); // types every field: well under a second alone, slower on a loaded machine
+
+  it("creates a realtime scenario and refuses a voice the realtime model does not have", async () => {
+    const api = setup([]);
+    const user = await renderEditor();
+    await fillMinimum(user);
+
+    const evaluator = screen.getByRole("group", { name: "Evaluator" });
+    const pipeline = within(evaluator).getByRole("radio", { name: "Pipeline" });
+    const realtime = within(evaluator).getByRole("radio", { name: "Realtime" });
+    expect(pipeline).toBeChecked();
+    expect(realtime).toHaveAccessibleDescription(expect.stringContaining("costs more"));
+    await user.type(field("Voice override (optional)"), "nova");
+    await user.click(realtime);
+
+    await waitFor(() =>
+      expect(field("Voice override (optional)")).toHaveAccessibleDescription(
+        expect.stringContaining("The realtime evaluator needs one of its voices: alloy, ash, ballad"),
+      ),
+    );
+    await user.click(screen.getByRole("button", { name: "Create scenario" }));
+    await waitFor(() => expect(field("Voice override (optional)")).toHaveFocus());
+    expect(api.requests).toEqual([]);
+
+    await retype(user, "Voice override (optional)", "marin");
+    await user.click(screen.getByRole("button", { name: "Create scenario" }));
+    await waitFor(() => expect(api.requests).toHaveLength(1));
+    expect(api.requests[0].body).toMatchObject({ evaluatorMode: "realtime", voiceOverride: "marin" });
+  });
+
+  it("drops the realtime voice error when switching back to the pipeline evaluator", async () => {
+    const api = setup([]);
+    const user = await renderEditor();
+    await fillMinimum(user);
+
+    await user.type(field("Voice override (optional)"), "nova");
+    await user.click(screen.getByRole("radio", { name: "Realtime" }));
+    await waitFor(() => expect(field("Voice override (optional)")).toHaveAttribute("aria-invalid", "true"));
+    await user.click(screen.getByRole("radio", { name: "Pipeline" }));
+    await waitFor(() => expect(field("Voice override (optional)")).not.toHaveAttribute("aria-invalid", "true"));
+
+    await user.click(screen.getByRole("button", { name: "Create scenario" }));
+    await waitFor(() => expect(api.requests).toHaveLength(1));
+    expect(api.requests[0].body).toMatchObject({ evaluatorMode: "pipeline", voiceOverride: "nova" });
+  });
 
   it("shows the live weight total and blocks saving until it is exactly 100", async () => {
     const api = setup([]);
@@ -389,6 +434,18 @@ describe("Scenario editor: edit", () => {
 
     await waitFor(() => expect(field("Interruption 1 After (s)")).toHaveAccessibleDescription("Too late for this agent"));
     expect(field("Interruption 1 After (s)")).toHaveFocus();
+  });
+
+  it("prefills the evaluator mode and sends it only when it changes", async () => {
+    const api = setup([scenarioFixture({ evaluatorMode: "realtime", voiceOverride: "cedar" })]);
+    const user = await renderEditor("s-booking");
+
+    expect(screen.getByRole("radio", { name: "Realtime" })).toBeChecked();
+    await user.click(screen.getByRole("radio", { name: "Pipeline" }));
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() => expect(api.requests).toHaveLength(1));
+    expect(api.requests[0].body).toEqual({ evaluatorMode: "pipeline" });
   });
 
   it("clears the evaluator voice with null", async () => {

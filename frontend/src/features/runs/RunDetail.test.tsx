@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { renderWithClient } from "@/test/render";
 import { RunDetailContainer } from "./RunDetailContainer";
-import { mockRunsApi, runDetailFixture, runFixture } from "./testing";
+import { mockRunsApi, runDetailFixture, runFixture, snapshotFixture } from "./testing";
 
 const nav = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn() }));
 vi.mock("next/navigation", () => ({
@@ -23,6 +23,7 @@ describe("Run detail", () => {
     expect(await screen.findByRole("heading", { level: 1, name: "Booking with date change" })).toBeInTheDocument();
     expect(screen.getByText("Hotel booking assistant")).toBeInTheDocument();
     expect(screen.getByText("Lucía · hurried · es-MX")).toBeInTheDocument();
+    expect(screen.queryByText(/evaluator$/)).not.toBeInTheDocument();
     expect(screen.getByText("Completed")).toBeInTheDocument();
     expect(screen.getByText("Evaluator hung up")).toBeInTheDocument();
 
@@ -119,6 +120,17 @@ describe("Run detail", () => {
     const row = within(transcript).getByRole("listitem");
     expect(row).toHaveTextContent("Hello, how can I help you today?");
     expect(row).toHaveTextContent("Heard before the interruption at 1.5 s: “Hi, how can”");
+  });
+
+  it.each([
+    ["realtime", "Realtime evaluator"],
+    ["pipeline", "Pipeline evaluator"],
+  ] as const)("names the %s evaluator the run was launched with", async (evaluatorMode, label) => {
+    const launched = runDetailFixture({ snapshot: snapshotFixture({ evaluatorMode }) });
+    mockRunsApi([run], { details: { "r-1": launched } });
+    renderWithClient(<RunDetailContainer runId="r-1" />);
+
+    expect(await screen.findByText(label)).toBeInTheDocument();
   });
 
   it("copies the thread id", async () => {

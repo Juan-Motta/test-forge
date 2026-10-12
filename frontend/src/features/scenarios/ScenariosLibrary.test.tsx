@@ -29,6 +29,7 @@ const cancel = scenarioFixture({
     { agentTurn: 1, afterMs: 2000 },
     { agentTurn: 3, afterMs: 4500 },
   ],
+  evaluatorMode: "realtime",
   updatedAt: "2026-10-03T10:00:00Z",
 });
 const refund = scenarioFixture({
@@ -64,8 +65,10 @@ describe("Scenarios library", () => {
     expect(within(first).getByText("Hurried")).toBeInTheDocument();
     expect(within(first).getByText("2 criteria")).toBeInTheDocument();
     expect(within(first).queryByText(/Interrupts/)).not.toBeInTheDocument();
+    expect(within(first).queryByText("Realtime")).not.toBeInTheDocument();
     const second = within(hotelGroup).getByRole("listitem", { name: "Cancel within 24h" });
     expect(within(second).getByText("Interrupts 2 replies")).toBeInTheDocument();
+    expect(within(second).getByText("Realtime")).toBeInTheDocument();
     expect(within(first).getByRole("link", { name: "Open Booking with date change" })).toHaveAttribute(
       "href",
       "/scenarios/s-booking",

@@ -88,6 +88,8 @@ export type RunSnapshot = {
     persona: { name: string; locale: string; temperament: string; notes?: string };
     goal: string;
     endConditions: { maxDurationS: number; maxSilenceS: number; hangUpWhen: string };
+    /** Absent on runs launched before the realtime evaluator existed. */
+    evaluatorMode?: "pipeline" | "realtime";
   };
   agent: { id: string; name: string; protocol: string };
   connections: { tts: { id: string; name: string }; evaluator: { id: string; name: string; chatModel: string | null } };

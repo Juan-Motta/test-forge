@@ -12,10 +12,14 @@ export function personaLine(detail: Pick<RunDetail, "snapshot">): string {
   return persona ? [persona.name, persona.temperament, persona.locale].filter(Boolean).join(" · ") : "";
 }
 
+const EVALUATOR_LABELS = { pipeline: "Pipeline evaluator", realtime: "Realtime evaluator" } as const;
+
 /** Who, against whom, how it ended, and the thread id (the Langfuse session) with a copy button. */
 export function RunMeta({ run }: { run: RunDetail }) {
   const [copied, setCopied] = useState(false);
   const reason = endReasonLabel(run.endReason);
+  const mode = run.snapshot?.scenario?.evaluatorMode;
+  const evaluator = mode ? EVALUATOR_LABELS[mode] : undefined;
 
   async function copy() {
     try {
@@ -36,6 +40,12 @@ export function RunMeta({ run }: { run: RunDetail }) {
         <>
           <span aria-hidden="true">·</span>
           <Badge tone="evaluator">{personaLine(run)}</Badge>
+        </>
+      ) : null}
+      {evaluator ? (
+        <>
+          <span aria-hidden="true">·</span>
+          <span>{evaluator}</span>
         </>
       ) : null}
       <span aria-hidden="true">·</span>

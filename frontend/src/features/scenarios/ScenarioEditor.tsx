@@ -13,13 +13,14 @@ import { errorAt, formPath } from "./editor-form";
 import { FactsEditor } from "./FactsEditor";
 import { InterruptionsEditor } from "./InterruptionsEditor";
 import {
+  EVALUATOR_MODE_LABELS,
   HANG_UP_LABELS,
   initialValues,
   scenarioFormSchema,
   TEMPERAMENT_LABELS,
   type ScenarioFormValues,
 } from "./form-schema";
-import { HANG_UP_RULES, TEMPERAMENTS, type Scenario } from "./types";
+import { EVALUATOR_MODES, HANG_UP_RULES, REALTIME_VOICES, TEMPERAMENTS, type Scenario } from "./types";
 
 const NO_SERVER_ERRORS: FieldErrors = {};
 
@@ -68,6 +69,7 @@ export function ScenarioEditor({
     reset,
     setError,
     clearErrors,
+    trigger,
     formState: { errors, isDirty },
   } = form;
   const formRef = useRef<HTMLFormElement>(null);
@@ -111,6 +113,7 @@ export function ScenarioEditor({
     });
 
   const agentId = useWatch({ control, name: "agentId" });
+  const evaluatorMode = useWatch({ control, name: "evaluatorMode" });
   const agent = agents.find((item) => item.id === agentId);
   const linkedTts = scenario?.ttsConnectionId;
   const voiceOptions =
@@ -219,10 +222,49 @@ export function ScenarioEditor({
         <Field label="Persona notes" hint="Habits and quirks, like interrupting." error={fieldError("persona.notes")}>
           {(props) => <Textarea rows={2} {...props} {...registerField("persona.notes")} />}
         </Field>
+        <fieldset className="flex flex-col gap-2">
+          <legend className="mb-1.5 text-xs font-medium text-muted">Evaluator</legend>
+          <div className="grid gap-2 md:grid-cols-2">
+            {EVALUATOR_MODES.map((mode) => {
+              const labelId = `evaluator-mode-${mode}`;
+              const descriptionId = `${labelId}-description`;
+              return (
+                <label key={mode} className="cursor-pointer">
+                  <input
+                    type="radio"
+                    value={mode}
+                    aria-labelledby={labelId}
+                    aria-describedby={descriptionId}
+                    className="peer sr-only"
+                    {...register("evaluatorMode", { onChange: () => void trigger("voiceOverride") })}
+                  />
+                  <span
+                    className={cn(
+                      "flex h-full flex-col gap-1 rounded-lg border border-line-strong p-3 text-sm",
+                      "peer-checked:border-evaluator peer-checked:bg-evaluator/15",
+                      "peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-evaluator",
+                    )}
+                  >
+                    <span id={labelId} className="font-medium">
+                      {EVALUATOR_MODE_LABELS[mode].label}
+                    </span>
+                    <span id={descriptionId} className="text-xs text-muted">
+                      {EVALUATOR_MODE_LABELS[mode].description}
+                    </span>
+                  </span>
+                </label>
+              );
+            })}
+          </div>
+        </fieldset>
         <div className="grid gap-4 md:grid-cols-2">
           <Field
             label="Evaluator voice (TTS connection)"
-            hint="None uses the platform's default evaluator voice."
+            hint={
+              evaluatorMode === "realtime"
+                ? "The realtime session uses this OpenAI or Azure OpenAI connection. None uses the platform's default."
+                : "None uses the platform's default evaluator voice."
+            }
             error={fieldError("ttsConnectionId")}
           >
             {(props) => (
@@ -238,7 +280,11 @@ export function ScenarioEditor({
           </Field>
           <Field
             label="Voice override (optional)"
-            hint="A voice ID of that connection, like coral."
+            hint={
+              evaluatorMode === "realtime"
+                ? `A realtime voice: ${REALTIME_VOICES.join(", ")}.`
+                : "A voice ID of that connection, like coral."
+            }
             error={fieldError("voiceOverride")}
           >
             {(props) => <Input mono autoComplete="off" spellCheck={false} {...props} {...registerField("voiceOverride")} />}

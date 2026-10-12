@@ -16,6 +16,7 @@ export function scenarioFixture(overrides: Partial<Scenario> = {}): Scenario {
     ttsConnectionId: null,
     evaluatorConnectionId: null,
     voiceOverride: null,
+    evaluatorMode: "pipeline",
     goal: "Book a double room for 3 nights from November 14.",
     instructions: "Do not give every detail at once.",
     facts: [

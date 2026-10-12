@@ -58,4 +58,27 @@ describe("scenario form helpers", () => {
     const eleven = Array.from({ length: 11 }, (_, index) => ({ agentTurn: String(index + 1), afterS: "1" }));
     expect(problems(eleven)).toEqual([["interruptions", "Use at most 10 interruptions."]]);
   });
+
+  it("defaults to the pipeline evaluator and accepts only realtime voices in realtime mode", () => {
+    expect(initialValues(undefined).evaluatorMode).toBe("pipeline");
+    const legacy = scenarioFixture();
+    delete (legacy as Partial<typeof legacy>).evaluatorMode;
+    expect(initialValues(legacy).evaluatorMode).toBe("pipeline");
+
+    const base = initialValues(scenarioFixture());
+    const problems = (evaluatorMode: "pipeline" | "realtime", voiceOverride: string) => {
+      const result = scenarioFormSchema.safeParse({ ...base, evaluatorMode, voiceOverride });
+      return result.success ? [] : result.error.issues.map((issue) => issue.path.join("."));
+    };
+    expect(problems("pipeline", "nova")).toEqual([]);
+    expect(problems("realtime", "")).toEqual([]);
+    expect(problems("realtime", " marin ")).toEqual([]);
+    expect(problems("realtime", "Marin")).toEqual(["voiceOverride"]);
+    expect(problems("realtime", "nova")).toEqual(["voiceOverride"]);
+
+    const scenario = scenarioFixture();
+    expect(toChanges(scenario, { ...initialValues(scenario), evaluatorMode: "realtime" })).toEqual({
+      evaluatorMode: "realtime",
+    });
+  });
 });

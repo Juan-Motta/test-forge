@@ -1,10 +1,13 @@
 import { z } from "zod";
 import {
   CRITERION_KINDS,
+  EVALUATOR_MODES,
   EVIDENCE_SOURCES,
   HANG_UP_RULES,
+  REALTIME_VOICES,
   TEMPERAMENTS,
   type CriterionKind,
+  type EvaluatorMode,
   type EvidenceSource,
   type HangUpWhen,
   type NewScenario,
@@ -27,6 +30,7 @@ export type ScenarioFormValues = {
   ttsConnectionId: string;
   evaluatorConnectionId: string;
   voiceOverride: string;
+  evaluatorMode: EvaluatorMode;
   goal: string;
   instructions: string;
   facts: { key: string; value: string }[];
@@ -53,6 +57,25 @@ export const SOURCE_LABELS: Record<EvidenceSource, string> = {
   trace: "Trace",
   timing: "Timing",
 };
+export const EVALUATOR_MODE_LABELS: Record<EvaluatorMode, { label: string; description: string }> = {
+  pipeline: {
+    label: "Pipeline",
+    description: "A chat model decides what the caller says and a TTS voice speaks it.",
+  },
+  realtime: {
+    label: "Realtime",
+    description:
+      "A speech-to-speech model (gpt-realtime-2.1-mini) hears the agent and answers by voice: lower latency and more natural, but it costs more (audio $10 in / $20 out per 1M tokens vs $12 out for TTS).",
+  },
+};
+export const realtimeVoiceMessage = `The realtime evaluator needs one of its voices: ${REALTIME_VOICES.join(", ")}.`;
+
+/** Whether the realtime evaluator can speak with this voice override (blank uses the connection's voice). */
+export function isRealtimeVoice(value: string): boolean {
+  const voice = value.trim();
+  return !voice || (REALTIME_VOICES as readonly string[]).includes(voice);
+}
+
 export const HANG_UP_LABELS: Record<HangUpWhen, string> = {
   goal_or_goodbye: "Goal met or goodbye said",
   goodbye: "Goodbye said",
@@ -126,6 +149,7 @@ export const scenarioFormSchema = z
       .string()
       .trim()
       .refine((value) => !value || IDENTIFIER.test(value), "Use only letters, digits and . _ : - (up to 100 characters)."),
+    evaluatorMode: z.enum(EVALUATOR_MODES),
     goal: text(MAX.goal, "Describe what the caller wants."),
     instructions: text(MAX.instructions),
     facts: z
@@ -165,6 +189,9 @@ export const scenarioFormSchema = z
       .max(MAX.interruptions, `Use at most ${MAX.interruptions} interruptions.`),
   })
   .superRefine((values, ctx) => {
+    if (values.evaluatorMode === "realtime" && !isRealtimeVoice(values.voiceOverride)) {
+      ctx.addIssue({ code: "custom", path: ["voiceOverride"], message: realtimeVoiceMessage });
+    }
     const tags = parseTags(values.tags);
     if (tags.length > MAX.tags) ctx.addIssue({ code: "custom", path: ["tags"], message: `Use at most ${MAX.tags} tags.` });
     if (tags.some((tag) => tag.length > MAX.tag)) {
@@ -218,6 +245,7 @@ export function initialValues(scenario: Scenario | undefined, defaultAgentId = "
       ttsConnectionId: "",
       evaluatorConnectionId: "",
       voiceOverride: "",
+      evaluatorMode: "pipeline",
       goal: "",
       instructions: "",
       facts: [],
@@ -235,6 +263,7 @@ export function initialValues(scenario: Scenario | undefined, defaultAgentId = "
     ttsConnectionId: scenario.ttsConnectionId ?? "",
     evaluatorConnectionId: scenario.evaluatorConnectionId ?? "",
     voiceOverride: scenario.voiceOverride ?? "",
+    evaluatorMode: scenario.evaluatorMode ?? "pipeline",
     goal: scenario.goal,
     instructions: scenario.instructions,
     facts: scenario.facts.map((fact) => ({ ...fact })),
@@ -272,6 +301,7 @@ export function toNewScenario(values: ScenarioFormValues): NewScenario {
     ttsConnectionId: values.ttsConnectionId || null,
     evaluatorConnectionId: values.evaluatorConnectionId || null,
     voiceOverride: values.voiceOverride.trim() || null,
+    evaluatorMode: values.evaluatorMode,
     goal: values.goal.trim(),
     instructions: values.instructions.trim(),
     facts: values.facts.map((fact) => ({ key: fact.key.trim(), value: fact.value.trim() })),

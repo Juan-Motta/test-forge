@@ -66,6 +66,7 @@ describe("Create connection", () => {
         "API version": "2025-03-01-preview",
         "TTS deployment": "my-tts",
         "Chat deployment": "my-chat",
+        "Realtime deployment": "my-realtime",
         "API key": "azure-openai-key-123",
       },
       config: {
@@ -74,6 +75,7 @@ describe("Create connection", () => {
         ttsDeployment: "my-tts",
         ttsVoice: "alloy",
         chatDeployment: "my-chat",
+        realtimeDeployment: "my-realtime",
       },
       secrets: { apiKey: "azure-openai-key-123" },
     },
@@ -383,6 +385,47 @@ describe("Form edge cases", () => {
     expect(within(dialog).getByLabelText("Chat deployment")).toHaveAccessibleDescription(
       expect.stringContaining("gpt-6-luna"),
     );
+  });
+
+  it("explains the optional realtime deployment of an Azure OpenAI connection", async () => {
+    mockConnectionsApi([]);
+    const { user, dialog } = await openCreate();
+
+    expect(within(dialog).queryByLabelText("Realtime deployment")).not.toBeInTheDocument();
+    await user.selectOptions(within(dialog).getByLabelText("Provider"), "azure_openai");
+    expect(within(dialog).getByLabelText("Realtime deployment")).toHaveAccessibleDescription(
+      expect.stringContaining("gpt-realtime-2.1-mini"),
+    );
+  });
+
+  it("adds a realtime deployment to a stored Azure OpenAI connection", async () => {
+    const stored = connectionFixture({
+      id: "c-azure",
+      name: "Azure",
+      kind: "azure_openai",
+      config: { endpoint: "https://res.openai.azure.com", apiVersion: "2025-03-01-preview", ttsDeployment: "tts", ttsVoice: "alloy", chatDeployment: null },
+    });
+    const api = mockConnectionsApi([stored]);
+    const { user, dialog } = await openEdit("Azure");
+
+    expect(within(dialog).getByLabelText("Realtime deployment")).toHaveValue("");
+    await user.type(within(dialog).getByLabelText("Realtime deployment"), "rt-mini");
+    await user.click(within(dialog).getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() => expect(api.requests).toHaveLength(1));
+    expect(api.requests[0]).toEqual({
+      method: "PATCH",
+      path: "/connections/c-azure",
+      body: {
+        config: {
+          endpoint: "https://res.openai.azure.com",
+          apiVersion: "2025-03-01-preview",
+          ttsDeployment: "tts",
+          ttsVoice: "alloy",
+          realtimeDeployment: "rt-mini",
+        },
+      },
+    });
   });
 
   it("blocks a chat deployment that is not an identifier", async () => {

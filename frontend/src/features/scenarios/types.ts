@@ -7,6 +7,11 @@ export const EVIDENCE_SOURCES = ["transcript", "trace", "timing"] as const;
 export type EvidenceSource = (typeof EVIDENCE_SOURCES)[number];
 export const HANG_UP_RULES = ["goal_or_goodbye", "goodbye", "max_duration"] as const;
 export type HangUpWhen = (typeof HANG_UP_RULES)[number];
+/** `pipeline`: a chat model decides the words and TTS speaks them. `realtime`: a speech-to-speech model. */
+export const EVALUATOR_MODES = ["pipeline", "realtime"] as const;
+export type EvaluatorMode = (typeof EVALUATOR_MODES)[number];
+/** Voices the realtime evaluator model (gpt-realtime-2.1-mini) can speak with. */
+export const REALTIME_VOICES = ["alloy", "ash", "ballad", "coral", "echo", "sage", "shimmer", "verse", "marin", "cedar"] as const;
 
 export type Persona = { name: string; locale: string; temperament: Temperament; notes: string };
 /** Something the caller knows and reveals only when asked. */
@@ -29,6 +34,8 @@ export type Scenario = {
   /** Connection whose chat model plays the caller; `null` uses the voice (TTS) connection. */
   evaluatorConnectionId: string | null;
   voiceOverride: string | null;
+  /** Absent on scenarios stored before the realtime evaluator existed (they use the pipeline). */
+  evaluatorMode?: EvaluatorMode;
   goal: string;
   instructions: string;
   facts: Fact[];
@@ -52,6 +59,7 @@ export type NewScenario = {
   ttsConnectionId: string | null;
   evaluatorConnectionId: string | null;
   voiceOverride: string | null;
+  evaluatorMode: EvaluatorMode;
   goal: string;
   instructions: string;
   facts: Fact[];
