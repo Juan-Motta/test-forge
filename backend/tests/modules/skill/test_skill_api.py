@@ -74,7 +74,9 @@ async def test_every_api_operation_is_in_the_reference(app, user_client):
         if method in {"get", "post", "put", "patch", "delete"}
     ]
     assert len(operations) > 20
-    missing = [f"{m} {p}" for m, p in operations if f"{m} {p}" not in reference]
+    # Exact headings: "GET /api/runs" must not pass just because "GET /api/runs/{run_id}" exists.
+    headings = set(re.findall(r"^### ([A-Z]+ \S+)$", reference, flags=re.MULTILINE))
+    missing = [f"{m} {p}" for m, p in operations if f"{m} {p}" not in headings]
     assert not missing, f"operations missing from the generated reference: {missing}"
 
 
@@ -87,9 +89,14 @@ async def test_reference_resolves_schemas_and_skips_hidden_routes(app, user_clie
     async def internal() -> dict:
         return {}
 
+    routes_before = list(app.router.routes)
     app.include_router(hidden)
     app.openapi_schema = None  # rebuild with the extra route
-    text = (await user_client.get("/api/skill")).text
+    try:
+        text = (await user_client.get("/api/skill")).text
+    finally:  # leave the shared app as it was
+        app.router.routes[:] = routes_before
+        app.openapi_schema = None
     assert "/api/internal-only" not in text
     assert "$ref" not in text
     reference = text[text.index("## Endpoint reference") :]
