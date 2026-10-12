@@ -186,3 +186,41 @@ def test_system_prompt_forces_english_free_text_with_verbatim_quotes():
         "quotes stay verbatim",
     ):
         assert expected in text, expected
+
+
+def test_an_interrupted_agent_turn_separates_heard_from_unheard_text():
+    rows = [
+        {"role": "caller", "text": "Count to thirty.", "start_ms": 0},
+        {
+            "role": "agent",
+            "text": "One.  \nTwo.  \nThree.  \nFour.  \nFive.",
+            "start_ms": 2000,
+            "interrupted": True,
+            "heard_text": "One.  \nTwo.",
+            "audio_end_ms": 4021,
+        },
+    ]
+
+    line = render_transcript(rows).splitlines()[1]
+
+    assert "[INTERRUPTED by the caller after 4021 ms of audio]" in line
+    assert 'heard by the caller: "One. Two."' in line
+    assert 'generated but NOT heard: "Three. Four. Five."' in line
+
+
+def test_an_interrupted_turn_without_audio_marks_nothing_heard():
+    rows = [
+        {
+            "role": "agent",
+            "text": "Hello there.",
+            "interrupted": True,
+            "heard_text": "",
+            "audio_end_ms": None,
+        }
+    ]
+
+    line = render_transcript(rows)
+
+    assert "[INTERRUPTED by the caller before any audio]" in line
+    assert 'heard by the caller: ""' in line
+    assert 'generated but NOT heard: "Hello there."' in line

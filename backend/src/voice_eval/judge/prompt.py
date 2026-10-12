@@ -130,6 +130,9 @@ it. If the evidence a criterion needs is not there at all, set `observable` to f
 turn, C2 for the caller's second), a timing row (T4) or a trace (R2, optionally followed by \
 the observation name); `quote` holds the exact words or values you relied on.
 - The caller is simulated: never judge the caller, only the agent.
+- A turn marked [INTERRUPTED by the caller] was cut: the caller heard only the "heard by the \
+caller" part; the "generated but NOT heard" part never reached them. Judge what the agent later \
+says it said, or where it resumes, against the heard part only.
 
 ## How to judge each criterion
 - Judge exactly the criteria listed in <criteria>, one answer each, using the criterion id \
@@ -188,6 +191,13 @@ def _clip(text: Any, limit: int) -> str:
     return text if len(text) <= limit else text[: limit - 1] + "…"
 
 
+def _unheard(text: Any, heard: str) -> str:
+    """The part of an interrupted reply after what the caller heard (whitespace-insensitive)."""
+    full = " ".join(str(text or "").split())
+    said = " ".join(heard.split())
+    return full[len(said) :].strip() if said and full.startswith(said) else full
+
+
 def _block(text: Any, limit: int = MAX_CONTEXT_CHARS) -> str:
     text = str(text or "").strip()
     return text if len(text) <= limit else text[: limit - 1] + "…"
@@ -229,7 +239,22 @@ def render_transcript(transcript: list[dict[str, Any]]) -> str:
         counters[role] += 1
         label = f"{'A' if role == 'agent' else 'C'}{counters[role]}"
         line = f"{label} [{_clock(row.get('start_ms'))}] {role.upper()}: "
-        line += _clip(row.get("text"), MAX_ROW_CHARS)
+        if role == "agent" and row.get("interrupted"):
+            # The caller cut this reply: only the heard part reached them.
+            heard = row.get("heard_text") or ""
+            at = row.get("audio_end_ms")
+            when = (
+                f"after {_ms(at)} of audio"
+                if isinstance(at, int | float) and at
+                else "before any audio"
+            )
+            line += (
+                f"[INTERRUPTED by the caller {when}] heard by the caller: "
+                f'"{_clip(heard, MAX_ROW_CHARS)}" | generated but NOT heard: '
+                f'"{_clip(_unheard(row.get("text"), heard), MAX_ROW_CHARS)}"'
+            )
+        else:
+            line += _clip(row.get("text"), MAX_ROW_CHARS)
         if role == "agent" and isinstance(row.get("latency_ms"), int | float):
             line += f" (latency {_ms(row['latency_ms'])})"
         if role == "caller" and row.get("reason"):
