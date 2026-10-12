@@ -40,8 +40,8 @@ rendering.
 - Single model call per judgement (stability is measured first; sampling only if needed).
 
 ## Tasks
-- [ ] T1 Backend judge v2: schema, prompt, parsing, bands, caps, gating, escaping, brief — route: delegated
-- [ ] T2 Frontend: bands, failure tags, unobservable reasons, v1 compatibility — route: delegated
+- [x] T1 Backend judge v2: schema, prompt, parsing, bands, caps, gating, escaping, brief — route: delegated
+- [x] T2 Frontend: bands, failure tags, unobservable reasons, v1 compatibility — route: delegated
 - [ ] T3 Stability CLI + measurement on ec3633f4 (paid; ask) — route: delegated + inline run
 
 ## Acceptance criteria
@@ -50,4 +50,15 @@ rendering.
 - Stability measured: per-criterion band spread reported for ≥3 judgements of one run.
 
 ## Progress
-(none yet)
+- T1 f8b7942 (delegated; ~980 lines; RED observed; pytest 749). Reviewed with 791affe/2b615e1
+  (1132 lines): correction_required — CRITICAL R3-median-overflow-test (p50 median of two huge
+  floats could overflow; test relied on it). Corrected in 70f79bd (median halves before adding),
+  targeted validation APPROVED + acknowledged.
+- T2 a906b0c (delegated; RED observed; vitest 324, lint, typecheck): bands, capped badge with text
+  explanation, failure-tag chips, unobservable reasons, run-level tag summary; v1 results unchanged.
+- T3 CLI 8e6d770 (delegated; RED observed; pytest 766): `voice-eval judge-stability <run> --times N
+  [--json]`, single Langfuse fetch, N judge calls, nothing stored. T2+T3 reviewed (1063 lines):
+  APPROVED + acknowledged. Advisories: CLI judge-failure / master-key exits untested; evaluator
+  KeyError now fails during collecting instead of judging; unjudgeable-run test doesn't assert no
+  paid calls.
+- Stack rebuilt with judge v2. Pending: real stability measurement on ec3633f4 (3 paid calls, ask).
