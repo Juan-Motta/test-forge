@@ -18,10 +18,10 @@ conservative answers.
 Out of scope: word/audio alignment, re-implementing the provider's correction, changing Vivi.
 
 ## Tasks
-- [ ] T1 Backend: capture `conversation.item.truncated` / `.deleted` from the target and correlate
+- [x] T1 Backend: capture `conversation.item.truncated` / `.deleted` from the target and correlate
       by item id with each `playback.interrupted`; summary/transcript/live/judge fields; heard text
       marked approximate in the judge prompt + tolerance rule; README + skill guide — delegated
-- [ ] T2 Frontend: transcript + live show "≈ heard" and confirmation status — delegated
+- [x] T2 Frontend: transcript + live show "≈ heard" and confirmation status — delegated
 - [x] T3 Update the interruption scenarios' criteria (pipeline + realtime copies) — inline
 
 ## Contract
@@ -42,4 +42,17 @@ Out of scope: word/audio alignment, re-implementing the provider's correction, c
   sure where it stopped" and (must 35) "resumes from a conservative point (at or before the last
   heard number) or admits it does not know and asks; never continues from an unheard number".
   Criterion ids and weights kept.
-- T1/T2: delegated writers in progress.
+- T2 5ef816b (delegated; RED observed; vitest 390): "≈ heard" label, confirmation status in run
+  transcript and live (`interruptionConfirmed`). Writer's prettier mishap reverted; commit holds
+  only the 8 intended files.
+- T1 95b80df (delegated; RED observed; pytest 923): target events ItemTruncated/ItemDeleted,
+  runner correlates by item id → `interruption_confirmed` events, summary `confirmation`,
+  `confirmed_audio_end_ms`, `confirmed_at_ms`, `items[]`; rows `heard_text_estimated`,
+  `interruption_confirmed`; live `interruptionConfirmed`; judge prompt "approximately heard … correction
+  confirmed: yes|no|unknown" + tolerance rule; skill guide + README.
+- Repo: `.codegraph/` added to .gitignore (local index, blocked the review's untracked check).
+- Review (705 lines): correction_required — CRITICAL: an interrupted reply with no transcript
+  crashed the runner (KeyError on `interruption_confirmed`). Fixed in a2c6fe4 (record the row
+  always; RED reproduced as failed/internal_error; runner tests 35 passed). Targeted validation
+  APPROVED + acknowledged. Backend rebuilt.
+- Next: a run against the local agent to see whether Vivi confirms the correction (ask).
