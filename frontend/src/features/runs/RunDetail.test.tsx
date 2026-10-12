@@ -119,7 +119,40 @@ describe("Run detail", () => {
     const transcript = await screen.findByRole("list", { name: "Transcript" });
     const row = within(transcript).getByRole("listitem");
     expect(row).toHaveTextContent("Hello, how can I help you today?");
-    expect(row).toHaveTextContent("Heard before the interruption at 1.5 s: “Hi, how can”");
+    expect(row).toHaveTextContent(
+      "≈ Heard before the interruption at 1.5 s (estimated from the audio played): “Hi, how can”",
+    );
+  });
+
+  it("labels the heard part as approximate and says whether the agent confirmed the correction", async () => {
+    const agentRow = (heardText: string, confirmed?: boolean) => ({
+      role: "agent" as const,
+      text: `${heardText} and the rest.`,
+      startMs: 1200,
+      endMs: 2600,
+      latencyMs: null,
+      interrupted: true,
+      heardText,
+      audioEndMs: 1500,
+      ...(confirmed === undefined ? {} : { heardTextEstimated: true as const, interruptionConfirmed: confirmed }),
+    });
+    const interrupted = runDetailFixture({
+      transcript: [agentRow("Confirmed part", true), agentRow("Unconfirmed part", false), agentRow("Older part")],
+    });
+    mockRunsApi([run], { details: { "r-1": interrupted } });
+    renderWithClient(<RunDetailContainer runId="r-1" />);
+
+    const transcript = await screen.findByRole("list", { name: "Transcript" });
+    const [confirmed, unconfirmed, older] = within(transcript).getAllByRole("listitem");
+    const approx = "Approximately heard (estimated from the audio played)";
+    expect(within(confirmed).getByTitle(approx)).toHaveTextContent(`${approx}: Confirmed part`);
+    expect(within(confirmed).getByText("≈ heard")).toBeInTheDocument();
+    expect(within(confirmed).getByText("Correction confirmed by the agent")).toBeInTheDocument();
+    expect(within(unconfirmed).getByText("Correction not confirmed")).toBeInTheDocument();
+    expect(within(unconfirmed).queryByText("Correction confirmed by the agent")).not.toBeInTheDocument();
+    // Older runs carry neither field: the heard part is still an estimate, the confirmation unknown.
+    expect(within(older).getByTitle(approx)).toHaveTextContent("Older part");
+    expect(within(older).queryByText(/Correction/)).not.toBeInTheDocument();
   });
 
   it.each([

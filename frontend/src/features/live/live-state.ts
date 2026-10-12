@@ -30,7 +30,17 @@ export type PendingLine = { decisionId: number | null; say: string; tMs: number 
 export type BargeIn = { tMs: number | null; callerTurn: number | null };
 type Turn = { turn: number; latencyMs: number | null };
 /** The caller cut agent reply #`agentTurn` (1-based, like the scenario) once `audioEndMs` had played. */
-export type CallerInterruption = { agentTurn: number | null; audioEndMs: number | null; heardText: string; tMs: number | null };
+export type CallerInterruption = {
+  agentTurn: number | null;
+  audioEndMs: number | null;
+  heardText: string;
+  tMs: number | null;
+  /** The target item the caller cut, when reported. */
+  itemId?: string;
+  /** Set once the agent's server confirmed the correction (`interruptionConfirmed`). */
+  confirmed?: true;
+  kind?: "truncated" | "deleted";
+};
 
 export type LiveRunState = {
   status: RunStatus | null;
@@ -97,7 +107,8 @@ const liveTurnOf = (interruption: CallerInterruption) =>
   interruption.agentTurn === null ? null : interruption.agentTurn - 1;
 
 function interrupted(entry: TranscriptEntry, interruption: CallerInterruption): TranscriptEntry {
-  return { ...entry, interruption: { heardText: interruption.heardText, audioEndMs: interruption.audioEndMs } };
+  const { heardText, audioEndMs, confirmed } = interruption;
+  return { ...entry, interruption: confirmed ? { heardText, audioEndMs, confirmed } : { heardText, audioEndMs } };
 }
 
 /**
@@ -187,12 +198,30 @@ export function liveReducer(state: LiveRunState, action: LiveAction): LiveRunSta
         audioEndMs: num(message.audioEndMs ?? message.audio_end_ms),
         heardText: str(message.heardText ?? message.heard_text),
         tMs: num(message.tMs),
+        ...(str(message.itemId) ? { itemId: str(message.itemId) } : {}),
       };
       const turn = liveTurnOf(interruption);
       const entries = state.entries.map((entry) =>
         entry.role === "agent" && turn !== null && entry.turn === turn ? interrupted(entry, interruption) : entry,
       );
       return { ...state, entries, interruptions: [...state.interruptions, interruption] };
+    }
+    case "interruptionConfirmed": {
+      const agentTurn = num(message.agentTurn);
+      const itemId = str(message.itemId);
+      // The interruption this confirms: same item when both know it, else the open one of that reply.
+      const index = state.interruptions.findIndex(
+        (item) => !item.confirmed && (item.itemId && itemId ? item.itemId === itemId : item.agentTurn === agentTurn),
+      );
+      if (index === -1) return state;
+      const kind = message.kind === "truncated" || message.kind === "deleted" ? message.kind : undefined;
+      const confirmed: CallerInterruption = { ...state.interruptions[index], confirmed: true, ...(kind ? { kind } : {}) };
+      const interruptions = state.interruptions.map((item, i) => (i === index ? confirmed : item));
+      const turn = liveTurnOf(confirmed);
+      const entries = state.entries.map((entry) =>
+        entry.role === "agent" && turn !== null && entry.turn === turn ? interrupted(entry, confirmed) : entry,
+      );
+      return { ...state, entries, interruptions };
     }
     case "agentBargeIn":
       return { ...state, bargeIns: [...state.bargeIns, { tMs: num(message.tMs), callerTurn: num(message.callerTurn) }] };
@@ -217,4 +246,10 @@ export function liveReducer(state: LiveRunState, action: LiveAction): LiveRunSta
     default:
       return state;
   }
+}
+
+/** Whether the agent confirmed the correction an interruption asked for, as of now. */
+export function confirmationLabel(interruption: CallerInterruption, finished: boolean): string {
+  if (interruption.confirmed) return "Correction confirmed";
+  return finished ? "Not confirmed" : "Waiting for the agent to confirm the correction";
 }

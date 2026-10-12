@@ -19,8 +19,12 @@ export type TranscriptEntry = {
   interruption?: Interruption;
 };
 
-/** Where the caller cut an agent line: what had played (`heardText`) and when (`audioEndMs`). */
-export type Interruption = { heardText: string; audioEndMs: number | null };
+/**
+ * Where the caller cut an agent line: what had played (`heardText`, an estimate from the share of
+ * audio played) and when (`audioEndMs`). `confirmed`: whether the agent's server confirmed the
+ * correction; `undefined` when unknown (older runs, or not reported yet).
+ */
+export type Interruption = { heardText: string; audioEndMs: number | null; confirmed?: boolean };
 
 /** An interrupted line split into what the caller heard and the rest; `null` when the heard text is not its start. */
 export function splitHeard(text: string, heardText: string): { heard: string; unheard: string } | null {
@@ -37,7 +41,10 @@ export function interruptedAt(audioEndMs: number | null): string {
 
 function interruptionOf(row: TranscriptRow): Interruption | undefined {
   if (row.role !== "agent" || !row.interrupted) return undefined;
-  return { heardText: row.heardText ?? "", audioEndMs: row.audioEndMs ?? null };
+  const interruption: Interruption = { heardText: row.heardText ?? "", audioEndMs: row.audioEndMs ?? null };
+  return typeof row.interruptionConfirmed === "boolean"
+    ? { ...interruption, confirmed: row.interruptionConfirmed }
+    : interruption;
 }
 
 /** Entries from `transcript.json` rows (finished run) or a live snapshot's transcript. */

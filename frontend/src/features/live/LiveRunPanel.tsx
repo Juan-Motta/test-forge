@@ -15,7 +15,7 @@ import type { LiveConnectionState } from "@/lib/live/connection";
 import { useNow } from "@/lib/time/use-now";
 import { Alert, Button, Card, CardHeader, Spinner, buttonClasses } from "@/ui";
 import { ListenControls } from "./ListenControls";
-import { TURN_STATE_LABELS } from "./live-state";
+import { TURN_STATE_LABELS, confirmationLabel } from "./live-state";
 import { useRunLive } from "./use-run-live";
 
 const POLL_MS = 3000;
@@ -150,7 +150,7 @@ export function LiveRunPanel({ runId }: { runId: string }) {
             <ul aria-label="Caller interruptions" className="flex flex-col gap-0.5 text-xs text-dim">
               {state.interruptions.map((interruption, index) => (
                 <li key={index}>
-                  {`Caller interrupted agent reply #${interruption.agentTurn ?? "?"} ${interruptedAt(interruption.audioEndMs)} · heard “${interruption.heardText}”`}
+                  {`Caller interrupted agent reply #${interruption.agentTurn ?? "?"} ${interruptedAt(interruption.audioEndMs)} · ≈ heard “${interruption.heardText}” · ${confirmationLabel(interruption, state.finished)}`}
                 </li>
               ))}
             </ul>

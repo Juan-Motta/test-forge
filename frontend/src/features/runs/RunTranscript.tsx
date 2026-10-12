@@ -62,7 +62,20 @@ export function RunTranscript({ entries, live = false, emptyText, anchors = fals
   );
 }
 
-/** The heard part as usual and the unheard rest struck through, with its meaning spelled out for screen readers. */
+const APPROXIMATE = "Approximately heard (estimated from the audio played)";
+
+/** Whether the agent's server confirmed the correction; nothing when unknown (older runs). */
+function Confirmation({ confirmed }: { confirmed?: boolean }) {
+  if (confirmed === undefined) return null;
+  return (
+    <p className="text-xs text-muted">{confirmed ? "Correction confirmed by the agent" : "Correction not confirmed"}</p>
+  );
+}
+
+/**
+ * The heard part, labelled as an estimate, and the unheard rest struck through, with their meaning
+ * spelled out for screen readers; then whether the agent confirmed the correction.
+ */
 function InterruptedText({ text, interruption }: { text: string; interruption: Interruption }) {
   const at = interruptedAt(interruption.audioEndMs);
   const split = splitHeard(text, interruption.heardText);
@@ -71,22 +84,34 @@ function InterruptedText({ text, interruption }: { text: string; interruption: I
       <>
         <p className="text-sm leading-relaxed break-words">{text}</p>
         <p className="text-xs text-muted">
-          {`Heard before the interruption${interruption.audioEndMs ? ` ${at}` : ""}: “${interruption.heardText.trim()}”`}
+          {`≈ Heard before the interruption${interruption.audioEndMs ? ` ${at}` : ""} (estimated from the audio played): “${interruption.heardText.trim()}”`}
         </p>
+        <Confirmation confirmed={interruption.confirmed} />
       </>
     );
   }
   const label = `Not heard — the caller interrupted ${at}`;
   return (
-    <p className="text-sm leading-relaxed break-words">
-      {split.heard ? <span>{split.heard}</span> : null}
-      {split.heard && split.unheard ? " " : null}
-      {split.unheard ? (
-        <span title={label} className="text-dim line-through">
-          <span className="sr-only">{`${label}: `}</span>
-          {split.unheard}
-        </span>
-      ) : null}
-    </p>
+    <>
+      <p className="text-sm leading-relaxed break-words">
+        {split.heard ? (
+          <span title={APPROXIMATE}>
+            <span aria-hidden="true" className="mr-1 font-mono text-xs text-dim">
+              ≈ heard
+            </span>
+            <span className="sr-only">{`${APPROXIMATE}: `}</span>
+            <span>{split.heard}</span>
+          </span>
+        ) : null}
+        {split.heard && split.unheard ? " " : null}
+        {split.unheard ? (
+          <span title={label} className="text-dim line-through">
+            <span className="sr-only">{`${label}: `}</span>
+            {split.unheard}
+          </span>
+        ) : null}
+      </p>
+      <Confirmation confirmed={interruption.confirmed} />
+    </>
   );
 }

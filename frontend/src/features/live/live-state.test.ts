@@ -53,3 +53,59 @@ describe("liveReducer: caller interruptions", () => {
     expect(state.entries[0].interruption).toEqual({ heardText: "Hello", audioEndMs: 600 });
   });
 });
+
+describe("liveReducer: interruption confirmations", () => {
+  const cut = send(started, {
+    type: "callerInterrupted",
+    tMs: 3500,
+    agentTurn: 1,
+    audioEndMs: 1500,
+    heardText: "Hello, how",
+    itemId: "item-1",
+  });
+
+  it("leaves an interruption unconfirmed until the agent confirms it", () => {
+    expect(cut.interruptions[0].confirmed).toBeUndefined();
+    expect(cut.entries[0].interruption?.confirmed).toBeUndefined();
+  });
+
+  it("marks the interruption and its agent reply confirmed", () => {
+    const state = send(cut, {
+      type: "interruptionConfirmed",
+      tMs: 3700,
+      agentTurn: 1,
+      itemId: "item-1",
+      kind: "truncated",
+      audioEndMs: 1500,
+    });
+    expect(state.interruptions[0]).toMatchObject({ confirmed: true, kind: "truncated" });
+    expect(state.entries[0].interruption).toMatchObject({ heardText: "Hello, how", confirmed: true });
+  });
+
+  it("keeps the confirmation for a reply whose transcript arrives later", () => {
+    let state = send(started, { type: "callerInterrupted", tMs: 9000, agentTurn: 2, audioEndMs: 4000, heardText: "Our rooms" });
+    state = send(state, { type: "interruptionConfirmed", tMs: 9100, agentTurn: 2, itemId: "item-2", kind: "deleted", audioEndMs: 0 });
+    state = send(state, { type: "agentTranscript", tMs: 9200, turn: 1, text: "Our rooms start at 120." });
+    expect(state.entries[1].interruption).toMatchObject({ confirmed: true });
+  });
+
+  it("reads the confirmation stored in a snapshot's transcript rows", () => {
+    const state = send(INITIAL_LIVE_STATE, {
+      type: "snapshot",
+      run: { status: "running" },
+      transcript: [
+        {
+          role: "agent",
+          text: "Hello there",
+          turn: 0,
+          tMs: 2000,
+          interrupted: true,
+          heardText: "Hello",
+          audioEndMs: 600,
+          interruptionConfirmed: true,
+        },
+      ],
+    });
+    expect(state.entries[0].interruption).toMatchObject({ confirmed: true });
+  });
+});

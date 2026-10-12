@@ -78,6 +78,10 @@ export type TranscriptRow = {
   heardText?: string;
   /** Agent rows: how much of the reply had played when the caller cut in; `null`/0 = nothing. */
   audioEndMs?: number | null;
+  /** Interrupted agent rows: `heardText` is estimated from the share of audio played (always, in practice). */
+  heardTextEstimated?: true;
+  /** Interrupted agent rows: the agent's server confirmed the correction; absent in older runs (unknown). */
+  interruptionConfirmed?: boolean;
 };
 
 /** What the run was launched with (snake_case keys camelized by the API). */

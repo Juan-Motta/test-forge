@@ -114,7 +114,33 @@ describe("Live run", () => {
     expect(within(agent).getByText("Hello, how")).toBeInTheDocument();
     expect(within(agent).getByTitle("Not heard — the caller interrupted at 1.5 s")).toHaveTextContent("can I help?");
     const list = screen.getByRole("list", { name: "Caller interruptions" });
-    expect(list).toHaveTextContent("Caller interrupted agent reply #1 at 1.5 s · heard “Hello, how”");
+    expect(list).toHaveTextContent("Caller interrupted agent reply #1 at 1.5 s · ≈ heard “Hello, how”");
+  });
+
+  it("shows whether the agent confirmed each correction", async () => {
+    const { socket } = await renderPanel();
+    act(() => {
+      socket.send(snapshot);
+      socket.send({ type: "callerInterrupted", tMs: 3600, agentTurn: 1, audioEndMs: 1500, heardText: "Hello, how" });
+      socket.send({ type: "callerInterrupted", tMs: 8600, agentTurn: 2, audioEndMs: 900, heardText: "For" });
+    });
+    const list = screen.getByRole("list", { name: "Caller interruptions" });
+    const [first, second] = within(list).getAllByRole("listitem");
+    expect(first).toHaveTextContent("Waiting for the agent to confirm the correction");
+
+    act(() =>
+      socket.send({ type: "interruptionConfirmed", tMs: 3700, agentTurn: 1, itemId: "i1", kind: "truncated", audioEndMs: 1500 }),
+    );
+    expect(first).toHaveTextContent("Correction confirmed");
+    expect(first).not.toHaveTextContent("Waiting");
+    expect(second).toHaveTextContent("Waiting for the agent to confirm the correction");
+    const [agent] = within(screen.getByRole("list", { name: "Transcript" })).getAllByRole("listitem");
+    expect(within(agent).getByText("Correction confirmed by the agent")).toBeInTheDocument();
+
+    act(() => socket.send({ type: "finished", status: "completed", reason: "hang_up" }));
+    expect(first).toHaveTextContent("Correction confirmed");
+    expect(second).toHaveTextContent("Not confirmed");
+    expect(second).not.toHaveTextContent("Waiting");
   });
 
   it("replaces what it showed with the snapshot of a new connection", async () => {
