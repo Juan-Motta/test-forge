@@ -17,9 +17,11 @@ flows and how to read the results.
   `openai`, `azure_openai` (voice, evaluator chat model, realtime models), `azure_speech`
   (stored but cannot synthesize speech yet: do not use it as a voice) and `langfuse` (reads the
   agent's traces).
-- **Agent**: a voice agent under test: its WebSocket `baseUrl`, `channelId`, `userId`, optional
-  `origin`, `protocol` and optional Langfuse connection. Its `context` (what the agent does) is
-  shared by all its scenarios.
+- **Agent**: the agent under test, of `kind` `voice` (default: its WebSocket `baseUrl`,
+  `channelId`, `userId`, optional `origin`, `protocol`) or `text` (a chat over HTTP: `baseUrl`,
+  `channelId`, `textMode`, `auth`, optional `origin`), plus an optional Langfuse connection. Its
+  `context` (what the agent does) is shared by all its scenarios. Text agents cannot be run yet
+  (launching one answers `422`).
 - **Scenario**: one kind of call to an agent: persona, goal, facts the caller knows, criteria the
   judge scores, end conditions, optional interruptions, and the evaluator setup (voice
   connection, evaluator chat connection, `evaluatorMode`, `realtimeModel`, `voiceOverride`).
@@ -131,11 +133,36 @@ Usually a human has already configured connections, agents and scenarios: list t
   agent checks it.
 - `409` when the name is taken; `DELETE /api/agents/{agentId}` answers `409` while scenarios use
   the agent.
+- Text agents (`"kind": "text"`, fixed at creation) chat over the Vivi channel API
+  (`{baseUrl}/channelsApi/{channelId}/invoke|stream`):
+
+  ```json
+  {
+    "name": "Support chat (staging)",
+    "kind": "text",
+    "context": "A bank's chat assistant: answers card and account questions.",
+    "baseUrl": "https://vivi.example.com/api",
+    "channelId": "6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b",
+    "textMode": "stream",
+    "auth": "api_key",
+    "apiKey": "<the channel's vivi-api-key>"
+  }
+  ```
+
+  `baseUrl` must be `https://` (`http://` only for the local hosts above); `channelId` is a UUID;
+  `textMode` is `stream` (default) or `invoke` (needed when the agent has a response schema);
+  `auth` is `none` (default, e.g. WEB channels) or `api_key` (API channels), which requires
+  `apiKey`. The key is write-only: responses carry only `hasApiKey` and `apiKeyHint`; send a new
+  `apiKey` to replace it, or `"auth": "none"` to remove it. `userId` and `protocol` apply only to
+  voice agents; `textMode`, `auth` and `apiKey` only to text agents.
 - Check that the agent answers (ask first): `POST /api/agents/{agentId}/test` opens its
   WebSocket like a run does, waits until the session is ready (8 seconds at most), then closes
   it; no audio is sent. It answers `200` with `reachable`, `latencyMs` (connect + ready),
   `protocol` (`live` or `realtime`, once detected) and `log`, a list of `{ok, message}` steps;
-  an unreachable agent has `reachable: false` and a failing last step.
+  an unreachable agent has `reachable: false` and a failing last step. For a text agent it sends
+  one short message ("Hello, this is a connection test.") in a fresh conversation and waits for
+  the whole reply (this reaches the agent, which answers it); `latencyMs` is the reply time and
+  `protocol` is `null`.
 
 ### Scenarios
 

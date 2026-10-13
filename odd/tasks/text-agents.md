@@ -41,7 +41,7 @@ chat with the agent over Vivi's channel API, every conversation is recorded, jud
   text; "Voice agent evals" → "Agent evals"; guide updated.
 
 ## Tasks
-- [ ] T1 Backend agents: `kind` + text config + sealed api key (migration), API/validation,
+- [x] T1 Backend agents: `kind` + text config + sealed api key (migration), API/validation,
       text target port + HTTP adapter (invoke + stream parser, egress guard), connection test — delegated
 - [ ] T2 Backend runs: text session runner (max turns, artifacts/summary without audio), launch
       gate + scenario validation by agent kind, evaluator text prompt, manager branch, live text
@@ -53,3 +53,12 @@ chat with the agent over Vivi's channel API, every conversation is recorded, jud
 - [ ] T6 Real run against a Vivi text agent (paid; ask first) — inline
 
 ## Progress
+- T1 done (delegated writer, uncommitted): `kind` + text config + sealed `vivi-api-key`
+  (migration 0013, DB checks per kind), write-only `apiKey` (`hasApiKey`/`apiKeyHint`), port
+  `ports/text_target.py` (`TextTarget.send(message, thread_id=) -> AsyncIterator[TextDelta |
+  ToolStarted | ToolEnded | ReplyEnded]`, `collect()` -> `TextReply`), adapter
+  `targets/http_chat.py` (`HttpChatTarget`, egress-guarded), text connection test, snapshot
+  `kind`/`text_mode`/`auth`/`has_api_key`, launch gate "Text agents cannot be run yet" (T2
+  removes it in `runs/service._plan` and the guide). Evidence: RED (import/assert failures)
+  then `uv run pytest -q` 1038 passed; ruff check + format clean; migration round trip covered
+  by `tests/platform/test_migrations.py`.

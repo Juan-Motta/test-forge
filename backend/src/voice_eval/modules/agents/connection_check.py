@@ -1,5 +1,7 @@
-"""Agent connection test: open the agent's WebSocket like a run does, wait until its session is
-ready, then close it the way a run closes it. No audio and no response request are ever sent.
+"""Agent connection test. Voice: open the agent's WebSocket like a run does, wait until its
+session is ready, then close it the way a run closes it; no audio and no response request are
+ever sent. Text: send one short message in a fresh conversation and wait for the whole reply
+(this reaches the agent, which answers it).
 
 The target is built like a run's (`run_target_spec`): the protocol is detected from the first
 frames (a forced protocol must match), the Origin header is the agent's, and a loopback host is
@@ -10,15 +12,18 @@ its query string, and never anything the agent sent back.
 import asyncio
 import logging
 import time
+import uuid
 from collections.abc import AsyncIterator
 from contextlib import suppress
 from dataclasses import dataclass, field
 from urllib.parse import urlsplit, urlunsplit
 
+import httpx
 from websockets.exceptions import ConnectionClosed, InvalidHandshake, InvalidStatus, InvalidURI
 
-from voice_eval.modules.agents.domain import Agent
+from voice_eval.modules.agents.domain import Agent, AgentKind, TextMode
 from voice_eval.ports.target import Ready, ServerEvent, TargetSession
+from voice_eval.ports.text_target import TextTargetError, collect
 from voice_eval.runner.common import close_session
 from voice_eval.targets.connection import dial_base_url, open_socket, realtime_url
 from voice_eval.targets.detect import (
@@ -27,12 +32,15 @@ from voice_eval.targets.detect import (
     attach_session,
     detect_protocol,
 )
+from voice_eval.targets.http_chat import HttpChatTarget
 
 log = logging.getLogger(__name__)
 
 READY_TIMEOUT_S = 8.0  # connect, protocol detection and readiness, together
 CLOSE_TIMEOUT_S = 3.0
 TEST_THREAD_ID = "connection-test"
+TEXT_TEST_MESSAGE = "Hello, this is a connection test."
+TEXT_TEST_TIMEOUT_S = 60.0  # the whole reply, tools included
 
 
 @dataclass(frozen=True)
@@ -188,3 +196,70 @@ async def _disconnect(session: TargetSession | None) -> None:
     if session is not None:
         with suppress(Exception):
             await session.disconnect()
+
+
+def text_target(
+    agent: Agent,
+    api_key: str | None,
+    *,
+    local_target_host: str | None,
+    allow_private: bool,
+    transport: httpx.AsyncBaseTransport | None = None,
+) -> HttpChatTarget:
+    """The chat target of text `agent`, dialled like a voice agent (loopback via
+    `local_target_host`) and through the egress guard unless `transport` is given."""
+    if agent.kind != AgentKind.TEXT:
+        raise ValueError("only text agents have a chat target")
+    return HttpChatTarget(
+        base_url=dial_base_url(agent.base_url, local_target_host),
+        channel_id=agent.channel_id,
+        mode=(agent.text_mode or TextMode.STREAM).value,
+        api_key=api_key,
+        origin=agent.origin,
+        transport=transport,
+        allow_private=allow_private,
+    )
+
+
+async def check_text_connection(
+    agent: Agent,
+    api_key: str | None,
+    *,
+    local_target_host: str | None,
+    allow_private: bool,
+    transport: httpx.AsyncBaseTransport | None = None,
+) -> ConnectionCheck:
+    """Send `TEXT_TEST_MESSAGE` with a fresh threadId and wait for the reply. Never raises.
+
+    The log never carries what the agent answered, nor the API key.
+    """
+    check = ConnectionCheck()
+    target = text_target(
+        agent,
+        api_key,
+        local_target_host=local_target_host,
+        allow_private=allow_private,
+        transport=transport,
+    )
+    check.step(f"Sending a test message to {_safe_url(target.url)}")
+    try:
+        async with asyncio.timeout(TEXT_TEST_TIMEOUT_S):
+            reply = await collect(target.send(TEXT_TEST_MESSAGE, thread_id=str(uuid.uuid4())))
+    except TimeoutError:
+        check.step(f"No complete reply within {_seconds(TEXT_TEST_TIMEOUT_S)} s", ok=False)
+        return check
+    except TextTargetError as exc:
+        check.step(str(exc), ok=False)
+        return check
+    except Exception as exc:
+        log.info("text agent connection test failed (%s)", type(exc).__name__)
+        check.step(f"Connection failed ({type(exc).__name__})", ok=False)
+        return check
+    if reply.first_text_ms is not None:
+        check.step(f"First text in {reply.first_text_ms} ms")
+    if reply.tools:
+        check.step(f"The agent used {len(reply.tools)} tool(s)")
+    check.latency_ms = reply.total_ms
+    check.reachable = True
+    check.step(f"Reply received in {reply.total_ms} ms ({len(reply.text)} characters)")
+    return check

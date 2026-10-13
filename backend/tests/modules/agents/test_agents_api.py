@@ -25,6 +25,11 @@ FIELDS = {
     "userId",
     "origin",
     "langfuseConnectionId",
+    "kind",
+    "textMode",
+    "auth",
+    "hasApiKey",
+    "apiKeyHint",
     "createdAt",
     "updatedAt",
 }
@@ -68,6 +73,8 @@ async def test_create_returns_the_agent(user_client, db):
     assert body["baseUrl"] == "wss://agents.example.com"
     assert body["origin"] == "https://portal.example.com"
     assert body["langfuseConnectionId"] is None
+    assert (body["kind"], body["textMode"], body["auth"]) == ("voice", None, None)
+    assert (body["hasApiKey"], body["apiKeyHint"]) == (False, None)
     async with db() as session:
         row = await session.get(AgentRecord, uuid.UUID(body["id"]))
     assert row.created_by is not None

@@ -195,15 +195,19 @@ def snapshot(plan: RunPlan) -> dict[str, Any]:
             "evaluator_mode": scenario.evaluator_mode.value,
             "realtime_model": scenario.realtime_model.value,
         },
-        "agent": {
+        "agent": {  # never the API key of a text agent: only whether it has one
             "id": str(agent.id),
             "name": agent.name,
+            "kind": agent.kind.value,
             "context": agent.context,
             "protocol": agent.protocol.value,
             "base_url": agent.base_url,
             "channel_id": agent.channel_id,
             "user_id": agent.user_id,
             "origin": agent.origin,
+            "text_mode": agent.text_mode.value if agent.text_mode else None,
+            "auth": agent.auth.value if agent.auth else None,
+            "has_api_key": agent.has_api_key,
             "langfuse_connection_id": (
                 str(agent.langfuse_connection_id) if agent.langfuse_connection_id else None
             ),

@@ -12,6 +12,7 @@ from typing import Any
 from sqlalchemy import Boolean, Integer, Numeric, Select, case, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from voice_eval.modules.agents.domain import AgentKind
 from voice_eval.modules.agents.models import AgentRecord
 from voice_eval.modules.judgements.domain import JudgementStatus
 from voice_eval.modules.judgements.models import RunJudgementRecord
@@ -47,13 +48,15 @@ async def _plan(db: AsyncSession, scenario_id: uuid.UUID) -> RunPlan:
         scenario = await scenarios.get_scenario(db, scenario_id)
     except ScenarioNotFound:
         raise ScenarioNotRunnable("scenario not found") from None
+    agent = await db.get(AgentRecord, scenario.agent.id, populate_existing=True)
+    if agent is None:
+        raise ScenarioNotRunnable("the scenario's agent no longer exists")
+    if agent.kind != AgentKind.VOICE:
+        raise ScenarioNotRunnable("Text agents cannot be run yet")  # until the text runner
     tts = await scenarios.connection_ref(db, scenario.tts_connection_id)
     if tts is None:
         raise ScenarioNotRunnable("choose a voice (TTS) connection for this scenario")
     evaluator = await scenarios.evaluator_connection(db, scenario)
-    agent = await db.get(AgentRecord, scenario.agent.id, populate_existing=True)
-    if agent is None:
-        raise ScenarioNotRunnable("the scenario's agent no longer exists")
     return RunPlan(scenario=scenario, agent=agent.to_domain(), tts=tts, evaluator=evaluator)
 
 
