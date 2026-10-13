@@ -21,6 +21,17 @@ describe("guardRoute", () => {
     expect(guardRoute({ pathname: "/runs", search: "", hasSessionCookie: true })).toEqual({ type: "next" });
   });
 
+  it.each(["/guide", "/guide/", "/guide/getting-started", "/guide/scoring"])(
+    "lets the public user guide %s through without a session",
+    (pathname) => {
+      expect(guardRoute({ pathname, search: "", hasSessionCookie: false })).toEqual({ type: "next" });
+    },
+  );
+
+  it.each(["/guides", "/guidebook/x"])("still guards %s, which only starts like the guide", (pathname) => {
+    expect(guardRoute({ pathname, search: "", hasSessionCookie: false })).toMatchObject({ type: "redirect" });
+  });
+
   it.each(["/login", "/_next/static/chunks/app.js", "/_next/image", "/icon.svg", "/favicon.ico", "/api/auth/me"])(
     "never redirects %s",
     (pathname) => {

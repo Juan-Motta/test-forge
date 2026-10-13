@@ -4,6 +4,8 @@ import { loginHref } from "@/lib/navigation/next-param";
 export const SESSION_COOKIE_NAME = process.env.SESSION_COOKIE_NAME || "ve_session";
 
 const PUBLIC_PATHS = new Set(["/login"]);
+/** Public sections served with every sub-path (the user guide needs no session). */
+const PUBLIC_SECTIONS = ["/guide"];
 const PASSTHROUGH_PREFIXES = ["/_next/", "/api/"];
 const FILE_EXTENSION = /\.[^/]+$/;
 
@@ -18,6 +20,7 @@ export function guardRoute(input: { pathname: string; search: string; hasSession
   if (
     hasSessionCookie ||
     PUBLIC_PATHS.has(pathname) ||
+    PUBLIC_SECTIONS.some((section) => pathname === section || pathname.startsWith(`${section}/`)) ||
     pathname === "/_next" ||
     PASSTHROUGH_PREFIXES.some((prefix) => pathname.startsWith(prefix)) ||
     FILE_EXTENSION.test(pathname)

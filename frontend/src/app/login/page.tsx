@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { Suspense } from "react";
 import { LoginContainer } from "@/features/auth/LoginContainer";
 import { Brand } from "@/features/shell/Brand";
@@ -26,6 +27,11 @@ export default function LoginPage() {
             <LoginContainer />
           </Suspense>
         </section>
+        <p className="text-center text-sm text-muted">
+          <Link href="/guide" className="underline-offset-4 hover:underline">
+            New here? Read the guide
+          </Link>
+        </p>
       </div>
     </main>
   );

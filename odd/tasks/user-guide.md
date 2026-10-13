@@ -28,8 +28,17 @@ getting started, the end-to-end flow, and what every module does, explained in d
 8. Troubleshooting / FAQ.
 
 ## Tasks
-- [ ] T1 Guide route, layout with section nav, content and diagrams, links, tests — delegated
+- [x] T1 Guide route, layout with section nav, content and diagrams, links, tests — delegated
 - [ ] T2 Visual check in the browser (desktop + phone width) — inline
 - [ ] T3 Review, fast-forward `main`, push — inline
 
 ## Progress
+- T1 (delegated writer, 2026-10-12): `/guide` + 7 sub-pages (static server components under
+  `frontend/src/app/guide/`, shared pieces in `frontend/src/features/guide/`: sections, header,
+  nav (sticky aside on lg, `<details>` menu on phones), page wrapper with prev/next, prose
+  primitives, HTML diagrams (flow, run lifecycle, barge-in, judge samples) and inert mock-ups
+  (verdict row, scorecard, launch panel, KPIs)). Route guard lets `/guide` and `/guide/*` through
+  without a session; sidebar "User guide" link after "API docs"; login "New here? Read the guide".
+  Titles `<Section> · Duet guide` (absolute). RED observed first (6 failing tests + 2 missing
+  modules). Checks: vitest 584/584, lint clean, typecheck clean, build prerenders all 8 guide
+  pages as static. Not committed (parent commits).

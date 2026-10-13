@@ -98,6 +98,15 @@ describe("Sidebar", () => {
     expect(links.indexOf(docs)).toBeGreaterThan(links.indexOf(nav.getByRole("link", { name: "Settings" })));
   });
 
+  it("links the public user guide next to the API docs", () => {
+    const nav = renderSidebar("/");
+
+    const guide = nav.getByRole("link", { name: "User guide" });
+    expect(guide).toHaveAttribute("href", "/guide");
+    const links = nav.getAllByRole("link");
+    expect(links.indexOf(guide)).toBe(links.indexOf(nav.getByRole("link", { name: "API docs (opens in a new tab)" })) + 1);
+  });
+
   it("draws the environment as a pill with a chevron, not as a control", () => {
     renderSidebar("/");
 

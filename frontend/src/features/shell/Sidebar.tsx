@@ -73,6 +73,24 @@ export function Sidebar({
               API docs <span aria-hidden="true">↗</span>
             </a>
           </li>
+          <li>
+            {/* The public guide has its own layout, outside the app shell. */}
+            <Link
+              href="/guide"
+              onClick={onNavigate}
+              onNavigate={(event) => {
+                if (!confirmLeave()) event.preventDefault();
+              }}
+              className={cn(
+                "flex min-h-11 items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm font-medium text-muted no-underline transition-colors",
+                "hover:bg-active/60 hover:text-fg",
+                focusRing,
+              )}
+            >
+              <GuideIcon />
+              User guide
+            </Link>
+          </li>
         </ul>
       </nav>
       <UserMenu
@@ -121,5 +139,14 @@ function NavLink({ item, current, badge, onNavigate }: NavLinkProps) {
         ) : null}
       </Link>
     </li>
+  );
+}
+
+function GuideIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H11v16H5.5A1.5 1.5 0 0 1 4 18.5z" />
+      <path d="M20 5.5A1.5 1.5 0 0 0 18.5 4H13v16h5.5a1.5 1.5 0 0 0 1.5-1.5z" />
+    </svg>
   );
 }
