@@ -44,4 +44,13 @@ timeline (pauses, overlaps and barge-in cuts as they happened), instead of two u
   endpoint returns 200 audio/wav mono 24 kHz, 68.08 s, equal to the levels timeline (68.077 s);
   the report shows the "Conversation" player + "Download conversation .wav" (?download=1) under the
   lanes, and the agent/evaluator tracks inside a closed "Separate tracks" section.
+- Native review of ffd821d..360f861 (medium, granted): APPROVED + acknowledged. Its warning that
+  the in-memory response had no byte ranges was confirmed in the browser (seekable 0–0), so
+  cce1391 keeps the mix as `conversation.wav` next to the artifacts (mixed once, atomic write),
+  serves it as a FileResponse (206 + Accept-Ranges) and answers 409 while the run is active
+  (RED: 3 tests). Reviewed (medium, granted): APPROVED + acknowledged; its race warning (temp
+  name per process, not per call) fixed in 37815d7 (assessed under_budget). Browser after rebuild:
+  seekable 0–68.08 s, seek to 40 s works.
+- Open notes: a failed cache write is a 500 (read-only artifacts dir); the kept mix is not
+  invalidated if the mixer changes (delete `conversation.wav` to remix).
 
