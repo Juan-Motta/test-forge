@@ -3,10 +3,12 @@
 Both sides are placed on the run timeline as the levels place them (see `levels`), so pauses,
 overlaps and the cut of an interrupted agent turn sound as they happened. Overlapping samples
 are summed and clipped to PCM16. Built on demand from the run's artifacts, so it works for any
-run that has `agent.wav` or `caller.wav`.
+run that has `agent.wav` or `caller.wav`, and kept next to them as `conversation.wav` (a finished
+run's artifacts never change) so it is mixed once and served as a file the player can seek in.
 """
 
 import io
+import os
 import sys
 import wave
 from array import array
@@ -17,6 +19,7 @@ from voice_eval.audio import CHANNELS, SAMPLE_RATE, SAMPLE_WIDTH
 from voice_eval.modules.runs.levels import SAMPLES_PER_MS, place_audio
 
 PCM16_MIN, PCM16_MAX = -32768, 32767
+CONVERSATION_FILE = "conversation.wav"
 
 
 def _mix(segments: list[tuple[int, array]], length: int) -> array:
@@ -57,3 +60,19 @@ def build_conversation(artifacts: Path, summary: dict[str, Any] | None = None) -
         w.setframerate(SAMPLE_RATE)
         w.writeframes(pcm.tobytes())
     return out.getvalue()
+
+
+def conversation_file(artifacts: Path, summary: dict[str, Any] | None = None) -> Path | None:
+    """The kept `conversation.wav` of a finished run, mixed and written on first use; None when
+    the run has no audio file. Written to a temporary name first, so a reader never sees half a
+    file."""
+    path = artifacts / CONVERSATION_FILE
+    if path.is_file():
+        return path
+    wav = build_conversation(artifacts, summary)
+    if wav is None:
+        return None
+    partial = path.with_name(f".{CONVERSATION_FILE}.{os.getpid()}.part")
+    partial.write_bytes(wav)
+    partial.replace(path)
+    return path

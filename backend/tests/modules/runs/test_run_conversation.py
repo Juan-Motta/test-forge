@@ -151,3 +151,35 @@ async def test_the_side_tracks_are_still_served(app, user_client):
     )
     assert (await user_client.get(f"/api/runs/{run_id}/audio/agent")).status_code == 200
     assert (await user_client.get(f"/api/runs/{run_id}/audio/other")).status_code == 422
+
+
+async def test_conversation_supports_byte_ranges_so_the_player_can_seek(app, user_client):
+    run_id = await insert_run(app.state.sessionmaker)
+    write_run(
+        app.state.runs.artifacts_dir(run_id), events=[agent_audio(0, 100)], agent=tone(100, 1)
+    )
+    response = await user_client.get(
+        f"/api/runs/{run_id}/audio/conversation", headers={"Range": "bytes=0-99"}
+    )
+    assert response.status_code == 206, response.text
+    assert response.headers["accept-ranges"] == "bytes"
+    assert len(response.content) == 100
+
+
+async def test_conversation_is_mixed_once_and_kept_with_the_artifacts(app, user_client):
+    run_id = await insert_run(app.state.sessionmaker)
+    out = app.state.runs.artifacts_dir(run_id)
+    write_run(out, events=[agent_audio(0, 100)], agent=tone(100, 1000))
+    first = await user_client.get(f"/api/runs/{run_id}/audio/conversation")
+    assert (out / "conversation.wav").read_bytes() == first.content
+    (out / "agent.wav").unlink()  # a second request serves the kept mix
+    second = await user_client.get(f"/api/runs/{run_id}/audio/conversation")
+    assert second.status_code == 200
+    assert second.content == first.content
+
+
+async def test_conversation_of_a_run_in_progress_is_409(app, user_client):
+    run_id = await insert_run(app.state.sessionmaker, status="running")
+    response = await user_client.get(f"/api/runs/{run_id}/audio/conversation")
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Run still in progress"
