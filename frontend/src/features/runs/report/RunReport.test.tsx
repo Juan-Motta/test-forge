@@ -297,6 +297,29 @@ describe("Run report · issues on the transcript and the recording", () => {
     expect(within(recording).getByLabelText("Agent track")).toHaveAttribute("src", `/api/runs/${RUN_ID}/audio/agent`);
   });
 
+  it("plays and downloads the conversation as one recording, with the separate tracks collapsed", async () => {
+    renderReport({ status: "none" });
+
+    const recording = await screen.findByRole("region", { name: "Call recording" });
+    expect(within(recording).getByLabelText("Conversation")).toHaveAttribute(
+      "src",
+      `/api/runs/${RUN_ID}/audio/conversation`,
+    );
+    expect(within(recording).getByRole("link", { name: "Download conversation .wav" })).toHaveAttribute(
+      "href",
+      `/api/runs/${RUN_ID}/audio/conversation?download=1`,
+    );
+    const separate = within(recording).getByText("Separate tracks").closest("details");
+    expect(separate).not.toBeNull();
+    expect(separate).not.toHaveAttribute("open");
+    expect(within(separate!).getByLabelText("Agent track")).toHaveAttribute("src", `/api/runs/${RUN_ID}/audio/agent`);
+    expect(within(separate!).getByLabelText("Evaluator track")).toHaveAttribute(
+      "src",
+      `/api/runs/${RUN_ID}/audio/caller`,
+    );
+    expect(within(separate!).getByText(/not aligned in time/)).toBeInTheDocument();
+  });
+
   it("explains missing lanes when the levels are not ready (409)", async () => {
     renderReport({ status: "none" }, { levels: 409 });
 

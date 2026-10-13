@@ -195,6 +195,32 @@ def _turns(transcript: Any) -> list[dict[str, Any]]:
     return turns
 
 
+@dataclass(frozen=True)
+class PlacedAudio:
+    """Both sides of a run on its timeline, and the timeline's length (ms)."""
+
+    agent: list[Segment]
+    caller: list[Segment]
+    duration_ms: float
+
+
+def place_audio(artifacts: Path | None, summary: dict[str, Any] | None = None) -> PlacedAudio:
+    """Each side's audio of the run in `artifacts`, placed on the run timeline (missing files:
+    nothing placed). The duration is the summary's (`summary` is the stored one, used when
+    `summary.json` cannot be read), extended when audio plays past it."""
+    if artifacts is not None and isinstance(stored := _read_json(artifacts / "summary.json"), dict):
+        summary = stored
+    events = _events(artifacts / "events.jsonl") if artifacts is not None else []
+    agent: list[Segment] = []
+    caller: list[Segment] = []
+    if events and artifacts is not None:
+        agent = _agent_segments(events, _pcm(artifacts / "agent.wav"))
+        caller = _caller_segments(events, _pcm(artifacts / "caller.wav"))
+    ends = [start + len(samples) / SAMPLES_PER_MS for start, samples in (*agent, *caller)]
+    duration = _number((summary or {}).get("duration_ms")) or 0.0
+    return PlacedAudio(agent, caller, max([duration, *ends]))
+
+
 def build_levels(
     artifacts: Path | None, *, bins: int, summary: dict[str, Any] | None = None
 ) -> RunLevels:
@@ -202,16 +228,8 @@ def build_levels(
 
     `summary` is the stored one, used when `summary.json` cannot be read.
     """
-    if artifacts is not None and isinstance(stored := _read_json(artifacts / "summary.json"), dict):
-        summary = stored
-    events = _events(artifacts / "events.jsonl") if artifacts is not None else []
-    agent = caller = []
-    if events and artifacts is not None:
-        agent = _agent_segments(events, _pcm(artifacts / "agent.wav"))
-        caller = _caller_segments(events, _pcm(artifacts / "caller.wav"))
-    ends = [start + len(samples) / SAMPLES_PER_MS for start, samples in (*agent, *caller)]
-    duration = _number((summary or {}).get("duration_ms")) or 0.0
-    duration = max([duration, *ends])
+    placed = place_audio(artifacts, summary)
+    agent, caller, duration = placed.agent, placed.caller, placed.duration_ms
     turns = _turns(_read_json(artifacts / "transcript.json") if artifacts is not None else None)
     if duration <= 0:
         return RunLevels(0, [0.0] * bins, [0.0] * bins, turns)

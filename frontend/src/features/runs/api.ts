@@ -63,6 +63,14 @@ export function audioUrl(id: string, channel: AudioChannel): string {
   return `/api${item(id)}/audio/${channel}`;
 }
 
+/**
+ * Same-origin URL of the whole conversation as one WAV: both sides mixed on the run timeline.
+ * `download` asks for it as an attachment (`run-<id8>-conversation.wav`) instead of inline.
+ */
+export function conversationUrl(id: string, { download = false }: { download?: boolean } = {}): string {
+  return `/api${item(id)}/audio/conversation${download ? "?download=1" : ""}`;
+}
+
 /** Default number of level bins: one bar per bin of the recording lanes. */
 export const LEVEL_BINS = 140;
 

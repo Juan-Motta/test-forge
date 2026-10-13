@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { JudgementController } from "@/features/judgements/use-judgement-controller";
 import { ApiError, errorMessage } from "@/lib/api";
 import { Alert, Tabs, type TabItem } from "@/ui";
-import { audioUrl } from "../api";
+import { audioUrl, conversationUrl } from "../api";
 import { clock, latency, median } from "../format";
 import { useRunLevels, useRunTrace } from "../queries";
 import { RunTranscript } from "../RunTranscript";
@@ -142,6 +142,8 @@ export function FinishedReport({ run, controller }: { run: RunDetail; controller
       )}
       <Warnings warnings={run.summary?.warnings ?? []} />
       <RecordingCard
+        conversationSrc={conversationUrl(run.id)}
+        conversationDownload={conversationUrl(run.id, { download: true })}
         agentSrc={audioUrl(run.id, "agent")}
         callerSrc={audioUrl(run.id, "caller")}
         levels={levels.data}

@@ -15,12 +15,13 @@ from pathlib import Path
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 from pydantic.alias_generators import to_camel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from voice_eval.modules.runs import service
+from voice_eval.modules.runs.conversation import build_conversation
 from voice_eval.modules.runs.domain import (
     MAX_BATCH_CONCURRENCY,
     MAX_LABEL_LENGTH,
@@ -355,6 +356,30 @@ async def cancel_run(run_id: uuid.UUID, db: Db, runs: Manager) -> RunOut:
     if after.finished and after.status not in CANCEL_STATUSES:  # it ended on its own meanwhile
         raise HTTPException(status.HTTP_409_CONFLICT, "Run already finished")
     return RunOut.of(after)
+
+
+# Declared before `/{run_id}/audio/{channel}`, which would answer 422 for this channel.
+@router.get(
+    "/{run_id}/audio/conversation",
+    response_class=Response,
+    responses={200: {"content": {"audio/wav": {}}}},
+)
+async def get_conversation_audio(
+    run_id: uuid.UUID, db: Db, runs: Manager, download: bool = False
+) -> Response:
+    """The whole conversation as one WAV (PCM16 24 kHz mono): agent and caller mixed on the run
+    timeline, with the pauses, overlaps and barge-in cuts as they happened. `download=1` names
+    the file as an attachment; otherwise it plays inline."""
+    try:
+        run = await service.get_run(db, run_id)
+    except RunNotFound:
+        raise _not_found("Run") from None
+    wav = await asyncio.to_thread(build_conversation, _artifacts(run, runs), run.summary)
+    if wav is None:
+        raise _not_found("Audio")
+    name = f"run-{str(run.id)[:8]}-conversation.wav"
+    disposition = f'attachment; filename="{name}"' if download else "inline"
+    return Response(wav, media_type="audio/wav", headers={"Content-Disposition": disposition})
 
 
 @router.get(

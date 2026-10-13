@@ -16,8 +16,8 @@ timeline (pauses, overlaps and barge-in cuts as they happened), instead of two u
   become secondary.
 
 ## Tasks
-- [ ] T1 Backend: shared segment placement + mixer, endpoint, tests, OpenAPI/skill docs — delegated
-- [ ] T2 Frontend: conversation player + download in RecordingCard, per-side tracks secondary, tests — delegated (same writer)
+- [x] T1 Backend: shared segment placement + mixer, endpoint, tests, OpenAPI/skill docs — delegated
+- [x] T2 Frontend: conversation player + download in RecordingCard, per-side tracks secondary, tests — delegated (same writer)
 - [ ] T3 Verify against a real finished run in the browser — inline
 
 ## Acceptance
@@ -26,3 +26,16 @@ timeline (pauses, overlaps and barge-in cuts as they happened), instead of two u
 - 404 when the run has no audio; works for runs recorded before this change.
 
 ## Progress
+- T1 (delegated writer): `levels.place_audio` (public, returns `PlacedAudio` agent/caller segments +
+  duration) now feeds both `build_levels` (unchanged behaviour) and the new
+  `modules/runs/conversation.py` mixer (copies into untouched regions, sums + clips only the
+  overlaps; a synthetic 5-min run mixes in ~0.07 s). Route `GET /{run_id}/audio/conversation`
+  declared before the channel route; inline by default, `?download=1` → attachment
+  `run-<id8>-conversation.wav`; 404 Run/Audio. Skill guide documents it. RED: collection error
+  (module missing), then 422 on the route before it existed. Checks: runs+skill pytest 114 passed;
+  ruff check/format clean. Not committed (parent commits).
+- T2 (delegated writer): `conversationUrl(id, {download})` in `api.ts`; RecordingCard's primary
+  player is "Conversation" + "Download .wav" (`?download=1`) under the lanes; Agent/Evaluator tracks
+  in a collapsed `<details>` "Separate tracks" with the not-aligned note. RED: new RunReport test
+  failed before the change. Checks: vitest 558 passed; lint, typecheck, build OK.
+- Next: T3 browser check against a real finished run.

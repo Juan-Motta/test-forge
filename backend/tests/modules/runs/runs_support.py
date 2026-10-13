@@ -2,11 +2,13 @@
 
 import asyncio
 import json
+import struct
 import uuid
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from voice_eval.audio import BYTES_PER_MS, write_wav
 from voice_eval.runner.events import EventSink, RunEvent
 
 AGENT = {
@@ -194,3 +196,44 @@ async def insert_run(
         )
         await db.commit()
     return run_id
+
+
+# --- Synthetic audio artifacts (levels, conversation) -------------------------------------
+
+
+def tone(ms: int, amplitude: int) -> bytes:
+    """A square wave: every sample is +/- `amplitude`, so its RMS is exactly `amplitude`."""
+    samples = ms * BYTES_PER_MS // 2
+    values = (amplitude if i % 2 else -amplitude for i in range(samples))
+    return struct.pack(f"<{samples}h", *values)
+
+
+def quiet(ms: int) -> bytes:
+    return b"\x00" * (ms * BYTES_PER_MS)
+
+
+def write_run(
+    out: Path,
+    *,
+    events: list[dict] | None,
+    agent: bytes = b"",
+    caller: bytes = b"",
+    duration_ms: float = 2000.0,
+    transcript: list[dict] | None = None,
+) -> Path:
+    out.mkdir(parents=True, exist_ok=True)
+    if events is not None:
+        (out / "events.jsonl").write_text("".join(json.dumps(e) + "\n" for e in events))
+    write_wav(out / "agent.wav", agent)
+    write_wav(out / "caller.wav", caller)
+    (out / "summary.json").write_text(json.dumps({"duration_ms": duration_ms}))
+    (out / "transcript.json").write_text(json.dumps(transcript or []))
+    return out
+
+
+def agent_audio(t_ms: float, ms: int, chunk: int = 1) -> dict:
+    return {"type": "agent_audio", "t_ms": t_ms, "chunk": chunk, "bytes": ms * BYTES_PER_MS}
+
+
+def caller_audio(t_ms: float, ms: int, chunk: int = 1) -> dict:
+    return {"type": "caller_audio", "t_ms": t_ms, "chunk": chunk, "bytes": ms * BYTES_PER_MS}

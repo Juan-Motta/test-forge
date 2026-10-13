@@ -340,9 +340,12 @@ are what the judge applies.
 ]
 ```
 
-Audio: `GET /api/runs/{runId}/audio/{channel}` with `channel` `agent` or `caller` returns a WAV
-(PCM16, 24 kHz, mono) once the run is finished. The two files are not aligned in time (the
-agent's holds only the audio it sent, back to back).
+Audio: `GET /api/runs/{runId}/audio/conversation` returns the whole conversation as one WAV
+(PCM16, 24 kHz, mono): both sides mixed on the run timeline, with the pauses, overlaps and
+barge-in cuts as they happened (`?download=1` sends it as an attachment named
+`run-<first 8 of id>-conversation.wav`). `GET /api/runs/{runId}/audio/{channel}` with `channel`
+`agent` or `caller` returns one side once the run is finished; those two files are not aligned
+in time (the agent's holds only the audio it sent, back to back). `404` when there is no audio.
 
 Audio levels on the run timeline: `GET /api/runs/{runId}/levels?bins=140` (`bins` 20-400)
 returns `durationMs`, `agent` and `caller` (one RMS value 0-1 per bin, one scale for both sides,
