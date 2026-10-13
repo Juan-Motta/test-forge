@@ -144,3 +144,13 @@ chat with the agent over Vivi's channel API, every conversation is recorded, jud
   typecheck clean, build OK; backend `uv run pytest -q tests/judge tests/modules/runs` 248 passed,
   ruff check + format clean. Voice judge timing (`render_timing`, upper median) left unchanged to
   keep the voice prompt byte-identical.
+- Commits and native reviews (all medium, granted, APPROVED + acknowledged): T1 b86ed93 (with the
+  plan 8688acd), T2 22c09ef (fixed T1 findings: generator closed with aclosing, byte cap on raw
+  bytes), T3 786690e, T4 638ec5e (+ T2 follow-up tests), T5 80b3b1d (+ T3 even-count median, T4
+  hidden voice fields not validated/sent for text; the stale-resolver finding did not reproduce —
+  regression test added).
+- Open review notes (T5): live view — confirm Invoke-mode timings attach to the agent bubble
+  (agentTranscript path) and that events without a numeric `turn` do not split a reply; voice
+  `render_timing` still uses the upper-middle median (kept byte-identical on purpose).
+- Stack rebuilt; backend at Alembic 0013 (head).
+
