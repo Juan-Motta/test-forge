@@ -15,12 +15,12 @@ export function GuideHeader() {
       >
         Skip to content
       </a>
-      <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-2.5 lg:px-8">
+      <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-2.5 lg:px-8">
         <Link href="/guide" aria-label="Duet guide home" className={cn("flex items-center gap-1 rounded-lg text-fg no-underline hover:text-fg", focusRing)}>
           <Brand />
-          <span className="rounded-full border border-field-line px-2 py-0.5 text-xs font-medium text-muted">Guide</span>
+          <span className="hidden rounded-full border border-field-line px-2 py-0.5 text-xs font-medium text-muted sm:inline">Guide</span>
         </Link>
-        <nav aria-label="Guide links" className="flex flex-wrap items-center gap-2">
+        <nav aria-label="Guide links" className="flex shrink-0 items-center gap-1 sm:gap-2">
           {/* Served by the backend (Swagger UI), so a plain link, not a client-side one. */}
           <a
             href="/api/docs"
@@ -29,11 +29,12 @@ export function GuideHeader() {
             className={cn(buttonClasses("ghost", "min-h-10 px-3 no-underline"))}
           >
             <ExternalLinkIcon size={16} />
-            API reference (Swagger)
+            {/* Short labels on phones keep the sticky bar to one row; the full name stays accessible. */}
+            API<span className="sr-only sm:not-sr-only"> reference (Swagger)</span>
             <span className="sr-only"> (opens in a new tab)</span>
           </a>
-          <Link href="/" className={buttonClasses("primary", "min-h-10 px-3.5 no-underline hover:text-on-evaluator")}>
-            Open the app
+          <Link href="/" aria-label="Open the app" className={buttonClasses("primary", "min-h-10 px-3.5 no-underline hover:text-on-evaluator")}>
+            Open<span className="sr-only sm:not-sr-only"> the</span> app
           </Link>
         </nav>
       </div>
