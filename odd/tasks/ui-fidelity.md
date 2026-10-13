@@ -71,4 +71,9 @@ connection/Langfuse cards and a test log.
   (`../voice-evaluator-worktrees/review`): dad39d0, 1a195dc, 1b0e647, 756db15, d8a748d, 0d85f38,
   cf4fe87 split into two temporary review commits with the identical final tree, and
   8cf22f1..6ea611c (high risk, 4 lenses). All APPROVED + acknowledged. Advisories collected into one
-  follow-up writer task (in progress).
+  follow-up writer task.
+- Advisory follow-up 9900880 (delegated; RED observed for most items): vitest 557, lint, typecheck,
+  `next build`, pytest agents+runs 178, ruff OK. Native review (medium, granted): APPROVED +
+  acknowledged. Remaining notes: the agent form remount relies on `mutateAsync` awaiting the
+  invalidation refetch (it does, via onSuccess returning the promise); overlapping CodeBlock copies
+  can leave an orphan reset timer (cosmetic).
