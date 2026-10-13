@@ -393,7 +393,8 @@ async def get_conversation_audio(
 async def get_audio(
     run_id: uuid.UUID, channel: Literal["agent", "caller"], db: Db, runs: Manager
 ) -> FileResponse:
-    """One side of the conversation as WAV (PCM16 24 kHz mono), once it has been written."""
+    """One side of the conversation as WAV (PCM16 24 kHz mono), once it has been written (404
+    for a text run: it has no audio)."""
     try:
         await service.get_run(db, run_id)
     except RunNotFound:
@@ -456,11 +457,13 @@ async def get_levels(
     bins: Annotated[int, Query(ge=MIN_BINS, le=MAX_BINS)] = DEFAULT_BINS,
 ) -> LevelsOut:
     """Audio levels of both sides on the run timeline (RMS 0..1 per bin), and the turns.
-    409 while the run is in progress."""
+    409 while the run is in progress; 404 for a text run (it has no audio)."""
     try:
         run = await service.get_run(db, run_id)
     except RunNotFound:
         raise _not_found("Run") from None
+    if run.snapshot.get("agent", {}).get("kind") == "text":
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "A text run has no audio levels")
     if not run.finished:
         raise HTTPException(status.HTTP_409_CONFLICT, "Run still in progress")
     key = (run.id, bins)

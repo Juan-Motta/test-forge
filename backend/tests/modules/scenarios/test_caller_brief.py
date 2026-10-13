@@ -48,3 +48,12 @@ def test_caller_brief_from_a_scenario():
         hang_up_when="goodbye",
         max_duration_s=300,
     )
+
+
+def test_end_conditions_stored_before_max_turns_read_with_its_default():
+    from voice_eval.modules.scenarios.domain import EndConditions
+
+    stored = {"max_duration_s": 120, "max_silence_s": 10, "hang_up_when": "goodbye"}
+    conditions = EndConditions.model_validate(stored)
+    assert conditions.max_turns == 20
+    assert conditions.model_dump(mode="json")["max_turns"] == 20

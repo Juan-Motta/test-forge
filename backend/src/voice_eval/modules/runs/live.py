@@ -14,6 +14,13 @@ heard text is the played share of the audio applied to the text, an estimate) an
 `interruptionConfirmed` (`agentTurn`, `itemId`, `kind` = `truncated` | `deleted`, `audioEndMs`
 as the agent's server applied it) is sent once per reported audio item when the agent's server
 confirms it applied the cut; it may come after later turns, and never comes for an unconfirmed one.
+
+Text runs (text agents) send no audio. Their caller lines come as `callerSpeaking` (the message
+was sent), the reply streams as `agentTextDelta` (`turn`, `text`: the next piece, in order) and
+`agentToolStarted` / `agentToolEnded` (`turn`, `name`, and `success`, `elapsedMs` when known),
+then `agentTranscript` carries the whole reply (the only one kept in the snapshot: a subscriber
+joining mid-reply sees that reply once it is complete) and `turnEnded` its timings
+(`requestMs`, `firstTextMs`, `endMs`, `latencyMs`).
 Audio goes out as binary frames: one channel byte (`0` agent, `1` caller) followed by the raw
 PCM16 little-endian 24 kHz mono chunk.
 
@@ -221,6 +228,19 @@ class LiveHub:
                 )
             case "caller_decision_discarded":
                 text = message("callerDecisionDiscarded", tMs=t_ms, decisionId=data["decision_id"])
+            case "agent_text_delta":
+                text = message("agentTextDelta", tMs=t_ms, turn=data["turn"], text=data["text"])
+            case "agent_tool_started":
+                text = message("agentToolStarted", tMs=t_ms, turn=data["turn"], name=data["name"])
+            case "agent_tool_ended":
+                text = message(
+                    "agentToolEnded",
+                    tMs=t_ms,
+                    turn=data["turn"],
+                    name=data["name"],
+                    success=data["success"],
+                    elapsedMs=data["elapsed_ms"],
+                )
             case "agent_barge_in":
                 text = message("agentBargeIn", tMs=t_ms, callerTurn=data["caller_turn"])
             case "turn_ended":

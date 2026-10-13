@@ -43,7 +43,7 @@ chat with the agent over Vivi's channel API, every conversation is recorded, jud
 ## Tasks
 - [x] T1 Backend agents: `kind` + text config + sealed api key (migration), API/validation,
       text target port + HTTP adapter (invoke + stream parser, egress guard), connection test — delegated
-- [ ] T2 Backend runs: text session runner (max turns, artifacts/summary without audio), launch
+- [x] T2 Backend runs: text session runner (max turns, artifacts/summary without audio), launch
       gate + scenario validation by agent kind, evaluator text prompt, manager branch, live text
       events — delegated
 - [ ] T3 Judge: text prompt variant, transcript/timing rendering and gating for text runs, brief — delegated
@@ -62,3 +62,17 @@ chat with the agent over Vivi's channel API, every conversation is recorded, jud
   removes it in `runs/service._plan` and the guide). Evidence: RED (import/assert failures)
   then `uv run pytest -q` 1038 passed; ruff check + format clean; migration round trip covered
   by `tests/platform/test_migrations.py`.
+- T2 done (delegated writer, uncommitted; route: delegated, writer trigger: 2+ non-trivial
+  files). `runner/text_session.py` (`TextSessionRunner`: user writes first, same UUID threadId
+  every turn, ends on `caller_hung_up` / `max_turns` / `max_duration` / `caller_silent`;
+  `TextTargetError` -> failed `agent_error`, partial reply kept as an `incomplete` row; artifacts
+  `transcript.json`, `events.jsonl`, `summary.json`, no audio). Chat prompt variant selected by
+  `ChatPolicyState` (evaluator/prompt.py; ports untouched). `EndConditions.max_turns` 1-100
+  (default 20, JSONB: no migration). Launch: text agents need an evaluator model connection (no
+  TTS fallback), snapshot `connections.tts` null. Manager `drive_text_session`
+  (`build_text_target`, `text_transport` overridable; key opened at run time; voice-only settings
+  warned). Live: `agentTextDelta`, `agentToolStarted`, `agentToolEnded`. Levels 404 for text runs.
+  T1 review fixes: `collect()` closes the events (`aclosing`), `HttpChatTarget.send` yields
+  `ReplyEnded` after the response/client closed, stream cap enforced on raw bytes as they arrive.
+  Evidence: RED (import errors, failing close/cap/launch/live asserts) then `uv run pytest -q`
+  1068 passed; ruff check + format clean.

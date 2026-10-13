@@ -15,8 +15,15 @@ A scenario with the realtime evaluator (`evaluator_mode` "realtime" in its snaps
 realtime caller of its `realtime_model` from its voice connection instead of the policy and the
 synthesizer.
 
-The factories (`build_policy`, `build_synthesizer`, `build_realtime_caller`) and the whole
-`drive` step are attributes, so tests replace them and never contact a provider.
+A text agent (`kind` "text" in the agent snapshot) is chatted with by a `TextSessionRunner`
+instead: the evaluator model's policy writes the messages, no voice is used, and the chat
+target is built from the snapshot with the agent's API key opened from the database at run time
+(it is never in the snapshot). Voice-only scenario settings are ignored with a warning.
+
+The factories (`build_policy`, `build_synthesizer`, `build_realtime_caller`,
+`build_text_target`), the text agents' HTTP transport (`text_transport`, None: the
+egress-guarded default) and the whole `drive` step are attributes, so tests replace them and
+never contact a provider or an agent.
 """
 
 import asyncio
@@ -28,8 +35,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
 
+import httpx
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from voice_eval.modules.agents import service as agents
+from voice_eval.modules.agents.domain import AgentNotFound
 from voice_eval.modules.connections.domain import DEFAULT_REALTIME_MODEL, UnsupportedConnection
 from voice_eval.modules.connections.runtime import (
     build_caller_policy,
@@ -39,15 +49,22 @@ from voice_eval.modules.connections.runtime import (
 from voice_eval.modules.runs import service
 from voice_eval.modules.runs.domain import Batch, Run, RunStatus, brief_from_snapshot
 from voice_eval.modules.runs.live import LiveHub
-from voice_eval.platform.secrets import SecretBox
+from voice_eval.platform.secrets import SecretBox, SecretDecryptionError
 from voice_eval.ports.policy import CallerPolicy
 from voice_eval.ports.realtime_caller import RealtimeCaller
+from voice_eval.ports.text_target import TextTarget
 from voice_eval.ports.tts import SpeechSynthesizer
 from voice_eval.runner.barge_in import Interruption
 from voice_eval.runner.events import EventSink, RunEvent
 from voice_eval.runner.session import SessionOptions, SessionRunner
+from voice_eval.runner.text_session import (
+    DEFAULT_MAX_TURNS,
+    TextSessionOptions,
+    TextSessionRunner,
+)
 from voice_eval.targets.connection import dial_base_url
 from voice_eval.targets.detect import TargetSpec
+from voice_eval.targets.http_chat import HttpChatTarget
 
 log = logging.getLogger(__name__)
 
@@ -77,6 +94,7 @@ SynthesizerFactory = Callable[[AsyncSession, uuid.UUID, str | None], Awaitable[S
 RealtimeCallerFactory = Callable[
     [AsyncSession, uuid.UUID, str | None, str], Awaitable[RealtimeCaller]
 ]
+TextTargetFactory = Callable[[AsyncSession, dict[str, Any]], Awaitable[TextTarget]]
 
 
 def read_json(path: Path) -> Any:
@@ -138,6 +156,8 @@ class RunManager:
         self.build_policy: PolicyFactory = self._build_policy
         self.build_synthesizer: SynthesizerFactory = self._build_synthesizer
         self.build_realtime_caller: RealtimeCallerFactory = self._build_realtime_caller
+        self.build_text_target: TextTargetFactory = self._build_text_target
+        self.text_transport: httpx.AsyncBaseTransport | None = None
         self.session_overrides: dict[str, Any] = {}  # SessionOptions fields (tests tune timings)
         self.hub = LiveHub()
         self._slots = asyncio.Semaphore(max_concurrency)
@@ -309,6 +329,8 @@ class RunManager:
     async def drive_session(self, job: RunJob, sink: EventSink) -> dict[str, Any]:
         """The real conversation: providers from the stored connections, then the runner."""
         snapshot = job.snapshot
+        if snapshot["agent"].get("kind") == "text":
+            return await self.drive_text_session(job, sink)
         connections = snapshot["connections"]
         voice = snapshot["scenario"]["voice_override"]
         tts_id = uuid.UUID(connections["tts"]["id"])
@@ -354,6 +376,64 @@ class RunManager:
         )
         return await runner.run()
 
+    async def drive_text_session(self, job: RunJob, sink: EventSink) -> dict[str, Any]:
+        """A chat with a text agent: the evaluator model's policy and the agent's chat target."""
+        snapshot = job.snapshot
+        evaluator_id = uuid.UUID(snapshot["connections"]["evaluator"]["id"])
+        async with self.sessionmaker() as db:
+            try:
+                policy = await self.build_policy(db, evaluator_id)
+            except Exception as exc:
+                raise _provider_error("evaluator", exc) from None
+            target = await self.build_text_target(db, snapshot["agent"])
+        end = snapshot["scenario"]["end_conditions"]
+        overrides = {
+            key: value
+            for key, value in self.session_overrides.items()
+            if key in TextSessionOptions.__dataclass_fields__
+        }
+        runner = TextSessionRunner(
+            target=target,
+            thread_id=job.thread_id,
+            brief=brief_from_snapshot(snapshot),
+            policy=policy,
+            sink=sink,
+            out_dir=job.out_dir,
+            options=TextSessionOptions(
+                max_turns=end.get("max_turns") or DEFAULT_MAX_TURNS,
+                max_duration_s=end["max_duration_s"],
+                hang_up_when=end["hang_up_when"],
+                **overrides,
+            ),
+            channel_id=snapshot["agent"]["channel_id"],
+            text_mode=snapshot["agent"].get("text_mode") or "stream",
+            notices=ignored_voice_settings(snapshot),
+        )
+        return await runner.run()
+
+    async def _build_text_target(self, db: AsyncSession, agent: dict[str, Any]) -> TextTarget:
+        """The chat target as the snapshot describes it; the API key is read now, never stored
+        in the snapshot. Loopback hosts are dialled like voice agents (`local_target_host`)."""
+        api_key = None
+        if agent.get("auth") == "api_key":
+            try:
+                api_key = await agents.agent_api_key(db, self.secret_box, uuid.UUID(agent["id"]))
+            except AgentNotFound:
+                raise RunSetupError("the agent of this run no longer exists") from None
+            except SecretDecryptionError:
+                raise RunSetupError(
+                    "the agent's API key cannot be decrypted (wrong VOICE_EVAL_MASTER_KEY?)"
+                ) from None
+        return HttpChatTarget(
+            base_url=dial_base_url(agent["base_url"], self.local_target_host),
+            channel_id=agent["channel_id"],
+            mode=agent.get("text_mode") or "stream",
+            api_key=api_key,
+            origin=agent.get("origin"),
+            transport=self.text_transport,
+            allow_private=self.allow_local_http,  # development only, like the connection test
+        )
+
     async def _build_policy(self, db: AsyncSession, connection_id: uuid.UUID) -> CallerPolicy:
         return await build_caller_policy(
             db, connection_id, secret_box=self.secret_box, allow_local_http=self.allow_local_http
@@ -396,6 +476,22 @@ def run_target_spec(
         origin=agent["origin"],
         protocol=agent["protocol"],
     )
+
+
+def ignored_voice_settings(snapshot: dict[str, Any]) -> tuple[str, ...]:
+    """Warnings for the voice-only settings a text run ignores (set on its scenario)."""
+    scenario = snapshot["scenario"]
+    notices = []
+    if scenario.get("voice_override"):
+        notices.append("the scenario's voice is ignored: text agents are chatted with")
+    if scenario.get("interruptions"):
+        notices.append("the scenario's interruptions are ignored in text runs")
+    if evaluator_mode(snapshot) == "realtime":
+        notices.append(
+            "the realtime evaluator is ignored in text runs: the evaluator model writes the "
+            "messages"
+        )
+    return tuple(notices)
 
 
 def evaluator_mode(snapshot: dict[str, Any]) -> str:

@@ -5,6 +5,7 @@ conversation so far. The model must answer with `DECISION_SCHEMA` (structured ou
 """
 
 import json
+from dataclasses import dataclass
 from typing import Any
 
 from voice_eval.ports.policy import CallerBrief, CallerDecision, PolicyState, Utterance
@@ -56,6 +57,33 @@ HANG_UP_RULES = {
 }
 
 
+CHAT_END_RULES = {
+    "goal_or_goodbye": (
+        "End the chat (hangUp true) as soon as your goal is achieved or the assistant says "
+        "goodbye. You may write a short goodbye in the same message."
+    ),
+    "goodbye": (
+        "End the chat (hangUp true) only when the assistant says goodbye or clearly closes the "
+        "conversation, even if your goal is already achieved. You may write a short goodbye in "
+        "the same message."
+    ),
+    "max_duration": (
+        "Never end the chat on your own (hangUp always false): keep the conversation going "
+        "until it is ended for you."
+    ),
+}
+
+
+@dataclass(frozen=True)
+class ChatPolicyState(PolicyState):
+    """The policy's input in a chat with a text agent: `build_messages` writes the chat prompt.
+
+    `caller_turns` counts the messages the user sent; the chat ends after `max_turns` of them.
+    """
+
+    max_turns: int = 20
+
+
 class MalformedDecision(ValueError):
     """The model's answer does not match the decision schema."""
 
@@ -64,14 +92,20 @@ def _section(title: str, body: str) -> str:
     return f"## {title}\n{body.strip()}"
 
 
-def _brief_sections(brief: CallerBrief, opening: str) -> list[str]:
-    """Who the caller is, knows and wants: the shared part of both evaluators' prompts."""
+def _brief_sections(
+    brief: CallerBrief,
+    opening: str,
+    *,
+    agent_heading: str = "Context about the agent you are calling",
+    scenario_heading: str = "Context of this call",
+) -> list[str]:
+    """Who the caller is, knows and wants: the shared part of every evaluator prompt."""
     temperament = TEMPERAMENTS.get(brief.temperament, brief.temperament)
     sections = [opening]
     if brief.agent_context.strip():
-        sections.append(_section("Context about the agent you are calling", brief.agent_context))
+        sections.append(_section(agent_heading, brief.agent_context))
     if brief.scenario_context.strip():
-        sections.append(_section("Context of this call", brief.scenario_context))
+        sections.append(_section(scenario_heading, brief.scenario_context))
     persona = [
         f"Name: {brief.persona_name}",
         f"Locale: {brief.locale}",
@@ -172,6 +206,47 @@ def realtime_instructions(brief: CallerBrief) -> str:
     return "\n\n".join(sections)
 
 
+def chat_system_prompt(brief: CallerBrief) -> str:
+    """The evaluator's system prompt in a chat: a person writing to a text assistant."""
+    sections = _brief_sections(
+        brief,
+        "You are a user chatting with a text assistant. You play a real person, described "
+        "below, and you write to the assistant to reach your goal.",
+        agent_heading="Context about the assistant you are writing to",
+        scenario_heading="Context of this chat",
+    )
+    rules = [
+        "You are the user, never the assistant: stay in character for the whole chat.",
+        f"Write only in the language of the locale {brief.locale}, the way a native speaker "
+        "would in a chat.",
+        "Write short, natural chat messages: usually one or two sentences, no lists, no "
+        "markup, no headings.",
+        "Never reveal a fact unless the assistant asks for it or the conversation needs it; "
+        "give one fact at a time, never all at once.",
+        "Never say or hint that you are an AI, a test, a simulation or an evaluator.",
+        "Do not repeat what the assistant just wrote back to it unless confirming a detail.",
+        CHAT_END_RULES.get(brief.hang_up_when, CHAT_END_RULES["goal_or_goodbye"]),
+        "Answer only with the JSON object of the response schema: `say` (your message, or null "
+        "only when you end the chat without a word), `hangUp` (true ends the chat), and "
+        "`reason` (a few words, never sent).",
+    ]
+    sections.append(_section("Rules", "\n".join(f"- {rule}" for rule in rules)))
+    return "\n\n".join(sections)
+
+
+def chat_conversation_prompt(state: "ChatPolicyState") -> str:
+    if state.conversation:
+        lines = [_line(u) for u in state.conversation]
+        transcript = "Chat so far:\n" + "\n".join(lines)
+    else:
+        transcript = "The chat has just opened and nobody has written yet: you write first."
+    status = (
+        f"Elapsed: {state.elapsed_s:.0f} s of {state.brief.max_duration_s:.0f} s. "
+        f"Messages you sent: {state.caller_turns} of {state.max_turns}."
+    )
+    return f"{transcript}\n\n{status}\nDecide your next message."
+
+
 INTERRUPTED_MARK = "… [you interrupted the agent here]"
 JUST_INTERRUPTED = (
     "You just interrupted the agent mid-sentence: you heard only what is shown above, not the "
@@ -203,6 +278,12 @@ def conversation_prompt(state: PolicyState) -> str:
 
 
 def build_messages(state: PolicyState) -> list[dict[str, str]]:
+    """The policy's messages: the chat variant for a `ChatPolicyState`, else the phone call."""
+    if isinstance(state, ChatPolicyState):
+        return [
+            {"role": "system", "content": chat_system_prompt(state.brief)},
+            {"role": "user", "content": chat_conversation_prompt(state)},
+        ]
     return [
         {"role": "system", "content": system_prompt(state.brief)},
         {"role": "user", "content": conversation_prompt(state)},

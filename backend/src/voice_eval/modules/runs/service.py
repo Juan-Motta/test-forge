@@ -32,7 +32,11 @@ from voice_eval.modules.runs.domain import (
 )
 from voice_eval.modules.runs.models import RunBatchRecord, RunRecord
 from voice_eval.modules.scenarios import service as scenarios
-from voice_eval.modules.scenarios.domain import ScenarioNotFound, ScenarioNotRunnable
+from voice_eval.modules.scenarios.domain import (
+    ScenarioNotFound,
+    ScenarioNotRunnable,
+    resolve_evaluator,
+)
 
 ACTIVE_RUNS = [status.value for status in ACTIVE_RUN_STATUSES]
 ACTIVE_BATCHES = [status.value for status in ACTIVE_BATCH_STATUSES]
@@ -51,8 +55,15 @@ async def _plan(db: AsyncSession, scenario_id: uuid.UUID) -> RunPlan:
     agent = await db.get(AgentRecord, scenario.agent.id, populate_existing=True)
     if agent is None:
         raise ScenarioNotRunnable("the scenario's agent no longer exists")
-    if agent.kind != AgentKind.VOICE:
-        raise ScenarioNotRunnable("Text agents cannot be run yet")  # until the text runner
+    if agent.kind == AgentKind.TEXT:  # a chat: no voice, the evaluator model writes
+        evaluator = await scenarios.connection_ref(db, scenario.evaluator_connection_id)
+        if evaluator is None:
+            raise ScenarioNotRunnable(
+                "choose an evaluator model connection: its chat model plays the user of a text "
+                "agent"
+            )
+        evaluator = resolve_evaluator(evaluator=evaluator, tts=None)
+        return RunPlan(scenario=scenario, agent=agent.to_domain(), tts=None, evaluator=evaluator)
     tts = await scenarios.connection_ref(db, scenario.tts_connection_id)
     if tts is None:
         raise ScenarioNotRunnable("choose a voice (TTS) connection for this scenario")

@@ -558,3 +558,47 @@ async def test_an_interruption_streams_and_marks_the_agent_line():
         {"role": "agent", "text": agent["text"], "turn": 0, "tMs": 4.0, **marked},
         {"role": "agent", "text": "Sure", "turn": 1, "tMs": 5.0},
     ]
+
+
+async def test_text_runs_stream_text_pieces_tools_and_the_whole_reply():
+    hub = LiveHub()
+    run_id = uuid.uuid4()
+    hub.open(run_id, uuid.uuid4())
+    sub = hub.subscribe(run_id)
+    for event in [
+        RunEvent("caller_speaking", 1.0, {"decision_id": 1, "say": "Balance?", "reason": "ask"}),
+        RunEvent("agent_tool_started", 2.0, {"turn": 0, "name": "lookup"}),
+        RunEvent(
+            "agent_tool_ended",
+            3.0,
+            {"turn": 0, "name": "lookup", "success": True, "elapsed_ms": 40},
+        ),
+        RunEvent("agent_text_delta", 4.0, {"turn": 0, "text": "It is "}),
+        RunEvent("agent_text_delta", 5.0, {"turn": 0, "text": "$10."}),
+        RunEvent(
+            "agent_transcript",
+            6.0,
+            {"turn": 0, "text": "It is $10.", "first_text_ms": 3, "latency_ms": 3.0, "tools": []},
+        ),
+    ]:
+        hub.event(run_id, event)
+    late = hub.subscribe(run_id)
+    hub.finish(run_id, "completed", "caller_hung_up")
+    texts = [json.loads(item) for item in await drain(sub) if isinstance(item, str)]
+
+    assert texts[2:6] == [
+        {"type": "agentToolStarted", "tMs": 2.0, "turn": 0, "name": "lookup"},
+        {
+            "type": "agentToolEnded",
+            "tMs": 3.0,
+            "turn": 0,
+            "name": "lookup",
+            "success": True,
+            "elapsedMs": 40,
+        },
+        {"type": "agentTextDelta", "tMs": 4.0, "turn": 0, "text": "It is "},
+        {"type": "agentTextDelta", "tMs": 5.0, "turn": 0, "text": "$10."},
+    ]
+    assert texts[6]["type"] == "agentTranscript" and texts[6]["text"] == "It is $10."
+    snapshot = json.loads((await drain(late))[0])
+    assert [row["text"] for row in snapshot["transcript"]] == ["Balance?", "It is $10."]

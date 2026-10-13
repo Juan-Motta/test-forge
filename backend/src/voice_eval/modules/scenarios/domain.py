@@ -92,6 +92,10 @@ Locale = Annotated[  # BCP 47-like: es, es-MX, zh-Hant-TW
 ]
 
 
+DEFAULT_MAX_TURNS = 20
+MAX_MAX_TURNS = 100
+
+
 class _Model(BaseModel):
     model_config = ConfigDict(
         alias_generator=to_camel,
@@ -124,9 +128,13 @@ class Criterion(_Model):
 
 
 class EndConditions(_Model):
+    """When a run ends. `max_silence_s` applies to voice agents only; `max_turns` (messages the
+    user sends) to text agents only. Rows stored before `max_turns` read with its default."""
+
     max_duration_s: int = Field(default=360, ge=30, le=1800)
     max_silence_s: int = Field(default=15, ge=5, le=120)
     hang_up_when: HangUpWhen = HangUpWhen.GOAL_OR_GOODBYE
+    max_turns: int = Field(default=DEFAULT_MAX_TURNS, ge=1, le=MAX_MAX_TURNS)
 
 
 class Interruption(_Model):

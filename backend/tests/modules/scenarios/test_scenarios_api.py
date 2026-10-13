@@ -142,6 +142,7 @@ async def test_create_returns_the_scenario(user_client, agent_id):
         "maxDurationS": 360,
         "maxSilenceS": 15,
         "hangUpWhen": "goal_or_goodbye",
+        "maxTurns": 20,
     }
     assert (body["ttsConnectionId"], body["voiceOverride"]) == (None, None)
     assert body["evaluatorConnectionId"] is None
@@ -284,6 +285,8 @@ def _criteria(*weights: int) -> list[dict]:
         ({"endConditions": {"maxSilenceS": 4}}, ["body", "endConditions", "maxSilenceS"]),
         ({"endConditions": {"maxSilenceS": 121}}, ["body", "endConditions", "maxSilenceS"]),
         ({"endConditions": {"hangUpWhen": "never"}}, ["body", "endConditions", "hangUpWhen"]),
+        ({"endConditions": {"maxTurns": 0}}, ["body", "endConditions", "maxTurns"]),
+        ({"endConditions": {"maxTurns": 101}}, ["body", "endConditions", "maxTurns"]),
         ({"ttsConnectionId": "nope"}, ["body", "ttsConnectionId"]),
         ({"agent": {"name": "x"}}, ["body", "agent"]),  # read-only summary
     ],
@@ -451,6 +454,7 @@ async def test_patch_is_partial_and_replaces_whole_objects(user_client, agent_id
         "maxDurationS": 360,  # replaced as a whole: the omitted field takes its default
         "maxSilenceS": 20,
         "hangUpWhen": "goal_or_goodbye",
+        "maxTurns": 20,
     }
     assert (patched["goal"], patched["tags"]) == (body["goal"], body["tags"])
     assert patched["createdAt"] == body["createdAt"]

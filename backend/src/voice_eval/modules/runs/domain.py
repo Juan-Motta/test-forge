@@ -160,7 +160,7 @@ class RunPlan:
 
     scenario: Scenario
     agent: Agent
-    tts: ConnectionRef
+    tts: ConnectionRef | None  # None for a text agent (no voice)
     evaluator: ConnectionRef
 
 
@@ -214,7 +214,7 @@ def snapshot(plan: RunPlan) -> dict[str, Any]:
         },
         "brief": asdict(brief),
         "connections": {
-            "tts": {"id": str(plan.tts.id), "name": plan.tts.name},
+            "tts": {"id": str(plan.tts.id), "name": plan.tts.name} if plan.tts else None,
             "evaluator": {
                 "id": str(plan.evaluator.id),
                 "name": plan.evaluator.name,

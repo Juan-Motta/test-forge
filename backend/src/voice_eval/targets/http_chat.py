@@ -15,6 +15,7 @@ Connections go through the SSRF egress guard unless a transport is injected (tes
 import json
 import time
 from collections.abc import AsyncIterator, Callable
+from contextlib import aclosing
 from typing import Any, Literal
 from urllib.parse import quote
 
@@ -76,6 +77,24 @@ def _tool_end(item: dict[str, Any]) -> ToolEnded:
     )
 
 
+async def _lines(response: httpx.Response) -> AsyncIterator[str]:
+    """The body's lines (split on \\n; \\r is stripped by the caller), refusing the reply as soon
+    as its raw bytes pass `MAX_REPLY_BYTES`, even inside one line that never ends."""
+    pending = bytearray()
+    received = 0
+    async for chunk in response.aiter_bytes():
+        received += len(chunk)
+        if received > MAX_REPLY_BYTES:
+            raise TextTargetError("The agent's reply is too large")
+        pending += chunk
+        *complete, rest = pending.split(b"\n")
+        pending = bytearray(rest)
+        for raw in complete:
+            yield raw.decode("utf-8", errors="replace")
+    if pending:
+        yield pending.decode("utf-8", errors="replace")
+
+
 class HttpChatTarget:
     """One agent's chat endpoint. `allow_private` lets the guard reach local/private hosts."""
 
@@ -127,6 +146,7 @@ class HttpChatTarget:
         def elapsed_ms() -> int:
             return round((self._clock() - started) * 1000)
 
+        end: ReplyEnded | None = None
         try:
             async with (
                 httpx.AsyncClient(transport=transport, timeout=timeout) as client,
@@ -144,10 +164,14 @@ class HttpChatTarget:
                     total = elapsed_ms()
                     if text:
                         yield TextDelta(text)
-                    yield ReplyEnded(text, total, total)
-                    return
-                async for event in self._stream(response, elapsed_ms):
-                    yield event
+                    end = ReplyEnded(text, total, total)
+                else:
+                    async with aclosing(self._stream(response, elapsed_ms)) as events:
+                        async for event in events:
+                            if isinstance(event, ReplyEnded):
+                                end = event
+                                break
+                            yield event
         except TextTargetError:
             raise
         except DestinationNotAllowed:
@@ -170,6 +194,9 @@ class HttpChatTarget:
             raise TextTargetError(
                 f"The connection to the agent failed ({type(exc).__name__})"
             ) from None
+        # Only once the response and the client are closed: a consumer may stop at the end.
+        if end is not None:
+            yield end
 
     async def _invoke_text(self, response: httpx.Response) -> str:
         body = bytearray()
@@ -191,11 +218,7 @@ class HttpChatTarget:
     ) -> AsyncIterator[TextEvent]:
         parts: list[str] = []
         first_text_ms: int | None = None
-        received = 0
-        async for raw in response.aiter_lines():  # splits on \n and \r\n
-            received += len(raw)
-            if received > MAX_REPLY_BYTES:
-                raise TextTargetError("The agent's reply is too large")
+        async for raw in _lines(response):
             line = raw.strip()
             if not line.startswith("data:"):
                 continue  # blank lines and anything that is not a data line

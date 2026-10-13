@@ -20,8 +20,8 @@ flows and how to read the results.
 - **Agent**: the agent under test, of `kind` `voice` (default: its WebSocket `baseUrl`,
   `channelId`, `userId`, optional `origin`, `protocol`) or `text` (a chat over HTTP: `baseUrl`,
   `channelId`, `textMode`, `auth`, optional `origin`), plus an optional Langfuse connection. Its
-  `context` (what the agent does) is shared by all its scenarios. Text agents cannot be run yet
-  (launching one answers `422`).
+  `context` (what the agent does) is shared by all its scenarios. A run of a text agent is a
+  chat instead of a call (see "Text runs" below).
 - **Scenario**: one kind of call to an agent: persona, goal, facts the caller knows, criteria the
   judge scores, end conditions, optional interruptions, and the evaluator setup (voice
   connection, evaluator chat connection, `evaluatorMode`, `realtimeModel`, `voiceOverride`).
@@ -202,9 +202,10 @@ Usually a human has already configured connections, agents and scenarios: list t
   or `trace` (the agent's Langfuse traces: tool calls, models, errors). **Weights must total
   exactly 100.** Each criterion gets a stable `id` (generated when missing; keep it when
   patching so results stay comparable).
-- `endConditions`: `maxDurationS` 30-1800 (default 360), `maxSilenceS` 5-120 (default 15),
-  `hangUpWhen` `goal_or_goodbye` (default), `goodbye` or `max_duration` (the call only ends at
-  the time limit).
+- `endConditions`: `maxDurationS` 30-1800 (default 360), `maxSilenceS` 5-120 (default 15,
+  voice agents only), `hangUpWhen` `goal_or_goodbye` (default), `goodbye` or `max_duration` (the
+  call only ends at its limits), and `maxTurns` 1-100 (default 20, text agents only: the most
+  messages the evaluator sends).
 - `interruptions` (up to 10, one per agent turn): the caller barges in on the agent's
   `agentTurn`-th reply once `afterMs` (300-60000) of it has played. Supported only on the legacy
   realtime protocol; on others the run warns and does not interrupt.
@@ -250,7 +251,8 @@ Usually a human has already configured connections, agents and scenarios: list t
    }
    ```
 
-   A scenario that cannot run (no voice connection, no evaluator model) makes the whole launch
+   A scenario that cannot run (no voice connection, no evaluator model; a text agent's scenario
+   needs an evaluator model connection and no voice connection) makes the whole launch
    `422` with one item per refused scenario: `{"type", "loc": ["body", "scenarioIds", i],
    "msg", "scenarioId"}`. Fix the scenario (or ask the human) instead of retrying.
 3. Follow it. Poll `GET /api/runs/batches/{batchId}` every 10-15 seconds (a call lasts up to
@@ -297,6 +299,9 @@ lowest `averageScore` first, with `text`, `scenarioName`, `judged`) and `suggest
 | `agent_ended` | completed | The agent closed the session. |
 | `max_duration` | completed | The scenario's `maxDurationS` was reached. |
 | `max_silence` | completed | Nobody spoke for `maxSilenceS`. |
+| `max_turns` | completed | Text runs: the evaluator sent `maxTurns` messages. |
+| `caller_silent` | completed | Text runs: the evaluator had nothing to write three times in a row. |
+| `agent_error` | failed | Text runs: the agent could not answer a message (`error` says why, e.g. its stream ended without its final event). |
 | `connect_failed` | failed | The agent's WebSocket could not be reached. |
 | `protocol_error` | failed | The agent's protocol could not be detected or was violated. |
 | `ready_timeout` | failed | The agent never said its session was ready. |
@@ -343,6 +348,22 @@ started. The run's `latencyP50Ms` is the median of `latenciesMs`. A greeting or 
 has no latency. As a rough guide for a phone conversation, a median under about 1500 ms feels
 responsive and replies over about 3000 ms feel broken, but the scenario's own `timing` criteria
 are what the judge applies.
+
+### Text runs
+
+A run of a text agent is a chat over the agent's channel API: the evaluator's chat model plays
+the user and always writes first, every message goes to the run's `threadId` (a UUID, the same
+every turn, which is also the agent's Langfuse session id), and the agent's reply is read whole
+(`invoke`) or as it streams (`stream`). Each reply waits for its user message, so there is no
+silence limit; the chat ends when the evaluator ends it, after `maxTurns` messages, or at
+`maxDurationS`. Voice settings of the scenario (voice, interruptions, realtime evaluator) are
+ignored, with a warning. A text run records no audio: its audio and levels endpoints answer
+`404`. Its summary adds `kind: "text"`, `textMode` and `maxTurns`, and each of its `turns` is
+`{index, kind: "reply", requestMs, firstTextMs, endMs, latencyMs, tools}` (the tools the agent
+used). **Text latency** is from sending the message to the reply's first text (`stream`) or to
+the whole reply (`invoke`). Caller rows have `startMs` = `endMs` = when the message was sent;
+agent rows add `firstTextMs` (from the request) and `tools`, and a reply that broke off keeps
+what arrived with `"incomplete": true`.
 
 ### Transcript rows
 
@@ -509,11 +530,14 @@ Text frames are JSON with a `type` and, where it applies, `tMs` (ms since the ru
 | `agentBargeIn` | `callerTurn`: the agent started talking while the caller was mid-utterance. |
 | `callerInterrupted` | `agentTurn`, `audioEndMs`, `heardText`: the caller cut the agent off. |
 | `interruptionConfirmed` | `agentTurn`, `itemId`, `kind` (`truncated` or `deleted`), `audioEndMs` (as the agent's server applied it): one per reported audio item, possibly after later turns; none when the server never confirms. |
-| `turnEnded` | `turn`, `firstAudioMs`, `endMs`, `playbackEndMs`, `latencyMs`, `endReason`. |
+| `turnEnded` | `turn`, `firstAudioMs`, `endMs`, `playbackEndMs`, `latencyMs`, `endReason` (text runs: `turn`, `requestMs`, `firstTextMs`, `endMs`, `latencyMs`). |
+| `agentTextDelta` | Text runs: `turn`, `text`: the next piece of the reply as it streams (the whole reply then comes as `agentTranscript`). |
+| `agentToolStarted`, `agentToolEnded` | Text runs: `turn`, `name`; the end adds `success` and `elapsedMs` when the agent reports them. |
 | `warning` | `message`. |
 | `lagging` | `message`: audio frames were dropped for you (text never is). |
 | `finished` | Always last: `status`, `reason`. |
 
+In a text run, `callerSpeaking` means the message was sent, and no binary frame is sent.
 Binary frames are audio: one channel byte (`0` agent, `1` caller) followed by raw PCM16
 little-endian, 24 kHz, mono samples. A run that is no longer live sends its `snapshot` and
 `finished`, then closes. The batch overview sends a `snapshot` (`batch`, `runs`), then `status`

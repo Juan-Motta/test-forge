@@ -202,3 +202,77 @@ async def test_the_egress_guard_refuses_private_addresses_without_connecting():
     chat = HttpChatTarget(base_url="http://127.0.0.1:9", channel_id=CHANNEL, mode="invoke")
     with pytest.raises(TextTargetError, match="private or local"):
         await events_of(chat)
+
+
+class TrackedStream(httpx.AsyncByteStream):
+    """A response body served in chunks that records how much was read and whether it closed."""
+
+    def __init__(self, chunks: list[bytes]) -> None:
+        self.chunks = chunks
+        self.served = 0
+        self.closed = False
+
+    async def __aiter__(self):
+        for chunk in self.chunks:
+            self.served += 1
+            yield chunk
+
+    async def aclose(self) -> None:
+        self.closed = True
+
+
+def tracked(stream: TrackedStream):
+    return lambda _: httpx.Response(
+        200, stream=stream, headers={"content-type": "text/event-stream"}
+    )
+
+
+@pytest.mark.parametrize("mode", ["stream", "invoke"])
+async def test_collect_closes_the_response_when_the_reply_ends(mode):
+    body = STREAM if mode == "stream" else json.dumps({"message": "Hello"})
+    stream = TrackedStream([body.encode()])
+    chat, _ = target(tracked(stream), mode=mode)
+    await collect(chat.send("Hi", thread_id=THREAD))
+    assert stream.closed
+
+
+async def test_reply_ended_comes_after_the_response_is_closed():
+    stream = TrackedStream([STREAM.encode()])
+    chat, _ = target(tracked(stream))
+    async for event in chat.send("Hi", thread_id=THREAD):
+        if isinstance(event, ReplyEnded):
+            assert stream.closed  # the consumer may stop here: nothing is left open
+
+
+async def test_one_huge_line_without_a_newline_is_refused_as_it_arrives(monkeypatch):
+    monkeypatch.setattr("voice_eval.targets.http_chat.MAX_REPLY_BYTES", 1000)
+    stream = TrackedStream([b"data: " + b"x" * 400] + [b"x" * 400] * 20)
+    chat, _ = target(tracked(stream))
+    with pytest.raises(TextTargetError, match="too large"):
+        await events_of(chat)
+    assert stream.served < len(stream.chunks)  # stopped before buffering the whole line
+    assert stream.closed
+
+
+def utf8_line(**fields) -> str:
+    """A stream line with its text as raw UTF-8 (not `\\u` escapes), like the agent sends."""
+    message = {"message": "", "event": None, "type": None, "category": None, "metadata": None}
+    return "data: " + json.dumps({**message, **fields}, ensure_ascii=False) + "\n"
+
+
+async def test_the_stream_cap_counts_bytes_not_characters(monkeypatch):
+    monkeypatch.setattr("voice_eval.targets.http_chat.MAX_REPLY_BYTES", 1000)
+    text = "é" * 400  # 400 characters, 800 bytes
+    body = utf8_line(message=text, event="on_chat_model_stream")
+    chat, _ = target(streaming(body + line(event="on_chat_end")))
+    with pytest.raises(TextTargetError, match="too large"):
+        await events_of(chat)
+
+
+async def test_multibyte_text_split_across_chunks_is_decoded_whole():
+    data = utf8_line(message="añejo café", event="on_chat_model_stream") + line(event="on_chat_end")
+    raw = data.encode()
+    cut = raw.index("é".encode()) + 1  # inside the two bytes of é
+    chat, _ = target(tracked(TrackedStream([raw[:cut], raw[cut:]])))
+    reply = await collect(chat.send("Hi", thread_id=THREAD))
+    assert reply.text == "añejo café"

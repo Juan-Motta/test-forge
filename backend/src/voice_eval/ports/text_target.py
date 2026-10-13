@@ -6,6 +6,7 @@ Timings are milliseconds from the moment the request is sent.
 """
 
 from collections.abc import AsyncIterator
+from contextlib import aclosing
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -63,11 +64,16 @@ class TextTarget(Protocol):
 
 
 async def collect(events: AsyncIterator[TextEvent]) -> TextReply:
-    """Consume a reply's events into one `TextReply` (tools in the order they started)."""
+    """Consume a reply's events into one `TextReply` (tools in the order they started).
+
+    The events are always closed when this returns or raises, so nothing the target opened for
+    the reply (a client, a response) outlives it.
+    """
     tools: list[str] = []
-    async for event in events:
-        if isinstance(event, ToolStarted):
-            tools.append(event.name)
-        elif isinstance(event, ReplyEnded):
-            return TextReply(event.text, event.first_text_ms, event.total_ms, tuple(tools))
+    async with aclosing(events) as stream:
+        async for event in stream:
+            if isinstance(event, ToolStarted):
+                tools.append(event.name)
+            elif isinstance(event, ReplyEnded):
+                return TextReply(event.text, event.first_text_ms, event.total_ms, tuple(tools))
     raise TextTargetError("The agent's reply ended without a final event")

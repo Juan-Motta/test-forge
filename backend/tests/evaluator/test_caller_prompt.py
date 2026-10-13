@@ -266,3 +266,55 @@ def test_the_realtime_interruption_note_keeps_the_caller_in_its_role():
         "Do not apologize and do not continue its task",
     ]:
         assert part in REALTIME_JUST_INTERRUPTED, part
+
+
+# --- chat (text agents) ------------------------------------------------------------------
+
+
+def test_chat_system_prompt_is_a_chat_not_a_phone_call():
+    from voice_eval.evaluator.prompt import chat_system_prompt
+
+    prompt = chat_system_prompt(BRIEF)
+    assert "chatting with a text assistant" in prompt
+    for spoken in ("phone", "spoken", "the caller", "the call", "hang up"):
+        assert spoken not in prompt.lower(), spoken
+    for part in ("Lucía", "es-MX", "Get a late check-out at 2 pm.", "Room: 412"):
+        assert part in prompt
+    assert "short, natural chat messages" in prompt
+
+
+def test_chat_hang_up_rules_follow_the_scenario():
+    from dataclasses import replace
+
+    from voice_eval.evaluator.prompt import chat_system_prompt
+
+    assert "end the chat" in chat_system_prompt(BRIEF)
+    never = chat_system_prompt(replace(BRIEF, hang_up_when="max_duration"))
+    assert "Never end the chat on your own" in never
+
+
+def test_chat_messages_are_selected_by_the_state():
+    from voice_eval.evaluator.prompt import ChatPolicyState, chat_system_prompt
+
+    state = ChatPolicyState(
+        brief=BRIEF,
+        conversation=(Utterance("caller", "Hola"), Utterance("agent", "¿En qué te ayudo?")),
+        elapsed_s=12.4,
+        caller_turns=1,
+        max_turns=10,
+    )
+    system, user = build_messages(state)
+    assert system == {"role": "system", "content": chat_system_prompt(BRIEF)}
+    assert user["content"] == (
+        "Chat so far:\nYOU: Hola\nAGENT: ¿En qué te ayudo?\n\n"
+        "Elapsed: 12 s of 360 s. Messages you sent: 1 of 10.\nDecide your next message."
+    )
+    opening = build_messages(ChatPolicyState(brief=BRIEF, max_turns=10))[1]["content"]
+    assert opening.startswith(
+        "The chat has just opened and nobody has written yet: you write first."
+    )
+
+
+def test_voice_states_still_get_the_phone_prompt():
+    state = PolicyState(brief=BRIEF)
+    assert build_messages(state)[0]["content"] == system_prompt(BRIEF)
