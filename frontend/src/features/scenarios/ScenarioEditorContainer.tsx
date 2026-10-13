@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAgents } from "@/features/agents/queries";
+import type { AgentKind } from "@/features/agents/types";
 import { canChat } from "@/features/connections/kinds";
 import { LaunchPanel } from "@/features/runs/LaunchPanel";
 import { useConnections } from "@/features/connections/queries";
@@ -195,6 +196,7 @@ export function ScenarioEditorContainer({ scenarioId }: ScenarioEditorContainerP
         launch={
           <LaunchRail
             scenario={scenario.data}
+            agentKind={agents.data?.find((agent) => agent.id === scenario.data?.agentId)?.kind}
             onLaunched={(batchId) => router.push(`/live?batchId=${encodeURIComponent(batchId)}`)}
             onBusyChange={setLaunching}
           />
@@ -215,10 +217,13 @@ export function ScenarioEditorContainer({ scenarioId }: ScenarioEditorContainerP
 /** Right rail: launches the saved scenario; a new one has to be saved first. */
 function LaunchRail({
   scenario,
+  agentKind,
   onLaunched,
   onBusyChange,
 }: {
   scenario: Scenario | undefined;
+  /** The scenario's agent kind, once known: text runs are conversations. */
+  agentKind?: AgentKind;
   onLaunched: (batchId: string) => void;
   onBusyChange: (busy: boolean) => void;
 }) {
@@ -248,7 +253,14 @@ function LaunchRail({
           <p className="text-xs text-dim">Launches the saved version.</p>
         </div>
         <LaunchPanel
-          scenarios={[{ id: scenario.id, name: scenario.name, maxDurationS: scenario.endConditions.maxDurationS }]}
+          scenarios={[
+            {
+              id: scenario.id,
+              name: scenario.name,
+              maxDurationS: scenario.endConditions.maxDurationS,
+              kind: agentKind,
+            },
+          ]}
           onLaunched={(batch) => onLaunched(batch.id)}
           onBusyChange={onBusyChange}
         />

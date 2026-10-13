@@ -249,10 +249,11 @@ export function ScenariosContainer() {
       />
       <LaunchRunsDialog
         open={launching !== undefined}
-        scenarios={(launching ?? []).map(({ id, name, endConditions }) => ({
+        scenarios={(launching ?? []).map(({ id, name, agentId, endConditions }) => ({
           id,
           name,
           maxDurationS: endConditions.maxDurationS,
+          kind: agentList.find((agent) => agent.id === agentId)?.kind,
         }))}
         onClose={() => setLaunching(undefined)}
         onLaunched={(batch) => router.push(`/live?batchId=${encodeURIComponent(batch.id)}`)}

@@ -8,9 +8,9 @@ every text piece is published live (`agent_text_delta`), as are the agent's tool
 answered before the chat ends.
 
 The chat ends when the user ends it (`caller_hung_up`), after `max_turns` messages of the user
-(`max_turns`), at `max_duration_s` of wall-clock time (`max_duration`), or when the user has
-nothing to say `MAX_SILENT_DECISIONS` times in a row (`caller_silent`, only possible when the
-scenario forbids hanging up). A reply the agent could not finish (`TextTargetError`, e.g. a
+(`max_turns`), at `max_duration_s` of wall-clock time (`max_duration`), or when the policy
+returns neither a message nor a hang-up `MAX_SILENT_DECISIONS` times in a row (`caller_silent`,
+whatever the scenario's hang-up rule). A reply the agent could not finish (`TextTargetError`, e.g. a
 stream without its final event) fails the run (`agent_error`); its partial text is kept on an
 `incomplete` transcript row. The runner always writes its artifacts: `transcript.json`,
 `events.jsonl` and `summary.json` (no audio).

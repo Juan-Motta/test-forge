@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState, type FormEvent } from "react";
+import type { AgentKind } from "@/features/agents/types";
 import { errorMessage } from "@/lib/api";
 import { Alert, Button, Field, Input, cn } from "@/ui";
 import {
@@ -18,8 +19,18 @@ import {
 import { useLaunchRuns } from "./queries";
 import type { BatchDetail } from "./types";
 
-/** A saved scenario to launch; `maxDurationS` feeds the wall-time estimate. */
-export type LaunchScenario = { id: string; name: string; maxDurationS?: number };
+/**
+ * A saved scenario to launch; `maxDurationS` feeds the wall-time estimate and `kind` (its agent's)
+ * names what each run is: a call (voice) or a conversation (text). Text runs need no voice connection.
+ */
+export type LaunchScenario = { id: string; name: string; maxDurationS?: number; kind?: AgentKind };
+
+/** What one run is called: a call, a conversation, or a run when the batch mixes both. */
+function runNoun(scenarios: LaunchScenario[]): string {
+  const text = scenarios.filter((scenario) => scenario.kind === "text").length;
+  if (text === 0) return "call";
+  return text === scenarios.length ? "conversation" : "run";
+}
 
 type LaunchPanelProps = {
   /** Saved scenarios to launch, in order. */
@@ -46,6 +57,7 @@ export function LaunchPanel({ scenarios, onLaunched, onCancel, onBusyChange }: L
   const planned = plannedRuns(scenarios.length, draft);
   const minutes = estimatedMinutes(scenarios, draft);
   const refused = launch.isError ? notRunnableReasons(launch.error, scenarios) : [];
+  const noun = runNoun(scenarios);
 
   function set(field: keyof LaunchDraft, value: string) {
     setDraft((current) => ({ ...current, [field]: value }));
@@ -128,10 +140,10 @@ export function LaunchPanel({ scenarios, onLaunched, onCancel, onBusyChange }: L
       </Field>
       <label className="flex items-center gap-2.5 text-[13px] text-body">
         <input type="checkbox" checked disabled readOnly className="size-[18px] accent-evaluator" />
-        Judge automatically when each call ends
+        Judge automatically when each {noun} ends
       </label>
       <div className="flex justify-between gap-3 border-t border-line pt-3 text-xs text-muted">
-        <span>{planned === null ? "" : planned === 1 ? "1 call" : `${planned} calls`}</span>
+        <span>{planned === null ? "" : planned === 1 ? `1 ${noun}` : `${planned} ${noun}s`}</span>
         {minutes === null ? null : <span>{`≈ ${minutes} min wall time`}</span>}
       </div>
       {launch.isError ? (

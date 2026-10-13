@@ -56,6 +56,7 @@ describe("Create agent", () => {
         body: {
           name: "Hotel desk",
           context: "Books rooms at Hotel Mirador.",
+          kind: "voice",
           protocol: "realtime",
           baseUrl: "wss://agent.example.com/ws/",
           channelId: "hotel-dev",
@@ -289,6 +290,7 @@ describe("Import from cURL", () => {
         body: {
           name: "Vivi dev",
           context: "",
+          kind: "voice",
           protocol: "live",
           baseUrl: "wss://api-dev-95a8b1f8-0925-4b65-a078-75c0473d54d7.vivi.bot",
           channelId: "2a8204d3-bd82-4799-a8e8-8e669f318fec",

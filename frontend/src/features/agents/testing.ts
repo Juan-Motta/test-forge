@@ -1,17 +1,22 @@
 import { http, HttpResponse } from "msw/http";
 import { apiUrl, server } from "@/test/server";
-import type { Agent, AgentConnectionTest, AgentProtocol } from "./types";
+import type { Agent, AgentConnectionTest, AgentKind, AgentProtocol, TextAuth, TextMode } from "./types";
 
 /** A stored agent as the API returns it. */
 export function agentFixture(overrides: Partial<Agent> = {}): Agent {
   return {
     id: "a-hotel",
     name: "Hotel booking assistant",
+    kind: "voice",
     context: "Voice receptionist of Hotel Mirador. Books, changes and cancels reservations.",
     protocol: "realtime",
     baseUrl: "wss://agent.example.com/ws",
     channelId: "hotel-dev",
     userId: "user|KSG|42",
+    textMode: null,
+    auth: null,
+    hasApiKey: false,
+    apiKeyHint: null,
     origin: null,
     langfuseConnectionId: null,
     createdAt: "2026-10-01T10:00:00Z",
@@ -47,6 +52,19 @@ export function connectionTestFixture(overrides: Partial<AgentConnectionTest> = 
 const nameTaken = () => HttpResponse.json({ detail: "Agent name already in use" }, { status: 409 });
 const notFound = () => HttpResponse.json({ detail: "Agent not found" }, { status: 404 });
 
+/** The masked tail the API shows for a stored key (`••••1234`); the key itself is never returned. */
+const hint = (key: string) => `••••${key.slice(-4)}`;
+
+/**
+ * The stored agent after a write, like the backend: the key is kept sealed (only `hasApiKey` and
+ * its hint come back), and `auth: none` removes it.
+ */
+function withKey({ apiKey, ...stored }: Agent & { apiKey?: unknown }): Agent {
+  if (typeof apiKey === "string") return { ...stored, hasApiKey: true, apiKeyHint: hint(apiKey) };
+  if (stored.auth === "none") return { ...stored, hasApiKey: false, apiKeyHint: null };
+  return stored;
+}
+
 /**
  * In-memory backend for `/api/agents`: keeps state across calls, answers 404/409 like the
  * backend, and records every request but list reads so tests can assert exact payloads.
@@ -72,19 +90,27 @@ export function mockAgentsApi(initial: Agent[] = [], options: MockOptions = {}) 
       if (taken(body.name)) return nameTaken();
       const now = new Date().toISOString();
       created += 1;
-      const agent: Agent = {
+      const kind = (body.kind ?? "voice") as AgentKind;
+      const text = kind === "text";
+      const agent = withKey({
         id: `a-new-${created}`,
         name: String(body.name),
+        kind,
         context: String(body.context ?? ""),
         protocol: (body.protocol ?? "auto") as AgentProtocol,
         baseUrl: String(body.baseUrl),
         channelId: String(body.channelId),
-        userId: String(body.userId),
+        userId: text ? null : String(body.userId),
+        textMode: text ? ((body.textMode ?? "stream") as TextMode) : null,
+        auth: text ? ((body.auth ?? "none") as TextAuth) : null,
+        hasApiKey: false,
+        apiKeyHint: null,
         origin: (body.origin as string | null | undefined) ?? null,
         langfuseConnectionId: (body.langfuseConnectionId as string | null | undefined) ?? null,
         createdAt: now,
         updatedAt: now,
-      };
+        apiKey: body.apiKey,
+      });
       state.items.push(agent);
       return HttpResponse.json(agent, { status: 201 });
     }),
@@ -94,7 +120,7 @@ export function mockAgentsApi(initial: Agent[] = [], options: MockOptions = {}) 
       const index = state.items.findIndex((item) => item.id === id);
       if (index < 0) return notFound();
       if (body.name !== undefined && taken(body.name, id)) return nameTaken();
-      state.items[index] = { ...state.items[index], ...(body as Partial<Agent>), updatedAt: new Date().toISOString() };
+      state.items[index] = withKey({ ...state.items[index], ...body, updatedAt: new Date().toISOString() });
       return HttpResponse.json(state.items[index]);
     }),
     http.delete(apiUrl("/agents/:id"), async ({ request, params }) => {

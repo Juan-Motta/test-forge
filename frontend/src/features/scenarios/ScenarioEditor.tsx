@@ -33,7 +33,7 @@ import {
   REALTIME_MODEL_LABELS,
   HANG_UP_LABELS,
   initialValues,
-  scenarioFormSchema,
+  scenarioFormSchemaFor,
   TEMPERAMENT_LABELS,
   type ScenarioFormValues,
 } from "./form-schema";
@@ -109,7 +109,11 @@ export function ScenarioEditor({
 }: ScenarioEditorProps) {
   const editing = scenario !== undefined;
   const form = useForm<ScenarioFormValues>({
-    resolver: zodResolver(scenarioFormSchema),
+    // The chosen agent's kind decides what is required (a text agent needs the evaluator model).
+    resolver: (values, context, options) => {
+      const kind = agents.find((item) => item.id === values.agentId)?.kind ?? "voice";
+      return zodResolver(scenarioFormSchemaFor(kind))(values, context, options);
+    },
     defaultValues: initialValues(scenario, agents[0]?.id),
     shouldFocusError: false,
   });
@@ -167,6 +171,10 @@ export function ScenarioEditor({
   const agentId = useWatch({ control, name: "agentId" });
   const evaluatorMode = useWatch({ control, name: "evaluatorMode" });
   const agent = agents.find((item) => item.id === agentId);
+  // A text agent chats: no voice, no barge-ins, and the evaluator model writes every message.
+  const text = agent?.kind === "text";
+  // Text agents have no interruptions card, so the evaluator card moves up.
+  const evaluatorNumber = text ? 6 : 7;
   const linkedTts = scenario?.ttsConnectionId;
   const voiceOptions =
     linkedTts && !ttsOptions.some((option) => option.id === linkedTts)
@@ -296,17 +304,19 @@ export function ScenarioEditor({
               <Field label="Locale" hint="Language tag, like es-MX or en-US." error={fieldError("persona.locale")}>
                 {(props) => <Input mono autoComplete="off" spellCheck={false} {...props} {...registerField("persona.locale")} />}
               </Field>
-              <Field
-                label="Voice override (optional)"
-                hint={
-                  evaluatorMode === "realtime"
-                    ? `A realtime voice: ${REALTIME_VOICES.join(", ")}.`
-                    : "A voice ID of the voice connection, like coral."
-                }
-                error={fieldError("voiceOverride")}
-              >
-                {(props) => <Input mono autoComplete="off" spellCheck={false} {...props} {...registerField("voiceOverride")} />}
-              </Field>
+              {text ? null : (
+                <Field
+                  label="Voice override (optional)"
+                  hint={
+                    evaluatorMode === "realtime"
+                      ? `A realtime voice: ${REALTIME_VOICES.join(", ")}.`
+                      : "A voice ID of the voice connection, like coral."
+                  }
+                  error={fieldError("voiceOverride")}
+                >
+                  {(props) => <Input mono autoComplete="off" spellCheck={false} {...props} {...registerField("voiceOverride")} />}
+                </Field>
+              )}
             </div>
             <div className="flex flex-col gap-2">
               <span aria-hidden="true" className="text-xs font-medium text-muted">
@@ -353,18 +363,30 @@ export function ScenarioEditor({
             <CriteriaEditor control={control} registerField={registerField} fieldError={fieldError} />
           </Section>
 
-          <Section id="scenario-end" title="5 · When the call ends">
+          <Section id="scenario-end" title={`5 · When the ${text ? "conversation" : "call"} ends`}>
             <div className="grid gap-3 sm:grid-cols-[repeat(auto-fit,minmax(min(180px,100%),1fr))]">
               <Field label="Max duration (s)" error={fieldError("endConditions.maxDurationS")}>
                 {(props) => (
                   <Input mono type="number" inputMode="numeric" min={30} max={1800} {...props} {...registerField("endConditions.maxDurationS")} />
                 )}
               </Field>
-              <Field label="Max silence (s)" error={fieldError("endConditions.maxSilenceS")}>
-                {(props) => (
-                  <Input mono type="number" inputMode="numeric" min={5} max={120} {...props} {...registerField("endConditions.maxSilenceS")} />
-                )}
-              </Field>
+              {text ? (
+                <Field
+                  label="Max turns"
+                  hint="Messages the evaluator sends before it stops, 1–100."
+                  error={fieldError("endConditions.maxTurns")}
+                >
+                  {(props) => (
+                    <Input mono type="number" inputMode="numeric" min={1} max={100} {...props} {...registerField("endConditions.maxTurns")} />
+                  )}
+                </Field>
+              ) : (
+                <Field label="Max silence (s)" error={fieldError("endConditions.maxSilenceS")}>
+                  {(props) => (
+                    <Input mono type="number" inputMode="numeric" min={5} max={120} {...props} {...registerField("endConditions.maxSilenceS")} />
+                  )}
+                </Field>
+              )}
               <Field label="Hang up when" error={fieldError("endConditions.hangUpWhen")}>
                 {(props) => (
                   <Select {...props} {...registerField("endConditions.hangUpWhen")}>
@@ -379,80 +401,30 @@ export function ScenarioEditor({
             </div>
           </Section>
 
-          <Section
-            id="scenario-interruptions"
-            title="6 · Interruptions"
-            description="The caller cuts the agent off mid-reply, like a person barging in. Agent replies count from 1."
-          >
-            <InterruptionsEditor control={control} registerField={registerField} fieldError={fieldError} />
-          </Section>
+          {text ? null : (
+            <Section
+              id="scenario-interruptions"
+              title="6 · Interruptions"
+              description="The caller cuts the agent off mid-reply, like a person barging in. Agent replies count from 1."
+            >
+              <InterruptionsEditor control={control} registerField={registerField} fieldError={fieldError} />
+            </Section>
+          )}
 
-          <Section id="scenario-evaluator" title="7 · Evaluator" description="How the caller hears the agent and speaks back.">
-            <RadioCardGroup label="Evaluator">
-              {EVALUATOR_MODES.map((mode) => (
-                <RadioCard
-                  key={mode}
-                  name="evaluatorMode"
-                  value={mode}
-                  checked={evaluatorMode === mode}
-                  onChange={setEvaluatorMode}
-                  title={EVALUATOR_MODE_LABELS[mode].label}
-                  description={EVALUATOR_MODE_LABELS[mode].description}
-                />
-              ))}
-            </RadioCardGroup>
-            {evaluatorMode === "realtime" ? (
-              <div className="flex flex-col gap-2">
-                <span aria-hidden="true" className="text-xs font-medium text-muted">
-                  Realtime model
-                </span>
-                <RadioCardGroup label="Realtime model">
-                  {REALTIME_MODELS.map((model) => (
-                    <RadioCard
-                      key={model}
-                      name="realtimeModel"
-                      value={model}
-                      checked={realtimeModel === model}
-                      onChange={(value) => {
-                        setValue("realtimeModel", value, { shouldDirty: true });
-                        clearErrors("realtimeModel");
-                      }}
-                      title={<span className="font-mono">{model}</span>}
-                      description={REALTIME_MODEL_LABELS[model]}
-                    />
-                  ))}
-                </RadioCardGroup>
-              </div>
-            ) : null}
-            <div className="grid gap-3 md:grid-cols-2">
-              <Field
-                label="Evaluator voice (TTS connection)"
-                hint={
-                  evaluatorMode === "realtime"
-                    ? "The realtime session uses this OpenAI or Azure OpenAI connection. None uses the platform's default."
-                    : "None uses the platform's default evaluator voice."
-                }
-                error={fieldError("ttsConnectionId")}
-              >
-                {(props) => (
-                  <Select {...props} {...registerField("ttsConnectionId")}>
-                    <option value="">None</option>
-                    {voiceOptions.map((option) => (
-                      <option key={option.id} value={option.id}>
-                        {option.name}
-                      </option>
-                    ))}
-                  </Select>
-                )}
-              </Field>
+          {text ? (
+            <Section
+              id="scenario-evaluator"
+              title={`${evaluatorNumber} · Evaluator`}
+              description="A chat model plays the user and writes every message to the agent."
+            >
               <Field
                 label="Evaluator model connection"
-                hint="Chat model that decides what the caller says. Azure OpenAI connections need a chat deployment."
+                hint="Required for text agents: its chat model writes the user's messages. Azure OpenAI connections need a chat deployment."
                 error={fieldError("evaluatorConnectionId")}
               >
                 {(props) => (
                   <Select {...props} {...registerField("evaluatorConnectionId")}>
-                    <option value="">Same as voice connection</option>
+                    <option value="">Choose a connection</option>
                     {chatOptions.map((option) => (
                       <option key={option.id} value={option.id}>
                         {option.name}
@@ -461,8 +433,89 @@ export function ScenarioEditor({
                   </Select>
                 )}
               </Field>
-            </div>
-          </Section>
+            </Section>
+          ) : (
+            <Section
+              id="scenario-evaluator"
+              title={`${evaluatorNumber} · Evaluator`}
+              description="How the caller hears the agent and speaks back."
+            >
+              <RadioCardGroup label="Evaluator">
+                {EVALUATOR_MODES.map((mode) => (
+                  <RadioCard
+                    key={mode}
+                    name="evaluatorMode"
+                    value={mode}
+                    checked={evaluatorMode === mode}
+                    onChange={setEvaluatorMode}
+                    title={EVALUATOR_MODE_LABELS[mode].label}
+                    description={EVALUATOR_MODE_LABELS[mode].description}
+                  />
+                ))}
+              </RadioCardGroup>
+              {evaluatorMode === "realtime" ? (
+                <div className="flex flex-col gap-2">
+                  <span aria-hidden="true" className="text-xs font-medium text-muted">
+                    Realtime model
+                  </span>
+                  <RadioCardGroup label="Realtime model">
+                    {REALTIME_MODELS.map((model) => (
+                      <RadioCard
+                        key={model}
+                        name="realtimeModel"
+                        value={model}
+                        checked={realtimeModel === model}
+                        onChange={(value) => {
+                          setValue("realtimeModel", value, { shouldDirty: true });
+                          clearErrors("realtimeModel");
+                        }}
+                        title={<span className="font-mono">{model}</span>}
+                        description={REALTIME_MODEL_LABELS[model]}
+                      />
+                    ))}
+                  </RadioCardGroup>
+                </div>
+              ) : null}
+              <div className="grid gap-3 md:grid-cols-2">
+                <Field
+                  label="Evaluator voice (TTS connection)"
+                  hint={
+                    evaluatorMode === "realtime"
+                      ? "The realtime session uses this OpenAI or Azure OpenAI connection. None uses the platform's default."
+                      : "None uses the platform's default evaluator voice."
+                  }
+                  error={fieldError("ttsConnectionId")}
+                >
+                  {(props) => (
+                    <Select {...props} {...registerField("ttsConnectionId")}>
+                      <option value="">None</option>
+                      {voiceOptions.map((option) => (
+                        <option key={option.id} value={option.id}>
+                          {option.name}
+                        </option>
+                      ))}
+                    </Select>
+                  )}
+                </Field>
+                <Field
+                  label="Evaluator model connection"
+                  hint="Chat model that decides what the caller says. Azure OpenAI connections need a chat deployment."
+                  error={fieldError("evaluatorConnectionId")}
+                >
+                  {(props) => (
+                    <Select {...props} {...registerField("evaluatorConnectionId")}>
+                      <option value="">Same as voice connection</option>
+                      {chatOptions.map((option) => (
+                        <option key={option.id} value={option.id}>
+                          {option.name}
+                        </option>
+                      ))}
+                    </Select>
+                  )}
+                </Field>
+              </div>
+            </Section>
+          )}
 
           {error || otherServerErrors.length > 0 ? (
             <Alert>

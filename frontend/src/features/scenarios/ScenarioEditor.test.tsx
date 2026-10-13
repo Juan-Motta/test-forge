@@ -119,7 +119,7 @@ describe("Scenario editor: create", () => {
             { text: "Offers a late check-out", kind: "must", source: "transcript", weight: 70 },
             { text: "Mentions the fee", kind: "should", source: "trace", weight: 30 },
           ],
-          endConditions: { maxDurationS: 300, maxSilenceS: 15, hangUpWhen: "goodbye" },
+          endConditions: { maxDurationS: 300, maxSilenceS: 15, maxTurns: 20, hangUpWhen: "goodbye" },
           interruptions: [],
         },
       },

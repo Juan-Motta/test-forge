@@ -4,28 +4,50 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { get, useForm, useWatch, type Path } from "react-hook-form";
 import type { FieldErrors } from "@/lib/api";
-import { Alert, Badge, Button, Card, Field, Input, Select, Textarea } from "@/ui";
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  Field,
+  Input,
+  PasswordInput,
+  RadioCard,
+  RadioCardGroup,
+  Select,
+  Textarea,
+} from "@/ui";
 import {
   AGENT_FIELDS,
   agentFormSchema,
   initialValues,
+  KIND_LABELS,
   PROTOCOL_LABELS,
+  TEXT_AUTH_LABELS,
+  TEXT_MODE_LABELS,
   type AgentFormValues,
 } from "./form-schema";
 import { CurlImportPanel, type CurlImportSuccess } from "./CurlImportPanel";
-import { AGENT_PROTOCOLS, type Agent } from "./types";
+import { AGENT_KINDS, AGENT_PROTOCOLS, TEXT_AUTHS, TEXT_MODES, type Agent, type AgentKind } from "./types";
 
 const NO_SERVER_ERRORS: FieldErrors = {};
 
-/** How the import summary names each field it filled, in form order. */
+/** How the import summary names each field it filled, per kind, in form order. */
 const IMPORTED_FIELD_LABELS = {
-  baseUrl: "WebSocket URL",
-  channelId: "channel ID",
-  userId: "user ID",
-  origin: "origin",
-} as const;
+  voice: { baseUrl: "WebSocket URL", channelId: "channel ID", userId: "user ID", origin: "origin" },
+  text: {
+    baseUrl: "base URL",
+    channelId: "channel ID",
+    textMode: "mode",
+    auth: "authentication",
+    apiKey: "API key",
+    origin: "origin",
+  },
+} as const satisfies Record<AgentKind, Partial<Record<keyof AgentFormValues, string>>>;
 
-type ImportSummary = { filled: string[]; ignored: string[]; warnings: string[] };
+const KIND_NAMES: Record<AgentKind, string> = { voice: "a voice agent", text: "a text agent" };
+
+type ImportSummary = { filled: string[]; ignored: string[]; warnings: string[]; mismatch?: boolean };
 
 export type LangfuseOption = {
   id: string;
@@ -96,7 +118,16 @@ export function AgentForm({
     clearErrors,
     control,
     formState: { errors, isDirty },
-  } = useForm<AgentFormValues>({ resolver: zodResolver(agentFormSchema), defaultValues: initialValues(agent) });
+  } = useForm<AgentFormValues>({
+    resolver: zodResolver(agentFormSchema(agent?.hasApiKey ?? false)),
+    defaultValues: initialValues(agent),
+  });
+  const kind = useWatch({ control, name: "kind" });
+  const textMode = useWatch({ control, name: "textMode" });
+  const auth = useWatch({ control, name: "auth" });
+  const text = kind === "text";
+  // A stored key is never shown; "Replace" opens an empty field for a new one.
+  const [replacingKey, setReplacingKey] = useState(false);
 
   const dirtyHandler = useRef(onDirtyChange);
   useEffect(() => {
@@ -118,15 +149,29 @@ export function AgentForm({
   }
 
   // Fills only what the command provided, as user edits (dirty), so the rest of the form stays.
-  function applyImport({ values, ignored, warnings }: CurlImportSuccess) {
-    const fields = (Object.keys(IMPORTED_FIELD_LABELS) as (keyof typeof IMPORTED_FIELD_LABELS)[]).filter(
-      (field) => values[field] !== undefined,
-    );
+  // A new agent takes the command's kind; an existing one keeps its own and is left untouched.
+  function applyImport({ kind: imported, values, ignored, warnings }: CurlImportSuccess) {
+    if (imported !== kind && editing) {
+      setImportSummary({
+        filled: [],
+        ignored: [],
+        warnings: [`This command is for ${KIND_NAMES[imported]}; this agent is ${KIND_NAMES[kind]}. Nothing filled.`],
+        mismatch: true,
+      });
+      closeImport();
+      return;
+    }
+    const labels: Partial<Record<keyof AgentFormValues, string>> = IMPORTED_FIELD_LABELS[imported];
+    const fields = (Object.keys(labels) as (keyof typeof values)[]).filter((field) => values[field] !== undefined);
+    if (imported !== kind) setValue("kind", imported, { shouldDirty: true });
     for (const field of fields) {
       setValue(field, values[field] ?? "", { shouldDirty: true });
       clearErrors(field);
     }
-    setImportSummary({ filled: fields.map((field) => IMPORTED_FIELD_LABELS[field]), ignored, warnings });
+    if (values.apiKey !== undefined) setReplacingKey(true);
+    const filled = fields.map((field) => labels[field] ?? field);
+    if (imported !== kind) filled.unshift(`kind (${imported})`);
+    setImportSummary({ filled, ignored, warnings });
     closeImport();
   }
 
@@ -180,10 +225,12 @@ export function AgentForm({
       {importOpen ? <CurlImportPanel id={importPanelId} onImport={applyImport} onCancel={closeImport} /> : null}
       {importSummary ? (
         <Alert tone="info">
-          <span className="block">
-            {importSummary.filled.length > 0 ? `Filled: ${importSummary.filled.join(", ")}.` : "Nothing filled."}
-            {importSummary.ignored.length > 0 ? ` Ignored: ${importSummary.ignored.join(", ")}.` : null}
-          </span>
+          {importSummary.mismatch ? null : (
+            <span className="block">
+              {importSummary.filled.length > 0 ? `Filled: ${importSummary.filled.join(", ")}.` : "Nothing filled."}
+              {importSummary.ignored.length > 0 ? ` Ignored: ${importSummary.ignored.join(", ")}.` : null}
+            </span>
+          )}
           {importSummary.warnings.map((warning) => (
             <span key={warning} className="block">
               {warning}
@@ -230,8 +277,12 @@ export function AgentForm({
 
   const baseUrlField = (
     <Field
-      label="WebSocket URL"
-      hint="wss:// without query string. ws:// works for a local agent (localhost, 127.0.0.1, host.docker.internal)."
+      label={text ? "Base URL" : "WebSocket URL"}
+      hint={
+        text
+          ? "https:// host of the channel API, without /channelsApi. http:// works for a local agent (localhost, 127.0.0.1, host.docker.internal)."
+          : "wss:// without query string. ws:// works for a local agent (localhost, 127.0.0.1, host.docker.internal)."
+      }
       error={fieldError("baseUrl")}
     >
       {(control) => (
@@ -240,12 +291,121 @@ export function AgentForm({
           inputMode="url"
           autoComplete="off"
           spellCheck={false}
-          placeholder="wss://agent.example.com/ws"
+          placeholder={text ? "https://api.example.com" : "wss://agent.example.com/ws"}
           {...control}
           {...registerField("baseUrl")}
         />
       )}
     </Field>
+  );
+
+  const kindField = (
+    <RadioCardGroup label="Agent kind">
+      {AGENT_KINDS.map((value) => (
+        <RadioCard
+          key={value}
+          name={`${formUid}-kind`}
+          value={value}
+          checked={kind === value}
+          onChange={(next) => {
+            setValue("kind", next, { shouldDirty: true });
+            clearErrors();
+          }}
+          title={KIND_LABELS[value].label}
+          description={KIND_LABELS[value].description}
+        />
+      ))}
+    </RadioCardGroup>
+  );
+
+  const kindBadge = <Badge tone="outline">{text ? "Text agent" : "Voice agent"}</Badge>;
+
+  const textModeField = (
+    <div className="flex flex-col gap-2">
+      <span aria-hidden="true" className="text-xs font-medium text-muted">
+        Mode
+      </span>
+      <RadioCardGroup label="Mode">
+        {TEXT_MODES.map((value) => (
+          <RadioCard
+            key={value}
+            name={`${formUid}-mode`}
+            value={value}
+            checked={textMode === value}
+            onChange={(next) => setValue("textMode", next, { shouldDirty: true })}
+            title={TEXT_MODE_LABELS[value].label}
+            description={TEXT_MODE_LABELS[value].description}
+          />
+        ))}
+      </RadioCardGroup>
+    </div>
+  );
+
+  const storedKey = agent?.hasApiKey && !replacingKey;
+  const authField = (
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-2">
+        <span aria-hidden="true" className="text-xs font-medium text-muted">
+          Authentication
+        </span>
+        <RadioCardGroup label="Authentication">
+          {TEXT_AUTHS.map((value) => (
+            <RadioCard
+              key={value}
+              name={`${formUid}-auth`}
+              value={value}
+              checked={auth === value}
+              onChange={(next) => {
+                setValue("auth", next, { shouldDirty: true });
+                clearErrors("apiKey");
+              }}
+              title={TEXT_AUTH_LABELS[value].label}
+              description={TEXT_AUTH_LABELS[value].description}
+            />
+          ))}
+        </RadioCardGroup>
+      </div>
+      {auth !== "api_key" ? null : storedKey ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-field-line bg-field px-3 py-2">
+          <span className="font-mono text-[13px]">Saved {agent?.apiKeyHint ?? ""}</span>
+          <span className="flex gap-2">
+            <Button variant="secondary" onClick={() => setReplacingKey(true)}>
+              Replace
+            </Button>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setValue("auth", "none", { shouldDirty: true });
+                clearErrors("apiKey");
+              }}
+            >
+              Remove
+            </Button>
+          </span>
+        </div>
+      ) : (
+        <Field
+          label="API key value"
+          hint={
+            agent?.hasApiKey
+              ? "Replaces the saved key on save; it is stored encrypted and never shown again."
+              : "Stored encrypted and never shown again; sent as the vivi-api-key header."
+          }
+          error={fieldError("apiKey")}
+        >
+          {(control) => (
+            <PasswordInput
+              mono
+              subject="API key"
+              autoComplete="new-password"
+              spellCheck={false}
+              {...control}
+              {...registerField("apiKey")}
+            />
+          )}
+        </Field>
+      )}
+    </div>
   );
 
   const originField = (label: string) => (
@@ -326,20 +486,39 @@ export function AgentForm({
       >
         {errorAlert}
         <SectionCard
-          title="Realtime connection"
-          subtitle="Each run opens its own socket with a fresh threadId"
+          title={text ? "Chat connection" : "Realtime connection"}
+          subtitle={
+            text
+              ? "Each run is one conversation with a fresh threadId"
+              : "Each run opens its own socket with a fresh threadId"
+          }
+          badge={kindBadge}
           status={connectionStatus}
         >
           {importBlock}
           {baseUrlField}
           <ParamsTable
-            channelId={paramInput("channelId", "Channel ID")}
-            userId={paramInput("userId", "User ID")}
+            fixed={
+              text
+                ? [{ key: "channelId", input: paramInput("channelId", "Channel ID") }]
+                : [
+                    { key: "channelId", input: paramInput("channelId", "Channel ID") },
+                    { key: "userId", input: paramInput("userId", "User ID") },
+                  ]
+            }
           />
-          <div className="grid gap-3 sm:grid-cols-2">
-            {originField("Origin header")}
-            {protocolField}
-          </div>
+          {text ? (
+            <>
+              {textModeField}
+              {authField}
+              {originField("Origin header")}
+            </>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {originField("Origin header")}
+              {protocolField}
+            </div>
+          )}
           {connectionCheck}
         </SectionCard>
         <SectionCard
@@ -386,23 +565,36 @@ export function AgentForm({
 
   return (
     <form id={formId} noValidate aria-label="Agent" onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-5">
+      {editing ? null : kindField}
       {importBlock}
       {nameField}
       {contextField}
 
       <fieldset className="flex flex-col gap-4 rounded-lg border border-line bg-raised p-4">
         <legend className="px-1 text-sm font-semibold">Connection</legend>
-        <p className="text-xs text-muted">Each run opens its own socket with a fresh thread ID.</p>
-        {protocolField}
+        <p className="text-xs text-muted">
+          {text
+            ? "Each run is one conversation with a fresh thread ID."
+            : "Each run opens its own socket with a fresh thread ID."}
+        </p>
+        {text ? null : protocolField}
         {baseUrlField}
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Channel ID" error={fieldError("channelId")}>
+          <Field
+            label="Channel ID"
+            hint={text ? "The channel's UUID, from /channelsApi/{channelId}/…" : undefined}
+            error={fieldError("channelId")}
+          >
             {(control) => <Input mono autoComplete="off" spellCheck={false} {...control} {...registerField("channelId")} />}
           </Field>
-          <Field label="User ID" error={fieldError("userId")}>
-            {(control) => <Input mono autoComplete="off" spellCheck={false} {...control} {...registerField("userId")} />}
-          </Field>
+          {text ? null : (
+            <Field label="User ID" error={fieldError("userId")}>
+              {(control) => <Input mono autoComplete="off" spellCheck={false} {...control} {...registerField("userId")} />}
+            </Field>
+          )}
         </div>
+        {text ? textModeField : null}
+        {text ? authField : null}
         {originField("Origin (optional)")}
       </fieldset>
 
@@ -423,18 +615,21 @@ export function AgentForm({
   );
 }
 
-type SectionCardProps = { title: string; subtitle: string; status?: ReactNode; children: ReactNode };
+type SectionCardProps = { title: string; subtitle: string; badge?: ReactNode; status?: ReactNode; children: ReactNode };
 
-/** One of the detail's cards: a titled region with an optional status pill on the right. */
-function SectionCard({ title, subtitle, status, children }: SectionCardProps) {
+/** One of the detail's cards: a titled region with an optional badge and status pill. */
+function SectionCard({ title, subtitle, badge, status, children }: SectionCardProps) {
   const headingId = useId();
   return (
     <Card aria-labelledby={headingId} className="gap-3.5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-col gap-1">
-          <h2 id={headingId} className="text-[15px] font-semibold">
-            {title}
-          </h2>
+          <span className="flex flex-wrap items-center gap-2">
+            <h2 id={headingId} className="text-[15px] font-semibold">
+              {title}
+            </h2>
+            {badge}
+          </span>
           <p className="text-xs text-dim">{subtitle}</p>
         </div>
         {status}
@@ -446,8 +641,8 @@ function SectionCard({ title, subtitle, status, children }: SectionCardProps) {
 
 const PARAM_CELL = "border-b border-line-soft px-2.5 py-2.5 align-top";
 
-/** The values every run sends: channel and user are fixed; the thread ID is new per run. */
-function ParamsTable({ channelId, userId }: { channelId: ReactNode; userId: ReactNode }) {
+/** The values every run sends: the fixed ones (channel, and user for voice); the thread ID is new per run. */
+function ParamsTable({ fixed }: { fixed: { key: string; input: ReactNode }[] }) {
   const labelId = useId();
   return (
     <div className="flex flex-col gap-2">
@@ -464,20 +659,17 @@ function ParamsTable({ channelId, userId }: { channelId: ReactNode; userId: Reac
             </tr>
           </thead>
           <tbody>
-            <tr>
-              <th scope="row" className={`${PARAM_CELL} pt-5 text-left font-mono text-xs font-normal`}>channelId</th>
-              <td className={PARAM_CELL}>{channelId}</td>
-              <td className={`${PARAM_CELL} pt-4`}>
-                <Badge tone="muted">Fixed</Badge>
-              </td>
-            </tr>
-            <tr>
-              <th scope="row" className={`${PARAM_CELL} pt-5 text-left font-mono text-xs font-normal`}>userId</th>
-              <td className={PARAM_CELL}>{userId}</td>
-              <td className={`${PARAM_CELL} pt-4`}>
-                <Badge tone="muted">Fixed</Badge>
-              </td>
-            </tr>
+            {fixed.map(({ key, input }) => (
+              <tr key={key}>
+                <th scope="row" className={`${PARAM_CELL} pt-5 text-left font-mono text-xs font-normal`}>
+                  {key}
+                </th>
+                <td className={PARAM_CELL}>{input}</td>
+                <td className={`${PARAM_CELL} pt-4`}>
+                  <Badge tone="muted">Fixed</Badge>
+                </td>
+              </tr>
+            ))}
             <tr>
               <th scope="row" className={`${PARAM_CELL} text-left font-mono text-xs font-normal`}>threadId</th>
               <td className={`${PARAM_CELL} font-mono text-xs text-body`}>new UUID</td>

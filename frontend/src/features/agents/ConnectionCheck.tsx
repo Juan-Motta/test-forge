@@ -1,5 +1,5 @@
 import { Alert, Badge, Button } from "@/ui";
-import type { AgentConnectionTest } from "./types";
+import type { AgentConnectionTest, AgentKind } from "./types";
 
 /** The last connection test of one agent in this browser session. */
 export type ConnectionTestState =
@@ -48,10 +48,18 @@ function checkedTime(at: Date): string {
 type ConnectionCheckProps = {
   state: ConnectionTestState;
   onRun: () => void;
+  /** What the test does differs: a voice agent's socket is opened; a text agent gets a message. */
+  kind?: AgentKind;
+};
+
+const WHAT_IT_DOES: Record<AgentKind, string> = {
+  voice:
+    "Tests the saved settings: opens the agent's WebSocket and closes it once the session is ready; no audio is sent. The agent may still start a short session on its side.",
+  text: "Tests the saved settings: sends one short message to the agent and waits for its reply. It is a real message: the agent answers it and it may show in the agent's conversations.",
 };
 
 /** The step-by-step log of the last test, in a terminal-style block, and the button that runs it. */
-export function ConnectionCheck({ state, onRun }: ConnectionCheckProps) {
+export function ConnectionCheck({ state, onRun, kind = "voice" }: ConnectionCheckProps) {
   const running = state.status === "running";
   return (
     <div className="flex flex-col gap-3">
@@ -75,16 +83,17 @@ export function ConnectionCheck({ state, onRun }: ConnectionCheckProps) {
           </>
         ) : (
           <span className="text-dim">
-            {running ? "Dialling the agent…" : "No connection test in this session yet."}
+            {running
+              ? kind === "text"
+                ? "Messaging the agent…"
+                : "Dialling the agent…"
+              : "No connection test in this session yet."}
           </span>
         )}
       </div>
       {state.status === "error" ? <Alert>Could not run the connection test: {state.message}</Alert> : null}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="max-w-xl text-xs text-dim">
-          Tests the saved settings: opens the agent&apos;s WebSocket and closes it once the session is ready; no
-          audio is sent. The agent may still start a short session on its side.
-        </p>
+        <p className="max-w-xl text-xs text-dim">{WHAT_IT_DOES[kind]}</p>
         <Button variant="secondary" loading={running} onClick={onRun}>
           {running ? "Testing…" : "Run connection test"}
         </Button>

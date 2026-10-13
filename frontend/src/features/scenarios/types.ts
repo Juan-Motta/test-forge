@@ -21,7 +21,10 @@ export type Persona = { name: string; locale: string; temperament: Temperament; 
 /** Something the caller knows and reveals only when asked. */
 export type Fact = { key: string; value: string };
 export type Criterion = { id: string; text: string; kind: CriterionKind; source: EvidenceSource; weight: number };
-export type EndConditions = { maxDurationS: number; maxSilenceS: number; hangUpWhen: HangUpWhen };
+/** `maxSilenceS` applies to voice agents only, `maxTurns` (messages the user sends, 1–100) to text agents only. */
+export type EndConditions = { maxDurationS: number; maxSilenceS: number; maxTurns: number; hangUpWhen: HangUpWhen };
+/** The backend's default `maxTurns`, also read for scenarios stored before it existed. */
+export const DEFAULT_MAX_TURNS = 20;
 /** The caller cuts agent reply #`agentTurn` (1-based) once `afterMs` of it has played. */
 export type Interruption = { agentTurn: number; afterMs: number };
 

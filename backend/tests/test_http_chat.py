@@ -239,9 +239,12 @@ async def test_collect_closes_the_response_when_the_reply_ends(mode):
 async def test_reply_ended_comes_after_the_response_is_closed():
     stream = TrackedStream([STREAM.encode()])
     chat, _ = target(tracked(stream))
+    ended = 0
     async for event in chat.send("Hi", thread_id=THREAD):
         if isinstance(event, ReplyEnded):
+            ended += 1
             assert stream.closed  # the consumer may stop here: nothing is left open
+    assert ended == 1
 
 
 async def test_one_huge_line_without_a_newline_is_refused_as_it_arrives(monkeypatch):

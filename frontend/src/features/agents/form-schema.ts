@@ -1,32 +1,68 @@
 import { z } from "zod";
-import { AGENT_PROTOCOLS, type Agent, type AgentChanges, type AgentProtocol, type NewAgent } from "./types";
+import {
+  AGENT_KINDS,
+  AGENT_PROTOCOLS,
+  TEXT_AUTHS,
+  TEXT_MODES,
+  type Agent,
+  type AgentChanges,
+  type AgentKind,
+  type AgentProtocol,
+  type NewAgent,
+  type TextAuth,
+  type TextMode,
+} from "./types";
 
 /**
- * Form state. Field names match the API's error locations (`baseUrl`, `langfuseConnectionId`),
- * so server field errors land on the inputs without translation. Optional values are "" here.
+ * Form state for both kinds; only the fields of the chosen kind are validated and sent. Field
+ * names match the API's error locations (`baseUrl`, `apiKey`), so server field errors land on the
+ * inputs without translation. Optional values are "" here; `apiKey` is "" unless a new key is typed.
  */
 export type AgentFormValues = {
+  kind: AgentKind;
   name: string;
   context: string;
   protocol: AgentProtocol;
   baseUrl: string;
   channelId: string;
   userId: string;
+  textMode: TextMode;
+  auth: TextAuth;
+  apiKey: string;
   origin: string;
   langfuseConnectionId: string;
 };
 
 /** The form's fields in display order (used to focus the first one with an error). */
 export const AGENT_FIELDS = [
+  "kind",
   "name",
   "context",
   "protocol",
   "baseUrl",
   "channelId",
   "userId",
+  "textMode",
+  "auth",
+  "apiKey",
   "origin",
   "langfuseConnectionId",
 ] as const satisfies readonly (keyof AgentFormValues)[];
+
+export const KIND_LABELS: Record<AgentKind, { label: string; description: string }> = {
+  voice: { label: "Voice", description: "Talks over a realtime WebSocket; the evaluator calls it." },
+  text: { label: "Text", description: "Chats over Vivi's channel API; the evaluator writes to it." },
+};
+
+export const TEXT_MODE_LABELS: Record<TextMode, { label: string; description: string }> = {
+  stream: { label: "Stream", description: "The reply arrives as it is written; latency is the time to the first text." },
+  invoke: { label: "Invoke", description: "The whole reply in one response; latency is the time to the full reply." },
+};
+
+export const TEXT_AUTH_LABELS: Record<TextAuth, { label: string; description: string }> = {
+  none: { label: "None", description: "A WEB channel, like the portal's testing channel: no credentials." },
+  api_key: { label: "API key", description: "An API channel: the key is sent as the vivi-api-key header." },
+};
 
 export const PROTOCOL_LABELS: Record<AgentProtocol, string> = {
   auto: "Auto-detect",
@@ -41,7 +77,9 @@ const MAX_URL = 2048;
 const MAX_CHANNEL_ID = 200;
 const MAX_USER_ID = 200;
 const MAX_ORIGIN = 300;
+const MAX_API_KEY = 512;
 const CHANNEL_ID = /^[A-Za-z0-9._~-]+$/;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** Hosts a `ws://` URL may name: an agent running on this machine (the backend may run in Docker). */
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "host.docker.internal"]);
 
@@ -71,15 +109,17 @@ function parseUrl(value: string): URL | string {
 }
 
 /**
- * The agent's WebSocket URL: `wss://`, or `ws://` for a local agent (`localhost`, `127.0.0.1`,
- * `host.docker.internal`), which the server accepts in any environment.
+ * The agent's base URL. Voice: the WebSocket URL, `wss://`. Text: the channel API's host,
+ * `https://`. The plain scheme (`ws://`, `http://`) works for a local agent (`localhost`,
+ * `127.0.0.1`, `host.docker.internal`), which the server accepts in any environment.
  */
-export function baseUrlProblem(value: string): string | undefined {
+export function baseUrlProblem(value: string, kind: AgentKind = "voice"): string | undefined {
   if (value.length > MAX_URL) return "URL is too long.";
   const url = parseUrl(value);
   if (typeof url === "string") return url;
-  const localWs = url.protocol === "ws:" && LOCAL_HOSTS.has(url.hostname);
-  if (url.protocol !== "wss:" && !localWs) return "URL must use wss://.";
+  const [secure, plain] = kind === "text" ? ["https:", "http:"] : ["wss:", "ws:"];
+  const local = url.protocol === plain && LOCAL_HOSTS.has(url.hostname);
+  if (url.protocol !== secure && !local) return `URL must use ${secure}//.`;
   return undefined;
 }
 
@@ -95,66 +135,95 @@ export function originProblem(value: string): string | undefined {
 
 const PRINTABLE = /^[^\p{Cc}\p{Cf}\p{Zl}\p{Zp}]*$/u;
 
-export const agentFormSchema = z
-  .object({
-    name: z.string().trim().min(1, "Enter a name.").max(MAX_NAME, `Use at most ${MAX_NAME} characters.`),
-    context: z.string().trim().max(MAX_CONTEXT, `Use at most ${MAX_CONTEXT} characters.`),
-    protocol: z.enum(AGENT_PROTOCOLS),
-    baseUrl: z.string().trim().min(1, "Enter the agent's WebSocket URL."),
-    channelId: z
-      .string()
-      .trim()
-      .min(1, "Enter the channel ID.")
-      .max(MAX_CHANNEL_ID, `Use at most ${MAX_CHANNEL_ID} characters.`)
-      .regex(CHANNEL_ID, "Use only letters, digits and . _ ~ - (no spaces)."),
-    userId: z
-      .string()
-      .trim()
-      .min(1, "Enter the user ID.")
-      .max(MAX_USER_ID, `Use at most ${MAX_USER_ID} characters.`)
-      .regex(PRINTABLE, "Use only printable characters."),
-    origin: z.string().trim(),
-    langfuseConnectionId: z.string(),
-  })
-  .superRefine((values, ctx) => {
-    const url = values.baseUrl ? baseUrlProblem(values.baseUrl) : undefined;
-    if (url) ctx.addIssue({ code: "custom", path: ["baseUrl"], message: url });
-    const origin = values.origin ? originProblem(values.origin) : undefined;
-    if (origin) ctx.addIssue({ code: "custom", path: ["origin"], message: origin });
-  });
+/**
+ * Validates the fields of the chosen kind only. `hasStoredKey`: the agent already has an API key,
+ * so `auth: api_key` needs no new one.
+ */
+export function agentFormSchema(hasStoredKey = false) {
+  return z
+    .object({
+      kind: z.enum(AGENT_KINDS),
+      name: z.string().trim().min(1, "Enter a name.").max(MAX_NAME, `Use at most ${MAX_NAME} characters.`),
+      context: z.string().trim().max(MAX_CONTEXT, `Use at most ${MAX_CONTEXT} characters.`),
+      protocol: z.enum(AGENT_PROTOCOLS),
+      baseUrl: z.string().trim(),
+      channelId: z.string().trim(),
+      userId: z.string().trim(),
+      textMode: z.enum(TEXT_MODES),
+      auth: z.enum(TEXT_AUTHS),
+      apiKey: z.string().trim().max(MAX_API_KEY, `Use at most ${MAX_API_KEY} characters.`),
+      origin: z.string().trim(),
+      langfuseConnectionId: z.string(),
+    })
+    .superRefine((values, ctx) => {
+      const issue = (path: keyof AgentFormValues, message: string) =>
+        ctx.addIssue({ code: "custom", path: [path], message });
+      const text = values.kind === "text";
+      if (!values.baseUrl) issue("baseUrl", text ? "Enter the agent's base URL." : "Enter the agent's WebSocket URL.");
+      else {
+        const url = baseUrlProblem(values.baseUrl, values.kind);
+        if (url) issue("baseUrl", url);
+      }
+      if (!values.channelId) issue("channelId", "Enter the channel ID.");
+      else if (values.channelId.length > MAX_CHANNEL_ID) issue("channelId", `Use at most ${MAX_CHANNEL_ID} characters.`);
+      else if (text && !UUID.test(values.channelId)) issue("channelId", "Use the channel's UUID.");
+      else if (!CHANNEL_ID.test(values.channelId)) issue("channelId", "Use only letters, digits and . _ ~ - (no spaces).");
+      if (!text) {
+        if (!values.userId) issue("userId", "Enter the user ID.");
+        else if (values.userId.length > MAX_USER_ID) issue("userId", `Use at most ${MAX_USER_ID} characters.`);
+        else if (!PRINTABLE.test(values.userId)) issue("userId", "Use only printable characters.");
+      } else if (values.auth === "api_key" && !values.apiKey && !hasStoredKey) {
+        issue("apiKey", "Enter the API key.");
+      }
+      const origin = values.origin ? originProblem(values.origin) : undefined;
+      if (origin) issue("origin", origin);
+    });
+}
 
 export function initialValues(agent?: Agent): AgentFormValues {
   return {
+    kind: agent?.kind ?? "voice",
     name: agent?.name ?? "",
     context: agent?.context ?? "",
     protocol: agent?.protocol ?? "auto",
     baseUrl: agent?.baseUrl ?? "",
     channelId: agent?.channelId ?? "",
     userId: agent?.userId ?? "",
+    textMode: agent?.textMode ?? "stream",
+    auth: agent?.auth ?? "none",
+    apiKey: "",
     origin: agent?.origin ?? "",
     langfuseConnectionId: agent?.langfuseConnectionId ?? "",
   };
 }
 
+/** The create payload: the fields of the chosen kind only; the API key only with `auth: api_key`. */
 export function toNewAgent(values: AgentFormValues): NewAgent {
-  return {
+  const common = {
     name: values.name.trim(),
     context: values.context.trim(),
-    protocol: values.protocol,
     baseUrl: values.baseUrl.trim(),
     channelId: values.channelId.trim(),
-    userId: values.userId.trim(),
     origin: values.origin.trim() || null,
     langfuseConnectionId: values.langfuseConnectionId || null,
   };
+  if (values.kind === "voice") {
+    return { ...common, kind: "voice", protocol: values.protocol, userId: values.userId.trim() };
+  }
+  const apiKey = values.auth === "api_key" ? values.apiKey.trim() : "";
+  return { ...common, kind: "text", textMode: values.textMode, auth: values.auth, ...(apiKey ? { apiKey } : {}) };
 }
 
-/** Only the fields that differ from the stored agent; a cleared optional field becomes `null`. */
+/**
+ * Only the fields that differ from the stored agent; a cleared optional field becomes `null`.
+ * `kind` is never sent, and a typed API key always is (it replaces the stored one).
+ */
 export function toChanges(agent: Agent, values: AgentFormValues): AgentChanges {
-  const next = toNewAgent(values);
+  const { kind, ...next } = toNewAgent({ ...values, kind: agent.kind });
+  void kind;
   const changes: Record<string, unknown> = {};
-  for (const key of Object.keys(next) as (keyof NewAgent)[]) {
-    if (next[key] !== agent[key]) changes[key] = next[key];
+  for (const [key, value] of Object.entries(next)) {
+    if (key === "apiKey" || value !== agent[key as keyof Agent]) changes[key] = value;
   }
   return changes as AgentChanges;
 }

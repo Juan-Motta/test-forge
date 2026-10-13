@@ -47,7 +47,7 @@ chat with the agent over Vivi's channel API, every conversation is recorded, jud
       gate + scenario validation by agent kind, evaluator text prompt, manager branch, live text
       events — delegated
 - [x] T3 Judge: text prompt variant, transcript/timing rendering and gating for text runs, brief — delegated
-- [ ] T4 Frontend agents + scenarios + launch for text agents (form, cURL import, test, editor
+- [x] T4 Frontend agents + scenarios + launch for text agents (form, cURL import, test, editor
       gating) — delegated
 - [ ] T5 Frontend live view + run report for text runs, naming, guide — delegated
 - [ ] T6 Real run against a Vivi text agent (paid; ask first) — inline
@@ -89,3 +89,27 @@ chat with the agent over Vivi's channel API, every conversation is recorded, jud
   Coordinator unchanged: `judge_run` derives the kind from the snapshot + summary it already
   gets; Langfuse correlation stays `thread_id`. No judgement API field added. Evidence: RED
   (`ImportError: run_kind`) then the T3 tests green; `uv run pytest -q` 1079 passed; ruff check + format clean.
+- T4 done (delegated writer, uncommitted; route: delegated, writer trigger: 2+ non-trivial
+  files). Agents: `kind` + text fields in `types.ts` (`Agent`, `NewAgent` = voice | text union,
+  `AgentChanges` never sends `kind`); `form-schema.agentFormSchema(hasStoredKey)` validates only
+  the chosen kind (text: https base URL / http for local hosts, UUID channel, API key required
+  only when `auth: api_key` and none is stored); create dialog offers a Voice/Text RadioCard
+  choice, the detail shows the fixed kind as a badge ("Chat connection" card for text: channel
+  param, Mode Stream/Invoke, Authentication None/API key, write-only key with "Saved ••••1234" +
+  Replace/Remove, where Remove switches auth to none); rail shows a kind badge and the text mode;
+  connection test copy says it sends one short message. cURL import detects
+  `/channelsApi/{channelId}/(invoke|stream)` (http/https, path prefix kept in the base URL),
+  `vivi-api-key` → `auth: api_key` + prefilled key (never echoed), Origin header; voice import
+  unchanged; result carries `kind`; an existing agent refuses a command of the other kind.
+  Scenarios: `endConditions.maxTurns` (default 20, sent always); for text agents the editor hides
+  voice override, max silence, interruptions and the evaluator mode/realtime/TTS cards, shows
+  "Max turns", "When the conversation ends", and requires the evaluator model connection
+  (`scenarioFormSchemaFor(kind)`, resolver picks the kind from the selected agent). Launch panel:
+  `LaunchScenario.kind` → "conversation(s)" for text, "run(s)" for mixed batches; voice copy
+  unchanged. Backend follow-ups: manager text-target setup failures (agent gone, undecryptable
+  key) and the `auth: none` header test in `tests/modules/runs/test_text_agent_launch.py`;
+  `ReplyEnded` seen-once assertion in `tests/test_http_chat.py`; `caller_silent` docstring fixed.
+  Evidence: RED 25 failing new frontend tests (curl, schema, agents UI, text scenario) before the
+  implementation; then `npx vitest run` 613 passed, lint clean, typecheck clean, build OK;
+  backend `uv run pytest -q tests/modules/runs tests/test_http_chat.py tests/runner` 212 passed,
+  ruff check + format clean (backend follow-up tests characterize existing behavior: no RED).

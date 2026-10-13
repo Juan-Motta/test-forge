@@ -52,4 +52,15 @@ describe("Launch panel", () => {
     setup();
     expect(screen.queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
   });
+
+  it("counts conversations for text scenarios and runs for a mixed batch", () => {
+    const chat = { id: "s-chat", name: "Chat refund", maxDurationS: 360, kind: "text" as const };
+    const { unmount } = renderWithClient(<LaunchPanel scenarios={[chat]} onLaunched={vi.fn()} />);
+    expect(screen.getByText("1 conversation")).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "Judge automatically when each conversation ends" })).toBeChecked();
+    unmount();
+
+    renderWithClient(<LaunchPanel scenarios={[chat, { ...booking, kind: "voice" }]} onLaunched={vi.fn()} />);
+    expect(screen.getByText("2 runs")).toBeInTheDocument();
+  });
 });

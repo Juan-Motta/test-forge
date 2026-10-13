@@ -9,10 +9,12 @@ import uuid
 
 import httpx
 import pytest
+from cryptography.fernet import Fernet
 from runs_support import scenario_body, wait_for
 from sqlalchemy import select
 
 from voice_eval.modules.runs.models import RunBatchRecord, RunRecord
+from voice_eval.platform.secrets import SecretBox
 from voice_eval.ports.policy import CallerDecision, PolicyState
 
 SECRET = "vk-run-key-0001"
@@ -204,3 +206,70 @@ async def test_an_agent_error_fails_the_text_run_with_its_message(app, user_clie
     detail = (await user_client.get(f"/api/runs/{run_id}")).json()
     assert detail["endReason"] == "agent_error"
     assert "no on_chat_end" in detail["error"]
+
+
+async def launch_text_run(app, user_client, factory, agent=TEXT_AGENT) -> str:
+    async def build_policy(db, connection_id):
+        return TwoMessagePolicy()
+
+    app.state.runs.build_policy = build_policy
+    created = await factory.post("/api/agents", {**agent, "name": f"{agent['name']} run"})
+    body = scenario_body(created["id"], "Chat run", evaluatorConnectionId=await factory.openai())
+    scenario = await factory.post("/api/scenarios", body)
+    response = await user_client.post("/api/runs", json={"scenarioIds": [scenario["id"]]})
+    assert response.status_code == 201, response.text
+    return response.json()["runs"][0]["id"]
+
+
+async def ended(user_client, run_id: str) -> dict:
+    async def done() -> bool:
+        status = (await user_client.get(f"/api/runs/{run_id}")).json()["status"]
+        return status in ("completed", "failed")
+
+    await wait_for(done, within_s=30)
+    return (await user_client.get(f"/api/runs/{run_id}")).json()
+
+
+async def test_a_text_run_whose_agent_is_gone_fails_with_a_setup_error(
+    app, user_client, factory, chat_agent
+):
+    manager = app.state.runs
+    real = manager.build_text_target
+
+    async def deleted_meanwhile(db, agent):  # the agent row vanished after the snapshot
+        return await real(db, {**agent, "id": str(uuid.uuid4())})
+
+    manager.build_text_target = deleted_meanwhile
+    run_id = await launch_text_run(app, user_client, factory)
+
+    detail = await ended(user_client, run_id)
+    assert detail["status"] == "failed"
+    assert detail["error"] == "the agent of this run no longer exists"
+    assert chat_agent.requests == []
+
+
+async def test_a_text_run_with_an_undecryptable_key_fails_with_a_setup_error(
+    app, user_client, factory, chat_agent
+):
+    manager = app.state.runs
+    manager.secret_box = SecretBox.from_master_key(Fernet.generate_key().decode())  # rotated key
+    run_id = await launch_text_run(app, user_client, factory)
+
+    detail = await ended(user_client, run_id)
+    assert detail["status"] == "failed"
+    assert "API key cannot be decrypted" in detail["error"]
+    assert SECRET not in json.dumps(detail)
+    assert chat_agent.requests == []
+
+
+async def test_a_text_run_without_auth_sends_no_api_key_header(
+    app, user_client, factory, chat_agent
+):
+    open_agent = {key: value for key, value in TEXT_AGENT.items() if key != "apiKey"}
+    run_id = await launch_text_run(app, user_client, factory, {**open_agent, "auth": "none"})
+
+    detail = await ended(user_client, run_id)
+    assert detail["status"] == "completed", detail.get("error")
+    assert len(chat_agent.requests) == 2
+    for request in chat_agent.requests:
+        assert "vivi-api-key" not in request.headers

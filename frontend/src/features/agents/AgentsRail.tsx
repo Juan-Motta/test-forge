@@ -1,6 +1,6 @@
-import { cn, focusRing } from "@/ui";
+import { Badge, cn, focusRing } from "@/ui";
 import { IDLE_TEST, ReachabilityDot, reachabilityLabel, type ConnectionTestState } from "./ConnectionCheck";
-import { PROTOCOL_LABELS } from "./form-schema";
+import { KIND_LABELS, PROTOCOL_LABELS, TEXT_MODE_LABELS } from "./form-schema";
 import type { Agent } from "./types";
 
 type AgentsRailProps = {
@@ -27,7 +27,7 @@ export function AgentsRail({ agents, selectedId, onSelect, scenarioCounts, tests
           const test = tests[agent.id] ?? IDLE_TEST;
           const meta = [
             scenarioCounts ? scenarioLabel(scenarioCounts.get(agent.id) ?? 0) : null,
-            PROTOCOL_LABELS[agent.protocol],
+            agent.kind === "text" ? TEXT_MODE_LABELS[agent.textMode ?? "stream"].label : PROTOCOL_LABELS[agent.protocol],
           ]
             .filter(Boolean)
             .join(" · ");
@@ -47,7 +47,12 @@ export function AgentsRail({ agents, selectedId, onSelect, scenarioCounts, tests
                   <span className="min-w-0 text-sm font-semibold break-words">{agent.name}</span>
                   <ReachabilityDot state={test} />
                 </span>
-                <span className="text-xs text-dim">{meta}</span>
+                <span className="flex flex-wrap items-center gap-1.5 text-xs text-dim">
+                  <Badge tone="outline" className="text-[11px]">
+                    {KIND_LABELS[agent.kind].label}
+                  </Badge>
+                  {meta}
+                </span>
                 <span className="sr-only">{reachabilityLabel(test)}</span>
               </button>
             </li>

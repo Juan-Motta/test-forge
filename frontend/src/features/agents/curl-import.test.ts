@@ -106,4 +106,61 @@ describe("parseAgentCurl", () => {
     expect(result.ignored).toEqual(["threadId"]);
     expect(result.warnings).toEqual([]);
   });
+
+  it("reports a voice agent for a realtime socket", () => {
+    expect(parsed(SAFARI_SAMPLE).kind).toBe("voice");
+  });
+});
+
+// The shape of a portal testing-channel request copied from the browser (WEB channel, no key).
+const TEXT_STREAM_SAMPLE = `curl 'https://api-dev.vivi.bot/channelsApi/2A8204D3-bd82-4799-a8e8-8e669f318fec/stream' \\
+  -H 'accept: text/event-stream' \\
+  -H 'content-type: application/json' \\
+  -H 'origin: https://portal-dev.vivi.bot' \\
+  -H 'referer: https://portal-dev.vivi.bot/' \\
+  --data-raw '{"message":"hi","threadId":"1786f832-77e7-4b1b-9ea6-ecc7982ce73f","userId":"waad|KSG|1","pageUrl":"https://portal-dev.vivi.bot/agents"}'`;
+
+describe("parseAgentCurl for text agents", () => {
+  it("reads a stream request without credentials as a text agent with no auth", () => {
+    const result = parsed(TEXT_STREAM_SAMPLE);
+
+    expect(result.kind).toBe("text");
+    expect(result.values).toEqual({
+      baseUrl: "https://api-dev.vivi.bot",
+      channelId: "2A8204D3-bd82-4799-a8e8-8e669f318fec",
+      textMode: "stream",
+      auth: "none",
+      origin: "https://portal-dev.vivi.bot",
+    });
+    expect(result.warnings).toEqual([]);
+  });
+
+  it("reads an invoke request with a vivi-api-key header as an API channel", () => {
+    const result = parsed(
+      "curl -X POST 'https://api.example.com/channelsApi/2a8204d3-bd82-4799-a8e8-8e669f318fec/invoke' -H 'Content-Type: application/json' -H 'vivi-api-key: sk-test-1234' -d '{\"message\":\"hi\"}'",
+    );
+
+    expect(result.kind).toBe("text");
+    expect(result.values).toEqual({
+      baseUrl: "https://api.example.com",
+      channelId: "2a8204d3-bd82-4799-a8e8-8e669f318fec",
+      textMode: "invoke",
+      auth: "api_key",
+      apiKey: "sk-test-1234",
+    });
+  });
+
+  it("keeps http for a local agent and the path prefix before /channelsApi", () => {
+    const result = parsed("curl 'http://localhost:8000/api/channelsApi/c0ffee00-0000-4000-8000-000000000001/stream'");
+
+    expect(result.values.baseUrl).toBe("http://localhost:8000/api");
+    expect(result.values.textMode).toBe("stream");
+  });
+
+  it("never puts the API key in the warnings or ignored lists", () => {
+    const result = parsed(
+      "curl 'https://api.example.com/channelsApi/2a8204d3-bd82-4799-a8e8-8e669f318fec/invoke?debug=1' -H 'vivi-api-key: sk-secret-9'",
+    );
+    expect(JSON.stringify([result.warnings, result.ignored])).not.toContain("sk-secret-9");
+  });
 });

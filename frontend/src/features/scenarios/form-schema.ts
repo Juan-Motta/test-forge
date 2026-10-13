@@ -1,6 +1,8 @@
 import { z } from "zod";
+import type { AgentKind } from "@/features/agents/types";
 import {
   CRITERION_KINDS,
+  DEFAULT_MAX_TURNS,
   DEFAULT_REALTIME_MODEL,
   EVALUATOR_MODES,
   EVIDENCE_SOURCES,
@@ -41,7 +43,7 @@ export type ScenarioFormValues = {
   facts: { key: string; value: string }[];
   /** `criterionId` (not `id`, which the field array uses for its own keys) is "" for a new row. */
   criteria: { criterionId: string; text: string; kind: CriterionKind; source: EvidenceSource; weight: string }[];
-  endConditions: { maxDurationS: string; maxSilenceS: string; hangUpWhen: HangUpWhen };
+  endConditions: { maxDurationS: string; maxSilenceS: string; maxTurns: string; hangUpWhen: HangUpWhen };
   /** Seconds here (`afterS`), milliseconds in the API (`afterMs`). */
   interruptions: { agentTurn: string; afterS: string }[];
 };
@@ -141,6 +143,21 @@ export function weightTotal(criteria: { weight: string }[]): number {
 export const weightTotalMessage = (total: number) =>
   `Weights must total exactly ${WEIGHT_TOTAL}; they total ${total}.`;
 
+export const EVALUATOR_MODEL_REQUIRED = "Choose the chat model that plays the user.";
+
+/**
+ * The form's schema for the kind of the chosen agent. A text agent ignores the voice-only
+ * settings (voice override, interruptions, evaluator mode) and needs an evaluator model connection.
+ */
+export function scenarioFormSchemaFor(kind: AgentKind) {
+  if (kind === "voice") return scenarioFormSchema;
+  return scenarioFormSchema.superRefine((values, ctx) => {
+    if (!values.evaluatorConnectionId) {
+      ctx.addIssue({ code: "custom", path: ["evaluatorConnectionId"], message: EVALUATOR_MODEL_REQUIRED });
+    }
+  });
+}
+
 export const scenarioFormSchema = z
   .object({
     agentId: z.string().min(1, "Choose the agent under test."),
@@ -181,6 +198,7 @@ export const scenarioFormSchema = z
     endConditions: z.object({
       maxDurationS: whole(30, 1800, "Use a whole number of seconds from 30 to 1800."),
       maxSilenceS: whole(5, 120, "Use a whole number of seconds from 5 to 120."),
+      maxTurns: whole(1, 100, "Use a whole number of turns from 1 to 100."),
       hangUpWhen: z.enum(HANG_UP_RULES),
     }),
     interruptions: z
@@ -262,7 +280,12 @@ export function initialValues(scenario: Scenario | undefined, defaultAgentId = "
       instructions: "",
       facts: [],
       criteria: [newCriterion(String(WEIGHT_TOTAL))],
-      endConditions: { maxDurationS: "360", maxSilenceS: "15", hangUpWhen: "goal_or_goodbye" },
+      endConditions: {
+        maxDurationS: "360",
+        maxSilenceS: "15",
+        maxTurns: String(DEFAULT_MAX_TURNS),
+        hangUpWhen: "goal_or_goodbye",
+      },
       interruptions: [],
     };
   }
@@ -290,6 +313,7 @@ export function initialValues(scenario: Scenario | undefined, defaultAgentId = "
     endConditions: {
       maxDurationS: String(scenario.endConditions.maxDurationS),
       maxSilenceS: String(scenario.endConditions.maxSilenceS),
+      maxTurns: String(scenario.endConditions.maxTurns ?? DEFAULT_MAX_TURNS),
       hangUpWhen: scenario.endConditions.hangUpWhen,
     },
     interruptions: (scenario.interruptions ?? []).map(({ agentTurn, afterMs }) => ({
@@ -329,6 +353,7 @@ export function toNewScenario(values: ScenarioFormValues): NewScenario {
     endConditions: {
       maxDurationS: Number(values.endConditions.maxDurationS),
       maxSilenceS: Number(values.endConditions.maxSilenceS),
+      maxTurns: Number(values.endConditions.maxTurns),
       hangUpWhen: values.endConditions.hangUpWhen,
     },
     interruptions: values.interruptions.map(({ agentTurn, afterS }) => ({

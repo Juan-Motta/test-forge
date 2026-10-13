@@ -1,12 +1,17 @@
 import type { AgentFormValues } from "./form-schema";
+import type { AgentKind } from "./types";
 
 /** The connection fields a cURL command can fill; name, context, protocol and Langfuse never. */
-export type CurlImportedValues = Partial<Pick<AgentFormValues, "baseUrl" | "channelId" | "userId" | "origin">>;
+export type CurlImportedValues = Partial<
+  Pick<AgentFormValues, "baseUrl" | "channelId" | "userId" | "origin" | "textMode" | "auth" | "apiKey">
+>;
 
 export type CurlImportResult =
   | {
       ok: true;
-      /** Only the fields found in the command. */
+      /** `text` for a channel API request (`/channelsApi/{channelId}/invoke|stream`), else `voice`. */
+      kind: AgentKind;
+      /** Only the fields found in the command. The API key is a secret: never log or echo it. */
       values: CurlImportedValues;
       /** Query parameters left out on purpose (`threadId`, `voiceCapability`) or unknown. */
       ignored: string[];
@@ -18,6 +23,8 @@ export type CurlImportResult =
 const NO_URL = "No ws://, wss://, http:// or https:// URL found in the command.";
 const URL_LIKE = /^(wss?|https?):\/\//i;
 const AGENT_PATH = /^\/channelApi\/([^/]+)\/realtime$/;
+/** A text agent's channel API call; whatever precedes `/channelsApi` belongs to the base URL. */
+const TEXT_PATH = /^(.*)\/channelsApi\/([^/]+)\/(invoke|stream)\/?$/;
 
 // Flags whose value is the next argument, so a URL-looking value (a referer, a header) is never
 // taken for the socket URL. `--url` is the one whose value is the URL.
@@ -154,11 +161,20 @@ function decode(value: string): string {
   }
 }
 
-function originFromHeaders(headers: string[], warnings: string[]): string | undefined {
+/** The value of the first header with this (case-insensitive) name. */
+function headerValue(headers: string[], name: string): string | undefined {
   for (const header of headers) {
     const separator = header.indexOf(":");
-    if (separator < 0 || header.slice(0, separator).trim().toLowerCase() !== "origin") continue;
-    const value = header.slice(separator + 1).trim();
+    if (separator >= 0 && header.slice(0, separator).trim().toLowerCase() === name) {
+      return header.slice(separator + 1).trim();
+    }
+  }
+  return undefined;
+}
+
+function originFromHeaders(headers: string[], warnings: string[]): string | undefined {
+  const value = headerValue(headers, "origin");
+  if (value !== undefined) {
     try {
       const url = new URL(value);
       if (url.protocol === "https:" || url.protocol === "http:") return url.origin;
@@ -166,14 +182,35 @@ function originFromHeaders(headers: string[], warnings: string[]): string | unde
       // reported below
     }
     warnings.push(`The Origin header ${value} is not an http(s) origin; it was not used.`);
-    return undefined;
   }
   return undefined;
 }
 
 /**
+ * A text agent's request: `{base}/channelsApi/{channelId}/{invoke|stream}`. The body (message,
+ * threadId, userId, pageUrl) is generated per run and never read; a `vivi-api-key` header means
+ * an API channel and prefills the key.
+ */
+function textAgent(url: URL, path: RegExpExecArray, headers: string[]): CurlImportResult {
+  const values: CurlImportedValues = {
+    baseUrl: `${url.protocol}//${url.host}${path[1]}`,
+    channelId: decode(path[2]),
+    textMode: path[3] as "invoke" | "stream",
+  };
+  const apiKey = headerValue(headers, "vivi-api-key");
+  values.auth = apiKey ? "api_key" : "none";
+  if (apiKey) values.apiKey = apiKey;
+  const warnings: string[] = [];
+  const origin = originFromHeaders(headers, warnings);
+  if (origin !== undefined) values.origin = origin;
+  const ignored = [...new Set(url.searchParams.keys())];
+  return { ok: true, kind: "text", values, ignored, warnings };
+}
+
+/**
  * Reads an agent's connection fields from a cURL command copied from the browser's devtools,
- * like `curl 'wss://host/channelApi/{channelId}/realtime?userId=…' -H 'Origin: …'`.
+ * like `curl 'wss://host/channelApi/{channelId}/realtime?userId=…' -H 'Origin: …'` (a voice
+ * agent) or `curl 'https://host/channelsApi/{channelId}/stream' -H 'vivi-api-key: …'` (a text agent).
  *
  * Pure string parsing; nothing is executed or fetched. It fails only when there is no usable
  * URL. Anything else that is missing (user ID) or unexpected (path shape) still fills what was
@@ -193,6 +230,9 @@ export function parseAgentCurl(text: string): CurlImportResult {
     return { ok: false, error: `Could not read the URL ${raw}.` };
   }
   if (!url.hostname) return { ok: false, error: `Could not read the URL ${raw}.` };
+
+  const textPath = TEXT_PATH.exec(url.pathname);
+  if (textPath && (url.protocol === "https:" || url.protocol === "http:")) return textAgent(url, textPath, headers);
 
   const values: CurlImportedValues = {};
   const ignored: string[] = [];
@@ -218,5 +258,5 @@ export function parseAgentCurl(text: string): CurlImportResult {
   const origin = originFromHeaders(headers, warnings);
   if (origin !== undefined) values.origin = origin;
 
-  return { ok: true, values, ignored, warnings };
+  return { ok: true, kind: "voice", values, ignored, warnings };
 }

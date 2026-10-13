@@ -171,7 +171,7 @@ export function AgentsContainer({ scenarioCounts }: AgentsContainerProps = {}) {
       <EmptyState
         icon={<AgentsIcon size={22} />}
         title="No agents yet"
-        description="Register the voice agents you want to evaluate: how to reach them over WebSocket and what they do. Scenarios are written against an agent."
+        description="Register the agents you want to evaluate: voice agents over WebSocket or text agents over the channel API, and what they do. Scenarios are written against an agent."
         action={
           <Button icon={<PlusIcon size={16} />} onClick={openCreate}>
             Add your first agent
@@ -232,7 +232,9 @@ export function AgentsContainer({ scenarioCounts }: AgentsContainerProps = {}) {
               error={save.error}
               serverFieldErrors={save.fieldErrors}
               connectionStatus={<ReachabilityPill state={test} />}
-              connectionCheck={<ConnectionCheck state={test} onRun={() => void runTest(selected)} />}
+              connectionCheck={
+                <ConnectionCheck state={test} kind={selected.kind} onRun={() => void runTest(selected)} />
+              }
               extraCards={<EvaluatorNote />}
               onDirtyChange={setDirty}
             />
@@ -248,7 +250,7 @@ export function AgentsContainer({ scenarioCounts }: AgentsContainerProps = {}) {
         <PageHeader
           titleRef={titleRef}
           title="Agents"
-          description="The voice agents under test, how to reach them and what they do."
+          description="The voice and text agents under test, how to reach them and what they do."
           actions={addButton}
         />
       )}
