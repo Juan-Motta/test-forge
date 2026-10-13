@@ -72,7 +72,7 @@ export default function InterruptionsPage() {
         rows={[
           ["How it works", "A chat model decides what the caller says; a text-to-speech voice says it.", "One speech model hears the agent's audio and answers directly by voice."],
           ["Feels", "Reliable and predictable.", "Faster and more natural."],
-          ["Cost", "Lower (TTS audio about $12 per 1M output tokens).", "Higher (audio from $10 in / $20 out per 1M tokens)."],
+          ["Cost", "Lower: text-to-speech is the cheapest way to give the caller a voice.", "Higher: the speech model is billed for the audio it hears and the audio it speaks."],
           ["Needs", "A voice connection, and a chat model (the voice connection, or a separate evaluator model connection).", "An OpenAI connection, or Azure OpenAI with a realtime deployment."],
         ]}
       />

@@ -9,15 +9,15 @@ const CARD = "flex flex-col gap-1.5 rounded-xl border border-line bg-panel p-4";
 export function VerdictMockup() {
   return (
     <Figure caption="Example verdict row at the top of a report (sample data).">
-      <Mockup label="Example verdict: overall score 78 out of 100, Fair; 3 of 4 goals met; one must criterion failed.">
+      <Mockup label="Example verdict: overall score 69 out of 100, Fair; 3 of 4 goals met; one must criterion failed.">
         <div className="flex flex-wrap gap-3">
           <div className={cn(CARD, "flex-[1_1_160px]")}>
             <span className="text-[13px] text-muted">Overall score</span>
             <p className="flex items-baseline gap-1.5">
-              <span className="text-4xl font-semibold tracking-[-0.03em] text-evaluator tabular-nums">78</span>
+              <span className="text-4xl font-semibold tracking-[-0.03em] text-evaluator tabular-nums">69</span>
               <span className="text-dim">/100</span>
             </p>
-            <ScoreBar score={78} label="Overall score" className="my-1" />
+            <ScoreBar score={69} label="Overall score" className="my-1" />
             <span className="text-xs text-muted">Fair</span>
             <span>
               <Badge tone="danger">Must criterion failed</Badge>
