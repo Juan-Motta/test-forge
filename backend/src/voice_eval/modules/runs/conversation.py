@@ -8,8 +8,8 @@ run's artifacts never change) so it is mixed once and served as a file the playe
 """
 
 import io
-import os
 import sys
+import uuid
 import wave
 from array import array
 from pathlib import Path
@@ -64,15 +64,15 @@ def build_conversation(artifacts: Path, summary: dict[str, Any] | None = None) -
 
 def conversation_file(artifacts: Path, summary: dict[str, Any] | None = None) -> Path | None:
     """The kept `conversation.wav` of a finished run, mixed and written on first use; None when
-    the run has no audio file. Written to a temporary name first, so a reader never sees half a
-    file."""
+    the run has no audio file. Written to a temporary name unique to the call first (a player's
+    overlapping first requests may mix at once), so a reader never sees half a file."""
     path = artifacts / CONVERSATION_FILE
     if path.is_file():
         return path
     wav = build_conversation(artifacts, summary)
     if wav is None:
         return None
-    partial = path.with_name(f".{CONVERSATION_FILE}.{os.getpid()}.part")
+    partial = path.with_name(f".{CONVERSATION_FILE}.{uuid.uuid4().hex}.part")
     partial.write_bytes(wav)
     partial.replace(path)
     return path
