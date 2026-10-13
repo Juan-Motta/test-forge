@@ -212,3 +212,13 @@ def test_playback_end_queues_audio_that_arrives_faster_than_it_plays():
     turn = detector.current_turn
     assert turn is not None
     assert turn.playback_end_ms == 2_000
+
+
+def test_a_cut_still_ends_the_queued_playback():
+    tracker = ResponseTurnTracker()
+    tracker.on_agent_audio(1_000, nbytes=int(2_000 * BYTES_PER_MS))
+    tracker.on_agent_audio(10_000, nbytes=int(5_000 * BYTES_PER_MS))
+    turn = tracker.current_turn
+    assert turn is not None
+    turn.cut_ms = 12_000  # the caller cut in during the second response
+    assert turn.playback_end_ms == pytest.approx(12_000)
