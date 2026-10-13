@@ -24,14 +24,24 @@ class AgentTurn:
     end_reason: str | None = None
     caller_resumed_ms: float | None = None  # when the next caller turn actually started
     cut_ms: float | None = None  # the caller interrupted the playback at this time
+    played_until_ms: float | None = None  # where the queued audio ends (see `add_audio`)
+
+    def add_audio(self, now_ms: float, nbytes: int) -> None:
+        """Queue agent audio the way a phone plays it: each chunk starts when it arrives or when
+        the previous one finished, whichever is later, so a pause between responses (a tool
+        call) delays the end instead of being lost."""
+        start = now_ms if self.played_until_ms is None else max(now_ms, self.played_until_ms)
+        self.played_until_ms = start + nbytes / BYTES_PER_MS
+        self.audio_bytes += nbytes
 
     @property
     def playback_end_ms(self) -> float | None:
-        """When the agent audio would finish playing: it plays back-to-back from the first delta
-        (or when the caller cut it off)."""
+        """When the agent audio would finish playing (or when the caller cut it off)."""
         if self.first_audio_ms is None:
             return None
-        end = self.first_audio_ms + self.audio_bytes / BYTES_PER_MS
+        end = self.played_until_ms
+        if end is None:  # a turn built without `add_audio`: back to back from the first delta
+            end = self.first_audio_ms + self.audio_bytes / BYTES_PER_MS
         return end if self.cut_ms is None else min(end, self.cut_ms)
 
     @property
@@ -68,7 +78,7 @@ class AgentTurnDetector:
             )
             self._pending_caller_end = None
         self._current.last_activity_ms = max(self._current.last_activity_ms, now_ms)
-        self._current.audio_bytes += nbytes
+        self._current.add_audio(now_ms, nbytes)
 
     def on_response_started(self, now_ms: float) -> None:
         """Explicit response events are ignored here (Live never sends them)."""
@@ -191,7 +201,7 @@ class ResponseTurnTracker(AgentTurnDetector):
         turn = self._open(now_ms)
         if turn.first_audio_ms is None:
             turn.first_audio_ms = now_ms
-        turn.audio_bytes += nbytes
+        turn.add_audio(now_ms, nbytes)
 
     def turn_ended(self, now_ms: float) -> bool:
         turn = self._current

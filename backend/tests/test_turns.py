@@ -1,5 +1,6 @@
 import pytest
 
+from voice_eval.audio import BYTES_PER_MS
 from voice_eval.turns import AgentTurnDetector, ResponseTurnTracker
 
 
@@ -191,3 +192,23 @@ def test_discarding_a_turn_that_is_not_completed_is_a_value_error():
 
     with pytest.raises(ValueError, match="not a completed turn"):
         d.discard(turn)
+
+
+def test_playback_end_counts_the_pauses_between_the_agents_audio():
+    # A turn whose second response comes after a pause (a tool call): the audio plays like a
+    # phone would, each chunk starting when it arrives or when the previous one finished.
+    tracker = ResponseTurnTracker()
+    tracker.on_agent_audio(1_000, nbytes=int(2_000 * BYTES_PER_MS))  # plays 1.0 s → 3.0 s
+    tracker.on_agent_audio(10_000, nbytes=int(5_000 * BYTES_PER_MS))  # arrives after a pause
+    turn = tracker.current_turn
+    assert turn is not None
+    assert turn.playback_end_ms == 15_000  # not 1.0 s + 7 s of audio = 8.0 s
+
+
+def test_playback_end_queues_audio_that_arrives_faster_than_it_plays():
+    detector = AgentTurnDetector()
+    detector.on_agent_audio(0, nbytes=int(1_000 * BYTES_PER_MS))
+    detector.on_agent_audio(100, nbytes=int(1_000 * BYTES_PER_MS))
+    turn = detector.current_turn
+    assert turn is not None
+    assert turn.playback_end_ms == 2_000
