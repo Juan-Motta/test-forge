@@ -29,8 +29,8 @@ getting started, the end-to-end flow, and what every module does, explained in d
 
 ## Tasks
 - [x] T1 Guide route, layout with section nav, content and diagrams, links, tests — delegated
-- [ ] T2 Visual check in the browser (desktop + phone width) — inline
-- [ ] T3 Review, fast-forward `main`, push — inline
+- [x] T2 Visual check in the browser (desktop + phone width) — inline
+- [x] T3 Review, fast-forward `main`, push — inline
 
 ## Progress
 - T1 (delegated writer, 2026-10-12): `/guide` + 7 sub-pages (static server components under
@@ -42,3 +42,13 @@ getting started, the end-to-end flow, and what every module does, explained in d
   Titles `<Section> · Duet guide` (absolute). RED observed first (6 failing tests + 2 missing
   modules). Checks: vitest 584/584, lint clean, typecheck clean, build prerenders all 8 guide
   pages as static. Not committed (parent commits).
+- T1 committed as d76c4da (delegated; RED observed: 6 failing tests + 2 missing modules; vitest 584,
+  lint, typecheck, build prerenders the 8 guide pages).
+- T2 (browser, rebuilt frontend): desktop renders the section nav, flow and barge-in diagrams;
+  all 8 pages have no horizontal overflow at 375 px; the sticky header wrapped to three rows on
+  phones, fixed to one row with short labels + full aria-labels (8f04892, 95cc318).
+- T3: native review (high, 4 lenses, granted): APPROVED + acknowledged. Applied its warnings on
+  dated provider prices (removed) and the verdict example score (78 → 69, matching the scorecard).
+  Remaining suggestions (hard-coded example arithmetic, median label, anchor ids, pager prop type,
+  sidebar leave-guard test) left as follow-ups.
+
