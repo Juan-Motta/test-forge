@@ -18,7 +18,7 @@ timeline (pauses, overlaps and barge-in cuts as they happened), instead of two u
 ## Tasks
 - [x] T1 Backend: shared segment placement + mixer, endpoint, tests, OpenAPI/skill docs — delegated
 - [x] T2 Frontend: conversation player + download in RecordingCard, per-side tracks secondary, tests — delegated (same writer)
-- [ ] T3 Verify against a real finished run in the browser — inline
+- [x] T3 Verify against a real finished run in the browser — inline
 
 ## Acceptance
 - The mixed WAV's length covers the run timeline; each voice starts at its run time (test with
@@ -39,3 +39,9 @@ timeline (pauses, overlaps and barge-in cuts as they happened), instead of two u
   in a collapsed `<details>` "Separate tracks" with the not-aligned note. RED: new RunReport test
   failed before the change. Checks: vitest 558 passed; lint, typecheck, build OK.
 - Next: T3 browser check against a real finished run.
+- T1+T2 committed as ffd821d.
+- T3 (browser, rebuilt containers, run 15098a5a, recorded before this change): the conversation
+  endpoint returns 200 audio/wav mono 24 kHz, 68.08 s, equal to the levels timeline (68.077 s);
+  the report shows the "Conversation" player + "Download conversation .wav" (?download=1) under the
+  lanes, and the agent/evaluator tracks inside a closed "Separate tracks" section.
+
