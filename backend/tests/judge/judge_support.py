@@ -91,3 +91,43 @@ def answer(*criteria: dict[str, Any], **overrides: Any) -> dict[str, Any]:
     }  # fmt: skip
     result.update(overrides)
     return result
+
+
+# --- a text (chat) run: stream mode, a tool call and a reply that broke off ------------------
+
+TEXT_SNAPSHOT: dict[str, Any] = {
+    "scenario": SNAPSHOT["scenario"],
+    "agent": {"id": "t", "name": "Vivi Chat", "kind": "text", "context": "Booking assistant.",
+              "protocol": "http_chat", "text_mode": "stream"},
+}  # fmt: skip
+
+TEXT_TRANSCRIPT: list[dict[str, Any]] = [
+    {"role": "caller", "text": "A table for two at 8, please.", "start_ms": 0.0,
+     "end_ms": 0.0, "reason": "ask"},
+    {"role": "agent", "text": "Booked for 8 pm.", "start_ms": 800.0, "end_ms": 1500.0,
+     "latency_ms": 800.0, "first_text_ms": 800, "tools": ["check_availability", "book_table"]},
+    {"role": "caller", "text": "Can I add a third person?", "start_ms": 4000.0,
+     "end_ms": 4000.0, "reason": "change"},
+    {"role": "agent", "text": "Let me check the", "start_ms": 4000.0, "end_ms": 9000.0,
+     "latency_ms": None, "first_text_ms": None, "tools": [], "incomplete": True},
+]  # fmt: skip
+
+TEXT_SUMMARY: dict[str, Any] = {
+    "kind": "text",
+    "status": "failed",
+    "reason": "agent_error",
+    "protocol": "http_chat",
+    "text_mode": "stream",
+    "thread_id": "thread-1",
+    "duration_ms": 9000.0,
+    "max_turns": 20,
+    "caller_turns": 2,
+    "agent_turns": 1,
+    "turns": [
+        {"index": 1, "kind": "reply", "request_ms": 0.0, "first_text_ms": 800.0,
+         "end_ms": 1500.0, "latency_ms": 800.0, "tools": ["check_availability", "book_table"]},
+    ],
+    "latencies_ms": [800.0],
+    "interruptions": [],
+    "warnings": [],
+}  # fmt: skip

@@ -9,7 +9,16 @@ from typing import Any
 
 from voice_eval.judge.domain import UnobservableReason, snapshot_criteria
 
-_TURN_TIMINGS = ("caller_end_ms", "first_audio_ms", "end_ms", "playback_end_ms", "latency_ms")
+# Voice turns time audio (`caller_end_ms`...`playback_end_ms`); text replies time the first
+# text (`first_text_ms`); both carry `end_ms` and `latency_ms`.
+_TURN_TIMINGS = (
+    "caller_end_ms",
+    "first_audio_ms",
+    "first_text_ms",
+    "end_ms",
+    "playback_end_ms",
+    "latency_ms",
+)
 
 
 def _number(value: Any) -> bool:

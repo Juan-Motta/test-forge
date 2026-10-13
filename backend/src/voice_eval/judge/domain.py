@@ -28,6 +28,7 @@ Verdict = Literal["pass", "partial", "fail", "not_observable"]
 Source = Literal["transcript", "trace", "timing"]
 Area = Literal["prompt", "tools", "flow", "latency", "voice", "other"]
 Priority = Literal["high", "medium", "low"]
+RunKind = Literal["voice", "text"]
 UnobservableReason = Literal[
     "traces_unavailable", "no_timing_data", "judge_marked_unobservable", "judge_omitted"
 ]
@@ -166,6 +167,17 @@ class ParsedJudgement(_Model):
     strengths: list[str]
 
 
+def run_kind(snapshot: Any, summary: Any) -> RunKind:
+    """`text` when the run's summary or its snapshotted agent says so; voice otherwise (runs
+    stored before text agents carry no kind)."""
+    agent = snapshot.get("agent") if isinstance(snapshot, dict) else None
+    kinds = (
+        summary.get("kind") if isinstance(summary, dict) else None,
+        agent.get("kind") if isinstance(agent, dict) else None,
+    )
+    return "text" if "text" in kinds else "voice"
+
+
 def _band(value: int) -> int:
     return max(1, min(5, value))
 
@@ -266,11 +278,13 @@ def parse_judgement(
     criteria: list[dict[str, Any]],
     *,
     gated: dict[str, UnobservableReason] | None = None,
+    kind: RunKind = "voice",
 ) -> ParsedJudgement:
     """Reconcile the model's answer with the run's `criteria` (snapshot dicts).
 
     `gated` maps the ids of criteria decided before the call (see `gating`) to their reason;
-    the model's answer for them, if any, is ignored.
+    the model's answer for them, if any, is ignored. A text run has no voice, so a suggestion
+    filed under the `voice` area is filed under `other` (the schema's enum is shared).
 
     Raises `JudgeError` when the answer does not have the schema's shape, or a snapshot
     criterion is malformed (never echoing either).
@@ -326,7 +340,7 @@ def parse_judgement(
         Suggestion(
             title=_clip(item.title, MAX_SHORT_TEXT),
             detail=_clip(item.detail, MAX_TEXT),
-            area=item.area,
+            area="other" if kind == "text" and item.area == "voice" else item.area,
             priority=item.priority,
             evidence_refs=[_clip(ref, MAX_SHORT_TEXT) for ref in item.evidence_refs[:MAX_EVIDENCE]],
         )

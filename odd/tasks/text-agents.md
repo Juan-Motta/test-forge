@@ -46,7 +46,7 @@ chat with the agent over Vivi's channel API, every conversation is recorded, jud
 - [x] T2 Backend runs: text session runner (max turns, artifacts/summary without audio), launch
       gate + scenario validation by agent kind, evaluator text prompt, manager branch, live text
       events — delegated
-- [ ] T3 Judge: text prompt variant, transcript/timing rendering and gating for text runs, brief — delegated
+- [x] T3 Judge: text prompt variant, transcript/timing rendering and gating for text runs, brief — delegated
 - [ ] T4 Frontend agents + scenarios + launch for text agents (form, cURL import, test, editor
       gating) — delegated
 - [ ] T5 Frontend live view + run report for text runs, naming, guide — delegated
@@ -76,3 +76,16 @@ chat with the agent over Vivi's channel API, every conversation is recorded, jud
   `ReplyEnded` after the response/client closed, stream cap enforced on raw bytes as they arrive.
   Evidence: RED (import errors, failing close/cap/launch/live asserts) then `uv run pytest -q`
   1068 passed; ruff check + format clean.
+- T3 done (delegated writer, uncommitted; route: delegated, writer trigger: 2+ non-trivial
+  files). `judge/domain.run_kind(snapshot, summary)` (`text` when the summary or the snapshotted
+  agent says so; voice otherwise). `judge/prompt`: `TEXT_SYSTEM_PROMPT` built from the same
+  template as `SYSTEM_PROMPT` (voice wording byte-identical, checked by sha256 before/after):
+  chat reviewer, simulated user, `[REPLY BROKE OFF]` rule, tools-per-reply rule, no `voice`
+  area; transcript renders `USER`/`AGENT` with time to first text, tools used and broken-off
+  replies; `render_text_timing` table (user message sent / first text / full reply / waits /
+  tools) with the invoke note; scenario/agent/traces wording per kind. Judge schema enum kept
+  (provider-fixed); `parse_judgement(kind="text")` files a `voice` suggestion under `other`.
+  `gating._TURN_TIMINGS` gains `first_text_ms`. Brief: "Text agent review", no voice steps.
+  Coordinator unchanged: `judge_run` derives the kind from the snapshot + summary it already
+  gets; Langfuse correlation stays `thread_id`. No judgement API field added. Evidence: RED
+  (`ImportError: run_kind`) then the T3 tests green; `uv run pytest -q` 1079 passed; ruff check + format clean.

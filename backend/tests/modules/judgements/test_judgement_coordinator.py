@@ -367,3 +367,38 @@ async def test_a_reconcile_error_on_one_run_still_judges_the_others(app, harness
         row = await judgement_row(sessionmaker, run_id)
         assert (row.status, row.attempt) == ("completed", 1)
     assert await judgement_row(sessionmaker, broken) is None  # the next start retries it
+
+
+async def test_a_text_run_is_judged_as_a_chat_correlated_by_its_thread(app, harness, tmp_path):
+    out = tmp_path / "run"
+    out.mkdir()
+    transcript = [
+        {"role": "caller", "text": "My balance, please.", "start_ms": 0.0, "end_ms": 0.0},
+        {"role": "agent", "text": "It is 120 dollars.", "start_ms": 700.0, "end_ms": 900.0,
+         "latency_ms": 700.0, "first_text_ms": 700, "tools": ["get_balance"]},
+    ]  # fmt: skip
+    summary = {
+        "kind": "text", "status": "completed", "reason": "caller_hung_up", "text_mode": "stream",
+        "duration_ms": 1000.0, "caller_turns": 1, "agent_turns": 1, "latencies_ms": [700.0],
+        "turns": [{"index": 1, "kind": "reply", "request_ms": 0.0, "first_text_ms": 700.0,
+                   "end_ms": 900.0, "latency_ms": 700.0, "tools": ["get_balance"]}],
+        "interruptions": [], "warnings": [],
+    }  # fmt: skip
+    (out / "transcript.json").write_text(json.dumps(transcript))
+    (out / "summary.json").write_text(json.dumps(summary))
+    data = snapshot()
+    data["agent"] |= {"kind": "text", "protocol": "http_chat", "text_mode": "stream"}
+    data["connections"]["tts"] = None
+    run_id = await insert_run(app.state.sessionmaker, data=data, artifacts_dir=out)
+    two = [observation(0), observation(1)]
+    harness.reader = ScriptedReader(two, two)
+
+    row = await judge(app, run_id)
+
+    assert row.status == "completed"
+    assert harness.reader.calls[0]["session_id"] == f"thread-{str(run_id)[:8]}"
+    system, user = harness.model.messages[0]
+    assert "text chat agents" in system["content"]
+    assert "USER: My balance, please." in user["content"]
+    assert "(tools used: get_balance)" in user["content"]
+    assert row.result["brief"].startswith("# Text agent review: Vivi / Balance\n")

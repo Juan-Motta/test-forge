@@ -10,9 +10,11 @@ from voice_eval.judge.domain import (
     JudgeError,
     JudgeResult,
     ParsedJudgement,
+    RunKind,
     UnobservableReason,
     parse_judgement,
     run_failure_tags,
+    run_kind,
 )
 from voice_eval.judge.gating import gate_criteria
 from voice_eval.judge.prompt import build_messages
@@ -34,8 +36,9 @@ async def _sample(
     messages: list[dict[str, Any]],
     criteria: list[dict[str, Any]],
     gated: dict[str, UnobservableReason],
+    kind: RunKind,
 ) -> ParsedJudgement:
-    return parse_judgement(await model.judge(messages), criteria, gated=gated)
+    return parse_judgement(await model.judge(messages), criteria, gated=gated, kind=kind)
 
 
 async def _samples(
@@ -43,12 +46,13 @@ async def _samples(
     messages: list[dict[str, Any]],
     criteria: list[dict[str, Any]],
     gated: dict[str, UnobservableReason],
+    kind: RunKind,
 ) -> list[ParsedJudgement]:
     """The successful samples, asked concurrently. A sample that fails with `JudgeError` is
     logged (its type only, never its text) and skipped; fewer than `MIN_SAMPLES` successes
     raise the first such error. Any other exception propagates."""
     outcomes = await asyncio.gather(
-        *(_sample(model, messages, criteria, gated) for _ in range(JUDGE_SAMPLES)),
+        *(_sample(model, messages, criteria, gated, kind) for _ in range(JUDGE_SAMPLES)),
         return_exceptions=True,
     )
     parsed: list[ParsedJudgement] = []
@@ -88,9 +92,13 @@ async def judge_run(
     Criteria whose evidence source is missing (no trace digest, no turn timings) are decided in
     code before the call: not sent as judgeable, stored as `not_observable` with their reason.
 
+    A text (chat) run (`run_kind` of the snapshot and summary) is judged with the text prompt
+    and gets the text brief.
+
     Raises `JudgeError` when fewer than `MIN_SAMPLES` samples succeed (the model failed or
     answered out of shape, after its own retries).
     """
+    kind = run_kind(snapshot, summary)
     scenario = snapshot.get("scenario") or {}
     criteria = scenario.get("criteria") or []
     if not criteria:
@@ -98,7 +106,7 @@ async def judge_run(
     prompt_digest = trace_digest.to_prompt_dict() if trace_digest is not None else None
     gated = gate_criteria(criteria, has_traces=prompt_digest is not None, summary=summary)
     messages = build_messages(snapshot, transcript, summary, prompt_digest, trace_note)
-    samples = await _samples(model, messages, criteria, gated)
+    samples = await _samples(model, messages, criteria, gated, kind)
     judgement = aggregate(samples)
     numbers = score(judgement.criteria)
     brief = render_brief(
@@ -109,6 +117,7 @@ async def judge_run(
         run_id=run_id,
         thread_id=thread_id,
         trace_note=trace_note,
+        kind=kind,
     )
     return JudgeResult(
         summary=judgement.summary,

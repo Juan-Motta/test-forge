@@ -9,6 +9,7 @@ from voice_eval.judge.domain import (
     CAPPING_TAGS,
     CriterionResult,
     ParsedJudgement,
+    RunKind,
     run_failure_tags,
 )
 from voice_eval.judge.scoring import Score
@@ -66,10 +67,12 @@ def render_brief(
     run_id: str,
     thread_id: str | None,
     trace_note: str | None,
+    kind: RunKind = "voice",
 ) -> str:
+    text = kind == "text"
     overall = "n/a (no criterion was observable)" if numbers.overall is None else numbers.overall
     lines = [
-        f"# Voice agent review: {agent_name} / {scenario_name}",
+        f"# {'Text' if text else 'Voice'} agent review: {agent_name} / {scenario_name}",
         "",
         f"- Agent: {agent_name}",
         f"- Scenario: {scenario_name}",
@@ -126,17 +129,26 @@ def render_brief(
         lines += ["", "## Passed criteria", ""]
         lines += [f"- {_one_line(r.text)} ({_band(r)}, score {r.score})" for r in passed]
 
+    lines += ["", "## How to verify", ""]
+    if text:
+        lines += [
+            "1. Make the changes above in the agent (prompt, tools or flow).",
+            f'2. Re-run the scenario "{scenario_name}" against agent "{agent_name}".',
+        ]
+    else:
+        lines += [
+            "1. Make the changes above in the agent (prompt, tools, flow or voice configuration).",
+            f'2. Re-run the scenario "{scenario_name}" against agent "{agent_name}" in the voice'
+            " evaluator.",
+        ]
     lines += [
-        "",
-        "## How to verify",
-        "",
-        "1. Make the changes above in the agent (prompt, tools, flow or voice configuration).",
-        f'2. Re-run the scenario "{scenario_name}" against agent "{agent_name}" in the voice'
-        " evaluator.",
         "3. Compare the new judgement with this one: failed criteria should now pass, and no"
         " passed criterion should regress.",
         "",
-        "Evidence refs: A<n>/C<n> are the agent's/caller's n-th turn in the transcript, T<n> the"
-        " n-th agent turn's timings, R<n> the n-th Langfuse trace of the session.",
+        "Evidence refs: A<n>/C<n> are the agent's/user's n-th message in the conversation, T<n>"
+        " the n-th agent reply's timings, R<n> the n-th Langfuse trace of the session."
+        if text
+        else "Evidence refs: A<n>/C<n> are the agent's/caller's n-th turn in the transcript, T<n>"
+        " the n-th agent turn's timings, R<n> the n-th Langfuse trace of the session.",
     ]
     return "\n".join(lines) + "\n"

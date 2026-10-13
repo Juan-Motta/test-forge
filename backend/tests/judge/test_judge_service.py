@@ -243,3 +243,29 @@ async def test_fewer_than_two_successful_samples_is_a_judge_error():
 async def test_an_unexpected_sample_error_propagates():
     with pytest.raises(RuntimeError):
         await run(SequenceModel(_sample(4), RuntimeError("bug"), _sample(4)))
+
+
+async def test_a_text_run_is_judged_as_a_chat_with_a_text_brief():
+    from judge_support import TEXT_SNAPSHOT, TEXT_SUMMARY, TEXT_TRANSCRIPT
+
+    from voice_eval.judge.prompt import TEXT_SYSTEM_PROMPT
+
+    voice_area = {"title": "Speak slower", "detail": "d", "area": "voice", "priority": "low",
+                  "evidenceRefs": ["A1"]}  # fmt: skip
+    model = ScriptedModel(answer(v(MUST_ID, 5), v(SHOULD_ID, 5), suggestions=[voice_area]))
+    result = await judge_run(
+        model,
+        snapshot=TEXT_SNAPSHOT,
+        transcript=TEXT_TRANSCRIPT,
+        summary=TEXT_SUMMARY,
+        trace_digest=None,
+        trace_note="no traces",
+        run_id="run-1",
+        thread_id="thread-1",
+        model_name="gpt-6-luna",
+    )
+    assert model.messages[0][0]["content"] == TEXT_SYSTEM_PROMPT
+    assert result.brief.startswith("# Text agent review: Vivi Chat / Book a table\n")
+    assert [s.area for s in result.suggestions] == ["other"]
+    observable = {c.criterion_id: c.verdict for c in result.criteria}
+    assert observable[SHOULD_ID] == "pass"  # reply timings make the timing criterion judgeable
