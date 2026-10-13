@@ -1,5 +1,7 @@
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { Activity } from "react";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mockRunsApi, runFixture, snapshotFixture } from "@/features/runs/testing";
 import type { RunDetail } from "@/features/runs/types";
@@ -258,6 +260,32 @@ describe("Live run", () => {
     unmount();
     expect(socket.closedByClient).toBe(true);
     expect(audio.contexts[0].closed).toBe(true);
+  });
+
+  it("stops listening when the page is hidden on navigation, and offers Listen again on return", async () => {
+    // Next keeps visited pages in a hidden <Activity>: hidden audio must not keep playing.
+    mockRunsApi([running]);
+    const view = renderWithClient(
+      <Activity mode="visible">
+        <LiveRunPanel runId="r-1" />
+      </Activity>,
+    );
+    await screen.findByRole("heading", { name: "Booking with date change" });
+    act(() => sockets.latest().open());
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Listen" }));
+    expect(await screen.findByRole("button", { name: "Stop listening" })).toBeInTheDocument();
+    const at = (mode: "visible" | "hidden") => (
+      <QueryClientProvider client={view.queryClient}>
+        <Activity mode={mode}>
+          <LiveRunPanel runId="r-1" />
+        </Activity>
+      </QueryClientProvider>
+    );
+    view.rerender(at("hidden"));
+    expect(audio.contexts[0].closed).toBe(true);
+    view.rerender(at("visible"));
+    expect(await screen.findByRole("button", { name: "Listen" })).toBeInTheDocument();
   });
 
   it("cancels the run", async () => {

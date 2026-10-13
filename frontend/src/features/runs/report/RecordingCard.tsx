@@ -1,3 +1,5 @@
+import { useRef } from "react";
+import { useMediaGuard } from "@/lib/browser/use-media-guard";
 import { AudioLane, Button, Spinner } from "@/ui";
 import { clock } from "../format";
 import type { RunLevels } from "../types";
@@ -39,8 +41,10 @@ export function RecordingCard({
   onPin,
   metrics,
 }: RecordingCardProps) {
+  const section = useRef<HTMLElement>(null);
+  useMediaGuard(section);
   return (
-    <section aria-labelledby="call-recording" className="flex flex-col gap-3.5 rounded-xl border border-line bg-panel p-5">
+    <section ref={section} aria-labelledby="call-recording" className="flex flex-col gap-3.5 rounded-xl border border-line bg-panel p-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-col gap-0.5">
           <h2 id="call-recording" className="text-[15px] font-semibold">

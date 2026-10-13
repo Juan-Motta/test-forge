@@ -2,7 +2,7 @@
 
 import { useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { clock, endReasonLabel, isActive, latency, shortId } from "@/features/runs/format";
 import { useCancelRun, useRun, runQueryKey } from "@/features/runs/queries";
 import { ChatTranscript } from "@/features/runs/ChatTranscript";
@@ -74,7 +74,15 @@ export function LiveRunPanel({ runId, meter: sharedMeter, onStats }: LiveRunPane
     statsHandler.current?.({ turns: metrics.turns, p50Ms: metrics.p50Ms });
   }, [metrics.turns, metrics.p50Ms]);
 
-  useEffect(() => () => player.stop(), [player]);
+  // Next keeps visited pages mounted but hidden (<Activity>): stop the audio when this panel is
+  // hidden or unmounted, and come back not listening.
+  useLayoutEffect(
+    () => () => {
+      player.stop();
+      setListening(false);
+    },
+    [player],
+  );
 
   useEffect(() => {
     // The REST view lags the stream: refresh it as soon as the stream says the run is over.
