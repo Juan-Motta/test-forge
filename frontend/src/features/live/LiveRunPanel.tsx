@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { clock, endReasonLabel, isActive, latency, shortId } from "@/features/runs/format";
 import { useCancelRun, useRun, runQueryKey } from "@/features/runs/queries";
+import { ChatTranscript } from "@/features/runs/ChatTranscript";
+import { runKind, textModeLabel } from "@/features/runs/kind";
 import { personaLine } from "@/features/runs/RunHeader";
 import { RunStatusChip } from "@/features/runs/RunStatusChip";
 import { interruptedAt } from "@/features/runs/transcript";
@@ -17,7 +19,7 @@ import { Alert, Badge, Button, KpiTile, LiveDot, Spinner, buttonClasses, cn } fr
 import { ListenControls } from "./ListenControls";
 import { LiveLanes } from "./LiveLanes";
 import { LiveTranscript } from "./LiveTranscript";
-import { TURN_STATE_LABELS, confirmationLabel } from "./live-state";
+import { confirmationLabel, turnStateLabel } from "./live-state";
 import { SLOW_TURN_MS, evaluatorChip, evaluatorGoals, liveMetrics, type SessionStats } from "./live-view";
 import { useRunLive } from "./use-run-live";
 
@@ -33,7 +35,10 @@ type LiveRunPanelProps = {
   onStats?: (stats: SessionStats) => void;
 };
 
-/** One run, live: timer, listening, audio lanes, transcript, the evaluator's plan and the call metrics. */
+/**
+ * One run, live: timer, listening, audio lanes, transcript, the evaluator's plan and the call
+ * metrics. A text run has no audio: its chat streams in, with reply timings and tools.
+ */
 export function LiveRunPanel({ runId, meter: sharedMeter, onStats }: LiveRunPanelProps) {
   const queryClient = useQueryClient();
   const run = useRun(runId, { pollWhileActiveMs: POLL_MS });
@@ -82,13 +87,16 @@ export function LiveRunPanel({ runId, meter: sharedMeter, onStats }: LiveRunPane
   const data = run.data;
   const status = state.status ?? data.status;
   const active = isActive(status) && !state.finished;
-  const endReason = endReasonLabel(state.endReason ?? data.endReason);
+  const kind = runKind(data);
+  const text = kind === "text";
+  const endReason = endReasonLabel(state.endReason ?? data.endReason, kind);
   const started = data.startedAt ? Date.parse(data.startedAt) : null;
   const ended = data.endedAt ? Date.parse(data.endedAt) : null;
   const elapsed = started === null ? null : (ended ?? (active ? now : started)) - started;
   const maxS = data.snapshot?.scenario?.endConditions?.maxDurationS;
   const skipped = state.laggingAt !== null && now - state.laggingAt < SKIPPED_FLAG_MS;
-  const evaluator = evaluatorChip(data.snapshot);
+  const evaluator = text ? ["Text agent", textModeLabel(data)].filter(Boolean).join(" · ") : evaluatorChip(data.snapshot);
+  const toolsUsed = state.entries.reduce((sum, entry) => sum + (entry.tools?.length ?? 0), 0);
   const goals = evaluatorGoals(data.snapshot);
   const headingId = `live-run-${runId}`;
 
@@ -141,7 +149,7 @@ export function LiveRunPanel({ runId, meter: sharedMeter, onStats }: LiveRunPane
           <div className="flex flex-wrap items-center gap-2 text-[13px]">
             <RunStatusChip status={status} />
             {evaluator ? <Badge tone="muted">{evaluator}</Badge> : null}
-            <span className="text-muted">{TURN_STATE_LABELS[state.finished ? "ended" : state.turnState]}</span>
+            <span className="text-muted">{turnStateLabel(state.finished ? "ended" : state.turnState, kind)}</span>
             {!active && endReason ? <span className="text-muted">{endReason}</span> : null}
           </div>
         </div>
@@ -151,26 +159,36 @@ export function LiveRunPanel({ runId, meter: sharedMeter, onStats }: LiveRunPane
         </div>
       </div>
       <ConnectionNotice state={connection} />
-      {cancel.isError ? <Alert>{`Could not end the call: ${errorMessage(cancel.error)}`}</Alert> : null}
+      {cancel.isError ? (
+        <Alert>{`Could not end the ${text ? "conversation" : "call"}: ${errorMessage(cancel.error)}`}</Alert>
+      ) : null}
       {audioError ? <Alert title="Could not start the audio">{audioError}</Alert> : null}
-      <ListenControls
-        listening={listening}
-        disabled={!active}
-        onListen={listen}
-        onStop={stopListening}
-        mix={mix}
-        onMix={chooseMix}
-        volume={volume}
-        onVolume={changeVolume}
-        skipped={skipped}
-      />
-      <LiveLanes meter={meter} active={active} startedMs={started} endedMs={ended} />
+      {text ? null : (
+        <>
+          <ListenControls
+            listening={listening}
+            disabled={!active}
+            onListen={listen}
+            onStop={stopListening}
+            mix={mix}
+            onMix={chooseMix}
+            volume={volume}
+            onVolume={changeVolume}
+            skipped={skipped}
+          />
+          <LiveLanes meter={meter} active={active} startedMs={started} endedMs={ended} />
+        </>
+      )}
       <div className="flex flex-wrap items-start gap-[18px]">
         <div className="flex min-w-0 flex-[999_1_380px] flex-col gap-3">
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold">Live transcript</h3>
+            <h3 className="text-sm font-semibold">{text ? "Live conversation" : "Live transcript"}</h3>
           </div>
-          <LiveTranscript entries={state.entries} pending={state.pending} />
+          {text ? (
+            <ChatTranscript live entries={state.entries} emptyText="No messages yet." pending={state.pending} />
+          ) : (
+            <LiveTranscript entries={state.entries} pending={state.pending} />
+          )}
           {state.interruptions.length > 0 ? (
             <ul aria-label="Caller interruptions" className="flex flex-col gap-0.5 text-xs text-dim">
               {state.interruptions.map((interruption, index) => (
@@ -190,7 +208,7 @@ export function LiveRunPanel({ runId, meter: sharedMeter, onStats }: LiveRunPane
           <div className="flex flex-wrap justify-end gap-2 border-t border-line pt-3.5">
             {active ? (
               <Button variant="danger" loading={cancel.isPending} onClick={() => cancel.mutate(runId)}>
-                End call
+                {text ? "End conversation" : "End call"}
               </Button>
             ) : (
               <Link href={`/runs/${encodeURIComponent(runId)}`} className={buttonClasses("secondary")}>
@@ -200,7 +218,11 @@ export function LiveRunPanel({ runId, meter: sharedMeter, onStats }: LiveRunPane
           </div>
         </div>
         <div className="flex min-w-0 flex-[1_1_220px] flex-col gap-4">
-          <RailBox id={`${headingId}-goals`} title="Evaluator goals" note="The plan; the judge checks it after the call.">
+          <RailBox
+            id={`${headingId}-goals`}
+            title="Evaluator goals"
+            note={`The plan; the judge checks it after the ${text ? "conversation" : "call"}.`}
+          >
             {goals.length > 0 ? (
               <ul className="flex flex-col gap-2">
                 {goals.map((goal, index) => (
@@ -216,26 +238,41 @@ export function LiveRunPanel({ runId, meter: sharedMeter, onStats }: LiveRunPane
           </RailBox>
           <section aria-labelledby={`${headingId}-metrics`} className="flex flex-col gap-2.5">
             <h3 id={`${headingId}-metrics`} className="sr-only">
-              Call metrics
+              {text ? "Conversation metrics" : "Call metrics"}
             </h3>
-            <div className="grid grid-cols-2 gap-2.5">
-              <Metric label="Avg agent latency" ms={metrics.avgLatencyMs} />
-              <Metric label="Slowest turn" ms={metrics.slowestMs} flagSlow />
-              <KpiTile className={TILE} label="Turns" value={metrics.turns} />
-              <KpiTile
-                className={TILE}
-                label="Interruptions"
-                value={metrics.interruptions}
-                sub={metrics.interruptions > 0 ? `${metrics.confirmed} confirmed` : undefined}
-              />
-            </div>
+            {text ? (
+              <div className="grid grid-cols-2 gap-2.5">
+                <Metric label="Avg time to first text" ms={metrics.avgLatencyMs} />
+                <Metric label="Slowest first text" ms={metrics.slowestMs} flagSlow />
+                <KpiTile className={TILE} label="Messages" value={metrics.turns} />
+                <KpiTile className={TILE} label="Tools used" value={toolsUsed} />
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-2.5">
+                <Metric label="Avg agent latency" ms={metrics.avgLatencyMs} />
+                <Metric label="Slowest turn" ms={metrics.slowestMs} flagSlow />
+                <KpiTile className={TILE} label="Turns" value={metrics.turns} />
+                <KpiTile
+                  className={TILE}
+                  label="Interruptions"
+                  value={metrics.interruptions}
+                  sub={metrics.interruptions > 0 ? `${metrics.confirmed} confirmed` : undefined}
+                />
+              </div>
+            )}
           </section>
           <RailBox id={`${headingId}-intent`} title="Evaluator intent">
             {state.decision ? (
               <div className="flex flex-col gap-1.5 text-sm">
                 <p className="text-evaluator-fg">
                   {state.decision.discarded ? "Discarded (the agent spoke again first): " : ""}
-                  {state.decision.say ? `Says: “${state.decision.say}”` : state.decision.hangUp ? "Hangs up" : "Stays silent"}
+                  {state.decision.say
+                    ? `${text ? "Sends" : "Says"}: “${state.decision.say}”`
+                    : state.decision.hangUp
+                      ? text
+                        ? "Ends the conversation"
+                        : "Hangs up"
+                      : "Stays silent"}
                 </p>
                 <p className="text-muted">{state.decision.reason}</p>
               </div>

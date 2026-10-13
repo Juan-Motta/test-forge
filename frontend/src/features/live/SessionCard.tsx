@@ -1,3 +1,4 @@
+import { runKind } from "@/features/runs/kind";
 import type { Run } from "@/features/runs/types";
 import { dominantTones, type ChannelLevels } from "@/lib/live/levels";
 import { Badge, Waveform, cn, focusRing } from "@/ui";
@@ -14,10 +15,11 @@ type SessionCardProps = {
   stats?: SessionStats;
 };
 
-/** One session in the live list: pick it to focus (and listen to) that run. */
+/** One session in the live list: pick it to focus (and, for a call, listen to) that run. */
 export function SessionCard({ run, selected, now, onSelect, levels, stats }: SessionCardProps) {
   const chip = sessionChip(run);
-  const wave = levels && run.status === "running" ? dominantTones(levels) : null;
+  // Text runs stream no audio: no levels to draw.
+  const wave = levels && run.status === "running" && runKind(run) !== "text" ? dominantTones(levels) : null;
   const who = [run.persona, run.agentName].filter(Boolean).join(" · ");
 
   return (

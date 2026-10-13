@@ -95,3 +95,18 @@ describe("Runs table design", () => {
     expect(cells).toEqual(["—", "—", "—", "—", "—"]);
   });
 });
+
+describe("Runs table agent kind", () => {
+  it("marks each run's agent as voice or text", () => {
+    const runs = [runFixture({ id: "r-voice-001" }), runFixture({ id: "r-text-0001", agentKind: "text", agentName: "Chat desk" })];
+    render(<RunsTable runs={runs} onCancel={() => {}} now={Date.parse("2026-10-05T17:00:00Z")} />);
+
+    const headers = screen.getAllByRole("columnheader").map((cell) => cell.textContent);
+    const agent = headers.indexOf("Agent");
+    const cells = screen
+      .getAllByRole("row")
+      .slice(1)
+      .map((row) => within(row).getAllByRole("cell")[agent].textContent);
+    expect(cells).toEqual(["Hotel booking assistantVoice", "Chat deskText"]);
+  });
+});

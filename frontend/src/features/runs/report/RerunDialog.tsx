@@ -20,7 +20,7 @@ export function RerunDialog({ open, scenarioName, agentName, onConfirm, onClose,
       description={
         <>
           {`This runs “${scenarioName}” against ${agentName} once more, with the scenario as it is now. `}
-          It is a new run: it calls the agent and the speech and evaluator models, which are billed.
+          It is a new run: it reaches the agent and uses the evaluator (and, for a call, speech) models, which are billed.
         </>
       }
       onClose={onClose}

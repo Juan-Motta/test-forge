@@ -59,23 +59,24 @@ export type Scenario = {
 /** A criterion without `id` is new: the backend generates one and keeps it afterwards. */
 export type CriterionInput = Omit<Criterion, "id"> & { id?: string };
 
+/** The voice-only settings are left out for text agents (the backend keeps its defaults or the stored values). */
 export type NewScenario = {
   agentId: string;
   name: string;
   tags: string[];
   context: string;
   persona: Persona;
-  ttsConnectionId: string | null;
+  ttsConnectionId?: string | null;
   evaluatorConnectionId: string | null;
-  voiceOverride: string | null;
-  evaluatorMode: EvaluatorMode;
-  realtimeModel: RealtimeModel;
+  voiceOverride?: string | null;
+  evaluatorMode?: EvaluatorMode;
+  realtimeModel?: RealtimeModel;
   goal: string;
   instructions: string;
   facts: Fact[];
   criteria: CriterionInput[];
   endConditions: EndConditions;
-  interruptions: Interruption[];
+  interruptions?: Interruption[];
 };
 
 /**

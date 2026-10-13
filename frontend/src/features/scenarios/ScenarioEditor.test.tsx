@@ -320,7 +320,7 @@ describe("Scenario editor: create", () => {
     expect(field("Name")).toHaveAccessibleDescription("Enter a name.");
     expect(field("Name")).toHaveAttribute("aria-invalid", "true");
     expect(field("Persona name")).toHaveAccessibleDescription("Enter the persona's name.");
-    expect(field("Goal")).toHaveAccessibleDescription(expect.stringContaining("Describe what the caller wants."));
+    expect(field("Goal")).toHaveAccessibleDescription(expect.stringContaining("Describe what the evaluator wants."));
     expect(field("Criterion 1 Text")).toHaveAccessibleDescription("Describe the criterion.");
   });
 

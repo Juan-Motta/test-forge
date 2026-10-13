@@ -35,7 +35,13 @@ export type Run = {
   callerTurns: number | null;
   agentTurns: number | null;
   latencyP50Ms: number | null;
+  /** The agent's kind from the launch snapshot; absent (voice) on older API responses. */
+  agentKind?: AgentKind;
 };
+
+export type AgentKind = "voice" | "text";
+/** How a text agent answers: one streamed reply, or the whole reply at once. */
+export type TextMode = "stream" | "invoke";
 
 /** One agent turn's timings (`summary.turns`). */
 export type TurnTiming = {
@@ -46,10 +52,19 @@ export type TurnTiming = {
   endMs?: number | null;
   playbackEndMs?: number | null;
   endReason?: string | null;
+  /** Text runs: run-clock ms the user message was sent, the first text and the full reply arrived. */
+  requestMs?: number | null;
+  firstTextMs?: number | null;
+  /** Text runs: the tools the agent ran during the reply. */
+  tools?: string[];
 };
 
 /** `summary.json` of a finished run (camelCase); every field may be missing on old artifacts. */
 export type RunSummary = {
+  /** `text` for text agents' runs; absent on voice runs. */
+  kind?: AgentKind;
+  textMode?: TextMode;
+  maxTurns?: number;
   status?: string;
   reason?: string | null;
   error?: string | null;
@@ -84,6 +99,12 @@ export type TranscriptRow = {
   heardTextEstimated?: true;
   /** Interrupted agent rows: the agent's server confirmed the correction; absent in older runs (unknown). */
   interruptionConfirmed?: boolean;
+  /** Text agent rows: ms from the user message to the first text (null when none came). */
+  firstTextMs?: number | null;
+  /** Text agent rows: the tools the agent ran for this reply. */
+  tools?: string[];
+  /** Text agent rows: the reply broke off (the agent failed before finishing it). */
+  incomplete?: boolean;
 };
 
 /** What the run was launched with (snake_case keys camelized by the API). */
@@ -93,14 +114,16 @@ export type RunSnapshot = {
     name: string;
     persona: { name: string; locale: string; temperament: string; notes?: string };
     goal: string;
-    endConditions: { maxDurationS: number; maxSilenceS: number; hangUpWhen: string };
+    endConditions: { maxDurationS: number; maxSilenceS: number; maxTurns?: number; hangUpWhen: string };
     /** Absent on runs launched before the realtime evaluator existed. */
     evaluatorMode?: "pipeline" | "realtime";
     /** The realtime evaluator's model; absent on pipeline runs and runs launched before the choice existed. */
     realtimeModel?: "gpt-realtime-2.1-mini" | "gpt-realtime-2.1";
   };
-  agent: { id: string; name: string; protocol: string };
-  connections: { tts: { id: string; name: string }; evaluator: { id: string; name: string; chatModel: string | null } };
+  /** `kind` absent: a voice agent (runs launched before text agents existed). */
+  agent: { id: string; name: string; protocol: string; kind?: AgentKind; textMode?: TextMode };
+  /** `tts` is null on text runs. */
+  connections: { tts: { id: string; name: string } | null; evaluator: { id: string; name: string; chatModel: string | null } };
 };
 
 /** `GET /api/runs/{id}`: `summary` and `transcript` once the run finished. */

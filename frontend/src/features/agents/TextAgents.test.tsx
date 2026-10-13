@@ -1,8 +1,9 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { mockConnectionsApi } from "@/features/connections/testing";
 import { renderWithClient } from "@/test/render";
+import { AgentForm } from "./AgentForm";
 import { AgentsContainer } from "./AgentsContainer";
 import { agentFixture, connectionTestFixture, mockAgentsApi } from "./testing";
 
@@ -170,6 +171,19 @@ describe("Text agents: detail", () => {
 
     await waitFor(() => expect(api.requests).toHaveLength(1));
     expect(api.requests[0]).toEqual({ method: "PATCH", path: "/agents/a-chat", body: { auth: "none" } });
+  });
+
+  it("asks for a new key once the stored key is gone, without remounting the form", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
+    const props = { langfuseOptions: [], onSubmit, pending: false };
+    const { rerender } = render(<AgentForm agent={chatAgent} {...props} />);
+    rerender(<AgentForm agent={{ ...chatAgent, hasApiKey: false, apiKeyHint: null }} {...props} />);
+
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(await screen.findByText("Enter the API key.")).toBeInTheDocument();
+    expect(onSubmit).not.toHaveBeenCalled();
   });
 
   it("runs the text connection test", async () => {

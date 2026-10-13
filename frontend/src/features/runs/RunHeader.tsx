@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState, type ReactNode } from "react";
 import { Badge, CheckIcon, CopyIcon, IconButton } from "@/ui";
 import { clock, endReasonLabel, runDurationMs, shortId } from "./format";
+import { runKind, textModeLabel } from "./kind";
 import { RunStatusChip } from "./RunStatusChip";
 import type { RunDetail } from "./types";
 
@@ -31,8 +32,11 @@ export const shortRunId = (id: string) => id.slice(0, 8);
  */
 export function RunHeader({ run, actions }: { run: RunDetail; actions?: ReactNode }) {
   const [copied, setCopied] = useState(false);
-  const reason = endReasonLabel(run.endReason);
-  const evaluator = evaluatorLabel(run);
+  const kind = runKind(run);
+  const reason = endReasonLabel(run.endReason, kind);
+  // Text runs have no evaluator voice: the chip names the agent's kind and mode instead.
+  const evaluator =
+    kind === "text" ? ["Text agent", textModeLabel(run)].filter(Boolean).join(" · ") : evaluatorLabel(run);
   const durationMs = run.summary?.durationMs ?? runDurationMs(run);
   const persona = personaLine(run);
 

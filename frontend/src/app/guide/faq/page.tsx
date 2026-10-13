@@ -15,8 +15,8 @@ function Item({ question, children }: { question: string; children: ReactNode })
 }
 
 const GLOSSARY = [
-  { term: "Agent", definition: "The voice agent under test: your assistant, reached over its WebSocket. Shown in blue." },
-  { term: "Evaluator", definition: "Duet's simulated caller. It plays a persona, pursues a goal and speaks with a synthetic voice. Shown in amber." },
+  { term: "Agent", definition: "The agent under test: a voice agent reached over its WebSocket, or a text agent reached over Vivi's channel API. Shown in blue." },
+  { term: "Evaluator", definition: "Duet's simulated user. It plays a persona and pursues a goal, speaking with a synthetic voice to a voice agent or writing to a text agent. Shown in amber." },
   { term: "Scenario", definition: "One kind of call: the persona, goal, facts, success criteria, end conditions, interruptions and evaluator setup." },
   { term: "Persona", definition: "Who the caller is: a name, a language (locale), a temperament and notes on habits." },
   { term: "Batch", definition: "Everything created by one launch: one run per scenario and repetition." },
@@ -27,7 +27,7 @@ const GLOSSARY = [
   { term: "Judgement", definition: "The judge's result for one run: score, verdicts, evidence, suggestions and brief." },
   { term: "Brief", definition: "A Markdown note, ready to paste into a coding agent, that explains what to change in your agent and why." },
   { term: "Barge-in", definition: "Talking over the other side. The caller can be set up to cut the agent off mid-reply." },
-  { term: "Latency", definition: "How long the agent takes to start answering after the caller stops speaking." },
+  { term: "Latency", definition: "How long the agent takes to start answering after the caller stops speaking. For a text agent: from the user message to the first text (Stream) or the full reply (Invoke)." },
   { term: "Thread ID", definition: "A fresh id for every run, also used as the agent's Langfuse session id. Use it to find the call in your agent's own logs." },
   { term: "Connection", definition: "Stored credentials for a provider (OpenAI, Azure OpenAI, Azure AI Speech or Langfuse). Secrets are never shown again." },
 ];
@@ -72,6 +72,29 @@ export default function FaqPage() {
             realtime deployment for the model you chose.
           </P>
         </Item>
+        <Item question="My text agent fails with &ldquo;Access denied (HTTP 403)&rdquo;.">
+          <P>
+            The agent&apos;s channel refused the message. On an API channel the <Code>vivi-api-key</Code> is missing (a wrong key
+            gives HTTP 401 instead): set <Ui>Authentication</Ui> to <Ui>API key</Ui> and save the key. On a WEB channel, such as
+            the portal&apos;s testing channel, the Origin is checked: leave <Ui>Origin</Ui> empty or set it to the portal or
+            one of the channel&apos;s allowed domains. A 403 also comes when the workspace&apos;s subscription is not active.
+          </P>
+        </Item>
+        <Item question="My text agent fails with &ldquo;The agent refused the message (HTTP 422)&rdquo;.">
+          <P>
+            API and WEB channels require the <Code>threadId</Code> to be a UUID. Duet always sends one, so a 422 usually means
+            the base URL or channel points to a different service; check them, or re-import a fresh cURL, and press{" "}
+            <Ui>Run connection test</Ui>.
+          </P>
+        </Item>
+        <Item question="&ldquo;The agent's stream ended before the reply finished (no on_chat_end event)&rdquo;.">
+          <P>
+            In Stream mode every reply must end with the <Code>on_chat_end</Code> event. A stream that stops without it is a
+            failure: the agent errored mid-reply (a context that grew too long sends a short message and then stops). The run
+            fails, and the report keeps the partial reply marked <Ui>Reply broke off</Ui>. Check the agent&apos;s traces for that
+            thread ID. An agent with a response schema cannot stream at all (HTTP 409): switch it to <Ui>Invoke</Ui>.
+          </P>
+        </Item>
         <Item question="The judgement is taking a long time.">
           <P>
             Without Langfuse it usually takes a few minutes. With Langfuse, Duet waits until the agent&apos;s traces stop
@@ -114,14 +137,14 @@ export default function FaqPage() {
         </Item>
         <Item question="How much does a run cost?">
           <P>
-            Each run uses your agent (a real session), the caller&apos;s voice and chat model (or realtime model), and the judge
+            Each run uses your agent (a real session), the evaluator&apos;s chat model (and, for calls, its voice or realtime model), and the judge
             (3 model calls per judgement). The cost depends on your providers and the call length; the launch panel shows how
             many calls you are about to make.
           </P>
         </Item>
         <Item question="Can I stop a call?">
           <P>
-            Yes: <Ui>End call</Ui> in the live view, <Ui>Cancel run</Ui> on a run, or <Ui>Stop all</Ui> for a whole batch.
+            Yes: <Ui>End call</Ui> (<Ui>End conversation</Ui> for a text agent) in the live view, <Ui>Cancel run</Ui> on a run, or <Ui>Stop all</Ui> for a whole batch.
             Cancelled runs are not judged; finished runs keep their results.
           </P>
         </Item>

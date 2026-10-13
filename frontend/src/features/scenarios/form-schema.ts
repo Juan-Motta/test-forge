@@ -145,13 +145,47 @@ export const weightTotalMessage = (total: number) =>
 
 export const EVALUATOR_MODEL_REQUIRED = "Choose the chat model that plays the user.";
 
+/** Form fields a text agent's editor hides (voice-only settings), as API paths. */
+const TEXT_HIDDEN_FIELDS = [
+  "ttsConnectionId",
+  "voiceOverride",
+  "evaluatorMode",
+  "realtimeModel",
+  "interruptions",
+  "endConditions.maxSilenceS",
+] as const;
+const DEFAULT_MAX_SILENCE_S = "15";
+
+/** Whether the editor hides the field at `apiPath` (or a field under it) for this kind of agent. */
+export function isHiddenFor(kind: AgentKind, apiPath: string): boolean {
+  return kind === "text" && TEXT_HIDDEN_FIELDS.some((field) => apiPath === field || apiPath.startsWith(`${field}.`));
+}
+
+/** A hidden max silence the backend would refuse falls back to its default. */
+function textMaxSilence(value: string): string {
+  const trimmed = value.trim();
+  return WHOLE.test(trimmed) && Number(trimmed) >= 5 && Number(trimmed) <= 120 ? trimmed : DEFAULT_MAX_SILENCE_S;
+}
+
+/** A text agent's values with the hidden voice-only settings neutralized, so they never block a save. */
+function withoutVoiceSettings(values: ScenarioFormValues): ScenarioFormValues {
+  return {
+    ...values,
+    voiceOverride: "",
+    evaluatorMode: "pipeline",
+    interruptions: [],
+    endConditions: { ...values.endConditions, maxSilenceS: textMaxSilence(values.endConditions.maxSilenceS) },
+  };
+}
+
 /**
  * The form's schema for the kind of the chosen agent. A text agent ignores the voice-only
- * settings (voice override, interruptions, evaluator mode) and needs an evaluator model connection.
+ * settings (voice override, interruptions, evaluator mode, max silence) and needs an evaluator
+ * model connection.
  */
 export function scenarioFormSchemaFor(kind: AgentKind) {
   if (kind === "voice") return scenarioFormSchema;
-  return scenarioFormSchema.superRefine((values, ctx) => {
+  return z.preprocess(withoutVoiceSettings, scenarioFormSchema).superRefine((values, ctx) => {
     if (!values.evaluatorConnectionId) {
       ctx.addIssue({ code: "custom", path: ["evaluatorConnectionId"], message: EVALUATOR_MODEL_REQUIRED });
     }
@@ -178,7 +212,7 @@ export const scenarioFormSchema = z
       .refine((value) => !value || IDENTIFIER.test(value), "Use only letters, digits and . _ : - (up to 100 characters)."),
     evaluatorMode: z.enum(EVALUATOR_MODES),
     realtimeModel: z.enum(REALTIME_MODELS),
-    goal: text(MAX.goal, "Describe what the caller wants."),
+    goal: text(MAX.goal, "Describe what the evaluator wants."),
     instructions: text(MAX.instructions),
     facts: z
       .array(z.object({ key: text(MAX.factKey, "Enter a key."), value: text(MAX.factValue, "Enter a value.") }))
@@ -323,8 +357,9 @@ export function initialValues(scenario: Scenario | undefined, defaultAgentId = "
   };
 }
 
-export function toNewScenario(values: ScenarioFormValues): NewScenario {
-  return {
+/** The API payload; a text agent's scenario leaves out the voice-only settings (the backend keeps them). */
+export function toNewScenario(values: ScenarioFormValues, agentKind: AgentKind = "voice"): NewScenario {
+  const shared = {
     agentId: values.agentId,
     name: values.name.trim(),
     tags: parseTags(values.tags),
@@ -335,11 +370,7 @@ export function toNewScenario(values: ScenarioFormValues): NewScenario {
       temperament: values.persona.temperament,
       notes: values.persona.notes.trim(),
     },
-    ttsConnectionId: values.ttsConnectionId || null,
     evaluatorConnectionId: values.evaluatorConnectionId || null,
-    voiceOverride: values.voiceOverride.trim() || null,
-    evaluatorMode: values.evaluatorMode,
-    realtimeModel: values.realtimeModel,
     goal: values.goal.trim(),
     instructions: values.instructions.trim(),
     facts: values.facts.map((fact) => ({ key: fact.key.trim(), value: fact.value.trim() })),
@@ -352,10 +383,20 @@ export function toNewScenario(values: ScenarioFormValues): NewScenario {
     })),
     endConditions: {
       maxDurationS: Number(values.endConditions.maxDurationS),
-      maxSilenceS: Number(values.endConditions.maxSilenceS),
+      maxSilenceS: Number(
+        agentKind === "text" ? textMaxSilence(values.endConditions.maxSilenceS) : values.endConditions.maxSilenceS,
+      ),
       maxTurns: Number(values.endConditions.maxTurns),
       hangUpWhen: values.endConditions.hangUpWhen,
     },
+  };
+  if (agentKind === "text") return shared;
+  return {
+    ...shared,
+    ttsConnectionId: values.ttsConnectionId || null,
+    voiceOverride: values.voiceOverride.trim() || null,
+    evaluatorMode: values.evaluatorMode,
+    realtimeModel: values.realtimeModel,
     interruptions: values.interruptions.map(({ agentTurn, afterS }) => ({
       agentTurn: Number(agentTurn),
       afterMs: Math.round(Number(afterS) * 1000),
@@ -367,9 +408,9 @@ export function toNewScenario(values: ScenarioFormValues): NewScenario {
  * Only the top-level fields that differ from the stored scenario. Structured fields (persona,
  * facts, criteria, end conditions, interruptions) are sent whole, as the backend replaces them whole.
  */
-export function toChanges(scenario: Scenario, values: ScenarioFormValues): ScenarioChanges {
-  const stored = toNewScenario(initialValues(scenario));
-  const next = toNewScenario(values);
+export function toChanges(scenario: Scenario, values: ScenarioFormValues, kind: AgentKind = "voice"): ScenarioChanges {
+  const stored = toNewScenario(initialValues(scenario), kind);
+  const next = toNewScenario(values, kind);
   const changes: Record<string, unknown> = {};
   for (const key of Object.keys(next) as (keyof NewScenario)[]) {
     if (JSON.stringify(next[key]) !== JSON.stringify(stored[key])) changes[key] = next[key];

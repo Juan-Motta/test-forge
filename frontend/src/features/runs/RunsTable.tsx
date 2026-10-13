@@ -5,6 +5,8 @@ import { runResult } from "@/features/overview/run-result";
 import { Badge, Button, ScoreBar, buttonClasses, cn } from "@/ui";
 import { STATUS_LABELS, clock, endReasonLabel, isActive, latency, runDurationMs, shortId } from "./format";
 import { RunStatusChip } from "./RunStatusChip";
+import { KindBadge } from "./KindBadge";
+import { runKind } from "./kind";
 import { TruncatedText } from "./TruncatedText";
 import type { Run } from "./types";
 
@@ -49,7 +51,7 @@ export function RunsTable({ runs, onCancel, cancellingId, now }: RunsTableProps)
         <tbody>
           {runs.map((run) => {
             const duration = runDurationMs(run, now);
-            const reason = endReasonLabel(run.endReason);
+            const reason = endReasonLabel(run.endReason, runKind(run));
             const showReason = reason && !isActive(run.status) && reason !== STATUS_LABELS[run.status];
             const label = shortId(run.id);
             return (
@@ -61,7 +63,10 @@ export function RunsTable({ runs, onCancel, cancellingId, now }: RunsTableProps)
                   <TruncatedText text={run.scenarioName} className="max-w-[18rem]" />
                 </td>
                 <td className={cn(CELL, "text-muted")}>
-                  <TruncatedText text={run.agentName} className="max-w-[14rem]" />
+                  <span className="flex items-center gap-1.5">
+                    <TruncatedText text={run.agentName} className="max-w-[14rem]" />
+                    <KindBadge run={run} />
+                  </span>
                 </td>
                 <td className={cn(CELL, "text-muted")}>
                   {run.persona ? <TruncatedText text={run.persona} className="max-w-[9rem]" /> : "—"}

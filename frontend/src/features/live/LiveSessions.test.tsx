@@ -178,7 +178,7 @@ describe("Live sessions", () => {
   it("says when no call is in progress", async () => {
     mockRunsApi([runFixture()]);
     renderWithClient(<LiveContainer />);
-    expect(await screen.findByText("No calls in progress")).toBeInTheDocument();
+    expect(await screen.findByText("Nothing running")).toBeInTheDocument();
     expect(sockets.sockets).toHaveLength(0);
   });
 

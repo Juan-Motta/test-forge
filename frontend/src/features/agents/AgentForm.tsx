@@ -423,7 +423,7 @@ export function AgentForm({
   const langfuseField = (
     <Field
       label="Langfuse connection"
-      hint={langfuseHint ?? "Traces are fetched after each call and handed to the judge."}
+      hint={langfuseHint ?? "Traces are fetched after each run and handed to the judge."}
       error={fieldError("langfuseConnectionId")}
     >
       {(control) => (
@@ -523,7 +523,7 @@ export function AgentForm({
         </SectionCard>
         <SectionCard
           title="Langfuse traces"
-          subtitle="Fetched after each call and handed to the judge with the transcript"
+          subtitle="Fetched after each run and handed to the judge with the transcript"
           status={
             selectedLangfuse ? (
               <Badge tone="success">

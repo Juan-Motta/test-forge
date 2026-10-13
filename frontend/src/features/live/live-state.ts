@@ -15,6 +15,20 @@ export const TURN_STATE_LABELS: Record<TurnState, string> = {
   ended: "Call ended",
 };
 
+/** Text runs: the same states, worded for a chat (`playback`: the reply is in, the evaluator writes). */
+const TEXT_TURN_STATE_LABELS: Record<TurnState, string> = {
+  waiting: "Waiting",
+  agent: "Agent replying",
+  playback: "Evaluator writing",
+  evaluator: "Message sent · waiting for the agent",
+  hanging_up: "Evaluator is ending the conversation",
+  ended: "Conversation ended",
+};
+
+export function turnStateLabel(state: TurnState, kind: "voice" | "text" = "voice"): string {
+  return (kind === "text" ? TEXT_TURN_STATE_LABELS : TURN_STATE_LABELS)[state];
+}
+
 export type Decision = {
   decisionId: number | null;
   say: string | null;
@@ -28,7 +42,14 @@ export type Decision = {
 export type PendingLine = { decisionId: number | null; say: string; tMs: number | null };
 /** The agent started a turn while the evaluator was mid-utterance. */
 export type BargeIn = { tMs: number | null; callerTurn: number | null };
-type Turn = { turn: number; latencyMs: number | null };
+/** An agent turn's timings; text runs also carry when the message was sent and the reply arrived (run clock). */
+type Turn = {
+  turn: number;
+  latencyMs: number | null;
+  requestMs?: number | null;
+  firstTextMs?: number | null;
+  endMs?: number | null;
+};
 /** The caller cut agent reply #`agentTurn` (1-based, like the scenario) once `audioEndMs` had played. */
 export type CallerInterruption = {
   agentTurn: number | null;
@@ -82,12 +103,57 @@ export type LiveAction =
 const num = (value: unknown): number | null => (typeof value === "number" ? value : null);
 const str = (value: unknown): string => (typeof value === "string" ? value : "");
 
+function turnOf(item: Record<string, unknown>, fallback: number): Turn {
+  const turn: Turn = { turn: num(item.turn) ?? num(item.index) ?? fallback, latencyMs: num(item.latencyMs) };
+  if (typeof item.requestMs !== "number") return turn;
+  return { ...turn, requestMs: item.requestMs, firstTextMs: num(item.firstTextMs), endMs: num(item.endMs) };
+}
+
 function turnsFrom(value: unknown): Turn[] {
   if (!Array.isArray(value)) return [];
-  return value.map((item: Record<string, unknown>, index) => ({
-    turn: num(item.turn) ?? num(item.index) ?? index,
-    latencyMs: num(item.latencyMs),
-  }));
+  return value.map((item: Record<string, unknown>, index) => turnOf(item, index));
+}
+
+/** A text reply's timings from its turn: first text and full reply, both from the user message. */
+function withTextTiming(entry: TranscriptEntry, turn: Turn | undefined): TranscriptEntry {
+  if (!turn || typeof turn.requestMs !== "number") return entry;
+  const since = (value: number | null | undefined) => (typeof value === "number" ? value - turn.requestMs! : null);
+  return { ...entry, latencyMs: turn.latencyMs, firstTextMs: since(turn.firstTextMs), fullReplyMs: since(turn.endMs) };
+}
+
+/** The entry without its `streaming` flag. */
+function settled(entry: TranscriptEntry): TranscriptEntry {
+  const copy = { ...entry };
+  delete copy.streaming;
+  return copy;
+}
+
+/** The index of the text reply still streaming for `turn`, or -1. */
+const streamingIndex = (entries: TranscriptEntry[], turn: number | null) =>
+  entries.findIndex((entry) => entry.streaming && entry.role === "agent" && entry.turn === turn);
+
+/** Applies `change` to the streaming reply of the message's turn, opening it on its first event. */
+function onStreaming(
+  state: LiveRunState,
+  message: Record<string, unknown>,
+  change: (entry: TranscriptEntry) => TranscriptEntry,
+): LiveRunState {
+  const turn = num(message.turn);
+  const index = streamingIndex(state.entries, turn);
+  if (index === -1) {
+    const opened: TranscriptEntry = {
+      key: `live-${state.seq}`,
+      role: "agent",
+      text: "",
+      tMs: num(message.tMs),
+      tools: [],
+      streaming: true,
+      ...(turn === null ? {} : { turn }),
+    };
+    return { ...state, turnState: "agent", entries: [...state.entries, change(opened)], seq: state.seq + 1 };
+  }
+  const entries = state.entries.map((entry, i) => (i === index ? change(entry) : entry));
+  return { ...state, turnState: "agent", entries };
 }
 
 /** Snapshot rows (live: `tMs`, `turn`; finished: `startMs`, `latencyMs`) as entries with latency. */
@@ -97,8 +163,10 @@ function snapshotEntries(rows: unknown, turns: Turn[]): TranscriptEntry[] {
   return entriesFromRows(typed).map((entry, index) => {
     const turn = typed[index].turn;
     if (entry.role !== "agent" || turn === undefined) return entry;
+    const timing = turns.find((item) => item.turn === turn);
+    if (timing && typeof timing.requestMs === "number") return withTextTiming({ ...entry, turn }, timing);
     if (entry.latencyMs != null) return { ...entry, turn };
-    return { ...entry, turn, latencyMs: turns.find((item) => item.turn === turn)?.latencyMs ?? null };
+    return { ...entry, turn, latencyMs: timing?.latencyMs ?? null };
   });
 }
 
@@ -144,8 +212,32 @@ export function liveReducer(state: LiveRunState, action: LiveAction): LiveRunSta
     }
     case "status":
       return { ...state, status: str(message.status) as RunStatus };
+    case "agentTextDelta":
+      // The reply's time is its first text, like the finished transcript's.
+      return onStreaming(state, message, (entry) => ({
+        ...entry,
+        text: entry.text + str(message.text),
+        tMs: entry.text ? entry.tMs : (num(message.tMs) ?? entry.tMs),
+      }));
+    case "agentToolStarted":
+      return onStreaming(state, message, (entry) => ({ ...entry, tools: [...(entry.tools ?? []), { name: str(message.name) }] }));
+    case "agentToolEnded":
+      return onStreaming(state, message, (entry) => {
+        const tools = [...(entry.tools ?? [])];
+        const index = tools.findLastIndex((tool) => tool.name === str(message.name) && tool.success === undefined);
+        if (index !== -1 && typeof message.success === "boolean") tools[index] = { ...tools[index], success: message.success };
+        return { ...entry, tools };
+      });
     case "agentTranscript": {
       const turn = num(message.turn);
+      const streaming = streamingIndex(state.entries, turn);
+      if (streaming !== -1) {
+        // A text reply that streamed in: the transcript is its final text.
+        const entries = state.entries.map((entry, i) =>
+          i === streaming ? { ...settled(entry), text: str(message.text) || entry.text } : entry,
+        );
+        return { ...state, entries };
+      }
       const latencyMs = state.turns.find((item) => item.turn === turn)?.latencyMs ?? null;
       const entry: TranscriptEntry = {
         key: `live-${state.seq}`,
@@ -225,12 +317,15 @@ export function liveReducer(state: LiveRunState, action: LiveAction): LiveRunSta
     }
     case "agentBargeIn":
       return { ...state, bargeIns: [...state.bargeIns, { tMs: num(message.tMs), callerTurn: num(message.callerTurn) }] };
-    case "turnEnded":
-      return {
-        ...state,
-        turns: [...state.turns, { turn: num(message.turn) ?? state.turns.length, latencyMs: num(message.latencyMs) }],
-        turnState: "playback",
-      };
+    case "turnEnded": {
+      const turn = turnOf(message, state.turns.length);
+      // Text replies get their timings now: the transcript came first.
+      const entries =
+        typeof turn.requestMs === "number"
+          ? state.entries.map((entry) => (entry.role === "agent" && entry.turn === turn.turn ? withTextTiming(entry, turn) : entry))
+          : state.entries;
+      return { ...state, entries, turns: [...state.turns, turn], turnState: "playback" };
+    }
     case "warning":
       return { ...state, warnings: [...state.warnings, str(message.message)] };
     case "lagging":
@@ -238,6 +333,8 @@ export function liveReducer(state: LiveRunState, action: LiveAction): LiveRunSta
     case "finished":
       return {
         ...state,
+        // A text reply still streaming never finished: it broke off.
+        entries: state.entries.map((entry) => (entry.streaming ? { ...settled(entry), incomplete: true } : entry)),
         status: str(message.status) as RunStatus,
         endReason: (message.reason as string | null) ?? null,
         finished: true,

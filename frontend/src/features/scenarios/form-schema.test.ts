@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { initialValues, parseTags, scenarioFormSchema, toChanges, toNewScenario, weightTotal } from "./form-schema";
+import {
+  initialValues,
+  isHiddenFor,
+  parseTags,
+  scenarioFormSchema,
+  scenarioFormSchemaFor,
+  toChanges,
+  toNewScenario,
+  weightTotal,
+} from "./form-schema";
 import { scenarioFixture } from "./testing";
 
 describe("scenario form helpers", () => {
@@ -97,5 +106,38 @@ describe("scenario form helpers", () => {
     });
     const result = scenarioFormSchema.safeParse({ ...initialValues(scenario), realtimeModel: "gpt-4o-realtime" });
     expect(result.success).toBe(false);
+  });
+
+  it("ignores the hidden voice-only values of a text agent's scenario", () => {
+    const values = initialValues(scenarioFixture({ agentId: "a-chat", evaluatorConnectionId: "c-openai" }));
+    values.voiceOverride = "not a voice!";
+    values.evaluatorMode = "realtime";
+    values.interruptions = [{ agentTurn: "x", afterS: "999" }];
+    values.endConditions.maxSilenceS = "1";
+    expect(scenarioFormSchema.safeParse(values).success).toBe(false);
+    expect(scenarioFormSchemaFor("text").safeParse(values).success).toBe(true);
+  });
+
+  it("sends no voice-only settings for a text agent", () => {
+    const scenario = scenarioFixture({ voiceOverride: "alloy", interruptions: [{ agentTurn: 2, afterMs: 2500 }] });
+    const values = initialValues(scenario);
+    values.voiceOverride = "nova";
+    values.interruptions = [];
+    values.endConditions.maxSilenceS = "1";
+    const payload = toNewScenario(values, "text");
+    for (const key of ["voiceOverride", "ttsConnectionId", "evaluatorMode", "realtimeModel", "interruptions"]) {
+      expect(payload).not.toHaveProperty(key);
+    }
+    expect(payload.endConditions.maxSilenceS).toBe(15);
+    expect(toChanges(scenario, values, "text")).toEqual({});
+    expect(toNewScenario(values).voiceOverride).toBe("nova");
+  });
+
+  it("knows which server error paths a text agent's editor hides", () => {
+    expect(isHiddenFor("text", "voiceOverride")).toBe(true);
+    expect(isHiddenFor("text", "interruptions.0.afterMs")).toBe(true);
+    expect(isHiddenFor("text", "endConditions.maxSilenceS")).toBe(true);
+    expect(isHiddenFor("text", "endConditions.maxTurns")).toBe(false);
+    expect(isHiddenFor("voice", "voiceOverride")).toBe(false);
   });
 });

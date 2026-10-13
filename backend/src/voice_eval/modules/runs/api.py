@@ -85,6 +85,11 @@ class LaunchIn(CamelModel):
     label: Label | None = None
 
 
+def _snapshot_agent_kind(snapshot: Any) -> Any:
+    agent = snapshot.get("agent") if isinstance(snapshot, dict) else None
+    return agent.get("kind") if isinstance(agent, dict) else None
+
+
 class RunOut(CamelModel):
     id: uuid.UUID
     batch_id: uuid.UUID
@@ -107,6 +112,7 @@ class RunOut(CamelModel):
     caller_turns: int | None  # from the summary, once the run finished
     agent_turns: int | None
     latency_p50_ms: int | None  # median response latency of the summary
+    agent_kind: Literal["voice", "text"]  # from the snapshot; runs of older snapshots are voice
 
     @classmethod
     def fields_of(cls, run: Run) -> dict[str, Any]:
@@ -132,6 +138,7 @@ class RunOut(CamelModel):
             "caller_turns": run.caller_turns,
             "agent_turns": run.agent_turns,
             "latency_p50_ms": run.latency_p50_ms,
+            "agent_kind": "text" if _snapshot_agent_kind(run.snapshot) == "text" else "voice",
         }
 
     @classmethod

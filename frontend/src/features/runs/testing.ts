@@ -72,6 +72,60 @@ export function runDetailFixture(overrides: Partial<RunDetail> = {}): RunDetail 
   };
 }
 
+/**
+ * A finished text run (stream mode): three user messages, two replies (the first used a tool) and
+ * a third reply that broke off when the agent failed.
+ */
+export function textRunDetailFixture(overrides: Partial<RunDetail> = {}): RunDetail {
+  const snapshot = snapshotFixture({
+    endConditions: { maxDurationS: 360, maxSilenceS: 15, maxTurns: 3, hangUpWhen: "goal_or_goodbye" },
+  });
+  return {
+    ...runFixture({ agentKind: "text", agentName: "Chat desk", agentId: "a-chat", status: "failed", endReason: "agent_error" }),
+    error: "The agent's reply ended without a final event",
+    summary: {
+      kind: "text",
+      protocol: "http_chat",
+      textMode: "stream",
+      status: "failed",
+      reason: "agent_error",
+      durationMs: 42_000,
+      callerTurns: 3,
+      agentTurns: 2,
+      maxTurns: 3,
+      latenciesMs: [800, 1600],
+      turns: [
+        { index: 0, kind: "reply", requestMs: 0, firstTextMs: 800, endMs: 1500, latencyMs: 800, tools: ["check_availability"] },
+        { index: 1, kind: "reply", requestMs: 4000, firstTextMs: 5600, endMs: 7500, latencyMs: 1600, tools: [] },
+      ],
+      warnings: [],
+    },
+    transcript: [
+      { role: "caller", text: "A table for two at 8, please.", startMs: 0, endMs: 0, reason: "ask" },
+      {
+        role: "agent",
+        text: "Booked for 8 pm.",
+        startMs: 800,
+        endMs: 1500,
+        latencyMs: 800,
+        firstTextMs: 800,
+        tools: ["check_availability"],
+      },
+      { role: "caller", text: "Can you make it 9?", startMs: 4000, endMs: 4000, reason: "change" },
+      { role: "agent", text: "Done, 9 pm.", startMs: 5600, endMs: 7500, latencyMs: 1600, firstTextMs: 1600, tools: [] },
+      { role: "caller", text: "Is there parking?", startMs: 9000, endMs: 9000, reason: "parking" },
+      { role: "agent", text: "Let me check the", startMs: 9000, endMs: 9500, latencyMs: null, firstTextMs: null, tools: [], incomplete: true },
+    ],
+    snapshot: {
+      ...snapshot,
+      scenario: { ...snapshot.scenario, evaluatorMode: "pipeline" },
+      agent: { id: "a-chat", name: "Chat desk", protocol: "http_chat", kind: "text", textMode: "stream" },
+      connections: { tts: null, evaluator: { id: "c-openai", name: "OpenAI", chatModel: "gpt-6-luna" } },
+    },
+    ...overrides,
+  };
+}
+
 /** Levels of `runDetailFixture()`'s 4:12 run: 8 bins per side and its three turns. */
 export function levelsFixture(overrides: Partial<RunLevels> = {}): RunLevels {
   return {

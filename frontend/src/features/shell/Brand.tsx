@@ -8,7 +8,7 @@ export function Brand() {
       </svg>
       <div className="flex flex-col leading-tight">
         <span className="text-[17px] font-bold tracking-[-0.01em]">Duet</span>
-        <span className="text-xs text-dim">Voice agent evals</span>
+        <span className="text-xs text-dim">Agent evals</span>
       </div>
     </div>
   );

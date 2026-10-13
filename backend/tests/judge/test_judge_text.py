@@ -156,3 +156,9 @@ def test_the_text_brief_names_a_text_agent_review_without_voice_steps():
     assert 'Re-run the scenario "Book a table" against agent "Vivi Chat".' in text
     assert "A<n>/C<n> are the agent's/user's n-th message in the conversation" in text
     assert "T<n> the n-th agent reply's timings" in text
+
+
+def test_the_median_reply_time_of_an_even_count_is_the_mean_of_the_middle_two():
+    summary = {**TEXT_SUMMARY, "latencies_ms": [900.0, 300.0, 1500.0, 500.0]}
+    text = render_timing(summary, kind="text")
+    assert "median 700 ms, max 1500 ms, over 4 reply(ies)" in text

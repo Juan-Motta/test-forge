@@ -19,6 +19,7 @@ import {
   buttonClasses,
 } from "@/ui";
 import { isActive } from "./format";
+import { runKind } from "./kind";
 import { notRunnableReasons } from "./launch";
 import { useCancelRun, useLangfuseHost, useRerun, useRun, useRunTrace } from "./queries";
 import { FinishedReport } from "./report/FinishedReport";
@@ -146,7 +147,11 @@ function RunReport({ run, judgementPollMs }: { run: RunDetail; judgementPollMs?:
       {cancel.isError ? <Alert>{`Could not cancel: ${errorMessage(cancel.error)}`}</Alert> : null}
       {active ? (
         <>
-          <Alert tone="info">The recording and transcript appear once the run finishes. Watch it live meanwhile.</Alert>
+          <Alert tone="info">
+            {runKind(run) === "text"
+              ? "The transcript and its timings appear once the conversation ends. Watch it live meanwhile."
+              : "The recording and transcript appear once the run finishes. Watch it live meanwhile."}
+          </Alert>
           <Card aria-labelledby="judgement-status">
             <CardHeader id="judgement-status" title="Judgement" />
             <p className="text-sm text-muted">The judge scores the run once it finishes.</p>

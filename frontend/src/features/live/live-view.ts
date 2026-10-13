@@ -1,4 +1,5 @@
 import { STATUS_LABELS, clock, endReasonLabel, isActive, latency, median, runDurationMs } from "@/features/runs/format";
+import { runKind } from "@/features/runs/kind";
 import type { Batch, Run, RunSnapshot } from "@/features/runs/types";
 import type { BadgeTone, ProgressSegment } from "@/ui";
 import type { LiveRunState } from "./live-state";
@@ -85,7 +86,7 @@ export function sessionMeta(run: Run, now: number, stats?: SessionStats): string
     duration === null ? null : clock(duration),
     turns === null || turns === 0 ? null : turnsText(turns),
     p50 === null ? null : `p50 ${latency(p50)}`,
-    isActive(run.status) ? null : endReasonLabel(run.endReason),
+    isActive(run.status) ? null : endReasonLabel(run.endReason, runKind(run)),
   ]
     .filter(Boolean)
     .join(" · ");

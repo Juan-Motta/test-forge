@@ -110,6 +110,21 @@ async def test_a_text_scenario_launches_without_a_voice_connection(user_client, 
     assert SECRET not in json.dumps(snap)
 
 
+async def test_runs_carry_the_agent_kind(user_client, factory, drive):
+    _, text = await text_scenario(factory, evaluatorConnectionId=await factory.openai())
+    voice = await factory.scenario("Voice balance")
+
+    response = await user_client.post("/api/runs", json={"scenarioIds": [text["id"], voice["id"]]})
+
+    assert response.status_code == 201, response.text
+    text_run, voice_run = response.json()["runs"]
+    items = {item["id"]: item for item in (await user_client.get("/api/runs")).json()["items"]}
+    assert items[text_run["id"]]["agentKind"] == "text"
+    assert items[voice_run["id"]]["agentKind"] == "voice"
+    detail = (await user_client.get(f"/api/runs/{text_run['id']}")).json()
+    assert detail["agentKind"] == "text"
+
+
 @pytest.fixture
 def chat_agent(app) -> ChatAgent:
     agent = ChatAgent()

@@ -10,10 +10,10 @@ export default function GuideOverviewPage() {
   return (
     <GuidePage slug="overview">
       <Lead>
-        Duet tests voice agents the way your customers meet them: on a call. A simulated caller, the{" "}
-        <strong className="text-evaluator-fg">evaluator</strong>, phones your{" "}
-        <strong className="text-agent-fg">agent under test</strong>, plays a person with a goal, and every call is recorded
-        and then scored by a judge.
+        Duet tests agents the way your customers meet them: on a call or in a chat. A simulated user, the{" "}
+        <strong className="text-evaluator-fg">evaluator</strong>, phones or writes to your{" "}
+        <strong className="text-agent-fg">agent under test</strong>, plays a person with a goal, and every conversation is
+        recorded and then scored by a judge.
       </Lead>
 
       <H2 id="what-is-duet">What is Duet?</H2>
@@ -28,14 +28,32 @@ export default function GuideOverviewPage() {
         the recording, the transcript, timings and a report that says what went well, what went wrong and what to change.
       </P>
 
+      <H2 id="voice-and-text">Voice and text agents</H2>
+      <P>Duet tests two kinds of agents with the same scenarios, judge and reports:</P>
+      <Bullets>
+        <li>
+          <strong className="text-fg">Voice agents</strong> are called over their realtime WebSocket. The evaluator speaks,
+          listens and can interrupt; you get a recording, a transcript and response latencies.
+        </li>
+        <li>
+          <strong className="text-fg">Text agents</strong> are reached over Vivi&apos;s channel API (HTTP). The evaluator
+          writes each message as the user and reads the reply; you get a chat transcript with the tools the agent ran and how
+          long each reply took to start and to finish. There is no audio.
+        </li>
+      </Bullets>
+      <P>
+        You choose the kind when you add the agent; scenarios written for it adapt (a text scenario has a maximum number of
+        turns instead of silence and interruption settings).
+      </P>
+
       <H2 id="who-is-it-for">Who is it for?</H2>
       <Bullets>
         <li>
-          <strong className="text-fg">Teams building voice agents</strong> who want to catch regressions before their users
+          <strong className="text-fg">Teams building voice or chat agents</strong> who want to catch regressions before their users
           do.
         </li>
         <li>
-          <strong className="text-fg">Product and QA people</strong> who want to listen to calls and read clear reports
+          <strong className="text-fg">Product and QA people</strong> who want to listen to calls, read chats and clear reports
           without touching code.
         </li>
         <li>
@@ -44,12 +62,13 @@ export default function GuideOverviewPage() {
         </li>
       </Bullets>
 
-      <H2 id="the-idea">The idea: the evaluator is the caller</H2>
+      <H2 id="the-idea">The idea: the evaluator is the user</H2>
       <P>
         Most test tools send text to a model. Duet instead acts like a phone caller. The evaluator connects to your agent over
         the same WebSocket voice protocol a real client uses, speaks with a real synthetic voice, listens to the answers and
         decides what to say next, following a persona and a goal. It can even cut the agent off mid-sentence, like people
-        do.
+        do. With a text agent it does the same in writing: it sends each message through the agent&apos;s channel API and
+        keeps the whole chat in one thread.
       </P>
       <div className="flex flex-wrap items-center gap-2 text-sm text-muted">
         <span>Throughout the app,</span>
@@ -65,14 +84,15 @@ export default function GuideOverviewPage() {
         The page <GuideLink href="/guide/how-it-works">How it works</GuideLink> walks through each step in detail.
       </P>
 
-      <H2 id="what-you-get">What you get from each call</H2>
+      <H2 id="what-you-get">What you get from each run</H2>
       <Bullets>
         <li>
-          <Ui>A recording</Ui> of the whole conversation, both voices on one timeline, with pauses and interruptions as they
-          happened.
+          <Ui>A recording</Ui> of the whole conversation (voice agents), both voices on one timeline, with pauses and
+          interruptions as they happened.
         </li>
         <li>
-          <Ui>A transcript</Ui> with timings: how long the agent took to start answering each time.
+          <Ui>A transcript</Ui> with timings: how long the agent took to start answering each time. For a text agent it is a
+          chat, with the time to the first text and to the full reply, and the tools each reply used.
         </li>
         <li>
           <Ui>A score from 0 to 100</Ui> and a verdict for each of your success criteria, with quotes as evidence.
@@ -83,14 +103,14 @@ export default function GuideOverviewPage() {
         </li>
       </Bullets>
 
-      <Callout tone="note" title="Calls cost money">
-        Each run is a real call: it opens a session with your agent and uses paid speech and language models for the caller
-        and the judge. Start with one or two runs and grow from there.
+      <Callout tone="note" title="Runs cost money">
+        Each run is a real conversation: it opens a session with your agent and uses paid language models (and, for voice
+        agents, speech models) for the evaluator and the judge. Start with one or two runs and grow from there.
       </Callout>
 
       <H2 id="where-next">Where to go next</H2>
       <P>
-        New to Duet? Follow <GuideLink href="/guide/getting-started">Getting started</GuideLink> for your first call. Looking
+        New to Duet? Follow <GuideLink href="/guide/getting-started">Getting started</GuideLink> for your first run. Looking
         for a specific screen? See <GuideLink href="/guide/modules">The modules</GuideLink>. Puzzled by a score? Read{" "}
         <GuideLink href="/guide/scoring">Scoring</GuideLink>.
       </P>

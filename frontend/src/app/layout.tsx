@@ -17,7 +17,7 @@ const mono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   title: { default: "Duet", template: "%s · Duet" },
-  description: "Voice agent evals",
+  description: "Agent evals",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

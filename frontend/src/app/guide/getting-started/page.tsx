@@ -14,16 +14,19 @@ export default function GettingStartedPage() {
   return (
     <GuidePage slug="getting-started">
       <P>
-        This page takes you from nothing to your first judged call. It follows the order the app expects: credentials first,
+        This page takes you from nothing to your first judged run. It follows the order the app expects: credentials first,
         then the agent, then a scenario, then a launch. Plan for about 20 minutes, most of it writing your first scenario.
       </P>
 
       <H2 id="before-you-start">Before you start</H2>
       <Bullets>
-        <li>A voice agent that speaks over a WebSocket (the same connection your web or phone client uses).</li>
+        <li>
+          A voice agent that speaks over a WebSocket (the same connection your web or phone client uses), or a text agent
+          reachable over Vivi&apos;s channel API.
+        </li>
         <li>
           An <Ui>OpenAI</Ui> or <Ui>Azure OpenAI</Ui> account: Duet uses it for the caller&apos;s voice, the
-          caller&apos;s brain and the judge.
+          evaluator&apos;s brain and the judge (a text agent needs no voice).
         </li>
         <li>
           Optional: a <Ui>Langfuse</Ui> project where your agent writes its traces, so the judge can also check tool calls and
@@ -77,7 +80,8 @@ export default function GettingStartedPage() {
 
       <H2 id="add-an-agent">4. Add your agent</H2>
       <P>
-        The agent is the voice assistant you want to test. Go to <Ui>Agents</Ui> and choose <Ui>Add agent</Ui>.
+        The agent is the assistant you want to test. Go to <Ui>Agents</Ui>, choose <Ui>Add agent</Ui> and keep the{" "}
+        <Ui>Voice</Ui> kind for a voice agent (for a chat agent, see the next section).
       </P>
       <Steps>
         <Step title="Import from cURL (the quickest way).">
@@ -105,6 +109,40 @@ export default function GettingStartedPage() {
         reaches your machine automatically.
       </Callout>
 
+      <H2 id="add-a-text-agent">Adding a text agent</H2>
+      <P>
+        A text agent is reached over Vivi&apos;s channel API: Duet sends each message as an HTTP request to{" "}
+        <Code>{"{base URL}/channelsApi/{channelId}/stream"}</Code> (or <Code>/invoke</Code>) and reads the reply. In{" "}
+        <Ui>Add agent</Ui>, choose the <Ui>Text</Ui> kind.
+      </P>
+      <Steps>
+        <Step title="Import from cURL, or fill in the fields.">
+          Paste a cURL command of a request to <Code>/channelsApi/…/invoke</Code> or <Code>/channelsApi/…/stream</Code>: the
+          base URL, Channel ID, mode, Origin and, if the command carries a <Code>vivi-api-key</Code> header, the API key are
+          filled in. Otherwise enter the <Ui>Base URL</Ui> (https; plain http only for local hosts) and the channel&apos;s
+          UUID as <Ui>Channel ID</Ui>.
+        </Step>
+        <Step title="Pick the mode.">
+          <Ui>Stream</Ui> gets the reply as it is written, and latency is the time to the first text. <Ui>Invoke</Ui> gets the
+          whole reply in one response, and latency is the time to the full reply. Agents with a response schema only work with
+          Invoke.
+        </Step>
+        <Step title="Pick the authentication.">
+          <Ui>None</Ui> for a WEB channel, such as the portal&apos;s testing channel of each agent: it needs no credentials (if
+          the channel checks the Origin, set <Ui>Origin</Ui> to an allowed domain). <Ui>API key</Ui> for an API channel: the
+          key is sent as the <Code>vivi-api-key</Code> header, stored encrypted and never shown again.
+        </Step>
+        <Step title="Create the agent and press Run connection test.">
+          The test sends one short message in a fresh conversation and waits for the whole reply. That message does reach your
+          agent.
+        </Step>
+      </Steps>
+      <Callout tone="note" title="Scenarios for a text agent">
+        A text agent&apos;s scenario has no voice settings: no voice override, interruptions or evaluator voice. It needs an{" "}
+        <Ui>Evaluator model connection</Ui> (the chat model that writes the user&apos;s messages) and ends after{" "}
+        <Ui>Max turns</Ui> messages from the user (20 by default) if nothing ends it first.
+      </Callout>
+
       <H2 id="write-a-scenario">5. Write your first scenario</H2>
       <P>
         A scenario is one kind of call. Go to <Ui>Scenarios</Ui> and choose <Ui>New scenario</Ui>. The editor has seven short
@@ -124,8 +162,11 @@ export default function GettingStartedPage() {
           What a good call looks like, one sentence each, with a weight. Weights must add up to exactly 100. Mark the
           essential ones as <Ui>Must</Ui>.
         </Step>
-        <Step title="When the call ends">The maximum duration, the maximum silence and when the caller hangs up.</Step>
-        <Step title="Interruptions">Optional: make the caller cut the agent off mid-reply.</Step>
+        <Step title="When the call ends">
+          The maximum duration, the maximum silence and when the caller hangs up. For a text agent: the maximum duration, the
+          maximum turns and when the evaluator ends the conversation.
+        </Step>
+        <Step title="Interruptions">Optional, voice agents only: make the caller cut the agent off mid-reply.</Step>
         <Step title="Evaluator">
           How the caller speaks. Keep <Ui>Pipeline</Ui>, choose your OpenAI or Azure OpenAI connection as the{" "}
           <Ui>Evaluator voice</Ui>, and leave the evaluator model on <Ui>Same as voice connection</Ui>.
@@ -149,19 +190,23 @@ export default function GettingStartedPage() {
 
       <H2 id="watch-live">7. Watch it live</H2>
       <P>
-        After launching, open <Ui>Live sessions</Ui>. Each call in progress has a card; open one to see the live transcript,
-        the evaluator&apos;s intent (what it is about to say, and why), and call metrics. Press <Ui>Listen</Ui> to hear it,
-        and choose the agent, the evaluator or both. <Ui>End call</Ui> stops it early.
+        After launching, open <Ui>Live sessions</Ui>. Each run in progress has a card; open one to see the live transcript,
+        the evaluator&apos;s intent (what it is about to say, and why), and its metrics. For a call, press <Ui>Listen</Ui> to
+        hear it, and choose the agent, the evaluator or both; <Ui>End call</Ui> stops it early. For a text agent the chat
+        streams in as the agent writes, with the tools it runs; <Ui>End conversation</Ui> stops it early.
       </P>
 
       <H2 id="read-the-report">8. Read the report</H2>
       <P>
-        When the call ends, the judge scores it automatically. It usually takes a few minutes, and up to about 20 with
+        When the run ends, the judge scores it automatically. It usually takes a few minutes, and up to about 20 with
         Langfuse (traces take a while to become available). Open the run from <Ui>Runs &amp; reports</Ui> to see:
       </P>
       <Bullets>
         <li>The overall score, how many goals were met and the judge&apos;s summary.</li>
-        <li>The call recording, the transcript and the scorecard, one row per criterion with evidence.</li>
+        <li>
+          The call recording (or, for a text agent, the conversation metrics), the transcript and the scorecard, one row per
+          criterion with evidence.
+        </li>
         <li>The agent&apos;s Langfuse trace, the suggestions, and the handoff brief for a coding agent.</li>
       </Bullets>
       <P>

@@ -38,11 +38,19 @@ const END_REASONS: Record<string, string> = {
   cancelled: "Cancelled",
   shutdown: "The server stopped",
   server_restarted: "The server restarted",
+  max_turns: "Reached the maximum turns",
+  caller_silent: "The evaluator had nothing to say",
+  agent_error: "The agent's reply failed",
 };
 
-export function endReasonLabel(reason: string | null | undefined): string | null {
+/** Text runs: reasons worded for a chat rather than a call. */
+const TEXT_END_REASONS: Record<string, string> = {
+  caller_hung_up: "Evaluator ended the conversation",
+};
+
+export function endReasonLabel(reason: string | null | undefined, kind: "voice" | "text" = "voice"): string | null {
   if (!reason) return null;
-  return END_REASONS[reason] ?? reason.replaceAll("_", " ");
+  return (kind === "text" ? TEXT_END_REASONS[reason] : undefined) ?? END_REASONS[reason] ?? reason.replaceAll("_", " ");
 }
 
 export function isActive(status: RunStatus): boolean {

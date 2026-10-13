@@ -1,6 +1,6 @@
 import { FlowDiagram, RunLifecycleDiagram } from "@/features/guide/diagrams";
 import { GuidePage } from "@/features/guide/GuidePage";
-import { Bullets, Callout, GuideLink, H2, H3, P, Table, Ui } from "@/features/guide/prose";
+import { Bullets, Callout, Code, GuideLink, H2, H3, P, Table, Ui } from "@/features/guide/prose";
 import { guideMetadata } from "@/features/guide/sections";
 
 export const metadata = guideMetadata("how-it-works");
@@ -9,8 +9,9 @@ export default function HowItWorksPage() {
   return (
     <GuidePage slug="how-it-works">
       <P>
-        Behind every report there is a simple chain: a scenario becomes runs, each run is a real call, the call leaves a
-        recording behind, and a judge turns that recording into a report.
+        Behind every report there is a simple chain: a scenario becomes runs, each run is a real conversation (a call with a
+        voice agent, a chat with a text agent), the conversation leaves a recording or transcript behind, and a judge turns
+        it into a report.
       </P>
       <FlowDiagram />
 
@@ -35,8 +36,8 @@ export default function HowItWorksPage() {
         </li>
       </Bullets>
       <Callout tone="warning" title="A scenario that cannot run stops the launch">
-        If a scenario has no voice connection or no evaluator model, the launch is refused and the panel lists what is
-        missing. Fix the scenario and launch again.
+        If a scenario has no voice connection or no evaluator model (a text agent&apos;s scenario always needs an evaluator
+        model connection), the launch is refused and the panel lists what is missing. Fix the scenario and launch again.
       </Callout>
 
       <H2 id="the-call">The call: evaluator and agent</H2>
@@ -62,16 +63,43 @@ export default function HowItWorksPage() {
         <GuideLink href="/guide/interruptions-and-evaluator">Interruptions and the evaluator</GuideLink>.
       </P>
 
+      <H2 id="text-agents">Text agents: a chat instead of a call</H2>
+      <P>
+        With a text agent there is no audio. Duet reaches the agent over Vivi&apos;s channel API, and the evaluator writes
+        first:
+      </P>
+      <Bullets>
+        <li>
+          The evaluator writes the user&apos;s message, following the same persona, goal, instructions and facts, and Duet
+          sends it with an HTTP request: <Code>/stream</Code> (the reply arrives in pieces as it is written) or{" "}
+          <Code>/invoke</Code> (the whole reply in one response), depending on the agent&apos;s mode.
+        </li>
+        <li>
+          Every message of the run carries the <Ui>same thread ID</Ui> (a UUID), so the agent sees one conversation. It is
+          also the Langfuse session id, as for calls.
+        </li>
+        <li>
+          Duet times each reply from the moment the message is sent: the time to the <Ui>first text</Ui> (the latency in
+          Stream mode) and to the <Ui>full reply</Ui> (the latency in Invoke mode), and notes the tools the agent ran.
+        </li>
+        <li>
+          The conversation ends when the evaluator reaches its goal or says goodbye, after the scenario&apos;s{" "}
+          <Ui>Max turns</Ui> user messages, at the time limit, or when the evaluator has nothing more to say. If the agent
+          fails mid-reply (an HTTP error, or a stream that stops without its end-of-reply event), the run fails and the partial
+          reply is kept, marked as broken off.
+        </li>
+      </Bullets>
+
       <H2 id="artifacts">What is recorded</H2>
       <Table
         caption="Artifacts saved for every run"
         head={["Artifact", "What it holds"]}
         rows={[
-          ["Audio", "Both sides of the call, plus one mixed recording with both voices on the call's timeline, pauses and interruptions included."],
+          ["Audio", "Voice agents only: both sides of the call, plus one mixed recording with both voices on the call's timeline, pauses and interruptions included."],
           ["Transcript", "Every turn in order, with when it started and ended. Interrupted agent replies show what was heard and what was not."],
-          ["Timings", "Per agent turn: how long it took to start answering (latency), how long it spoke, and how the turn ended."],
+          ["Timings", "Per agent turn: how long it took to start answering (latency), how long it spoke, and how the turn ended. Text agents: when the message was sent, the first text and the full reply arrived, and the tools used."],
           ["Events", "A detailed log of the call (status changes, decisions, interruptions, warnings), used for the live view and the report."],
-          ["Summary", "Duration, turn counts, latencies, the protocol your agent spoke, and any warnings."],
+          ["Summary", "Duration, turn counts, latencies, the protocol your agent spoke (or the text mode), and any warnings."],
         ]}
       />
 
@@ -88,6 +116,9 @@ export default function HowItWorksPage() {
           ["Agent ended the call", "Completed", "Your agent closed the session."],
           ["Reached the maximum duration", "Completed", "The scenario's time limit was hit."],
           ["Too long without speech", "Completed", "Nobody spoke for the scenario's maximum silence."],
+          ["Reached the maximum turns", "Completed", "Text agents: the evaluator sent the scenario's maximum number of messages."],
+          ["The evaluator had nothing to say", "Completed", "Text agents: the evaluator ended without a message to send."],
+          ["The agent's reply failed", "Failed", "Text agents: an HTTP error, a timeout, or a stream that stopped without its end-of-reply event."],
           ["Could not connect to the agent", "Failed", "The WebSocket URL could not be reached."],
           ["The agent never became ready", "Failed", "The connection opened but the session never started."],
           ["Protocol error", "Failed", "Duet could not recognise or follow the agent's voice protocol."],
@@ -120,7 +151,8 @@ export default function HowItWorksPage() {
 
       <H2 id="the-report">The report</H2>
       <P>
-        The run page brings everything together: the verdict at the top, the call recording with audio lanes, and four tabs:{" "}
+        The run page brings everything together: the verdict at the top, the call recording with audio lanes (for a text
+        agent, the conversation metrics), and four tabs:{" "}
         <Ui>Transcript &amp; scorecard</Ui>, <Ui>Langfuse trace</Ui>, <Ui>Suggestions</Ui> and <Ui>Handoff</Ui>. From there you
         can also <Ui>Re-run</Ui> the scenario (a new, paid call with the scenario as it is now) or <Ui>Re-judge</Ui> the call.
       </P>

@@ -7,9 +7,12 @@ import { Alert, Tabs, type TabItem } from "@/ui";
 import { audioUrl, conversationUrl } from "../api";
 import { clock, latency, median } from "../format";
 import { useRunLevels, useRunTrace } from "../queries";
+import { ChatTranscript } from "../ChatTranscript";
+import { runKind } from "../kind";
 import { RunTranscript } from "../RunTranscript";
 import { entriesFromRows } from "../transcript";
 import type { RunDetail } from "../types";
+import { ConversationCard } from "./ConversationCard";
 import { HandoffCard } from "./HandoffCard";
 import { collectIssues, issuePins } from "./issues";
 import { JudgeButton, JudgementStatusCard } from "./JudgementStatusCard";
@@ -21,13 +24,17 @@ import { VerdictRow } from "./VerdictRow";
 
 export type ReportTab = "transcript" | "trace" | "suggestions" | "handoff";
 
-/** A finished run's report: verdict, recording, and the transcript, trace, suggestions and handoff tabs. */
+/**
+ * A finished run's report: verdict, recording (the conversation card for text runs, which have no
+ * audio), and the transcript, trace, suggestions and handoff tabs.
+ */
 export function FinishedReport({ run, controller }: { run: RunDetail; controller: JudgementController }) {
   const [tab, setTab] = useState<ReportTab>("transcript");
   // A new object per request, so opening the same turn twice scrolls twice.
   const [turnRequest, setTurnRequest] = useState<{ ref: string } | null>(null);
   const handledRequest = useRef<{ ref: string } | null>(null);
-  const levels = useRunLevels(run.id);
+  const text = runKind(run) === "text";
+  const levels = useRunLevels(run.id, { enabled: !text });
   const trace = useRunTrace(run.id);
 
   const judgement = controller.judgement;
@@ -75,7 +82,11 @@ export function FinishedReport({ run, controller }: { run: RunDetail; controller
             <h2 id="run-transcript" className="text-[15px] font-semibold">
               Transcript
             </h2>
-            <RunTranscript entries={entries} emptyText="Nothing was said in this run." anchors issues={issuesByRef} />
+            {text ? (
+              <ChatTranscript entries={entries} emptyText="No messages were sent in this run." anchors issues={issuesByRef} />
+            ) : (
+              <RunTranscript entries={entries} emptyText="Nothing was said in this run." anchors issues={issuesByRef} />
+            )}
           </section>
           <section
             aria-labelledby="run-scorecard"
@@ -141,7 +152,10 @@ export function FinishedReport({ run, controller }: { run: RunDetail; controller
         <JudgementStatusCard controller={controller} />
       )}
       <Warnings warnings={run.summary?.warnings ?? []} />
-      <RecordingCard
+      {text ? (
+        <ConversationCard run={run} />
+      ) : (
+        <RecordingCard
         conversationSrc={conversationUrl(run.id)}
         conversationDownload={conversationUrl(run.id, { download: true })}
         agentSrc={audioUrl(run.id, "agent")}
@@ -152,7 +166,8 @@ export function FinishedReport({ run, controller }: { run: RunDetail; controller
         pins={pins}
         onPin={goToTurn}
         metrics={runMetrics(run)}
-      />
+        />
+      )}
       <Tabs label="Report sections" tabs={tabs} value={tab} onChange={setTab} />
       <span role="status" className="sr-only">
         {controller.briefCopied ? "Brief copied" : ""}

@@ -4,7 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import Link from "next/link";
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useForm, useWatch, type Path } from "react-hook-form";
-import type { Agent } from "@/features/agents/types";
+import type { Agent, AgentKind } from "@/features/agents/types";
 import type { FieldErrors } from "@/lib/api";
 import { useUnsavedChangesGuard } from "@/lib/navigation/unsaved-changes";
 import { PageHeader } from "@/features/shell/PageHeader";
@@ -33,6 +33,7 @@ import {
   REALTIME_MODEL_LABELS,
   HANG_UP_LABELS,
   initialValues,
+  isHiddenFor,
   scenarioFormSchemaFor,
   TEMPERAMENT_LABELS,
   type ScenarioFormValues,
@@ -65,7 +66,8 @@ type ScenarioEditorProps = {
   /** Connections with a chat model that can decide the caller's turns. */
   evaluatorOptions: ConnectionOption[];
   /** Resolves with the stored scenario when saved, `undefined` when the save failed. */
-  onSubmit: (values: ScenarioFormValues) => Promise<Scenario | undefined>;
+  /** `kind`: the chosen agent's kind, which decides what the payload carries. */
+  onSubmit: (values: ScenarioFormValues, kind: AgentKind) => Promise<Scenario | undefined>;
   onCancel: () => void;
   pending: boolean;
   /** Form-level error from the last save. */
@@ -143,19 +145,27 @@ export function ScenarioEditor({
     first.focus();
   });
 
-  // Server field errors live in the form state, so editing a field clears its error.
+  const agentId = useWatch({ control, name: "agentId" });
+  const evaluatorMode = useWatch({ control, name: "evaluatorMode" });
+  const agent = agents.find((item) => item.id === agentId);
+  // A text agent chats: no voice, no barge-ins, and the evaluator model writes every message.
+  const text = agent?.kind === "text";
+  const kind: AgentKind = agent?.kind ?? "voice";
+
+  // Server field errors live in the form state, so editing a field clears its error. Errors on
+  // fields this agent's editor hides (voice-only settings of a text agent) show in the form alert.
   const otherServerErrors: string[] = [];
   for (const [apiPath, message] of Object.entries(serverFieldErrors)) {
-    if (!formPath(apiPath)) otherServerErrors.push(message);
+    if (!formPath(apiPath) || isHiddenFor(kind, apiPath)) otherServerErrors.push(message);
   }
   useEffect(() => {
     for (const [apiPath, message] of Object.entries(serverFieldErrors)) {
       const path = formPath(apiPath);
-      if (!path) continue;
+      if (!path || isHiddenFor(kind, apiPath)) continue;
       setError(path as Path<ScenarioFormValues>, { type: "server", message });
       focusFirstError.current = true;
     }
-  }, [serverFieldErrors, setError]);
+  }, [serverFieldErrors, setError, kind]);
 
   const fieldError = (path: string) => errorAt(errors, path);
   const registerField = (path: Path<ScenarioFormValues>) =>
@@ -168,11 +178,6 @@ export function ScenarioEditor({
       },
     });
 
-  const agentId = useWatch({ control, name: "agentId" });
-  const evaluatorMode = useWatch({ control, name: "evaluatorMode" });
-  const agent = agents.find((item) => item.id === agentId);
-  // A text agent chats: no voice, no barge-ins, and the evaluator model writes every message.
-  const text = agent?.kind === "text";
   // Text agents have no interruptions card, so the evaluator card moves up.
   const evaluatorNumber = text ? 6 : 7;
   const linkedTts = scenario?.ttsConnectionId;
@@ -188,7 +193,7 @@ export function ScenarioEditor({
 
   async function onValid(values: ScenarioFormValues) {
     setSaved(false);
-    const stored = await onSubmit(values);
+    const stored = await onSubmit(values, kind);
     if (stored) {
       reset(initialValues(stored));
       setSaved(true);
@@ -343,10 +348,10 @@ export function ScenarioEditor({
           </Section>
 
           <Section id="scenario-goal" title="3 · Goal and instructions">
-            <Field label="Goal" hint="What the caller wants to achieve; the judge checks it." error={fieldError("goal")}>
+            <Field label="Goal" hint="What the evaluator wants to achieve; the judge checks it." error={fieldError("goal")}>
               {(props) => <Textarea rows={3} {...props} {...registerField("goal")} />}
             </Field>
-            <Field label="How to behave" hint="How the caller talks and reacts." error={fieldError("instructions")}>
+            <Field label="How to behave" hint="How the evaluator talks and reacts." error={fieldError("instructions")}>
               {(props) => <Textarea rows={3} {...props} {...registerField("instructions")} />}
             </Field>
             <div className="flex flex-col gap-2">

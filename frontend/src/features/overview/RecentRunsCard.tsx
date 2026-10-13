@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState, type ReactNode } from "react";
 import { absoluteTime, relativeTime } from "@/features/connections/format";
 import { clock, runDurationMs, shortId } from "@/features/runs/format";
+import { KindBadge } from "@/features/runs/KindBadge";
 import { TruncatedText } from "@/features/runs/TruncatedText";
 import type { Run } from "@/features/runs/types";
 import { Badge, FilterChips, ScoreBar, cn, focusRing } from "@/ui";
@@ -59,7 +60,17 @@ const COLUMNS: readonly Column[] = [
     ),
   },
   { name: "Scenario", width: "w-[19%]", cellClassName: "font-medium", cell: (run) => <TruncatedText text={run.scenarioName} /> },
-  { name: "Agent", width: "", cellClassName: "text-muted", cell: (run) => <TruncatedText text={run.agentName} /> },
+  {
+    name: "Agent",
+    width: "",
+    cellClassName: "text-muted",
+    cell: (run) => (
+      <span className="flex min-w-0 items-center gap-1.5">
+        <TruncatedText text={run.agentName} />
+        <KindBadge run={run} />
+      </span>
+    ),
+  },
   {
     name: "Persona",
     width: "",

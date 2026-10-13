@@ -17,7 +17,19 @@ export type TranscriptEntry = {
   turn?: number;
   /** Agent lines the caller cut off. */
   interruption?: Interruption;
+  /** Text agent lines: ms from the user message to the first text, and to the full reply. */
+  firstTextMs?: number | null;
+  fullReplyMs?: number | null;
+  /** Text agent lines: the tools the agent ran for this reply (`success` once known, live). */
+  tools?: ToolUse[];
+  /** Text agent lines: the reply broke off before the agent finished it. */
+  incomplete?: boolean;
+  /** Live text agent lines still being written. */
+  streaming?: boolean;
 };
+
+/** A tool the agent ran during a reply; `success` is known once it ended (live runs only). */
+export type ToolUse = { name: string; success?: boolean };
 
 /**
  * Where the caller cut an agent line: what had played (`heardText`, an estimate from the share of
@@ -47,17 +59,37 @@ function interruptionOf(row: TranscriptRow): Interruption | undefined {
     : interruption;
 }
 
+/** The text fields of an agent row: timings from the user message before it, tools, broken off. */
+function textFieldsOf(row: TranscriptRow, sentMs: number | null): Partial<TranscriptEntry> {
+  if (row.role !== "agent") return {};
+  const fields: Partial<TranscriptEntry> = {};
+  if (row.firstTextMs !== undefined) fields.firstTextMs = row.firstTextMs;
+  if (row.tools !== undefined) fields.tools = row.tools.map((name) => ({ name }));
+  if (row.incomplete) fields.incomplete = true;
+  if (row.tools !== undefined && !row.incomplete && sentMs !== null && typeof row.endMs === "number") {
+    fields.fullReplyMs = row.endMs - sentMs;
+  }
+  return fields;
+}
+
 /** Entries from `transcript.json` rows (finished run) or a live snapshot's transcript. */
 export function entriesFromRows(rows: readonly (TranscriptRow & { tMs?: number })[]): TranscriptEntry[] {
   const counters = { agent: 0, caller: 0 };
-  return rows.map((row, index) => ({
-    ref: `${row.role === "agent" ? "A" : "C"}${(counters[row.role] += 1)}`,
-    key: `row-${index}`,
-    role: row.role,
-    text: row.text,
-    tMs: row.startMs ?? row.tMs ?? null,
-    latencyMs: row.role === "agent" ? (row.latencyMs ?? null) : undefined,
-    intent: row.role === "caller" ? row.reason || undefined : undefined,
-    interruption: interruptionOf(row),
-  }));
+  // Text runs: an agent reply's full time runs from the user message before it.
+  let sentMs: number | null = null;
+  return rows.map((row, index) => {
+    const tMs = row.startMs ?? row.tMs ?? null;
+    if (row.role === "caller") sentMs = tMs;
+    return {
+      ref: `${row.role === "agent" ? "A" : "C"}${(counters[row.role] += 1)}`,
+      key: `row-${index}`,
+      role: row.role,
+      text: row.text,
+      tMs,
+      latencyMs: row.role === "agent" ? (row.latencyMs ?? null) : undefined,
+      intent: row.role === "caller" ? row.reason || undefined : undefined,
+      interruption: interruptionOf(row),
+      ...textFieldsOf(row, sentMs),
+    };
+  });
 }

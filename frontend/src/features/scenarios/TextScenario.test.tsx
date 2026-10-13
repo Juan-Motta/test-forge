@@ -1,10 +1,12 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent, { type UserEvent } from "@testing-library/user-event";
+import { http, HttpResponse } from "msw/http";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { agentFixture, mockAgentsApi } from "@/features/agents/testing";
 import { connectionFixture, mockConnectionsApi } from "@/features/connections/testing";
 import { mockRunsApi } from "@/features/runs/testing";
 import { renderWithClient } from "@/test/render";
+import { apiUrl, server } from "@/test/server";
 import { ScenarioEditorContainer } from "./ScenarioEditorContainer";
 import { mockScenariosApi, scenarioFixture } from "./testing";
 
@@ -133,5 +135,40 @@ describe("Scenario editor: text agents", () => {
     const rail = screen.getByRole("region", { name: "Launch a batch" });
     expect(within(rail).getByText("1 conversation")).toBeInTheDocument();
     expect(within(rail).getByRole("checkbox", { name: "Judge automatically when each conversation ends" })).toBeChecked();
+  });
+
+  it("saves a voice scenario moved to a text agent without its hidden voice settings", async () => {
+    const api = setup([
+      scenarioFixture({ voiceOverride: "alloy", evaluatorMode: "realtime", interruptions: [{ agentTurn: 1, afterMs: 2500 }] }),
+    ]);
+    const user = await renderEditor("s-booking");
+
+    await user.clear(field("Voice override (optional)"));
+    await user.type(field("Voice override (optional)"), "not a voice!");
+    await user.selectOptions(field("Agent under test"), "Chat desk");
+    await user.selectOptions(field("Evaluator model connection"), "OpenAI prod");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(api.requests).toHaveLength(1));
+    expect(api.requests[0].body).toEqual({ agentId: "a-chat", evaluatorConnectionId: "c-openai" });
+  });
+
+  it("shows a server error on a hidden voice-only field", async () => {
+    setup([]);
+    server.use(
+      http.post(apiUrl("/scenarios"), () =>
+        HttpResponse.json(
+          { detail: [{ type: "value_error", loc: ["body", "voiceOverride"], msg: "Unknown voice" }] },
+          { status: 422 },
+        ),
+      ),
+    );
+    const user = await renderEditor();
+
+    await fillMinimum(user);
+    await user.selectOptions(field("Evaluator model connection"), "OpenAI prod");
+    await user.click(screen.getByRole("button", { name: "Create scenario" }));
+
+    expect(await screen.findByText("Unknown voice")).toBeInTheDocument();
   });
 });

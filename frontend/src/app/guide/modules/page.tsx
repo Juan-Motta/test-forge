@@ -58,7 +58,8 @@ export default function ModulesPage() {
             completion (the share of judged runs whose must criteria all passed) and the agent&apos;s median reply latency.
           </li>
           <li>
-            <Ui>Live now</Ui>: calls in progress, with <Ui>Listen in</Ui>.
+            <Ui>Live now</Ui>: runs in progress, with <Ui>Listen in</Ui> for calls and <Ui>Watch</Ui> for text
+            conversations.
           </li>
           <li>
             <Ui>Recent runs</Ui>, filtered by <Ui>All</Ui>, <Ui>Failed</Ui> or <Ui>Needs review</Ui> (a must criterion failed,
@@ -79,8 +80,9 @@ export default function ModulesPage() {
 
       <Region id="live-sessions" title="Live sessions">
         <P>
-          Watch and listen to calls as they happen. Each call in progress is a card with its recent audio levels; after a
-          launch you land on the batch, with its progress.
+          Watch runs as they happen, and listen to calls. Each run in progress is a card (calls show their recent audio
+          levels); after a launch you land on the batch, with its progress. A text agent&apos;s run shows the chat streaming
+          in instead: each reply as it is written, the tools it runs, and its time to the first text.
         </P>
         <Bullets>
           <li>
@@ -94,10 +96,11 @@ export default function ModulesPage() {
             <Ui>Evaluator goals</Ui>: the plan the judge will check after the call.
           </li>
           <li>
-            <Ui>Call metrics</Ui>: average and slowest agent latency, turns and interruptions.
+            <Ui>Call metrics</Ui>: average and slowest agent latency, turns and interruptions (for a text agent: time to
+            the first text, messages and tools used).
           </li>
           <li>
-            <Ui>Listen</Ui> with an audio mix (both, agent only or evaluator only) and a volume control.
+            <Ui>Listen</Ui> (calls only) with an audio mix (both, agent only or evaluator only) and a volume control.
           </li>
         </Bullets>
         <Tips>
@@ -114,11 +117,11 @@ export default function ModulesPage() {
 
       <Region id="runs-and-reports" title="Runs & reports">
         <P>
-          Every call ever made, newest first, with its transcript, audio and timings. Filter by <Ui>Status</Ui> or{" "}
+          Every run ever made, newest first, with its transcript, timings and (for calls) audio. Filter by <Ui>Status</Ui> or{" "}
           <Ui>Scenario</Ui>; <Ui>Recent batches</Ui> shows how each launch is progressing.
         </P>
         <P>
-          The table shows the scenario, agent, persona, duration, turns (caller / agent), median latency, status, score and
+          The table shows the scenario, agent (marked Voice or Text), persona, duration, turns (caller / agent), median latency, status, score and
           result. Open a run to see its report:
         </P>
         <VerdictMockup />
@@ -128,7 +131,8 @@ export default function ModulesPage() {
           rows={[
             ["Verdict", "Overall score, goals met, the judge's summary, failure tags and strengths."],
             ["Call recording", "The whole conversation as one recording (both voices on one timeline), audio lanes with issue markers, Download conversation .wav and the separate tracks."],
-            ["Transcript & scorecard", "The conversation next to one row per criterion, with verdicts and links to the turns used as evidence."],
+            ["Conversation (text agents)", "Instead of the recording: the mode, user messages and agent replies, time to the first text (median and slowest), full reply time, tools used and why the conversation ended."],
+            ["Transcript & scorecard", "The conversation next to one row per criterion, with verdicts and links to the turns used as evidence. A text agent's transcript is a chat, with each reply's timings, its tools and replies that broke off."],
             ["Langfuse trace", "The agent's model calls, tool calls and errors during the call, as a timeline."],
             ["Suggestions", "Concrete changes to make, each with an area (prompt, tools, flow, latency, voice) and a priority."],
             ["Handoff", "A brief for a coding agent: copy it or download it as Markdown."],
@@ -151,7 +155,7 @@ export default function ModulesPage() {
 
       <Region id="scenarios" title="Scenarios">
         <P>
-          Your library of calls. A scenario describes the caller the evaluator plays, what it knows and wants, and how the
+          Your library of conversations. A scenario describes the user the evaluator plays, what it knows and wants, and how the
           judge scores the call. Filter by agent or tag, select several to <Ui>Launch selected</Ui>, or open one to edit it.
         </P>
         <Table
@@ -162,9 +166,9 @@ export default function ModulesPage() {
             ["2 · Persona the evaluator plays", "Persona name, locale (the caller speaks that language), voice override, temperament, notes."],
             ["3 · Goal and instructions", "Goal (the judge checks it), how to behave, and facts the caller knows (only revealed when asked)."],
             ["4 · Success criteria for the judge", "Up to 30 criteria: text, Must or Should, evidence source (transcript, timing or trace) and weight. Weights total 100."],
-            ["5 · When the call ends", "Max duration (30–1800 s, default 360), max silence (5–120 s, default 15), and hang up when: goal met or goodbye said, goodbye said, or max duration reached."],
-            ["6 · Interruptions", "Up to 10: which agent reply to cut and after how many seconds of it."],
-            ["7 · Evaluator", "Pipeline or speech-to-speech, the realtime model, the evaluator voice connection and the evaluator model connection."],
+            ["5 · When the call ends", "Max duration (30–1800 s, default 360), max silence (5–120 s, default 15), and hang up when: goal met or goodbye said, goodbye said, or max duration reached. For a text agent: max turns (1–100 user messages, default 20) instead of max silence."],
+            ["6 · Interruptions", "Voice agents only. Up to 10: which agent reply to cut and after how many seconds of it."],
+            ["7 · Evaluator", "Pipeline or speech-to-speech, the realtime model, the evaluator voice connection and the evaluator model connection. For a text agent (section 6): only the evaluator model connection, which is required."],
           ]}
         />
         <Tips>
@@ -181,8 +185,9 @@ export default function ModulesPage() {
 
       <Region id="agents" title="Agents">
         <P>
-          The voice agents you test: how to reach them and what they do. Scenarios are written against an agent, so add one
-          first.
+          The agents you test: how to reach them and what they do. Each one is a voice agent (called over its WebSocket) or a
+          text agent (reached over Vivi&apos;s channel API); the kind is chosen when the agent is added and cannot change.
+          Scenarios are written against an agent, so add one first.
         </P>
         <Table
           caption="Agent fields"
@@ -190,11 +195,15 @@ export default function ModulesPage() {
           rows={[
             ["Name", "Unique; scenarios and runs refer to the agent by it."],
             ["What this agent does", "Shared by all its scenarios; the evaluator and the judge read it before every run."],
-            ["Protocol", "Auto-detect (default), Live or Realtime."],
+            ["Agent kind", "Voice or Text, chosen when the agent is added."],
+            ["Protocol", "Voice: Auto-detect (default), Live or Realtime."],
             ["WebSocket URL", <>The agent&apos;s address, <Code>wss://</Code>, without a query string. <Code>ws://</Code> is allowed for local addresses.</>],
-            ["Channel ID, User ID", "Sent when the call opens, like your own client does."],
+            ["Channel ID, User ID", "Voice: sent when the call opens, like your own client does."],
+            ["Base URL, Channel ID", <>Text: the address before <Code>/channelsApi</Code> (https; http only for local hosts) and the channel&apos;s UUID.</>],
+            ["Mode", "Text: Stream (latency to the first text) or Invoke (latency to the full reply)."],
+            ["Authentication", <>Text: None for a WEB channel such as the portal&apos;s testing channel, or API key (sent as <Code>vivi-api-key</Code>, write-only).</>],
             ["Origin (optional)", "Sent as the Origin header when your agent checks it."],
-            ["Langfuse connection", "Optional. The agent's traces are fetched after each call and handed to the judge."],
+            ["Langfuse connection", "Optional. The agent's traces are fetched after each run and handed to the judge."],
           ]}
         />
         <Tips>
@@ -203,7 +212,8 @@ export default function ModulesPage() {
             tools. Name and context are not touched.
           </li>
           <li>
-            <Ui>Run connection test</Ui> checks the agent answers before you spend money on runs.
+            <Ui>Run connection test</Ui> checks the agent answers before you spend money on runs. For a text agent it sends
+            one short message, which reaches the agent.
           </li>
           <li>The evaluator and the judge are set per scenario, not per agent.</li>
           <li>An agent can only be deleted when no scenario uses it.</li>

@@ -59,7 +59,7 @@ export function ScenarioEditorContainer({ scenarioId }: ScenarioEditorContainerP
     [save.error],
   );
 
-  async function onSubmit(values: ScenarioFormValues): Promise<Scenario | undefined> {
+  async function onSubmit(values: ScenarioFormValues, kind: AgentKind): Promise<Scenario | undefined> {
     if (saving.current) return undefined;
     saving.current = true;
     create.reset();
@@ -67,10 +67,10 @@ export function ScenarioEditorContainer({ scenarioId }: ScenarioEditorContainerP
     try {
       const current = scenario.data;
       if (current) {
-        const changes = toChanges(current, values);
+        const changes = toChanges(current, values, kind);
         return Object.keys(changes).length === 0 ? current : await update.mutateAsync({ id: current.id, changes });
       }
-      const created = await create.mutateAsync(toNewScenario(values));
+      const created = await create.mutateAsync(toNewScenario(values, kind));
       router.replace(`/scenarios/${encodeURIComponent(created.id)}`);
       return created;
     } catch {

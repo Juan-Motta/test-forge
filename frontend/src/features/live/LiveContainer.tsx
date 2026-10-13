@@ -122,7 +122,7 @@ function BatchLive({ batchId }: { batchId: string }) {
       <Dialog
         open={confirming}
         title="Stop the whole batch?"
-        description="This ends every call in progress and cancels the runs still queued. Finished runs keep their results."
+        description="This ends every run in progress and cancels the runs still queued. Finished runs keep their results."
         onClose={() => setConfirming(false)}
         actions={
           <>
@@ -178,8 +178,8 @@ function Sessions({ sessions }: { sessions: Run[] }) {
     return (
       <EmptyState
         icon={<LiveIcon size={22} />}
-        title="No calls in progress"
-        description="Launch a scenario to watch and listen to its call here."
+        title="Nothing running"
+        description="Launch a scenario to watch its run here (and listen in, for voice agents)."
         action={
           <Link href="/scenarios" className={buttonClasses("secondary")}>
             Go to scenarios

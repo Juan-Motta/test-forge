@@ -135,7 +135,7 @@ describe("Overview live strip", () => {
       mockStatsApi();
       renderWithClient(<OverviewContainer />);
       const live = await screen.findByRole("region", { name: "Live now" });
-      expect(await within(live).findByText("No calls in progress right now.")).toBeInTheDocument();
+      expect(await within(live).findByText("Nothing running right now.")).toBeInTheDocument();
 
       api.runs.push(runFixture({ id: "r-2", status: "running", endedAt: null, createdAt: "2026-10-05T17:00:00Z" }));
       await act(async () => {
@@ -160,7 +160,7 @@ describe("Overview live strip", () => {
     renderWithClient(<OverviewContainer />);
     const live = await screen.findByRole("region", { name: "Live now" });
     expect(await within(live).findByText("— sessions")).toBeInTheDocument();
-    expect(within(live).getByText(/Could not load live calls/)).toBeInTheDocument();
+    expect(within(live).getByText(/Could not load live runs/)).toBeInTheDocument();
   });
 });
 

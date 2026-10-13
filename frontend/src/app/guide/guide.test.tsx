@@ -111,4 +111,35 @@ describe("Guide content", () => {
       expect(within(glossary).getByText(term, { selector: "dt" })).toBeInTheDocument();
     }
   });
+
+  it("covers text agents next to voice agents", () => {
+    const { unmount } = render(<OverviewPage />);
+    expect(screen.getByRole("heading", { level: 2, name: "Voice and text agents" })).toBeInTheDocument();
+    unmount();
+
+    const started = render(<GettingStartedPage />);
+    const textAgent = screen.getByRole("heading", { level: 2, name: /Adding a text agent/ });
+    expect(textAgent).toHaveAttribute("id", "add-a-text-agent");
+    expect(screen.getByText(/portal's testing channel/)).toBeInTheDocument();
+    expect(screen.getAllByText("vivi-api-key").length).toBeGreaterThan(0);
+    started.unmount();
+
+    const how = render(<HowItWorksPage />);
+    expect(screen.getByRole("heading", { level: 2, name: "Text agents: a chat instead of a call" })).toBeInTheDocument();
+    expect(screen.getByRole("table", { name: /Common end reasons/ })).toHaveTextContent("Reached the maximum turns");
+    how.unmount();
+
+    const modules = render(<ModulesPage />);
+    expect(screen.getAllByText(/text agent/i).length).toBeGreaterThan(0);
+    modules.unmount();
+
+    const scoring = render(<ScoringPage />);
+    expect(screen.getByRole("heading", { name: "Timing for text agents" })).toBeInTheDocument();
+    scoring.unmount();
+
+    render(<FaqPage />);
+    for (const question of [/HTTP 403/, /HTTP 422/, /no on_chat_end/]) {
+      expect(screen.getByRole("heading", { level: 3, name: question })).toBeInTheDocument();
+    }
+  });
 });

@@ -293,8 +293,8 @@ function EvaluatorNote() {
         <p className="text-xs text-dim">Set per scenario, not per agent</p>
       </div>
       <p className="text-sm text-muted">
-        Each scenario chooses how the evaluator speaks (speech-to-speech or STT → LLM → TTS), its voice and the
-        connections it uses, and the judge scores every run against that scenario&apos;s criteria.
+        Each scenario chooses the evaluator&apos;s connections (and, for voice agents, how it speaks and its voice),
+        and the judge scores every run against that scenario&apos;s criteria.
       </p>
       <div>
         <Link href="/scenarios" className={buttonClasses("secondary")}>

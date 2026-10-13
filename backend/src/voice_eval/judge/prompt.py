@@ -14,6 +14,7 @@ the context window.
 
 import json
 import re
+import statistics
 from typing import Any
 
 from voice_eval.judge.domain import (
@@ -338,8 +339,7 @@ def _median_and_max(summary: dict[str, Any]) -> tuple[float, float, int] | None:
     latencies = [v for v in summary.get("latencies_ms") or [] if isinstance(v, int | float)]
     if not latencies:
         return None
-    ordered = sorted(latencies)
-    return ordered[len(ordered) // 2], ordered[-1], len(ordered)
+    return statistics.median(latencies), max(latencies), len(latencies)
 
 
 def _since(value: Any, start: Any) -> Any:

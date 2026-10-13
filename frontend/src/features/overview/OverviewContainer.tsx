@@ -39,7 +39,7 @@ export function OverviewContainer() {
       <EmptyState
         icon={<OverviewIcon size={22} />}
         title="No runs yet"
-        description="Launch a scenario against an agent: metrics, live calls and recent runs will show up here."
+        description="Launch a scenario against an agent: metrics, what is running now and recent runs will show up here."
         action={
           <Link href="/scenarios" className={buttonClasses("primary")}>
             Go to scenarios

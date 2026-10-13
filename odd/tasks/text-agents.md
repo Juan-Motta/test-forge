@@ -49,7 +49,7 @@ chat with the agent over Vivi's channel API, every conversation is recorded, jud
 - [x] T3 Judge: text prompt variant, transcript/timing rendering and gating for text runs, brief — delegated
 - [x] T4 Frontend agents + scenarios + launch for text agents (form, cURL import, test, editor
       gating) — delegated
-- [ ] T5 Frontend live view + run report for text runs, naming, guide — delegated
+- [x] T5 Frontend live view + run report for text runs, naming, guide — delegated
 - [ ] T6 Real run against a Vivi text agent (paid; ask first) — inline
 
 ## Progress
@@ -113,3 +113,34 @@ chat with the agent over Vivi's channel API, every conversation is recorded, jud
   implementation; then `npx vitest run` 613 passed, lint clean, typecheck clean, build OK;
   backend `uv run pytest -q tests/modules/runs tests/test_http_chat.py tests/runner` 212 passed,
   ruff check + format clean (backend follow-up tests characterize existing behavior: no RED).
+- T5 done (delegated writer, uncommitted; route: delegated, writer trigger: 2+ non-trivial
+  files). Backend: `RunOut.agentKind` (`text` from the snapshot's agent kind, `voice` otherwise);
+  judge `_median_and_max` uses `statistics.median` (true median for an even count). Report: text
+  runs (`runs/kind.runKind`: API `agentKind`, summary `kind` or snapshot agent kind) skip the
+  levels query and audio (`useRunLevels` disabled, no `RecordingCard`), show a `ConversationCard`
+  (mode, duration, user messages / agent replies, first text p50 / slowest, full reply p50 from
+  `turns[].endMs - requestMs`, tools used, end reason) and a `ChatTranscript` (user/agent bubbles,
+  `turn-<ref>` anchors and issue pins, "First text in … · full reply in …", tool chips, "Reply
+  broke off"); header chip "Text agent · Stream/Invoke"; end reasons `max_turns`, `caller_silent`,
+  `agent_error` worded (text wording for `caller_hung_up`). Live: reducer folds `agentTextDelta` /
+  `agentToolStarted` / `agentToolEnded` into one streaming agent entry, finalized by
+  `agentTranscript` and timed by `turnEnded`; a reply still streaming at `finished` becomes
+  incomplete; text panel has no listen controls/lanes, chat-worded states, metrics (time to first
+  text, messages, tools) and "End conversation"; session cards draw no levels for text; Live now
+  card offers "Watch" for text runs. Runs table and recent runs show a Voice/Text badge. Copy:
+  "Agent evals", Langfuse "after each run", evaluator-neutral goal/behaviour hints, EvaluatorNote,
+  live empty states, rerun dialog. Guide: overview (voice and text), getting started ("Adding a
+  text agent": cURL import, Stream/Invoke, None for WEB/portal testing channel vs API key
+  `vivi-api-key`, connection test), how it works (text flow, same threadId, timings, end reasons),
+  modules, scoring ("Timing for text agents"), FAQ (403, 422, no `on_chat_end`, 409). T4 review
+  fixes: text scenarios validate with hidden voice-only fields neutralized (`scenarioFormSchemaFor`
+  preprocess), `toNewScenario/toChanges(values, kind)` omit `ttsConnectionId`, `voiceOverride`,
+  `evaluatorMode`, `realtimeModel`, `interruptions` for text (invalid hidden max silence falls back
+  to 15), and 422s on hidden fields show in the form alert (`isHiddenFor`). AgentForm stale
+  `hasStoredKey`: not reproducible (react-hook-form 7.89 refreshes the resolver from props every
+  render); regression test added, no code change. Evidence: RED (2 backend tests: even median,
+  missing `agentKind`; frontend: 3 scenario schema + 2 text-scenario editor, 3 text report, 3 live
+  text, 1 runs-table kind, 2 live-now card, 1 guide) then `npx vitest run` 629 passed, lint clean,
+  typecheck clean, build OK; backend `uv run pytest -q tests/judge tests/modules/runs` 248 passed,
+  ruff check + format clean. Voice judge timing (`render_timing`, upper median) left unchanged to
+  keep the voice prompt byte-identical.

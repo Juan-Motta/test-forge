@@ -133,6 +133,15 @@ export default function ScoringPage() {
         feel broken. But the judge only applies what your timing criteria say, so write the number you expect, like
         &ldquo;Every agent reply starts in under 2 seconds.&rdquo;
       </P>
+      <H3 id="timing-text">Timing for text agents</H3>
+      <P>
+        A text agent has no sound, so its timings start when the user message is sent. The judge sees, for every reply, the
+        time to the <Ui>first text</Ui> and to the <Ui>full reply</Ui>, and the tools the agent ran. In <Ui>Stream</Ui> mode
+        latency is the time to the first text; in <Ui>Invoke</Ui> mode the whole reply arrives at once, so the first text and
+        the full reply are the same. A reply that broke off (the agent failed before finishing it) is marked and never counts
+        as a measured reply. Write timing criteria for what the user sees, like &ldquo;Every reply starts within 3
+        seconds.&rdquo;
+      </P>
 
       <H2 id="evidence">Evidence</H2>
       <P>Every verdict comes with the evidence the judge relied on: exact quotes, and references to where they come from.</P>
@@ -141,8 +150,8 @@ export default function ScoringPage() {
         head={["Reference", "Points to"]}
         rows={[
           [<Code key="a">A3</Code>, "The agent's 3rd turn in the transcript."],
-          [<Code key="c">C2</Code>, "The caller's 2nd turn."],
-          [<Code key="t">T3</Code>, "The timing row of the agent's 3rd turn."],
+          [<Code key="c">C2</Code>, "The caller's 2nd turn (for a text agent, the user's 2nd message)."],
+          [<Code key="t">T3</Code>, "The timing row of the agent's 3rd turn (for a text agent, its 3rd reply)."],
           [<Code key="r">R1</Code>, "The 1st Langfuse trace of the call."],
         ]}
       />

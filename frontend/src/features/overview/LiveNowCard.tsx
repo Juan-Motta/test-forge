@@ -1,28 +1,29 @@
 import Link from "next/link";
 import { clock, runDurationMs } from "@/features/runs/format";
+import { runKind } from "@/features/runs/kind";
 import type { Run } from "@/features/runs/types";
 import { LiveDot, VolumeIcon, Waveform, buttonClasses, cn, focusRing } from "@/ui";
 import { placeholderWave } from "./format";
 
 type LiveNowCardProps = {
-  /** Up to 3 running calls; undefined while loading or when they could not be loaded. */
+  /** Up to 3 running runs (calls and text conversations); undefined while loading or when they could not be loaded. */
   runs: Run[] | undefined;
-  /** Every running call; null when unknown. */
+  /** Every running run; null when unknown. */
   total: number | null;
   error: string | null;
   now: number;
 };
 
-/** Calls in progress right now, each with a way to listen in. */
+/** Runs in progress right now, each with a way to listen in (calls) or watch (text conversations). */
 export function LiveNowCard({ runs, total, error, now }: LiveNowCardProps) {
   const headingId = "live-now";
   let content;
   if (error) {
-    content = <p className="text-sm text-danger-fg">{`Could not load live calls: ${error}`}</p>;
+    content = <p className="text-sm text-danger-fg">{`Could not load live runs: ${error}`}</p>;
   } else if (runs === undefined) {
-    content = <p className="text-sm text-muted">Loading live calls…</p>;
+    content = <p className="text-sm text-muted">Loading live runs…</p>;
   } else if (runs.length === 0) {
-    content = <p className="text-sm text-muted">No calls in progress right now.</p>;
+    content = <p className="text-sm text-muted">Nothing running right now.</p>;
   } else {
     content = (
       <div className="grid grid-cols-[repeat(auto-fit,minmax(min(300px,100%),1fr))] gap-3.5">
@@ -57,7 +58,8 @@ export function LiveNowCard({ runs, total, error, now }: LiveNowCardProps) {
 
 function LiveSessionCard({ run, now }: { run: Run; now: number }) {
   const elapsed = runDurationMs(run, now);
-  const wave = placeholderWave(run.id);
+  const text = runKind(run) === "text";
+  const wave = text ? null : placeholderWave(run.id);
   const titleId = `live-session-${run.id}`;
   return (
     <article aria-labelledby={titleId} className="flex flex-col gap-3 rounded-[10px] border border-line-soft bg-raised p-4">
@@ -72,13 +74,19 @@ function LiveSessionCard({ run, now }: { run: Run; now: number }) {
           {elapsed === null ? "—" : clock(elapsed)}
         </span>
       </div>
-      <Waveform values={wave.values} tones={wave.tones} height={40} />
+      {wave ? <Waveform values={wave.values} tones={wave.tones} height={40} /> : null}
       <Link
         href={`/live?batchId=${encodeURIComponent(run.batchId)}`}
         className={buttonClasses("secondary", "min-h-10 text-[13px]")}
       >
-        <VolumeIcon size={16} />
-        Listen in
+        {text ? (
+          "Watch"
+        ) : (
+          <>
+            <VolumeIcon size={16} />
+            Listen in
+          </>
+        )}
       </Link>
     </article>
   );

@@ -25,13 +25,13 @@ export const GUIDE_SECTIONS: readonly GuideSection[] = [
     slug: "overview",
     href: "/guide",
     title: "Overview",
-    summary: "What Duet is, who it is for, and the idea behind it: a simulated caller phones your voice agent.",
+    summary: "What Duet is, who it is for, and the idea behind it: a simulated user calls or chats with your agent.",
   },
   {
     slug: "getting-started",
     href: "/guide/getting-started",
     title: "Getting started",
-    summary: "From an empty workspace to your first judged call, step by step.",
+    summary: "From an empty workspace to your first judged run, voice or text, step by step.",
   },
   {
     slug: "how-it-works",
@@ -49,7 +49,7 @@ export const GUIDE_SECTIONS: readonly GuideSection[] = [
     slug: "scoring",
     href: "/guide/scoring",
     title: "Scoring",
-    summary: "How the judge turns a call into a score, a verdict and concrete suggestions.",
+    summary: "How the judge turns a call or a chat into a score, a verdict and concrete suggestions.",
   },
   {
     slug: "interruptions-and-evaluator",
