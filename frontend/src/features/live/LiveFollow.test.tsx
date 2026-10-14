@@ -185,6 +185,84 @@ describe("Live sessions: follow and listen automatically", () => {
     expect(await heading("Cancel within 24h")).toBeInTheDocument();
   });
 
+  it("follows a run picked by hand, then moves on when it ends", async () => {
+    nav.search = "batchId=b-9";
+    storeFollow(true);
+    mockRunsApi([booking, cancel, late], {
+      batches: [batchFixture({ id: "b-9", label: "Hotel regression", status: "running", total: 3 })],
+    });
+    renderWithClient(<LiveContainer />);
+    const user = userEvent.setup();
+    const overview = await overviewOf([booking, cancel, late]);
+    expect(await heading("Booking with date change")).toBeInTheDocument();
+    await screen.findByRole("button", { name: "Stop listening" });
+
+    await user.click(session(/Late checkout/));
+    expect(await heading("Late checkout")).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Stop listening" })).toBeInTheDocument();
+    expect(audio.contexts).toHaveLength(2);
+    expect(audio.contexts[0].closed).toBe(true);
+
+    act(() => overview.send({ type: "finished", runId: "r-4", status: "completed", reason: "caller_hung_up" }));
+    expect(await heading("Booking with date change")).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Stop listening" })).toBeInTheDocument();
+    expect(audio.contexts).toHaveLength(3);
+  });
+
+  it("stays on a queued or ended run picked by hand", async () => {
+    nav.search = "batchId=b-9";
+    storeFollow(true);
+    const waiting = runFixture({
+      id: "r-5",
+      batchId: "b-9",
+      position: 4,
+      scenarioId: "s-group",
+      scenarioName: "Group booking",
+      status: "queued",
+      startedAt: null,
+      ...live,
+    });
+    const done = runFixture({ id: "r-6", batchId: "b-9", position: 5, scenarioId: "s-spa", scenarioName: "Spa booking", status: "completed" });
+    mockRunsApi([booking, waiting, done], {
+      batches: [batchFixture({ id: "b-9", label: "Hotel regression", status: "running", total: 3 })],
+    });
+    renderWithClient(<LiveContainer />);
+    const user = userEvent.setup();
+    const overview = await overviewOf([booking, waiting, done]);
+    expect(await heading("Booking with date change")).toBeInTheDocument();
+
+    await user.click(session(/Spa booking/));
+    expect(await heading("Spa booking")).toBeInTheDocument();
+    act(() => overview.send({ type: "status", runId: "r-1", status: "running" }));
+    expect(session(/Spa booking/)).toHaveAttribute("aria-pressed", "true");
+
+    await user.click(session(/Group booking/));
+    expect(await heading("Group booking")).toBeInTheDocument();
+    act(() => overview.send({ type: "status", runId: "r-1", status: "running" }));
+    expect(session(/Group booking/)).toHaveAttribute("aria-pressed", "true");
+
+    // Once the picked run has started and ended, following moves on again.
+    act(() => overview.send({ type: "status", runId: "r-5", status: "running" }));
+    expect(session(/Group booking/)).toHaveAttribute("aria-pressed", "true");
+    act(() => overview.send({ type: "finished", runId: "r-5", status: "completed", reason: "caller_hung_up" }));
+    expect(await heading("Booking with date change")).toBeInTheDocument();
+  });
+
+  it("drops the click hint when following is turned off", async () => {
+    audio.restore();
+    audio = installFakeAudio({ resumeError: new Error("The AudioContext was not allowed to start.") });
+    storeFollow(true);
+    mockRunsApi([booking]);
+    renderWithClient(<LiveContainer />);
+    const user = userEvent.setup();
+    expect(await screen.findByText(/needs a click/)).toBeInTheDocument();
+
+    await user.click(toggle());
+
+    expect(toggle()).toHaveAttribute("aria-checked", "false");
+    expect(screen.queryByText(/needs a click/)).not.toBeInTheDocument();
+  });
+
   it("follows a text run, with no audio", async () => {
     storeFollow(true);
     const chat = runFixture({ id: "r-t", agentKind: "text", status: "running", startedAt: at(0), ...live });

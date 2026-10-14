@@ -135,6 +135,7 @@ export function LiveRunPanel({ runId, meter: sharedMeter, onStats, autoListen = 
     player.setMix(mix);
     player.setVolume(volume);
     setAudioError(null);
+    setNeedsClick(false);
     try {
       // Without any click on the page yet, browsers keep the audio suspended: ask for one instead.
       if (automatic && !hasUserGesture()) throw new Error("The browser plays audio only after a click on the page.");
@@ -144,7 +145,6 @@ export function LiveRunPanel({ runId, meter: sharedMeter, onStats, autoListen = 
       if (automatic) setNeedsClick(true);
       return;
     }
-    setNeedsClick(false);
     setListening(true);
   }
 
@@ -198,7 +198,7 @@ export function LiveRunPanel({ runId, meter: sharedMeter, onStats, autoListen = 
         <Alert>{`Could not end the ${text ? "conversation" : "call"}: ${errorMessage(cancel.error)}`}</Alert>
       ) : null}
       {audioError ? <Alert title="Could not start the audio">{audioError}</Alert> : null}
-      {!text && needsClick && !listening && active ? (
+      {!text && autoListen && needsClick && !listening && active ? (
         <p role="status" className="text-sm text-muted">
           Your browser needs a click before it plays audio: press Listen to hear this call.
         </p>

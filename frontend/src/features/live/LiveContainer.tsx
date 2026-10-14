@@ -186,12 +186,18 @@ function Sessions({ sessions }: { sessions: Run[] }) {
   // the active list, until the user picks another. Only "follow" moves it on its own, and only
   // once that run is no longer in progress: a conversation is never cut mid-way.
   const [focused, setFocused] = useState<Run | undefined>(undefined);
+  // The run the user picked by hand, and whether it has been seen in progress since: a queued or
+  // ended run picked by hand stays put; once it has run and ended, following moves on again.
+  const [pick, setPick] = useState<{ id: string; started: boolean } | null>(null);
   const [feed, setFeed] = useState<FocusFeed | null>(null);
   const fallback = sessions.find((run) => isActive(run.status) && run.status !== "queued") ?? sessions[0];
   if (focused === undefined && fallback !== undefined) setFocused(fallback);
-  if (follow) {
-    const listed = focused && sessions.find((run) => run.id === focused.id);
-    const next = listed && inProgress(listed) ? undefined : nextToFollow(sessions);
+  const listed = focused && sessions.find((run) => run.id === focused.id);
+  const focusLive = listed !== undefined && inProgress(listed);
+  if (pick !== null && focusLive && pick.id === focused?.id && !pick.started) setPick({ ...pick, started: true });
+  const heldByHand = pick !== null && pick.id === focused?.id && !pick.started;
+  if (follow && !focusLive && !heldByHand) {
+    const next = nextToFollow(sessions);
     if (next !== undefined && next.id !== focused?.id) setFocused(next);
   }
   const focus = focused ?? fallback;
@@ -236,7 +242,10 @@ function Sessions({ sessions }: { sessions: Run[] }) {
         run={run}
         now={now}
         selected={selected}
-        onSelect={() => setFocused(run)}
+        onSelect={() => {
+          setFocused(run);
+          setPick({ id: run.id, started: inProgress(run) });
+        }}
         levels={selected ? levels : undefined}
         stats={selected ? current?.stats : undefined}
       />
