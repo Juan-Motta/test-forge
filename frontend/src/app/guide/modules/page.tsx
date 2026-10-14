@@ -103,6 +103,12 @@ export default function ModulesPage() {
             <Ui>Listen</Ui> (calls only) with an audio mix (both, agent only or evaluator only) and a volume control.
           </li>
         </Bullets>
+        <P>
+          Turn on <Ui>Follow and listen automatically</Ui> to have each run open as it starts and, for a call, play on its
+          own. With runs in parallel it stays on the current one until it ends, then moves to the next run still in
+          progress; you can still pick another card. Your browser remembers the choice. After a reload, the browser may
+          need one click (on <Ui>Listen</Ui>) before it plays audio.
+        </P>
         <Tips>
           <li>
             <Ui>End call</Ui> stops one call; <Ui>Stop all</Ui> ends every call of a batch and cancels the ones still queued.

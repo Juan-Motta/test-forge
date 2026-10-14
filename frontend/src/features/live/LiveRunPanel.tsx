@@ -2,7 +2,7 @@
 
 import { useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useEffectEvent, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { clock, endReasonLabel, isActive, latency, shortId } from "@/features/runs/format";
 import { useCancelRun, useRun, runQueryKey } from "@/features/runs/queries";
 import { ChatTranscript } from "@/features/runs/ChatTranscript";
@@ -33,13 +33,18 @@ type LiveRunPanelProps = {
   meter?: LevelMeter;
   /** Turns and median latency so far, each time they change. */
   onStats?: (stats: SessionStats) => void;
+  /**
+   * Start listening without a click on Listen (a call in progress only): one attempt each time it
+   * turns on, never a retry loop. When the browser refuses, the panel asks for a click instead.
+   */
+  autoListen?: boolean;
 };
 
 /**
  * One run, live: timer, listening, audio lanes, transcript, the evaluator's plan and the call
  * metrics. A text run has no audio: its chat streams in, with reply timings and tools.
  */
-export function LiveRunPanel({ runId, meter: sharedMeter, onStats }: LiveRunPanelProps) {
+export function LiveRunPanel({ runId, meter: sharedMeter, onStats, autoListen = false }: LiveRunPanelProps) {
   const queryClient = useQueryClient();
   const run = useRun(runId, { pollWhileActiveMs: POLL_MS });
   const cancel = useCancelRun();
@@ -49,6 +54,9 @@ export function LiveRunPanel({ runId, meter: sharedMeter, onStats }: LiveRunPane
   const meter = sharedMeter ?? ownMeter;
   const [listening, setListening] = useState(false);
   const [audioError, setAudioError] = useState<string | null>(null);
+  /** An automatic start was refused (or could not be tried): the browser needs a click first. */
+  const [needsClick, setNeedsClick] = useState(false);
+  const autoTried = useRef(false);
   const [mix, setMix] = useState<Mix>("both");
   const [volume, setVolume] = useState(0.8);
   const { state, connection } = useRunLive(runId, {
@@ -84,6 +92,21 @@ export function LiveRunPanel({ runId, meter: sharedMeter, onStats }: LiveRunPane
     [player],
   );
 
+  const canAutoListen =
+    run.data !== undefined && runKind(run.data) !== "text" && isActive(state.status ?? run.data.status) && !state.finished;
+
+  const startAutomatically = useEffectEvent(() => {
+    if (autoTried.current || player.started) return;
+    autoTried.current = true;
+    void listen(true);
+  });
+
+  useEffect(() => {
+    // Off resets the attempt: switching it on again (a click) may start the audio.
+    if (!autoListen) autoTried.current = false;
+    else if (canAutoListen) startAutomatically();
+  }, [autoListen, canAutoListen]);
+
   useEffect(() => {
     // The REST view lags the stream: refresh it as soon as the stream says the run is over.
     if (state.finished) void queryClient.invalidateQueries({ queryKey: runQueryKey(runId) });
@@ -108,16 +131,20 @@ export function LiveRunPanel({ runId, meter: sharedMeter, onStats }: LiveRunPane
   const goals = evaluatorGoals(data.snapshot);
   const headingId = `live-run-${runId}`;
 
-  async function listen() {
+  async function listen(automatic = false) {
     player.setMix(mix);
     player.setVolume(volume);
     setAudioError(null);
     try {
+      // Without any click on the page yet, browsers keep the audio suspended: ask for one instead.
+      if (automatic && !hasUserGesture()) throw new Error("The browser plays audio only after a click on the page.");
       await player.start();
     } catch (error) {
       setAudioError(error instanceof Error && error.message ? error.message : "The browser refused to play audio.");
+      if (automatic) setNeedsClick(true);
       return;
     }
+    setNeedsClick(false);
     setListening(true);
   }
 
@@ -171,12 +198,17 @@ export function LiveRunPanel({ runId, meter: sharedMeter, onStats }: LiveRunPane
         <Alert>{`Could not end the ${text ? "conversation" : "call"}: ${errorMessage(cancel.error)}`}</Alert>
       ) : null}
       {audioError ? <Alert title="Could not start the audio">{audioError}</Alert> : null}
+      {!text && needsClick && !listening && active ? (
+        <p role="status" className="text-sm text-muted">
+          Your browser needs a click before it plays audio: press Listen to hear this call.
+        </p>
+      ) : null}
       {text ? null : (
         <>
           <ListenControls
             listening={listening}
             disabled={!active}
-            onListen={listen}
+            onListen={() => void listen()}
             onStop={stopListening}
             mix={mix}
             onMix={chooseMix}
@@ -301,6 +333,12 @@ export function LiveRunPanel({ runId, meter: sharedMeter, onStats }: LiveRunPane
       </div>
     </section>
   );
+}
+
+/** Whether the page got a click (or key press) yet; unknown counts as yes. */
+function hasUserGesture(): boolean {
+  const activation = typeof navigator === "undefined" ? undefined : navigator.userActivation;
+  return activation === undefined || activation.hasBeenActive;
 }
 
 const TILE = "gap-1.5 rounded-[10px] bg-raised px-3.5 py-3";

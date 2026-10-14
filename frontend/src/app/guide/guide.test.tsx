@@ -131,6 +131,7 @@ describe("Guide content", () => {
 
     const modules = render(<ModulesPage />);
     expect(screen.getAllByText(/text agent/i).length).toBeGreaterThan(0);
+    expect(screen.getByText("Follow and listen automatically")).toBeInTheDocument();
     modules.unmount();
 
     const scoring = render(<ScoringPage />);

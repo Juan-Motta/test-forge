@@ -19,10 +19,12 @@ import {
   LiveIcon,
   Spinner,
   StackedProgress,
+  Switch,
   buttonClasses,
   cn,
   focusRing,
 } from "@/ui";
+import { useFollowPreference } from "./follow-preference";
 import { batchEyebrow, batchSegments, type SessionStats } from "./live-view";
 import { LiveRunPanel } from "./LiveRunPanel";
 import { SessionCard } from "./SessionCard";
@@ -42,6 +44,20 @@ const ORDER: Record<RunStatus, number> = {
 
 function byProgress(a: Run, b: Run): number {
   return ORDER[a.status] - ORDER[b.status] || a.createdAt.localeCompare(b.createdAt) || a.position - b.position;
+}
+
+/** A conversation under way (left the queue, not over yet): following never leaves one of these. */
+function inProgress(run: Run): boolean {
+  return run.status === "connecting" || run.status === "running";
+}
+
+function byStart(a: Run, b: Run): number {
+  return (a.startedAt ?? a.createdAt).localeCompare(b.startedAt ?? b.createdAt) || byProgress(a, b);
+}
+
+/** Who to follow next: the earliest started of the runs in progress. */
+function nextToFollow(sessions: Run[]): Run | undefined {
+  return sessions.filter(inProgress).sort(byStart)[0];
 }
 
 /**
@@ -165,18 +181,37 @@ const CARD_BINS = 40;
 
 function Sessions({ sessions }: { sessions: Run[] }) {
   const now = useNow(1000);
+  const [follow, setFollow] = useFollowPreference();
   // The focused run, as last listed. It stays focused (and listed) after it ends and drops out of
-  // the active list, until the user picks another: the focus never jumps on its own.
+  // the active list, until the user picks another. Only "follow" moves it on its own, and only
+  // once that run is no longer in progress: a conversation is never cut mid-way.
   const [focused, setFocused] = useState<Run | undefined>(undefined);
   const [feed, setFeed] = useState<FocusFeed | null>(null);
   const fallback = sessions.find((run) => isActive(run.status) && run.status !== "queued") ?? sessions[0];
   if (focused === undefined && fallback !== undefined) setFocused(fallback);
+  if (follow) {
+    const listed = focused && sessions.find((run) => run.id === focused.id);
+    const next = listed && inProgress(listed) ? undefined : nextToFollow(sessions);
+    if (next !== undefined && next.id !== focused?.id) setFocused(next);
+  }
   const focus = focused ?? fallback;
   if (focus !== undefined && feed?.id !== focus.id) setFeed({ id: focus.id, meter: createLevelMeter() });
 
+  const followSwitch = (
+    <Switch
+      checked={follow}
+      onChange={setFollow}
+      label="Follow and listen automatically"
+      hint="Opens each run as it starts and plays its call; stays on a run until it ends, then moves to the next."
+      className="self-start"
+    />
+  );
+
   if (focus === undefined) {
     return (
-      <EmptyState
+      <div className="flex min-w-0 flex-col gap-5">
+        {followSwitch}
+        <EmptyState
         icon={<LiveIcon size={22} />}
         title="Nothing running"
         description="Launch a scenario to watch its run here (and listen in, for voice agents)."
@@ -185,7 +220,8 @@ function Sessions({ sessions }: { sessions: Run[] }) {
             Go to scenarios
           </Link>
         }
-      />
+        />
+      </div>
     );
   }
 
@@ -209,6 +245,7 @@ function Sessions({ sessions }: { sessions: Run[] }) {
 
   return (
     <div className="flex min-w-0 flex-col gap-5">
+      {followSwitch}
       <ul aria-label="Sessions" className="-mx-1 flex snap-x gap-2.5 overflow-x-auto px-1 pb-1">
         {sessions.map((run) => (
           <li key={run.id} className="w-[min(340px,85vw)] shrink-0 snap-start">
@@ -226,6 +263,7 @@ function Sessions({ sessions }: { sessions: Run[] }) {
           key={focus.id}
           runId={focus.id}
           meter={current.meter}
+          autoListen={follow}
           onStats={(stats) => setFeed((previous) => (previous?.id === focusId ? { ...previous, stats } : previous))}
         />
       ) : null}

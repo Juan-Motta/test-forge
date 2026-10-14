@@ -23,6 +23,7 @@ export { SearchField } from "./SearchField";
 export { SegmentedControl, type SegmentOption } from "./SegmentedControl";
 export { Select } from "./Select";
 export { Spinner } from "./Spinner";
+export { Switch } from "./Switch";
 export { StackedProgress, type ProgressSegment, type ProgressTone } from "./StackedProgress";
 export { Tabs, type TabItem } from "./Tabs";
 export { Textarea } from "./Textarea";
