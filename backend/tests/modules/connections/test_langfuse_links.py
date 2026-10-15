@@ -8,7 +8,7 @@ from sqlalchemy import update
 
 from voice_eval.modules.connections.langfuse_links import (
     LangfuseLinks,
-    session_url,
+    thread_traces_url,
     trace_url,
 )
 from voice_eval.modules.connections.models import ConnectionRecord
@@ -57,10 +57,11 @@ async def resolve(app, links: LangfuseLinks, connection_id: uuid.UUID):
         return await links.resolve(db, connection_id, secret_box=app.state.secret_box)
 
 
-def test_session_url_encodes_the_session_id():
+def test_thread_traces_url_filters_the_traces_by_thread_id():
     assert (
-        session_url("https://lf.example/", "proj-1", "thread a/b?c")
-        == "https://lf.example/project/proj-1/sessions/thread%20a%2Fb%3Fc"
+        thread_traces_url("https://lf.example/", "proj-1", "thread a/b?c")
+        == "https://lf.example/project/proj-1/traces?filter="
+        "metadata%3BstringObject%3Bthread_id%3B%3D%3Bthread%20a%2Fb%3Fc"
     )
 
 

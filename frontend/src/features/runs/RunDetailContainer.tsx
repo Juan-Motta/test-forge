@@ -81,8 +81,8 @@ function RunReport({ run, judgementPollMs }: { run: RunDetail; judgementPollMs?:
   const controller = useJudgementController(run.id, { enabled: !active, endedAt: run.endedAt, pollMs: judgementPollMs });
   const trace = useRunTrace(run.id, { enabled: !active });
   // The session shows every turn of the run; a single trace only when the session is unknown.
-  const sessionUrl = trace.data?.langfuse?.sessionUrl ?? null;
-  const langfuseUrl = sessionUrl ?? trace.data?.langfuse?.traceUrl ?? null;
+  const threadTracesUrl = trace.data?.langfuse?.threadTracesUrl ?? null;
+  const langfuseUrl = threadTracesUrl ?? trace.data?.langfuse?.traceUrl ?? null;
 
   function onConfirmRerun() {
     if (launching.current) return;
@@ -114,7 +114,7 @@ function RunReport({ run, judgementPollMs }: { run: RunDetail; judgementPollMs?:
       ) : null}
       {langfuseUrl ? (
         <a href={langfuseUrl} target="_blank" rel="noopener noreferrer" className={buttonClasses("secondary")}>
-          {sessionUrl ? t("runs.openSession") : t("runs.openTrace")}
+          {threadTracesUrl ? t("runs.openThreadTraces") : t("runs.openTrace")}
           <ExternalLinkIcon size={14} />
           <span className="sr-only">{` ${t("common.newTab")}`}</span>
         </a>

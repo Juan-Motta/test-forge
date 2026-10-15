@@ -23,7 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from voice_eval.modules.connections.langfuse_links import (
     LangfuseLinks,
     default_links,
-    session_url,
+    thread_traces_url,
     trace_url,
 )
 from voice_eval.modules.pricing import service as pricing
@@ -272,7 +272,7 @@ class TraceObservationOut(CamelModel):
 
 
 class LangfuseLinksOut(CamelModel):
-    session_url: str | None  # every trace (turn) of the run; None when the project is unknown
+    thread_traces_url: str | None  # every trace (turn) of the run; None when the project is unknown
     trace_url: str | None  # the run's first trace; None without saved observations
 
 
@@ -515,7 +515,7 @@ async def get_trace(
     """The agent's Langfuse observations for the run, as a waterfall (offsets from the run
     start). `available` is false, with a `note`, when none were saved (no Langfuse connection,
     nothing found, the run still in progress or not judged yet). `langfuse` links the run in
-    Langfuse's UI: `sessionUrl` (every turn of the run) when Langfuse told its project id, and
+    Langfuse's UI: `threadTracesUrl` (every turn of the run) when Langfuse told its project id, and
     `traceUrl` (the first trace) when observations were saved; null without a Langfuse
     connection or while the run is in progress."""
     try:
@@ -554,8 +554,8 @@ async def _langfuse_links(
         return None
     trace_id = next((row["traceId"] for row in trace["observations"] if row["traceId"]), None)
     return {
-        "session_url": (
-            session_url(project.host, project.project_id, run.thread_id)
+        "thread_traces_url": (
+            thread_traces_url(project.host, project.project_id, run.thread_id)
             if project.project_id and run.thread_id
             else None
         ),

@@ -351,7 +351,7 @@ export const es: Messages = {
   "runs.watchLiveButton": "Ver en vivo",
   "runs.cancelRunButton": "Cancelar corrida",
   "runs.openTrace": "Abrir la traza en Langfuse",
-  "runs.openSession": "Abrir sesión en Langfuse",
+  "runs.openThreadTraces": "Abrir trazas en Langfuse",
   "runs.rerunHint": "Lanza este escenario una vez más (su versión actual)",
   "runs.rerun": "Volver a ejecutar",
   "runs.runFailed": "La corrida falló",

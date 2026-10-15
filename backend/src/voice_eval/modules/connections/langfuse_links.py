@@ -1,8 +1,8 @@
-"""Links into Langfuse's UI for a Langfuse connection: a run's session and a single trace.
+"""Links into Langfuse's UI for a Langfuse connection: a run's traces (by thread id) and one trace.
 
-The session view (`{host}/project/{projectId}/sessions/{sessionId}`) needs the project id, which
-only Langfuse knows: `LangfuseLinks.resolve` looks it up with the connection's keys
-(`providers.langfuse_projects`) the first time it is needed and keeps it in memory, keyed by
+The thread's trace list (`{host}/project/{projectId}/traces?filter=…thread_id…`) needs
+the project id, which only Langfuse knows: `LangfuseLinks.resolve` looks it up with the
+connection's keys (`providers.langfuse_projects`) the first time it is needed and keeps it in memory, keyed by
 the connection id and its `updated_at`, so an edited connection (another host or key) is looked
 up again. A failed lookup is remembered for `failure_ttl_s` so an unreachable Langfuse does not
 slow every request down; it never raises, the project id is just unknown. Only the host and
@@ -45,11 +45,13 @@ class _Entry:
     retry_at: float | None  # failures only
 
 
-def session_url(host: str, project_id: str, session_id: str) -> str:
-    """Langfuse's session view: every trace of the session (one per turn of a run)."""
+def thread_traces_url(host: str, project_id: str, thread_id: str) -> str:
+    """Langfuse's trace list filtered on `metadata.thread_id`: every trace (one per turn) of a
+    run, the way the Langfuse UI writes that filter (`column;type;key;operator;value`)."""
+    condition = f"metadata;stringObject;thread_id;=;{thread_id}"
     return (
         f"{host.rstrip('/')}/project/{quote(project_id, safe='')}"
-        f"/sessions/{quote(session_id, safe='')}"
+        f"/traces?filter={quote(condition, safe='')}"
     )
 
 

@@ -438,13 +438,14 @@ describe("Run report · trace, suggestions and handoff", () => {
     expect(screen.queryByRole("button", { name: "Copy brief" })).not.toBeInTheDocument();
   });
 
-  const SESSION_URL = "https://cloud.langfuse.com/project/proj-1/sessions/thread%201";
+  const SESSION_URL =
+    "https://cloud.langfuse.com/project/proj-1/traces?filter=metadata%3BstringObject%3Bthread_id%3B%3D%3Bthread%201";
   const TRACE_URL = "https://cloud.langfuse.com/trace/t-1";
 
   it("links the run's Langfuse session, every turn together", async () => {
-    renderReport({ status: "none" }, { trace: traceFixture({ langfuse: { sessionUrl: SESSION_URL, traceUrl: TRACE_URL } }) });
+    renderReport({ status: "none" }, { trace: traceFixture({ langfuse: { threadTracesUrl: SESSION_URL, traceUrl: TRACE_URL } }) });
 
-    const link = await screen.findByRole("link", { name: /Open session in Langfuse/ });
+    const link = await screen.findByRole("link", { name: /Open traces in Langfuse/ });
     expect(link).toHaveAttribute("href", SESSION_URL);
     expect(link).toHaveAttribute("target", "_blank");
     expect(link).toHaveAttribute("rel", "noopener noreferrer");
@@ -454,19 +455,19 @@ describe("Run report · trace, suggestions and handoff", () => {
   it("labels the session link in Spanish", async () => {
     renderReport(
       { status: "none" },
-      { trace: traceFixture({ langfuse: { sessionUrl: SESSION_URL, traceUrl: TRACE_URL } }), locale: "es" },
+      { trace: traceFixture({ langfuse: { threadTracesUrl: SESSION_URL, traceUrl: TRACE_URL } }), locale: "es" },
     );
 
-    const link = await screen.findByRole("link", { name: /Abrir sesión en Langfuse/ });
+    const link = await screen.findByRole("link", { name: /Abrir trazas en Langfuse/ });
     expect(link).toHaveAttribute("href", SESSION_URL);
   });
 
   it("falls back to the single trace when the session is unknown", async () => {
-    renderReport({ status: "none" }, { trace: traceFixture({ langfuse: { sessionUrl: null, traceUrl: TRACE_URL } }) });
+    renderReport({ status: "none" }, { trace: traceFixture({ langfuse: { threadTracesUrl: null, traceUrl: TRACE_URL } }) });
 
     const link = await screen.findByRole("link", { name: /Open trace in Langfuse/ });
     expect(link).toHaveAttribute("href", TRACE_URL);
-    expect(screen.queryByRole("link", { name: /Open session in Langfuse/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Open traces in Langfuse/ })).not.toBeInTheDocument();
   });
 
   it("omits the Langfuse link without a Langfuse connection", async () => {

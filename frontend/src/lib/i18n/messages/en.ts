@@ -358,7 +358,7 @@ export const en = {
   "runs.watchLiveButton": "Watch live",
   "runs.cancelRunButton": "Cancel run",
   "runs.openTrace": "Open trace in Langfuse",
-  "runs.openSession": "Open session in Langfuse",
+  "runs.openThreadTraces": "Open traces in Langfuse",
   "runs.rerunHint": "Launch this scenario once more (its current version)",
   "runs.rerun": "Re-run",
   "runs.runFailed": "The run failed",

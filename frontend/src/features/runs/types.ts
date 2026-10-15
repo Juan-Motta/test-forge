@@ -211,8 +211,8 @@ export type RunTrace = {
   observations: TraceObservation[];
   /**
    * Links into Langfuse's UI; null without a Langfuse connection (or while the run is active).
-   * `sessionUrl`: every turn of the run (null when Langfuse could not be asked for the project);
+   * `threadTracesUrl`: every turn of the run (null when Langfuse could not be asked for the project);
    * `traceUrl`: the first trace only (null without saved observations).
    */
-  langfuse?: { sessionUrl: string | null; traceUrl: string | null } | null;
+  langfuse?: { threadTracesUrl: string | null; traceUrl: string | null } | null;
 };

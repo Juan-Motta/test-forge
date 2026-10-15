@@ -422,7 +422,7 @@ with `id`, `traceId`, `parentId`, `type` (`llm`, `tool`, `span`, `event`, ...), 
 `startMs` (from the run start), `durationMs`, `model`, `tokens`, `costUsd`, `level`,
 `statusMessage` and `depth` (nesting), sorted by start. `langfuse` links the run in Langfuse's
 UI, or is `null` when the agent has no Langfuse connection (or the run is in progress):
-`sessionUrl` opens the run's session (its `threadId`), every turn's trace together, and is `null`
+`threadTracesUrl` opens Langfuse's trace list filtered on `metadata.thread_id` (the run's `threadId`), every turn's trace together, and is `null`
 when Langfuse could not be asked for the project; `traceUrl` opens the first trace only, `null`
 without saved observations.
 

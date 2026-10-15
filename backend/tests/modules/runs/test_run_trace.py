@@ -207,7 +207,8 @@ async def test_trace_links_the_langfuse_session_of_the_run(app, user_client, tmp
 
     assert first.status_code == 200, first.text
     assert first.json()["langfuse"] == {
-        "sessionUrl": "https://cloud.langfuse.com/project/proj-1/sessions/thread%20a%2F1",
+        "threadTracesUrl": "https://cloud.langfuse.com/project/proj-1/traces?filter="
+        "metadata%3BstringObject%3Bthread_id%3B%3D%3Bthread%20a%2F1",
         "traceUrl": "https://cloud.langfuse.com/trace/t1",
     }
     assert second.json()["langfuse"] == first.json()["langfuse"]
@@ -227,7 +228,7 @@ async def test_trace_without_langfuse_reachable_keeps_the_trace_link(
     body = response.json()
     assert body["available"] is True
     assert body["langfuse"] == {
-        "sessionUrl": None,
+        "threadTracesUrl": None,
         "traceUrl": "https://cloud.langfuse.com/trace/t1",
     }
 
