@@ -43,8 +43,8 @@ type CopyButtonProps = {
   /** Announced (politely) once copied (default "Copied", translated). */
   copiedMessage?: string;
   iconSize?: number;
-  /** The button's size; "sm" for dense places such as table cells. */
-  size?: "md" | "sm";
+  /** The button's size; "sm" for dense places such as table cells, "xs" inside a chip. */
+  size?: "md" | "sm" | "xs";
   className?: string;
 };
 

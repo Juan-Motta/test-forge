@@ -87,20 +87,22 @@ export function RunHeader({ run, actions }: { run: RunDetail; actions?: ReactNod
             </li>
           ) : null}
           <li>
-            <Badge tone="muted" mono className="max-w-full py-0 pr-0.5">
+            {/* The copy button fits the chip's own height, so every chip in the row lines up. */}
+            <Badge tone="muted" mono className="max-w-full pr-1">
               <span className="min-w-0 whitespace-normal break-all">{t("runs.thread", { id: run.threadId })}</span>
               <CopyButton
                 text={run.threadId}
                 label={t("runs.copyThreadId")}
                 copiedMessage={t("runs.threadIdCopied")}
-                iconSize={13}
-                className="size-7 min-h-0 min-w-0"
+                iconSize={12}
+                size="xs"
+                className="-my-0.5"
               />
             </Badge>
           </li>
           {evaluator ? (
             <li>
-              <Badge tone="outline">{evaluator}</Badge>
+              <Badge tone="muted">{evaluator}</Badge>
             </li>
           ) : null}
         </ul>

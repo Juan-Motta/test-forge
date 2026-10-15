@@ -5,8 +5,8 @@ export type IconButtonProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, "ari
   /** Required: an icon-only button needs an accessible name. */
   label: string;
   icon: ReactNode;
-  /** "sm" (28px) for dense, pointer-first places such as table cells; "md" (44px) by default. */
-  size?: "md" | "sm";
+  /** "xs" (20px) inside chips, "sm" (28px) in dense places such as table cells, "md" (44px) by default. */
+  size?: "md" | "sm" | "xs";
 };
 
 export function IconButton({ label, icon, size = "md", type = "button", className, ...props }: IconButtonProps) {
@@ -20,7 +20,7 @@ export function IconButton({ label, icon, size = "md", type = "button", classNam
       title={label}
       className={cn(
         "inline-flex shrink-0 items-center justify-center text-muted transition-colors",
-        size === "sm" ? "size-7 rounded-md" : "size-11 rounded-lg",
+        size === "xs" ? "size-5 rounded" : size === "sm" ? "size-7 rounded-md" : "size-11 rounded-lg",
         "hover:bg-active hover:text-fg disabled:cursor-not-allowed disabled:opacity-60",
         focusRing,
         className,
