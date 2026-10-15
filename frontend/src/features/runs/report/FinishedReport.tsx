@@ -93,7 +93,7 @@ export function FinishedReport({ run, controller }: { run: RunDetail; controller
           </section>
           <section
             aria-labelledby="run-scorecard"
-            className="flex min-w-0 flex-[1_1_420px] flex-col gap-3.5 rounded-xl border border-line bg-panel p-5"
+            className="flex min-w-0 flex-[1_1_420px] 2xl:flex-[1_1_600px] flex-col gap-3.5 rounded-xl border border-line bg-panel p-5"
           >
             <h2 id="run-scorecard" className="text-[15px] font-semibold">
               {t("report.scorecard")}
