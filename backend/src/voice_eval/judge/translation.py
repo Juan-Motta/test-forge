@@ -93,7 +93,10 @@ class _Masker:
             reverse=True,
         )
         self._pattern = re.compile(
-            "|".join([*(re.escape(term) for term in literal), _CODE, _REF, _SNAKE])
+            # Whole words only: a short name must not be masked inside an unrelated word.
+            "|".join(
+                [*(rf"(?<!\w){re.escape(term)}(?!\w)" for term in literal), _CODE, _REF, _SNAKE]
+            )
         )
         self._tokens: dict[str, str] = {}
         self._terms: dict[str, str] = {}
