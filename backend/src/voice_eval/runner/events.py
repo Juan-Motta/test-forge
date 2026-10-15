@@ -12,7 +12,9 @@ server applied the cut to one reported audio item: `agent_turn`, `item_id`, `kin
 `heard_text`, `heard_text_estimated` (always true: the played share of the audio applied to the
 text), `audio_end_ms` and `interruption_confirmed` (as of that moment).
 `caller_speech_synthesized` (the decision's streamed synthesis ended) may come before or after
-its `caller_speaking`.
+its `caller_speaking`. With the realtime caller, `caller_speaking` carries the words transcribed
+so far (often none), `caller_text` (`decision_id`, `text`: the next piece, in order) follows as
+it speaks, and the response's `caller_decision` comes last with the whole transcript.
 `caller_decision`, `caller_speaking`, `caller_speech_synthesized` and `caller_decision_discarded`
 carry the decision's `decision_id` (from 1). Latency timings, in ms: `caller_decision` has
 `started_ms` (run time the policy was asked) and `duration_ms`; `caller_speaking` has

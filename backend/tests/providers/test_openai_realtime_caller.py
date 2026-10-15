@@ -18,6 +18,7 @@ from websockets.http11 import Response
 from voice_eval.ports.realtime_caller import (
     CallerAudio,
     CallerTranscript,
+    CallerTranscriptDelta,
     HangUp,
     RealtimeCallerError,
 )
@@ -277,6 +278,35 @@ async def test_a_response_commits_what_was_heard_and_streams_the_answer(model):
         "call_id": "call_1",
         "output": "the call is over",
     }
+
+
+@pytest.mark.parametrize(
+    "prefix", ["response.output_audio_transcript", "response.audio_transcript"]
+)
+async def test_the_spoken_words_stream_as_transcript_deltas(model, prefix):
+    pcm = base64.b64encode(AUDIO).decode()
+    model.responses = [
+        [
+            {"type": f"{prefix}.delta", "item_id": "i1", "delta": "Hi, I "},
+            {"type": "response.output_audio.delta", "item_id": "i1", "delta": pcm},
+            {"type": f"{prefix}.delta", "item_id": "i1", "delta": "need a room."},
+            {"type": f"{prefix}.delta", "item_id": "i1", "delta": ""},
+            {"type": f"{prefix}.done", "item_id": "i1", "transcript": " Hi, I need a room. "},
+        ]
+    ]
+    caller = openai_caller(model)
+    await caller.open("You are Ana.")
+    try:
+        events = await collect(caller)
+    finally:
+        await caller.close()
+
+    assert events == [
+        CallerTranscriptDelta("Hi, I "),
+        CallerAudio(AUDIO),
+        CallerTranscriptDelta("need a room."),
+        CallerTranscript("Hi, I need a room."),
+    ]
 
 
 async def test_a_short_buffer_is_padded_to_the_minimum_commit(model):

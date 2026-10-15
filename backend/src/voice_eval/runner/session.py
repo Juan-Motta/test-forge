@@ -24,7 +24,8 @@ per interruption (`confirmation`, per-item detail) and on the interrupted transc
 With a realtime caller (`realtime`, the scenario's realtime evaluator) no policy or TTS is used:
 a speech-to-speech model hears the agent's audio as it arrives (`runner.realtime`) and, at the
 same playback-aware moment the pipeline caller would speak, answers by voice; its audio streams
-to the agent from the first chunk and its output transcript is the caller's transcript row. It
+to the agent from the first chunk and its output transcript is the caller's transcript row (its
+pieces stream live as `caller_text` while it speaks; the whole one closes the line). It
 ends the call with its `hang_up` tool (after its goodbye played); a hang-up without any spoken
 audio is refused once, and the caller asked at once to say its goodbye out loud (a second silent
 hang-up ends the call anyway). On an interrupted turn it hears
@@ -37,6 +38,7 @@ import time
 from collections import Counter
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -439,7 +441,8 @@ class SessionRunner:
                 await self._agent_spoke_again()
                 return False
             if speech.has_audio:
-                said, row = self._utter(speech, speech.decision_id, "", REALTIME_REASON)
+                said, row = self._utter(speech, speech.decision_id, speech.spoken, REALTIME_REASON)
+                speech.on_text = partial(self._caller_text, speech.decision_id, row)
             await self._wait_until(lambda: speech.done)  # its transcript and hang-up
             self._check_speech()
         finally:
@@ -505,9 +508,18 @@ class SessionRunner:
             "reason": REALTIME_REASON,
         }
 
+    def _caller_text(self, decision_id: int, row: dict[str, Any], text: str) -> None:
+        """The next piece of what the realtime caller is saying: it extends its live line (the
+        pieces before its `caller_speaking` go out with it)."""
+        row["text"] += text
+        if row["start_ms"] is not None:
+            self._publish("caller_text", {"decision_id": decision_id, "text": text})
+
     def _realtime_decided(self, speech: RealtimeSpeech, row: dict[str, Any] | None) -> None:
-        """The response is done: its words go to the transcript and the conversation."""
-        text = (speech.transcript or "").strip()
+        """The response is done: its words (the whole output transcript) go to the transcript
+        and the conversation."""
+        speech.on_text = None
+        text = (speech.transcript or speech.spoken).strip()
         if row is not None:
             row["text"] = text
             self.conversation.append(Utterance("caller", text))
@@ -639,7 +651,7 @@ class SessionRunner:
                 "caller_speaking",
                 {
                     "decision_id": decision_id,
-                    "say": say,
+                    "say": row["text"],  # realtime: the words transcribed so far
                     "reason": reason,
                     "tts_first_chunk_ms": rounded(speech.first_chunk_ms),
                 },

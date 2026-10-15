@@ -2,9 +2,10 @@
 
 It hears the agent's audio (`append`) and answers by voice when the runner says it is the
 caller's turn (`respond`); the runner keeps the turn control (no server turn detection). A
-response yields the caller's audio as it is generated, the transcript of what it said, and a
-`HangUp` when the model calls its `hang_up` tool. Failures raise `RealtimeCallerError`, whose
-message is safe to store (never a key, a URL or a provider payload).
+response yields the caller's audio as it is generated, the transcript of what it said (in pieces
+as it is spoken, then whole), and a `HangUp` when the model calls its `hang_up` tool. Failures
+raise `RealtimeCallerError`, whose message is safe to store (never a key, a URL or a provider
+payload).
 """
 
 from collections.abc import AsyncIterator
@@ -50,6 +51,13 @@ class CallerTranscript:
 
 
 @dataclass(frozen=True)
+class CallerTranscriptDelta:
+    """The next piece of what the caller is saying, in order (its audio transcript so far)."""
+
+    text: str
+
+
+@dataclass(frozen=True)
 class HangUp:
     """The model called `hang_up`; answer it with `tool_output(call_id, ...)`."""
 
@@ -57,7 +65,7 @@ class HangUp:
     reason: str
 
 
-ResponseEvent = CallerAudio | CallerTranscript | HangUp
+ResponseEvent = CallerAudio | CallerTranscriptDelta | CallerTranscript | HangUp
 
 
 class RealtimeCaller(Protocol):

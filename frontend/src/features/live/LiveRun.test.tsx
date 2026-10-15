@@ -105,6 +105,55 @@ describe("Live run", () => {
     expect(lines.join(" ")).not.toContain("Stale words");
   });
 
+  it("shows the realtime evaluator's words as it speaks them, then its whole line", async () => {
+    const { socket } = await renderPanel();
+    act(() => {
+      socket.send(snapshot);
+      socket.send({ type: "callerSpeaking", tMs: 4200, decisionId: 1, say: "", reason: "realtime" });
+      socket.send({ type: "callerText", tMs: 4400, decisionId: 1, text: "I need " });
+      socket.send({ type: "callerText", tMs: 4600, decisionId: 1, text: "a room" });
+    });
+    let lines = transcriptLines();
+    expect(lines).toHaveLength(2);
+    expect(lines[1]).toContain("I need a room");
+    expect(lines[1]).not.toContain("Evaluator intent");
+
+    act(() => {
+      socket.send({ type: "callerDecision", tMs: 6000, decisionId: 1, say: "I need a room.", hangUp: false, reason: "realtime" });
+    });
+    lines = transcriptLines();
+    expect(lines).toHaveLength(2);
+    expect(lines[1]).toContain("I need a room.");
+    expect(screen.queryByRole("status", { name: "Evaluator is about to say" })).not.toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Evaluator intent" })).toHaveTextContent("Says: “I need a room.”");
+    expect(screen.getByRole("region", { name: "Evaluator intent" })).not.toHaveTextContent("realtime");
+  });
+
+  it("keeps streaming a realtime line it joined in the middle of", async () => {
+    const { socket } = await renderPanel();
+    act(() => {
+      socket.send({
+        ...snapshot,
+        transcript: [...snapshot.transcript, { role: "caller", text: "I need", reason: "realtime", tMs: 4200, decisionId: 3 }],
+      });
+      socket.send({ type: "callerText", tMs: 4600, decisionId: 3, text: " a room" });
+    });
+    const lines = transcriptLines();
+    expect(lines).toHaveLength(2);
+    expect(lines[1]).toContain("I need a room");
+    expect(lines[1]).not.toContain("Evaluator intent");
+  });
+
+  it("shows the whole thread id and copies it", async () => {
+    const { user } = await renderPanel();
+    expect(screen.getByText(running.threadId)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Copy thread id" }));
+
+    expect(await navigator.clipboard.readText()).toBe(running.threadId);
+    expect(screen.getByText("Thread id copied")).toHaveAttribute("role", "status");
+  });
+
   it("marks the agent reply the caller interrupted and shows what was heard", async () => {
     const { socket } = await renderPanel();
     act(() => {

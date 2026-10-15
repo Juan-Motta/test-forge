@@ -14,6 +14,7 @@ from voice_eval.ports.policy import CallerBrief
 from voice_eval.ports.realtime_caller import (
     CallerAudio,
     CallerTranscript,
+    CallerTranscriptDelta,
     HangUp,
     RealtimeCallerError,
     ResponseEvent,
@@ -233,6 +234,36 @@ async def test_the_first_audio_reaches_the_agent_before_the_response_ends(
     # the caller's transcript row is the model's output transcript
     caller_rows = [r for r in transcript(tmp_path) if r["role"] == "caller"]
     assert [r["text"] for r in caller_rows] == ["I need a room", "Bye"]
+
+
+async def test_the_caller_words_stream_live_as_they_are_spoken(fake_live_server, tmp_path):
+    words: list[ResponseEvent] = [
+        CallerTranscriptDelta("I need "),
+        CallerAudio(CHUNK),
+        CallerAudio(CHUNK),
+        CallerTranscriptDelta("a room "),
+        CallerAudio(CHUNK),
+        CallerTranscriptDelta("for two nights"),
+        CallerAudio(CHUNK),
+        CallerTranscript("I need a room for two nights."),
+    ]
+    caller = FakeRealtimeCaller([words, spoken("Bye", hang_up=True)], chunk_delay_s=0.1)
+    summary, sink = await run(fake_live_server.url, tmp_path, caller)
+
+    assert (summary["status"], summary["reason"]) == ("completed", "caller_hung_up")
+    speaking = sink.of("caller_speaking")[0]
+    assert speaking.data["decision_id"] == 1
+    texts = [e for e in sink.of("caller_text") if e.data["decision_id"] == 1]
+    assert texts and all(e.t_ms >= speaking.t_ms for e in texts)
+    # what the live view shows: the words at the start, then each next piece, in order
+    shown = speaking.data["say"] + "".join(e.data["text"] for e in texts)
+    assert shown == "I need a room for two nights"
+    # the finished line (transcript row, judge input, decision) is the full output transcript
+    decision = sink.of("caller_decision")[0]
+    assert decision.data["say"] == "I need a room for two nights."
+    assert decision.t_ms >= texts[-1].t_ms
+    caller_rows = [r["text"] for r in transcript(tmp_path) if r["role"] == "caller"]
+    assert caller_rows == ["I need a room for two nights.", "Bye"]
 
 
 async def test_hang_up_ends_the_call_after_the_goodbye_audio(fake_live_server, tmp_path):

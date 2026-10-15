@@ -1,11 +1,15 @@
 """In-process live hub: fans each running run's events out to its WebSocket subscribers.
 
 Text messages are JSON objects with a camelCase `type`: `snapshot` (first, always), `status`,
-`agentTranscript`, `callerDecision`, `callerSpeaking`, `callerDecisionDiscarded`, `agentBargeIn`,
-`callerInterrupted`, `interruptionConfirmed`, `turnEnded`, `warning`, `lagging`, and last
-`finished`. A `callerDecision` is only the evaluator's intent: its words join the transcript
-once `callerSpeaking` confirms they are being said, and a `callerDecisionDiscarded` one is never
-said. `callerInterrupted`
+`agentTranscript`, `callerDecision`, `callerSpeaking`, `callerText`, `callerDecisionDiscarded`,
+`agentBargeIn`, `callerInterrupted`, `interruptionConfirmed`, `turnEnded`, `warning`, `lagging`,
+and last `finished`. A `callerDecision` is only the evaluator's intent: its words join the
+transcript once `callerSpeaking` confirms they are being said, and a `callerDecisionDiscarded` one
+is never said. The realtime evaluator speaks before its words are known: its `callerSpeaking`
+carries the words transcribed so far (often none), each `callerText` (`decisionId`, `text`: the
+next piece, in order) extends that line, and its `callerDecision` comes after, with the whole
+transcript as `say`, which replaces the line's text. Snapshot caller lines carry their
+`decisionId`. `callerInterrupted`
 (`agentTurn`, `audioEndMs`, `heardText`) marks the caller cutting the agent off: agent audio
 already streamed past that point was never heard (a player should drop what it still queues), and
 the rest of that reply is not streamed. The agent line of an interrupted turn (`agentTranscript`
@@ -207,6 +211,9 @@ class LiveHub:
                     audioEndMs=data["audio_end_ms"],
                 )
             case "caller_decision":
+                # the realtime caller decides once it said it: its line gets the whole transcript
+                if data["say"] and (row := self._caller_row(run, data["decision_id"])) is not None:
+                    row["text"] = data["say"]
                 text = message(
                     "callerDecision",
                     tMs=t_ms,
@@ -217,7 +224,13 @@ class LiveHub:
                 )
             case "caller_speaking":
                 run.transcript.append(
-                    {"role": "caller", "text": data["say"], "reason": data["reason"], "tMs": t_ms}
+                    {
+                        "role": "caller",
+                        "text": data["say"],
+                        "reason": data["reason"],
+                        "tMs": t_ms,
+                        "decisionId": data["decision_id"],
+                    }
                 )
                 text = message(
                     "callerSpeaking",
@@ -225,6 +238,12 @@ class LiveHub:
                     decisionId=data["decision_id"],
                     say=data["say"],
                     reason=data["reason"],
+                )
+            case "caller_text":
+                if (row := self._caller_row(run, data["decision_id"])) is not None:
+                    row["text"] += data["text"]
+                text = message(
+                    "callerText", tMs=t_ms, decisionId=data["decision_id"], text=data["text"]
                 )
             case "caller_decision_discarded":
                 text = message("callerDecisionDiscarded", tMs=t_ms, decisionId=data["decision_id"])
@@ -251,6 +270,14 @@ class LiveHub:
             case _:
                 return
         self._broadcast(run, text)
+
+    @staticmethod
+    def _caller_row(run: LiveRun, decision_id: int) -> dict[str, Any] | None:
+        """The snapshot line of the caller utterance `decision_id`, once it is being said."""
+        for row in reversed(run.transcript):
+            if row["role"] == "caller" and row.get("decisionId") == decision_id:
+                return row
+        return None
 
     def finish(self, run_id: uuid.UUID, status: str, reason: str | None) -> None:
         """The run is over: send `finished`, close its subscribers, forget it."""

@@ -7,8 +7,9 @@ what a person who cut in would not have heard.
 
 `RealtimeSpeech` is one caller response, streamed like `CallerSpeech`: its audio is buffered
 until the runner attaches an utterance of the caller stream, then goes straight to it. It also
-keeps the response's transcript and the `hang_up` call, if the model made one. A response may
-have no audio (only a hang-up, or nothing at all).
+keeps the response's transcript (the words so far in `spoken`, each next piece handed to
+`on_text` once set; the whole one in `transcript`) and the `hang_up` call, if the model made
+one. A response may have no audio (only a hang-up, or nothing at all).
 """
 
 import asyncio
@@ -18,6 +19,7 @@ from collections.abc import AsyncIterator, Callable
 from voice_eval.ports.realtime_caller import (
     CallerAudio,
     CallerTranscript,
+    CallerTranscriptDelta,
     HangUp,
     RealtimeCaller,
     RealtimeCallerError,
@@ -103,6 +105,8 @@ class RealtimeSpeech(CallerSpeech):
         self._note = note
         self.decision_id = decision_id
         self.transcript: str | None = None
+        self.spoken = ""  # the transcript pieces so far
+        self.on_text: Callable[[str], None] | None = None
         self.hang_up: HangUp | None = None
         self._setup(timeout_s, now_ms, None)
 
@@ -112,6 +116,10 @@ class RealtimeSpeech(CallerSpeech):
                 match event:
                     case CallerAudio(pcm=pcm):
                         yield pcm
+                    case CallerTranscriptDelta(text=text):
+                        self.spoken += text
+                        if self.on_text is not None:
+                            self.on_text(text)
                     case CallerTranscript(text=text):
                         self.transcript = text
                     case HangUp():

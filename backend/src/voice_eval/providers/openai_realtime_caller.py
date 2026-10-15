@@ -3,8 +3,9 @@
 Speaks the GA WebSocket protocol directly (the schema of `openai.types.realtime`): one
 `session.update` with server turn detection off, `input_audio_buffer.append` for the agent's
 audio, and per caller turn `input_audio_buffer.commit` + `response.create`, reading
-`response.output_audio.delta`, `response.output_audio_transcript.done`,
-`response.function_call_arguments.done` and `response.done`.
+`response.output_audio.delta`, `response.output_audio_transcript.delta` / `.done` (also their
+older `response.audio_transcript.*` names), `response.function_call_arguments.done` and
+`response.done`.
 
 A response cancelled before it ended (the agent spoke again) leaves its output items in the
 model's conversation: before the next response, each is deleted (`conversation.item.delete`), or
@@ -33,11 +34,15 @@ from websockets.exceptions import ConnectionClosed, InvalidStatus, WebSocketExce
 from voice_eval.ports.realtime_caller import (
     CallerAudio,
     CallerTranscript,
+    CallerTranscriptDelta,
     HangUp,
     RealtimeCallerError,
     ResponseEvent,
 )
 
+# the model's own speech transcript, under its GA and its older (beta) event names
+TRANSCRIPT_DELTA = ("response.output_audio_transcript.delta", "response.audio_transcript.delta")
+TRANSCRIPT_DONE = ("response.output_audio_transcript.done", "response.audio_transcript.done")
 PCM_FORMAT = {"type": "audio/pcm", "rate": 24000}
 MIN_COMMIT_BYTES = 4800  # the model refuses to commit less than 100 ms of PCM16 24 kHz
 MAX_MESSAGE_BYTES = 16 * 1024 * 1024
@@ -353,7 +358,10 @@ class OpenAIRealtimeCaller:
                             item_id = str(event.get("item_id") or "")
                             played[item_id] = played.get(item_id, 0) + len(pcm)
                             yield CallerAudio(pcm)
-                    case "response.output_audio_transcript.done":
+                    case _ if kind in TRANSCRIPT_DELTA:
+                        if delta := str(event.get("delta") or ""):
+                            yield CallerTranscriptDelta(delta)
+                    case _ if kind in TRANSCRIPT_DONE:
                         yield CallerTranscript(str(event.get("transcript") or "").strip())
                     case "response.function_call_arguments.done" if event.get("name") == "hang_up":
                         yield HangUp(str(event.get("call_id") or ""), _reason(event))

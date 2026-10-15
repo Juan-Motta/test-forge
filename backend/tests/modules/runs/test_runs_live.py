@@ -366,8 +366,41 @@ async def test_a_snapshot_lists_only_spoken_caller_lines():
     snapshot = json.loads(await hub.subscribe(run_id).get())
 
     assert snapshot["transcript"] == [
-        {"role": "caller", "text": "Fresh", "reason": "why", "tMs": 5.0}
+        {"role": "caller", "text": "Fresh", "reason": "why", "tMs": 5.0, "decisionId": 2}
     ]
+
+
+async def test_the_realtime_caller_words_stream_into_its_line_and_the_snapshot():
+    hub = LiveHub()
+    run_id = uuid.uuid4()
+    hub.open(run_id, uuid.uuid4())
+    sub = hub.subscribe(run_id)
+    for event in [
+        RunEvent("caller_speaking", 1.0, {"decision_id": 1, "say": "I ", "reason": "realtime"}),
+        RunEvent("caller_text", 1.5, {"decision_id": 1, "text": "need a "}),
+        RunEvent("caller_text", 2.0, {"decision_id": 1, "text": "room"}),
+    ]:
+        hub.event(run_id, event)
+    joined = json.loads(await hub.subscribe(run_id).get())
+    hub.event(
+        run_id,
+        RunEvent(
+            "caller_decision",
+            3.0,
+            {"decision_id": 1, "say": "I need a room.", "hang_up": False, "reason": "realtime"},
+        ),
+    )
+    late = json.loads(await hub.subscribe(run_id).get())
+    hub.finish(run_id, "completed", "caller_hung_up")
+    texts = [json.loads(item) for item in await drain(sub) if isinstance(item, str)]
+
+    assert texts[2:4] == [
+        {"type": "callerText", "tMs": 1.5, "decisionId": 1, "text": "need a "},
+        {"type": "callerText", "tMs": 2.0, "decisionId": 1, "text": "room"},
+    ]
+    # a subscriber joining mid-utterance sees the words so far, then the finished line
+    assert [row["text"] for row in joined["transcript"]] == ["I need a room"]
+    assert [row["text"] for row in late["transcript"]] == ["I need a room."]
 
 
 async def test_a_consumer_that_catches_up_is_told_again_when_it_lags_again():

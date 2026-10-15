@@ -27,7 +27,7 @@ describe("Run detail", () => {
     expect(within(chips).getByText("Hotel booking assistant")).toBeInTheDocument();
     expect(within(chips).getByText("Duration")).toBeInTheDocument();
     expect(chips).toHaveTextContent("Duration 4:12");
-    expect(chips).toHaveTextContent("thread 1786f832…3f");
+    expect(chips).toHaveTextContent("thread 1786f832-aaaa-bbbb-cccc-0000000003f");
     expect(screen.getByText("Lucía · hurried · es-MX")).toBeInTheDocument();
     expect(screen.queryByText(/evaluator$/)).not.toBeInTheDocument();
     expect(screen.getByText("Completed")).toBeInTheDocument();

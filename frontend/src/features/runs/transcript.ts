@@ -11,6 +11,8 @@ export type TranscriptEntry = {
   latencyMs?: number | null;
   /** Caller lines: the evaluator's own reason for saying it. */
   intent?: string;
+  /** Live caller lines: the evaluator decision they say (the realtime evaluator's words stream into it). */
+  decisionId?: number;
   /** The judge's ref of a finished run's row: `A<n>` (agent) or `C<n>` (caller), counted per role. */
   ref?: string;
   /** Live agent lines: the runner's 0-based agent turn index. */
@@ -73,6 +75,14 @@ function textFieldsOf(row: TranscriptRow, sentMs: number | null): Partial<Transc
 }
 
 /** Entries from `transcript.json` rows (finished run) or a live snapshot's transcript. */
+/** The realtime evaluator's only "reason" names the mode: not an intent worth showing. */
+const REALTIME_REASON = "realtime";
+
+/** A caller line's intent: its reason, unless it is only the realtime placeholder. */
+export function callerIntent(reason: string | null | undefined): string | undefined {
+  return reason && reason !== REALTIME_REASON ? reason : undefined;
+}
+
 export function entriesFromRows(rows: readonly (TranscriptRow & { tMs?: number })[]): TranscriptEntry[] {
   const counters = { agent: 0, caller: 0 };
   // Text runs: an agent reply's full time runs from the user message before it.
@@ -87,7 +97,7 @@ export function entriesFromRows(rows: readonly (TranscriptRow & { tMs?: number }
       text: row.text,
       tMs,
       latencyMs: row.role === "agent" ? (row.latencyMs ?? null) : undefined,
-      intent: row.role === "caller" ? row.reason || undefined : undefined,
+      intent: row.role === "caller" ? callerIntent(row.reason) : undefined,
       interruption: interruptionOf(row),
       ...textFieldsOf(row, sentMs),
     };

@@ -4,6 +4,7 @@ export { Badge, type BadgeTone } from "./Badge";
 export { Button, buttonClasses, type ButtonProps, type ButtonVariant } from "./Button";
 export { Card, CardHeader } from "./Card";
 export { CodeBlock } from "./CodeBlock";
+export { CopyButton, useClipboard, type CopyState } from "./CopyButton";
 export { cn, focusRing } from "./cn";
 export { Dialog } from "./Dialog";
 export { EmptyState } from "./EmptyState";

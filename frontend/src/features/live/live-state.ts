@@ -1,5 +1,5 @@
 import type { TranscriptEntry } from "@/features/runs/transcript";
-import { entriesFromRows } from "@/features/runs/transcript";
+import { callerIntent, entriesFromRows } from "@/features/runs/transcript";
 import { isActive } from "@/features/runs/format";
 import { RUN_STATUSES, type RunStatus, type TranscriptRow } from "@/features/runs/types";
 
@@ -159,16 +159,21 @@ function onStreaming(
 /** Snapshot rows (live: `tMs`, `turn`; finished: `startMs`, `latencyMs`) as entries with latency. */
 function snapshotEntries(rows: unknown, turns: Turn[]): TranscriptEntry[] {
   if (!Array.isArray(rows)) return [];
-  const typed = rows as (TranscriptRow & { tMs?: number; turn?: number })[];
+  const typed = rows as (TranscriptRow & { tMs?: number; turn?: number; decisionId?: number })[];
   return entriesFromRows(typed).map((entry, index) => {
-    const turn = typed[index].turn;
-    if (entry.role !== "agent" || turn === undefined) return entry;
+    const { turn, decisionId } = typed[index];
+    if (entry.role === "caller") return typeof decisionId === "number" ? { ...entry, decisionId } : entry;
+    if (turn === undefined) return entry;
     const timing = turns.find((item) => item.turn === turn);
     if (timing && typeof timing.requestMs === "number") return withTextTiming({ ...entry, turn }, timing);
     if (entry.latencyMs != null) return { ...entry, turn };
     return { ...entry, turn, latencyMs: timing?.latencyMs ?? null };
   });
 }
+
+/** The index of the caller line saying decision `decisionId`, or -1. */
+const callerLineIndex = (entries: TranscriptEntry[], decisionId: number | null) =>
+  decisionId === null ? -1 : entries.findLastIndex((entry) => entry.role === "caller" && entry.decisionId === decisionId);
 
 /** The live (0-based) agent turn an interruption of reply #`agentTurn` (1-based) applies to. */
 const liveTurnOf = (interruption: CallerInterruption) =>
@@ -255,27 +260,43 @@ export function liveReducer(state: LiveRunState, action: LiveAction): LiveRunSta
     case "callerDecision": {
       // Only an intent: the line joins the transcript on `callerSpeaking`.
       const say = typeof message.say === "string" && message.say ? message.say : null;
+      const decisionId = num(message.decisionId);
       const decision: Decision = {
-        decisionId: num(message.decisionId),
+        decisionId,
         say,
         hangUp: message.hangUp === true,
         reason: str(message.reason),
         tMs: num(message.tMs),
         discarded: false,
       };
-      if (say) return { ...state, decision, pending: { decisionId: decision.decisionId, say, tMs: decision.tMs } };
+      // The realtime evaluator decides once it said it: its whole transcript closes its line.
+      const spoken = callerLineIndex(state.entries, decisionId);
+      if (spoken !== -1) {
+        const entries = say ? state.entries.map((entry, i) => (i === spoken ? { ...entry, text: say } : entry)) : state.entries;
+        return { ...state, decision, entries };
+      }
+      if (say) return { ...state, decision, pending: { decisionId, say, tMs: decision.tMs } };
       return { ...state, decision, pending: null, turnState: decision.hangUp ? "hanging_up" : "waiting" };
     }
     case "callerSpeaking": {
+      const decisionId = num(message.decisionId);
       const entry: TranscriptEntry = {
         key: `live-${state.seq}`,
         role: "caller",
         text: str(message.say),
         tMs: num(message.tMs),
-        intent: str(message.reason) || undefined,
+        intent: callerIntent(str(message.reason)),
+        ...(decisionId === null ? {} : { decisionId }),
       };
       const pending = state.pending?.decisionId === num(message.decisionId) ? null : state.pending;
       return { ...state, pending, turnState: "evaluator", entries: [...state.entries, entry], seq: state.seq + 1 };
+    }
+    case "callerText": {
+      // The next piece of what the realtime evaluator is saying, in order.
+      const index = callerLineIndex(state.entries, num(message.decisionId));
+      if (index === -1) return state;
+      const entries = state.entries.map((entry, i) => (i === index ? { ...entry, text: entry.text + str(message.text) } : entry));
+      return { ...state, entries };
     }
     case "callerDecisionDiscarded": {
       const id = num(message.decisionId);

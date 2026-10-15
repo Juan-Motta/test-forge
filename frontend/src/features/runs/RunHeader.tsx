@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useState, type ReactNode } from "react";
-import { Badge, CheckIcon, CopyIcon, IconButton } from "@/ui";
-import { clock, endReasonLabel, runDurationMs, shortId } from "./format";
+import type { ReactNode } from "react";
+import { Badge, CopyButton } from "@/ui";
+import { clock, endReasonLabel, runDurationMs } from "./format";
 import { runKind, textModeLabel } from "./kind";
 import { RunStatusChip } from "./RunStatusChip";
 import type { RunDetail } from "./types";
@@ -31,7 +31,6 @@ export const shortRunId = (id: string) => id.slice(0, 8);
  * who took part, how long it took, the thread id (the Langfuse session, copyable) and the evaluator.
  */
 export function RunHeader({ run, actions }: { run: RunDetail; actions?: ReactNode }) {
-  const [copied, setCopied] = useState(false);
   const kind = runKind(run);
   const reason = endReasonLabel(run.endReason, kind);
   // Text runs have no evaluator voice: the chip names the agent's kind and mode instead.
@@ -39,15 +38,6 @@ export function RunHeader({ run, actions }: { run: RunDetail; actions?: ReactNod
     kind === "text" ? ["Text agent", textModeLabel(run)].filter(Boolean).join(" · ") : evaluatorLabel(run);
   const durationMs = run.summary?.durationMs ?? runDurationMs(run);
   const persona = personaLine(run);
-
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(run.threadId);
-      setCopied(true);
-    } catch {
-      setCopied(false);
-    }
-  }
 
   return (
     <header className="flex flex-wrap items-end justify-between gap-4">
@@ -93,13 +83,14 @@ export function RunHeader({ run, actions }: { run: RunDetail; actions?: ReactNod
             </li>
           ) : null}
           <li>
-            <Badge tone="muted" mono className="py-0 pr-0.5">
-              <span title={run.threadId}>thread {shortId(run.threadId)}</span>
-              <IconButton
+            <Badge tone="muted" mono className="max-w-full py-0 pr-0.5">
+              <span className="min-w-0 whitespace-normal break-all">thread {run.threadId}</span>
+              <CopyButton
+                text={run.threadId}
                 label="Copy thread id"
+                copiedMessage="Thread id copied"
+                iconSize={13}
                 className="size-7 min-h-0 min-w-0"
-                icon={copied ? <CheckIcon size={13} /> : <CopyIcon size={13} />}
-                onClick={() => void copy()}
               />
             </Badge>
           </li>
@@ -109,9 +100,6 @@ export function RunHeader({ run, actions }: { run: RunDetail; actions?: ReactNod
             </li>
           ) : null}
         </ul>
-        <span role="status" className="sr-only">
-          {copied ? "Thread id copied" : ""}
-        </span>
       </div>
       {actions ? <div className="flex flex-wrap items-center gap-2.5">{actions}</div> : null}
     </header>

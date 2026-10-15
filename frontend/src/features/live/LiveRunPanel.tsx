@@ -3,19 +3,19 @@
 import { useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useEffect, useEffectEvent, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { clock, endReasonLabel, isActive, latency, shortId } from "@/features/runs/format";
+import { clock, endReasonLabel, isActive, latency } from "@/features/runs/format";
 import { useCancelRun, useRun, runQueryKey } from "@/features/runs/queries";
 import { ChatTranscript } from "@/features/runs/ChatTranscript";
 import { runKind, textModeLabel } from "@/features/runs/kind";
 import { personaLine } from "@/features/runs/RunHeader";
 import { RunStatusChip } from "@/features/runs/RunStatusChip";
-import { interruptedAt } from "@/features/runs/transcript";
+import { callerIntent, interruptedAt } from "@/features/runs/transcript";
 import { errorMessage } from "@/lib/api";
 import { AGENT_CHANNEL, createLivePlayer, type Mix } from "@/lib/live/audio";
 import type { LiveConnectionState } from "@/lib/live/connection";
 import { createLevelMeter, type LevelMeter } from "@/lib/live/levels";
 import { useNow } from "@/lib/time/use-now";
-import { Alert, Badge, Button, KpiTile, LiveDot, Spinner, buttonClasses, cn } from "@/ui";
+import { Alert, Badge, Button, CopyButton, KpiTile, LiveDot, Spinner, buttonClasses, cn } from "@/ui";
 import { ListenControls } from "./ListenControls";
 import { LiveLanes } from "./LiveLanes";
 import { LiveTranscript } from "./LiveTranscript";
@@ -176,10 +176,17 @@ export function LiveRunPanel({ runId, meter: sharedMeter, onStats, autoListen = 
               {data.scenarioName}
             </h2>
           </div>
-          <p className="text-[13px] text-muted">
-            {[data.agentName, personaLine(data)].filter(Boolean).join(" · ")}
-            {" · thread "}
-            <span className="font-mono text-fg/85">{shortId(data.threadId)}</span>
+          <p className="text-[13px] text-muted">{[data.agentName, personaLine(data)].filter(Boolean).join(" · ")}</p>
+          <p className="flex min-w-0 items-center gap-1 text-[13px] text-muted">
+            <span>thread</span>
+            <span className="min-w-0 font-mono break-all text-fg/85">{data.threadId}</span>
+            <CopyButton
+              text={data.threadId}
+              label="Copy thread id"
+              copiedMessage="Thread id copied"
+              iconSize={13}
+              className="size-7 min-h-0 min-w-0"
+            />
           </p>
           <div className="flex flex-wrap items-center gap-2 text-[13px]">
             <RunStatusChip status={status} />
@@ -314,7 +321,7 @@ export function LiveRunPanel({ runId, meter: sharedMeter, onStats, autoListen = 
                         : "Hangs up"
                       : "Stays silent"}
                 </p>
-                <p className="text-muted">{state.decision.reason}</p>
+                {callerIntent(state.decision.reason) ? <p className="text-muted">{state.decision.reason}</p> : null}
               </div>
             ) : (
               <p className="text-sm text-muted">The evaluator has not decided anything yet.</p>
