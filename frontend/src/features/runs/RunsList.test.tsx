@@ -44,6 +44,15 @@ function rowNames() {
   return screen.getAllByRole("row").slice(1).map((row) => within(row).getAllByRole("link")[0].textContent);
 }
 
+/** The table row whose scenario links to the report of run `id`. */
+function rowOf(table: HTMLElement, id: string): HTMLElement {
+  const row = within(table)
+    .getAllByRole("row")
+    .find((candidate) => within(candidate).queryAllByRole("link").some((link) => link.getAttribute("href") === `/runs/${id}`));
+  if (!row) throw new Error(`no row for run ${id}`);
+  return row;
+}
+
 describe("Runs list", () => {
   beforeEach(() => {
     nav.push.mockReset();
@@ -58,7 +67,7 @@ describe("Runs list", () => {
 
     const table = await screen.findByRole("table", { name: "Runs" });
     expect(rowNames()).toEqual(["Cancel within 24h", "Booking with date change", "Booking with date change"]);
-    const row = within(table).getByRole("row", { name: /r-2/ });
+    const row = rowOf(table, "r-2");
     expect(within(row).getByText("Failed")).toBeInTheDocument();
     expect(within(row).getByText("Speech synthesis failed")).toBeInTheDocument();
     expect(within(row).getByText("0:30")).toBeInTheDocument();
@@ -66,7 +75,7 @@ describe("Runs list", () => {
     expect(within(row).getAllByRole("link").map((link) => link.getAttribute("href"))).toContain("/runs/r-2");
     expect(within(row).queryByRole("link", { name: /^Open run/ })).not.toBeInTheDocument();
     expect(within(row).queryByRole("button", { name: /Cancel/ })).not.toBeInTheDocument();
-    const live = within(table).getByRole("row", { name: /r-3/ });
+    const live = rowOf(table, "r-3");
     expect(within(live).getByText("Running")).toBeInTheDocument();
     expect(within(live).getByRole("link", { name: "Watch run r-3 live" })).toHaveAttribute("href", "/runs/r-3/live");
   });
@@ -124,11 +133,8 @@ describe("Runs list", () => {
     await waitFor(() => expect(rowNames()).toHaveLength(3));
     expect(screen.getByRole("radio", { name: "Oldest first" })).toBeChecked();
     expect(api.listQueries[0]).toContain("order=oldest");
-    expect(screen.getAllByRole("row").slice(1).map((row) => within(row).getByTitle(/^r-\d$/).textContent)).toEqual([
-      "r-1",
-      "r-2",
-      "r-3",
-    ]);
+    const reportOf = (row: HTMLElement) => within(row).getAllByRole("link")[0].getAttribute("href");
+    expect(screen.getAllByRole("row").slice(1).map(reportOf)).toEqual(["/runs/r-1", "/runs/r-2", "/runs/r-3"]);
   });
 
   it("shows the same runs as cards for small screens", async () => {
@@ -138,14 +144,14 @@ describe("Runs list", () => {
 
     const table = await screen.findByRole("table", { name: "Runs" });
     const cards = screen.getByRole("list", { name: "Runs" });
-    const tableIds = within(table)
+    const tableReports = within(table)
       .getAllByRole("row")
       .slice(1)
-      .map((row) => within(row).getByTitle(/^r-\d$/).textContent);
+      .map((row) => within(row).getAllByRole("link")[0].getAttribute("href"));
     const items = within(cards).getAllByRole("listitem");
-    expect(items.map((item) => within(item).getByRole("button", { name: /^Copy run id / }).getAttribute("aria-label"))).toEqual(
-      tableIds.map((id) => `Copy run id ${id}`),
-    );
+    expect(items.map((item) => within(item).getAllByRole("link")[0].getAttribute("href"))).toEqual(tableReports);
+    // The cards keep the run id with its copy button (small screens have no other place to see it).
+    expect(within(items[0]).getByRole("button", { name: /^Copy run id / })).toBeInTheDocument();
     expect(within(items[0]).getByRole("link", { name: "Cancel within 24h" })).toHaveAttribute("href", "/runs/r-3");
     // Only one of the two shows at a time: the table on wide screens, the cards below.
     expect(table.closest("div")).toHaveClass("hidden");
@@ -225,7 +231,7 @@ describe("Runs list", () => {
     await user.click(within(screen.getByRole("table", { name: "Runs" })).getByRole("button", { name: "Cancel run r-3" }));
 
     await waitFor(() => expect(api.requests).toEqual([{ method: "POST", path: "/runs/r-3/cancel", body: undefined }]));
-    const row = await screen.findByRole("row", { name: /r-3/ });
+    const row = rowOf(await screen.findByRole("table", { name: "Runs" }), "r-3");
     await waitFor(() => expect(within(row).getByText("Cancelled")).toBeInTheDocument());
   });
 
@@ -270,7 +276,7 @@ describe("Runs list in Spanish", () => {
     expect(screen.getByRole("heading", { level: 1, name: "Corridas y reportes" })).toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "Estado" })).toBeInTheDocument();
     expect(within(table).getByRole("columnheader", { name: "Escenario" })).toBeInTheDocument();
-    const row = within(table).getByRole("row", { name: /r-2/ });
+    const row = rowOf(table, "r-2");
     expect(within(row).getByText("Fallida")).toBeInTheDocument();
     expect(within(table).getAllByText("Booking with date change").length).toBeGreaterThan(0);
   });

@@ -181,7 +181,7 @@ describe("Overview recent runs", () => {
     const rows = within(table).getAllByRole("row").slice(1);
     expect(rows).toHaveLength(3);
     expect(within(rows[0]).getByRole("link", { name: "Booking with date change" })).toHaveAttribute("href", "/runs/r-pass-0001");
-    expect(within(rows[0]).getByRole("button", { name: "Copy run id r-pass-0001" })).toBeInTheDocument();
+    expect(within(rows[0]).queryByRole("button", { name: /^Copy run id / })).not.toBeInTheDocument();
     expect(within(rows[0]).getByText("Passed")).toBeInTheDocument();
     expect(within(rows[0]).getByText("Marco")).toBeInTheDocument();
     expect(within(rows[0]).getByRole("meter", { name: "Score of run r-pass-0001" })).toHaveAttribute("aria-valuenow", "88");
@@ -233,8 +233,7 @@ describe("Overview recent runs", () => {
     ]);
     const link = within(table).getByRole("link", { name: long.scenarioName });
     expect(link).toHaveAttribute("href", `/runs/${longId}`);
-    expect(within(table).getByText("7f6e5d4c…18")).toHaveAttribute("title", longId);
-    expect(within(table).getByRole("button", { name: "Copy run id 7f6e5d4c…18" })).toBeInTheDocument();
+    expect(within(table).queryByText("7f6e5d4c…18")).not.toBeInTheDocument();
     for (const text of [long.scenarioName, long.agentName, "Lucía Fernández"]) {
       const cell = within(table).getByText(text);
       expect(cell).toHaveAttribute("title", text);

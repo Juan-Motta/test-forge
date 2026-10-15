@@ -4,8 +4,8 @@ import { isJudging } from "@/features/judgements/format";
 import { runCostLabel } from "@/features/pricing/format";
 import { runResult } from "@/features/overview/run-result";
 import { useFormat, useT, type Format, type MessageKey } from "@/lib/i18n";
-import { Badge, Button, CopyButton, ScoreBar, buttonClasses, cn, focusRing } from "@/ui";
-import { clock, endReasonLabel, endReasonRepeatsStatus, isActive, latency, runDurationMs, shortId } from "./format";
+import { Badge, Button, ScoreBar, buttonClasses, cn, focusRing } from "@/ui";
+import { clock, endReasonLabel, endReasonRepeatsStatus, isActive, latency, runDurationMs } from "./format";
 import { KindBadge } from "./KindBadge";
 import { runKind } from "./kind";
 import { RunStatusChip } from "./RunStatusChip";
@@ -72,12 +72,10 @@ export function RunStarted({ run, now }: { run: Run; now: number }) {
 
 /**
  * A table's two-line run cell: the scenario, linked to the report, and under it, muted, the agent
- * and its kind, the persona and the short run id with a button that copies the full one. Every
+ * and its kind and the persona (the run id lives in the report header and on the cards). Every
  * name is ellipsized with its full text in a title, so the cell never widens its column.
  */
 export function RunIdentity({ run }: { run: Run }) {
-  const t = useT();
-  const label = shortId(run.id);
   return (
     <div className="flex min-w-0 flex-col gap-0.5">
       <Link
@@ -98,18 +96,6 @@ export function RunIdentity({ run }: { run: Run }) {
             <TruncatedText text={run.persona} className="min-w-0 shrink-[2]" />
           </>
         ) : null}
-        <span className="ml-auto flex shrink-0 items-center pl-1">
-          <span className="whitespace-nowrap font-mono text-dim" title={run.id}>
-            {label}
-          </span>
-          <CopyButton
-            text={run.id}
-            label={t("runs.copyRunId", { id: label })}
-            copiedMessage={t("runs.runIdCopied")}
-            iconSize={12}
-            size="sm"
-          />
-        </span>
       </div>
     </div>
   );

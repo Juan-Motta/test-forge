@@ -46,13 +46,13 @@ describe("Runs table scenario cell", () => {
     expect(within(voice).getByText("Hotel booking assistant")).toHaveAttribute("title", "Hotel booking assistant");
     expect(within(voice).getByText("Voice")).toBeInTheDocument();
     expect(within(voice).getByText("Lucía Fernández")).toHaveAttribute("title", "Lucía Fernández");
-    const id = within(voice).getByText("7f6e5d4c…18");
-    expect(id).toHaveAttribute("title", longId);
-    expect(within(voice).getByRole("button", { name: "Copy run id 7f6e5d4c…18" })).toBeInTheDocument();
+    // The run id is not repeated in the table: the report header shows it with a copy button.
+    expect(within(voice).queryByText("7f6e5d4c…18")).not.toBeInTheDocument();
+    expect(within(voice).queryByRole("button", { name: /^Copy run id / })).not.toBeInTheDocument();
 
     expect(within(text).getByText("Chat desk")).toBeInTheDocument();
     expect(within(text).getByText("Text")).toBeInTheDocument();
-    expect(within(text).getByRole("button", { name: "Copy run id r-text-0001" })).toBeInTheDocument();
+    expect(within(text).queryByRole("button", { name: /^Copy run id / })).not.toBeInTheDocument();
   });
 
   it("truncates long scenario, agent and persona names, keeping the full text in a title", () => {
