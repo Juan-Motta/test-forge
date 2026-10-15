@@ -52,6 +52,13 @@ describe("Run report · text runs", () => {
     expect(metric("Full reply p50")).toHaveTextContent("2.5 s");
     expect(metric("Tools used")).toHaveTextContent("1");
     expect(metric("Ended")).toHaveTextContent("The agent's reply failed");
+    // Mode, duration and end reason are chips by the title; the figures sit in their own grid.
+    const [chips, figures] = within(card).getAllByRole("definition").reduce<[HTMLElement[], HTMLElement[]]>(
+      (groups, item) => (item.querySelector("[data-tone]") ? [[...groups[0], item], groups[1]] : [groups[0], [...groups[1], item]]),
+      [[], []],
+    );
+    expect(chips.map((chip) => chip.textContent)).toEqual(["Stream", expect.any(String), "The agent's reply failed"]);
+    expect(figures.map((figure) => figure.textContent)).toContain("1.2 s");
 
     expect(screen.queryByRole("region", { name: "Call recording" })).not.toBeInTheDocument();
     expect(document.querySelector("audio")).toBeNull();
