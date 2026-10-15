@@ -36,10 +36,13 @@ export function GuideHeader() {
           >
             <ExternalLinkIcon size={16} />
             {/* Short labels on phones keep the sticky bar to one row; aria-label keeps the full name. */}
-            API<span className="hidden sm:inline">&nbsp;reference (Swagger)</span>
+            {/* One text node per label: the button's flex gap would space out split pieces. */}
+            <span className="sm:hidden">API</span>
+            <span className="hidden sm:inline">API reference (Swagger)</span>
           </a>
           <Link href="/" aria-label="Open the app" className={buttonClasses("primary", "min-h-10 px-3.5 no-underline hover:text-on-evaluator")}>
-            Open<span className="hidden sm:inline">&nbsp;the</span> app
+            <span className="sm:hidden">Open app</span>
+            <span className="hidden sm:inline">Open the app</span>
           </Link>
         </nav>
       </div>
