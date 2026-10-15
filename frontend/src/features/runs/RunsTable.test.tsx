@@ -25,7 +25,8 @@ describe("Runs table columns", () => {
     const { headers } = renderTable([runFixture()]);
 
     expect(headers).toEqual(["Scenario", "Duration", "Turns", "p50 latency", "Cost", "Outcome", "Started", "Actions"]);
-    expect(screen.getByRole("table", { name: "Runs" }).className).not.toMatch(/min-w-/);
+    // A floor (not the old 80rem) that still fits the ~942 px the table gets at a 1280 px screen.
+    expect(screen.getByRole("table", { name: "Runs" }).className).toMatch(/min-w-\[56rem\]/);
   });
 });
 
@@ -159,14 +160,16 @@ describe("Runs table started column", () => {
     const runs = [
       runFixture({ id: "r-started-1", startedAt: "2026-10-05T16:55:00Z" }),
       runFixture({ id: "r-queued-01", status: "queued", startedAt: null, endedAt: null, createdAt: "2026-10-05T16:58:00Z" }),
+      runFixture({ id: "r-cancel-01", status: "cancelled", startedAt: null, endedAt: "2026-10-05T16:59:00Z", createdAt: "2026-10-05T16:57:00Z" }),
     ];
     const { column } = renderTable(runs);
-    const [started, queued] = column("Started");
+    const [started, queued, cancelled] = column("Started");
 
     expect(within(started).getByText("5 minutes ago")).toHaveAttribute("dateTime", "2026-10-05T16:55:00Z");
     expect(within(queued).getByText("2 minutes ago")).toHaveAttribute("dateTime", "2026-10-05T16:58:00Z");
     expect(queued).toHaveTextContent("Not started");
     expect(started).not.toHaveTextContent("Not started");
+    expect(cancelled).toHaveTextContent("Not started"); // cancelled while still queued
   });
 });
 

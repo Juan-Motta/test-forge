@@ -35,8 +35,10 @@ type RunsTableProps = {
  */
 export function RunsTable({ runs, onCancel, cancellingId, now, className }: RunsTableProps) {
   return (
-    <div className={cn("rounded-xl border border-line bg-panel px-3 py-2", className)}>
-      <table aria-label="Runs" className="w-full table-fixed border-collapse text-left text-[13px]">
+    // Fits without scrolling from the xl breakpoint where it is shown; the floor keeps the
+    // scenario column readable, and the box scrolls instead of crushing it if it ever gets narrower.
+    <div className={cn("overflow-x-auto rounded-xl border border-line bg-panel px-3 py-2", className)}>
+      <table aria-label="Runs" className="w-full min-w-[56rem] table-fixed border-collapse text-left text-[13px]">
         <thead className="text-dim">
           <tr>
             <th scope="col" className={HEAD}>
