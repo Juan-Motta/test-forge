@@ -65,3 +65,15 @@ Three live/report improvements asked by the user (2026-10-15):
   pass alone), lint, typecheck, build clean.
 - Follow-up: `backend/migrations/env.py` does not import `modules.pricing.models` (outside the
   writer's surface), so alembic autogenerate would not see `model_prices`.
+- Commits: T1+T2 ff9c43b (reviewed medium, APPROVED + acknowledged); T3+T4 482e7d0 with the two
+  ff9c43b findings (stale turnState on a realtime decision for a shown line; a live-text publish
+  error no longer fails the caller turn) and `migrations/env.py` importing the pricing models
+  (reviewed medium, APPROVED + acknowledged); 8d9a2dc review fix: prices limited to 4 decimals
+  (Numeric(12,4) would round silently) and the price field is text so a typo is refused instead
+  of dropped (assessed under_budget). Full checks: backend 1127 passed, frontend 669 passed
+  (`--maxWorkers=4`; the default worker count times out unrelated 5 s tests), lint, typecheck,
+  build.
+- TTS: the speech endpoint streams raw PCM with no usage; input tokens are estimated (chars/4)
+  and audio output is not priced, so pipeline costs are marked incomplete ("+").
+- T5 pending: a real run to see the cost and the live evaluator text (paid; ask first).
+
