@@ -9,7 +9,7 @@ import { runCostFixture } from "@/features/pricing/testing";
 import { renderWithClient } from "@/test/render";
 import { apiUrl, server } from "@/test/server";
 import { RunDetailContainer } from "../RunDetailContainer";
-import { levelsFixture, mockLangfuseLookup, mockRunsApi, runDetailFixture, runFixture, traceFixture } from "../testing";
+import { levelsFixture, mockRunsApi, runDetailFixture, runFixture, traceFixture } from "../testing";
 import type { RunLevels, RunTrace } from "../types";
 
 vi.mock("next/navigation", () => ({
@@ -22,6 +22,7 @@ type Options = {
   rejudgeConflict?: string;
   levels?: RunLevels | number;
   trace?: RunTrace;
+  locale?: "en" | "es";
 };
 
 function renderReport(judgement: Judgement | Judgement[], options: Options = {}) {
@@ -31,7 +32,7 @@ function renderReport(judgement: Judgement | Judgement[], options: Options = {})
     traces: options.trace ? { [RUN_ID]: options.trace } : undefined,
   });
   const api = mockJudgementApi({ [RUN_ID]: judgement }, { rejudgeConflict: options.rejudgeConflict });
-  const view = renderWithClient(<RunDetailContainer runId={RUN_ID} judgementPollMs={20} />);
+  const view = renderWithClient(<RunDetailContainer runId={RUN_ID} judgementPollMs={20} />, { locale: options.locale });
   return { api, runs, ...view };
 }
 
@@ -437,25 +438,42 @@ describe("Run report · trace, suggestions and handoff", () => {
     expect(screen.queryByRole("button", { name: "Copy brief" })).not.toBeInTheDocument();
   });
 
-  it("links the trace in Langfuse when the agent's Langfuse host is known", async () => {
-    mockLangfuseLookup("a-hotel", "https://cloud.langfuse.com/");
-    renderReport({ status: "none" }, { trace: traceFixture() });
+  const SESSION_URL = "https://cloud.langfuse.com/project/proj-1/sessions/thread%201";
+  const TRACE_URL = "https://cloud.langfuse.com/trace/t-1";
+
+  it("links the run's Langfuse session, every turn together", async () => {
+    renderReport({ status: "none" }, { trace: traceFixture({ langfuse: { sessionUrl: SESSION_URL, traceUrl: TRACE_URL } }) });
+
+    const link = await screen.findByRole("link", { name: /Open session in Langfuse/ });
+    expect(link).toHaveAttribute("href", SESSION_URL);
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(link).toHaveAttribute("rel", "noopener noreferrer");
+    expect(screen.queryByRole("link", { name: /Open trace in Langfuse/ })).not.toBeInTheDocument();
+  });
+
+  it("labels the session link in Spanish", async () => {
+    renderReport(
+      { status: "none" },
+      { trace: traceFixture({ langfuse: { sessionUrl: SESSION_URL, traceUrl: TRACE_URL } }), locale: "es" },
+    );
+
+    const link = await screen.findByRole("link", { name: /Abrir sesión en Langfuse/ });
+    expect(link).toHaveAttribute("href", SESSION_URL);
+  });
+
+  it("falls back to the single trace when the session is unknown", async () => {
+    renderReport({ status: "none" }, { trace: traceFixture({ langfuse: { sessionUrl: null, traceUrl: TRACE_URL } }) });
 
     const link = await screen.findByRole("link", { name: /Open trace in Langfuse/ });
-    expect(link).toHaveAttribute("href", "https://cloud.langfuse.com/trace/t-1");
-    expect(link).toHaveAttribute("target", "_blank");
+    expect(link).toHaveAttribute("href", TRACE_URL);
+    expect(screen.queryByRole("link", { name: /Open session in Langfuse/ })).not.toBeInTheDocument();
   });
 
   it("omits the Langfuse link without a Langfuse connection", async () => {
-    mockLangfuseLookup("a-hotel", null);
-    const { queryClient } = renderReport({ status: "none" }, { trace: traceFixture() });
+    const { queryClient } = renderReport({ status: "none" }, { trace: traceFixture({ langfuse: null }) });
     await screen.findByRole("region", { name: "Call recording" });
-    // Wait until the agent (it links no Langfuse connection) was fetched and nothing else loads.
-    await waitFor(() => {
-      expect(queryClient.getQueryState(["agents"])?.status).toBe("success");
-      expect(queryClient.isFetching()).toBe(0);
-    });
-    expect(screen.queryByRole("link", { name: /Open trace in Langfuse/ })).not.toBeInTheDocument();
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    expect(screen.queryByRole("link", { name: /in Langfuse/ })).not.toBeInTheDocument();
   });
 });
 

@@ -1,10 +1,6 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { listAgents } from "@/features/agents/api";
-import { agentsQueryKey } from "@/features/agents/queries";
-import { listConnections } from "@/features/connections/api";
-import { connectionsQueryKey } from "@/features/connections/queries";
 import { isJudging } from "@/features/judgements/format";
 import {
   LEVEL_BINS,
@@ -122,23 +118,4 @@ export function useRunTrace(id: string, options: { enabled?: boolean } = {}) {
 export function useRerun() {
   const queryClient = useQueryClient();
   return useMutation({ mutationFn: (id: string) => rerunRun(id), onSuccess: () => refreshRuns(queryClient) });
-}
-
-/**
- * The Langfuse host of the agent's Langfuse connection (e.g. `https://cloud.langfuse.com`), or
- * null when it is unknown: no agent, no connection, or not loaded (yet). `enabled`: only look it up
- * when there is a trace to open.
- */
-export function useLangfuseHost(agentId: string | null, options: { enabled?: boolean } = {}): string | null {
-  const enabled = (options.enabled ?? true) && agentId !== null;
-  const agents = useQuery({ queryKey: agentsQueryKey, queryFn: ({ signal }) => listAgents(signal), enabled });
-  const connectionId = agents.data?.find((agent) => agent.id === agentId)?.langfuseConnectionId ?? null;
-  const connections = useQuery({
-    queryKey: connectionsQueryKey,
-    queryFn: ({ signal }) => listConnections(signal),
-    enabled: enabled && connectionId !== null,
-  });
-  const connection = connections.data?.find((item) => item.id === connectionId && item.kind === "langfuse");
-  const host = connection?.config.host;
-  return typeof host === "string" && /^https?:\/\//.test(host) ? host.replace(/\/+$/, "") : null;
 }

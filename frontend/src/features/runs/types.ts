@@ -209,4 +209,10 @@ export type RunTrace = {
   /** The judge digest's stats (camelCase); any key may be missing. */
   stats: (Record<string, unknown> & { totalTokens?: number; observationCount?: number }) | null;
   observations: TraceObservation[];
+  /**
+   * Links into Langfuse's UI; null without a Langfuse connection (or while the run is active).
+   * `sessionUrl`: every turn of the run (null when Langfuse could not be asked for the project);
+   * `traceUrl`: the first trace only (null without saved observations).
+   */
+  langfuse?: { sessionUrl: string | null; traceUrl: string | null } | null;
 };

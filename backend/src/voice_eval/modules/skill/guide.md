@@ -420,7 +420,11 @@ Agent trace: `GET /api/runs/{runId}/trace` returns the agent's Langfuse observat
 the run was judged: `available`, `note` (why there is none), `stats` and `observations`, each
 with `id`, `traceId`, `parentId`, `type` (`llm`, `tool`, `span`, `event`, ...), `name`,
 `startMs` (from the run start), `durationMs`, `model`, `tokens`, `costUsd`, `level`,
-`statusMessage` and `depth` (nesting), sorted by start.
+`statusMessage` and `depth` (nesting), sorted by start. `langfuse` links the run in Langfuse's
+UI, or is `null` when the agent has no Langfuse connection (or the run is in progress):
+`sessionUrl` opens the run's session (its `threadId`), every turn's trace together, and is `null`
+when Langfuse could not be asked for the project; `traceUrl` opens the first trace only, `null`
+without saved observations.
 
 ## Reading the judgement
 

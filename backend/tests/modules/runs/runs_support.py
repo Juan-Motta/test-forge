@@ -166,6 +166,8 @@ async def insert_run(
     started_at: datetime | None = None,
     scenario_id: uuid.UUID | None = None,
     summary: dict[str, Any] | None = None,
+    thread_id: str | None = None,
+    agent: dict[str, Any] | None = None,
 ) -> uuid.UUID:
     """A run written straight to the database (in its own batch), never driven."""
     from voice_eval.modules.runs.models import RunBatchRecord, RunRecord
@@ -182,11 +184,11 @@ async def insert_run(
                 batch_id=batch_id,
                 position=0,
                 scenario_id=scenario_id,
-                thread_id=f"thread-{str(run_id)[:8]}",
+                thread_id=thread_id or f"thread-{str(run_id)[:8]}",
                 status=status,
                 snapshot={
                     "scenario": {"id": str(scenario_id or uuid.uuid4()), "name": "Balance"},
-                    "agent": {"id": str(uuid.uuid4()), "name": "Vivi"},
+                    "agent": agent or {"id": str(uuid.uuid4()), "name": "Vivi"},
                 },
                 summary=summary,
                 artifacts_dir=str(artifacts_dir) if artifacts_dir else None,

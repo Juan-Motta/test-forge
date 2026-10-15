@@ -22,7 +22,7 @@ import {
 import { isActive } from "./format";
 import { runKind } from "./kind";
 import { notRunnableReasons } from "./launch";
-import { useCancelRun, useLangfuseHost, useRerun, useRun, useRunTrace } from "./queries";
+import { useCancelRun, useRerun, useRun, useRunTrace } from "./queries";
 import { FinishedReport } from "./report/FinishedReport";
 import { RerunDialog } from "./report/RerunDialog";
 import { RunHeader } from "./RunHeader";
@@ -80,8 +80,9 @@ function RunReport({ run, judgementPollMs }: { run: RunDetail; judgementPollMs?:
   const active = isActive(run.status);
   const controller = useJudgementController(run.id, { enabled: !active, endedAt: run.endedAt, pollMs: judgementPollMs });
   const trace = useRunTrace(run.id, { enabled: !active });
-  const traceId = trace.data?.available ? trace.data.observations.find((item) => item.traceId)?.traceId : undefined;
-  const langfuseHost = useLangfuseHost(run.agentId, { enabled: Boolean(traceId) });
+  // The session shows every turn of the run; a single trace only when the session is unknown.
+  const sessionUrl = trace.data?.langfuse?.sessionUrl ?? null;
+  const langfuseUrl = sessionUrl ?? trace.data?.langfuse?.traceUrl ?? null;
 
   function onConfirmRerun() {
     if (launching.current) return;
@@ -111,14 +112,9 @@ function RunReport({ run, judgementPollMs }: { run: RunDetail; judgementPollMs?:
           </Button>
         </>
       ) : null}
-      {langfuseHost && traceId ? (
-        <a
-          href={`${langfuseHost}/trace/${encodeURIComponent(traceId)}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className={buttonClasses("secondary")}
-        >
-          {t("runs.openTrace")}
+      {langfuseUrl ? (
+        <a href={langfuseUrl} target="_blank" rel="noopener noreferrer" className={buttonClasses("secondary")}>
+          {sessionUrl ? t("runs.openSession") : t("runs.openTrace")}
           <ExternalLinkIcon size={14} />
           <span className="sr-only">{` ${t("common.newTab")}`}</span>
         </a>

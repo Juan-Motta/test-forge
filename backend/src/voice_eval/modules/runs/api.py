@@ -20,6 +20,12 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 from pydantic.alias_generators import to_camel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from voice_eval.modules.connections.langfuse_links import (
+    LangfuseLinks,
+    default_links,
+    session_url,
+    trace_url,
+)
 from voice_eval.modules.pricing import service as pricing
 from voice_eval.modules.pricing.domain import ModelPrice, run_cost
 from voice_eval.modules.runs import service
@@ -41,6 +47,8 @@ from voice_eval.modules.runs.manager import RunManager, read_json
 from voice_eval.modules.runs.trace import build_trace
 from voice_eval.modules.users.deps import Principal, current_principal
 from voice_eval.platform.db import get_db_session
+from voice_eval.platform.secrets import SecretBox, app_secret_box
+from voice_eval.platform.settings import Settings, app_settings
 
 CANCEL_STATUSES = frozenset({RunStatus.CANCELLED, RunStatus.INTERRUPTED})
 TRACES_FILE = "langfuse.json"  # written by the judge (`modules.judgements.coordinator`)
@@ -63,6 +71,16 @@ def manager(request: Request) -> RunManager:
 
 
 Manager = Annotated[RunManager, Depends(manager)]
+
+
+def langfuse_links() -> LangfuseLinks:
+    """FastAPI dependency: the process-wide Langfuse project cache (overridden in tests)."""
+    return default_links
+
+
+Links = Annotated[LangfuseLinks, Depends(langfuse_links)]
+Box = Annotated[SecretBox, Depends(app_secret_box)]
+AppSettings = Annotated[Settings, Depends(app_settings)]
 
 
 def camelize(value: Any) -> Any:
@@ -253,11 +271,17 @@ class TraceObservationOut(CamelModel):
     depth: int  # nesting under the parent observation (0: a root)
 
 
+class LangfuseLinksOut(CamelModel):
+    session_url: str | None  # every trace (turn) of the run; None when the project is unknown
+    trace_url: str | None  # the run's first trace; None without saved observations
+
+
 class TraceOut(CamelModel):
     available: bool
     note: str | None
     stats: dict[str, Any] | None  # the judge digest's stats (camelCase)
     observations: list[TraceObservationOut]
+    langfuse: LangfuseLinksOut | None = None  # None when the agent has no Langfuse connection
 
 
 class LevelTurnOut(CamelModel):
@@ -485,10 +509,15 @@ def _artifacts(run: Run, runs: RunManager) -> Path:
 
 
 @router.get("/{run_id}/trace", response_model=TraceOut)
-async def get_trace(run_id: uuid.UUID, db: Db, runs: Manager) -> dict[str, Any]:
+async def get_trace(
+    run_id: uuid.UUID, db: Db, runs: Manager, links: Links, box: Box, settings: AppSettings
+) -> dict[str, Any]:
     """The agent's Langfuse observations for the run, as a waterfall (offsets from the run
     start). `available` is false, with a `note`, when none were saved (no Langfuse connection,
-    nothing found, the run still in progress or not judged yet)."""
+    nothing found, the run still in progress or not judged yet). `langfuse` links the run in
+    Langfuse's UI: `sessionUrl` (every turn of the run) when Langfuse told its project id, and
+    `traceUrl` (the first trace) when observations were saved; null without a Langfuse
+    connection or while the run is in progress."""
     try:
         run = await service.get_run(db, run_id)
     except RunNotFound:
@@ -501,7 +530,37 @@ async def get_trace(run_id: uuid.UUID, db: Db, runs: Manager) -> dict[str, Any]:
     usable = isinstance(observations, list) and any(isinstance(row, dict) for row in observations)
     if not usable:
         note = await service.judgement_trace_note(db, run_id) or NO_TRACE_NOTE
-    return build_trace(observations, origin=run.started_at, note=note)
+    trace = build_trace(observations, origin=run.started_at, note=note)
+    trace["langfuse"] = await _langfuse_links(db, run, trace, links, box, settings)
+    return trace
+
+
+async def _langfuse_links(
+    db: AsyncSession,
+    run: Run,
+    trace: dict[str, Any],
+    links: LangfuseLinks,
+    box: SecretBox,
+    settings: Settings,
+) -> dict[str, str | None] | None:
+    connection_id = await service.langfuse_connection_id(db, run)
+    if connection_id is None:
+        return None
+    development = settings.environment == "development"
+    project = await links.resolve(
+        db, connection_id, secret_box=box, allow_local_http=development, allow_private=development
+    )
+    if project is None:
+        return None
+    trace_id = next((row["traceId"] for row in trace["observations"] if row["traceId"]), None)
+    return {
+        "session_url": (
+            session_url(project.host, project.project_id, run.thread_id)
+            if project.project_id and run.thread_id
+            else None
+        ),
+        "trace_url": trace_url(project.host, trace_id) if trace_id else None,
+    }
 
 
 _levels_cache: OrderedDict[tuple[uuid.UUID, int], RunLevels] = OrderedDict()

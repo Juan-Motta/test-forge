@@ -37,7 +37,6 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from voice_eval.judge.domain import JudgeError, JudgeResult
 from voice_eval.judge.service import judge_run
 from voice_eval.judge.translation import LANGUAGES, TranslationError, translate_result
-from voice_eval.modules.agents.models import AgentRecord
 from voice_eval.modules.connections.domain import CHAT_MODEL, UnsupportedConnection
 from voice_eval.modules.connections.runtime import build_judge, build_trace_reader
 from voice_eval.modules.judgements import service
@@ -501,13 +500,7 @@ class JudgementCoordinator:
 
     async def _langfuse_connection(self, db: AsyncSession, run: Run) -> uuid.UUID | None:
         """From the snapshot; runs launched before it kept the id fall back to the agent row."""
-        agent = run.snapshot.get("agent") or {}
-        if "langfuse_connection_id" in agent:
-            return _uuid(agent["langfuse_connection_id"])
-        if run.agent_id is None:
-            return None
-        record = await db.get(AgentRecord, run.agent_id)
-        return record.langfuse_connection_id if record is not None else None
+        return await runs.langfuse_connection_id(db, run)
 
     async def _collect_traces(
         self, run: Run, connection_id: uuid.UUID, *, poll: bool = True

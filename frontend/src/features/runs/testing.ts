@@ -1,7 +1,5 @@
 import { http, HttpResponse } from "msw/http";
 import { apiUrl, server } from "@/test/server";
-import type { Agent } from "@/features/agents/types";
-import type { Connection } from "@/features/connections/types";
 import type { Batch, BatchDetail, Run, RunDetail, RunLevels, RunSnapshot, RunStatus, RunTrace, TraceObservation } from "./types";
 import { isActive } from "./format";
 
@@ -432,17 +430,4 @@ export function mockRunsApi(initial: Run[] = [], options: MockOptions = {}) {
   }
 
   return state;
-}
-
-/**
- * `/api/agents` and `/api/connections` for the run report's Langfuse link: the agent `agentId`
- * with a Langfuse connection on `host` (or none when `host` is null).
- */
-export function mockLangfuseLookup(agentId: string, host: string | null) {
-  const agent = { id: agentId, name: "Agent", langfuseConnectionId: host ? "c-langfuse" : null } as Agent;
-  const connection = { id: "c-langfuse", name: "Langfuse", kind: "langfuse", config: { host } } as unknown as Connection;
-  server.use(
-    http.get(apiUrl("/agents"), () => HttpResponse.json([agent])),
-    http.get(apiUrl("/connections"), () => HttpResponse.json(host ? [connection] : [])),
-  );
 }

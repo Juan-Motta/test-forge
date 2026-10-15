@@ -182,6 +182,22 @@ async def judgement_trace_note(db: AsyncSession, run_id: uuid.UUID) -> str | Non
     )
 
 
+async def langfuse_connection_id(db: AsyncSession, run: Run) -> uuid.UUID | None:
+    """The agent's Langfuse connection: from the run's snapshot; runs launched before the
+    snapshot kept it fall back to the agent row."""
+    agent = run.snapshot.get("agent") or {}
+    if "langfuse_connection_id" in agent:
+        try:
+            value = agent["langfuse_connection_id"]
+            return uuid.UUID(str(value)) if value else None
+        except ValueError:
+            return None
+    if run.agent_id is None:
+        return None
+    record = await db.get(AgentRecord, run.agent_id)
+    return record.langfuse_connection_id if record is not None else None
+
+
 async def get_run(db: AsyncSession, run_id: uuid.UUID) -> Run:
     row = (await db.execute(_with_judgement().where(RunRecord.id == run_id))).one_or_none()
     if row is None:
