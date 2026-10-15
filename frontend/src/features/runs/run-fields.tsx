@@ -43,13 +43,23 @@ function turnsLabel(run: Run): string {
   return run.callerTurns == null || run.agentTurns == null ? "—" : `${run.callerTurns} / ${run.agentTurns}`;
 }
 
-/** When the run started, or when it was queued while it has not started yet. */
+/** When the run started; a run that never started (queued, or cancelled or failed while queued)
+ * says so and shows when it was queued instead. */
 export function RunStarted({ run, now }: { run: Run; now: number }) {
-  const at = run.startedAt ?? run.createdAt;
+  if (run.startedAt) {
+    return (
+      <time dateTime={run.startedAt} title={absoluteTime(run.startedAt)}>
+        {relativeTime(run.startedAt, now)}
+      </time>
+    );
+  }
   return (
-    <time dateTime={at} title={absoluteTime(at)}>
-      {relativeTime(at, now)}
-    </time>
+    <span className="text-muted">
+      Not started ·{" queued "}
+      <time dateTime={run.createdAt} title={absoluteTime(run.createdAt)}>
+        {relativeTime(run.createdAt, now)}
+      </time>
+    </span>
   );
 }
 

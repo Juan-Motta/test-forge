@@ -148,5 +148,7 @@ describe("Runs table started column", () => {
       .map((row) => within(row).getAllByRole("cell")[column]);
     expect(within(started).getByText("5 minutes ago")).toHaveAttribute("dateTime", "2026-10-05T16:55:00Z");
     expect(within(queued).getByText("2 minutes ago")).toHaveAttribute("dateTime", "2026-10-05T16:58:00Z");
+    expect(queued).toHaveTextContent("Not started");
+    expect(started).not.toHaveTextContent("Not started");
   });
 });
