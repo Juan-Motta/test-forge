@@ -7,17 +7,36 @@ import { PageHeader } from "@/features/shell/PageHeader";
 import { useScenarios } from "@/features/scenarios/queries";
 import { errorMessage } from "@/lib/api";
 import { useNow } from "@/lib/time/use-now";
-import { Alert, Button, CloseIcon, EmptyState, Field, RunsIcon, Select, Spinner, buttonClasses, cn, focusRing } from "@/ui";
+import {
+  Alert,
+  Button,
+  CloseIcon,
+  EmptyState,
+  Field,
+  RunsIcon,
+  SegmentedControl,
+  Select,
+  Spinner,
+  buttonClasses,
+  cn,
+  focusRing,
+} from "@/ui";
 import { BatchesPanel, batchName } from "./BatchesPanel";
 import { STATUS_LABELS } from "./format";
 import { useBatch, useBatches, useCancelRun, useRuns } from "./queries";
+import { RunCards } from "./RunCards";
 import { RunsTable } from "./RunsTable";
-import { RUN_STATUSES, type Run, type RunStatus } from "./types";
+import { RUN_STATUSES, type Run, type RunOrder, type RunStatus } from "./types";
 
 export const PAGE_SIZE = 20;
 const POLL_MS = 4000;
 
-type Filters = { status: RunStatus | ""; scenarioId: string; batchId: string; page: number };
+const ORDERS = [
+  { value: "newest", label: "Newest first" },
+  { value: "oldest", label: "Oldest first" },
+] as const satisfies readonly { value: RunOrder; label: string }[];
+
+type Filters = { status: RunStatus | ""; scenarioId: string; batchId: string; order: RunOrder; page: number };
 
 function filtersFrom(params: URLSearchParams): Filters {
   const status = params.get("status") ?? "";
@@ -26,6 +45,7 @@ function filtersFrom(params: URLSearchParams): Filters {
     status: (RUN_STATUSES as readonly string[]).includes(status) ? (status as RunStatus) : "",
     scenarioId: params.get("scenarioId") ?? "",
     batchId: params.get("batchId") ?? "",
+    order: params.get("order") === "oldest" ? "oldest" : "newest",
     page: Number.isInteger(page) && page > 0 ? page : 1,
   };
 }
@@ -35,12 +55,16 @@ function hrefOf(filters: Filters): string {
   if (filters.status) params.set("status", filters.status);
   if (filters.scenarioId) params.set("scenarioId", filters.scenarioId);
   if (filters.batchId) params.set("batchId", filters.batchId);
+  if (filters.order !== "newest") params.set("order", filters.order);
   if (filters.page > 1) params.set("page", String(filters.page));
   const query = params.toString();
   return query ? `/runs?${query}` : "/runs";
 }
 
-/** Container for `/runs`: every run, newest first, filtered by status, scenario and batch. */
+/**
+ * Container for `/runs`: every run, newest (or oldest) first, filtered by status, scenario and
+ * batch. Wide screens get the runs table; narrower ones the same runs as cards.
+ */
 export function RunsContainer() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -63,6 +87,7 @@ export function RunsContainer() {
       status: filters.status || undefined,
       scenarioId: filters.scenarioId || undefined,
       batchId: filters.batchId || undefined,
+      order: filters.order === "newest" ? undefined : filters.order,
       limit: PAGE_SIZE,
       offset: (filters.page - 1) * PAGE_SIZE,
     },
@@ -131,11 +156,20 @@ export function RunsContainer() {
   } else {
     body = (
       <>
+        {/* One of the two shows at a time (CSS), so the hidden one is out of the a11y tree too. */}
         <RunsTable
           runs={items}
           now={now}
           onCancel={onCancel}
           cancellingId={cancel.isPending ? cancel.variables : undefined}
+          className="hidden xl:block"
+        />
+        <RunCards
+          runs={items}
+          now={now}
+          onCancel={onCancel}
+          cancellingId={cancel.isPending ? cancel.variables : undefined}
+          className="xl:hidden"
         />
         <nav aria-label="Pagination" className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted">
           <span>{`${first}–${last} of ${total}`}</span>
@@ -209,6 +243,12 @@ export function RunsContainer() {
             )}
           </Field>
         </div>
+        <SegmentedControl
+          label="Order"
+          options={ORDERS}
+          value={filters.order}
+          onChange={(order) => update({ order })}
+        />
         {filters.batchId ? (
           <span className="inline-flex min-h-9 items-center gap-1 rounded-full border border-evaluator bg-evaluator/15 pr-1 pl-3.5 text-xs">
             {batchLabel}

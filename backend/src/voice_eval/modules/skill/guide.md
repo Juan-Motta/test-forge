@@ -61,7 +61,8 @@ raw key is shown only once. A key acts as its owner. `GET /api/auth/me` checks w
   `endConditions`, `criteria`, `facts`, `interruptions`, a connection's `config`) are replaced
   whole. `null` clears optional references; it is refused for required fields.
 - Lists of runs and batches are paginated with `limit` (1-200, default 50) and `offset`, and
-  return `{"items": [...], "total": n}`, newest first.
+  return `{"items": [...], "total": n}`, newest first (`GET /api/runs` also takes
+  `order=oldest` for oldest first).
 
 ## Costs and human approval
 
@@ -276,7 +277,8 @@ Usually a human has already configured connections, agents and scenarios: list t
 5. Stop early if needed: `POST /api/runs/{runId}/cancel` or
    `POST /api/runs/batches/{batchId}/cancel` (`202`; `409` when already finished).
 
-Other reads: `GET /api/runs?status=&scenarioId=&batchId=&limit=&offset=` (runs, newest first)
+Other reads: `GET /api/runs?status=&scenarioId=&batchId=&order=&limit=&offset=` (runs; `order` is
+`newest`, the default, or `oldest`)
 and `GET /api/runs/batches` (batches with per-status `counts`).
 
 Run one scenario again (paid, ask first): `POST /api/runs/{runId}/rerun` launches the run's

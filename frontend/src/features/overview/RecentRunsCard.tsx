@@ -5,6 +5,7 @@ import { useState, type ReactNode } from "react";
 import { absoluteTime, relativeTime } from "@/features/connections/format";
 import { clock, runDurationMs, shortId } from "@/features/runs/format";
 import { KindBadge } from "@/features/runs/KindBadge";
+import { RunCards } from "@/features/runs/RunCards";
 import { TruncatedText } from "@/features/runs/TruncatedText";
 import type { Run } from "@/features/runs/types";
 import { Badge, FilterChips, ScoreBar, cn, focusRing } from "@/ui";
@@ -41,7 +42,8 @@ const roundedScore = (run: Run) => (run.score === null || run.score === undefine
  * One definition per column: its header, width and body cell. Fixed widths for the short columns;
  * scenario takes a fixed share and agent and persona split the rest, all three ellipsized, so ids
  * and names stay on one line. The minimum width fits the card beside the insights column at
- * 1280px and up; narrower, the card scrolls sideways.
+ * 1280px and up; between 1024px and that it scrolls sideways, and below 1024px the card shows the
+ * runs as cards instead.
  */
 const COLUMNS: readonly Column[] = [
   {
@@ -149,33 +151,36 @@ export function RecentRunsCard({ runs, search, now }: { runs: Run[]; search: str
           {search.trim() ? "No recent runs match." : "No recent runs in this view."}
         </p>
       ) : (
-        <div className="overflow-x-auto">
-          <table
-            aria-labelledby={headingId}
-            className="w-full min-w-[720px] table-fixed border-collapse text-left text-[13px]"
-          >
-            <thead className="text-dim">
-              <tr>
-                {COLUMNS.map(({ name, width }) => (
-                  <th key={name} scope="col" className={cn("whitespace-nowrap border-b border-line px-2 py-2 font-medium", width)}>
-                    {name}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {shown.map((run) => (
-                <tr key={run.id}>
-                  {COLUMNS.map((column) => (
-                    <td key={column.name} className={cn(cell, column.cellClassName)}>
-                      {column.cell(run, now)}
-                    </td>
+        <>
+          <div className="hidden overflow-x-auto lg:block">
+            <table
+              aria-labelledby={headingId}
+              className="w-full min-w-[720px] table-fixed border-collapse text-left text-[13px]"
+            >
+              <thead className="text-dim">
+                <tr>
+                  {COLUMNS.map(({ name, width }) => (
+                    <th key={name} scope="col" className={cn("whitespace-nowrap border-b border-line px-2 py-2 font-medium", width)}>
+                      {name}
+                    </th>
                   ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {shown.map((run) => (
+                  <tr key={run.id}>
+                    {COLUMNS.map((column) => (
+                      <td key={column.name} className={cn(cell, column.cellClassName)}>
+                        {column.cell(run, now)}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <RunCards runs={shown} now={now} label="Recent runs" className="lg:hidden" />
+        </>
       )}
     </section>
   );

@@ -161,10 +161,14 @@ export type LaunchInput = {
   label?: string;
 };
 
+/** `newest` (the default) lists the newest runs first, `oldest` the oldest first. */
+export type RunOrder = "newest" | "oldest";
+
 export type RunFilters = {
   status?: RunStatus;
   scenarioId?: string;
   batchId?: string;
+  order?: RunOrder;
   limit?: number;
   offset?: number;
 };

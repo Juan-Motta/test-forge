@@ -29,7 +29,7 @@ export function launchRuns(input: LaunchInput): Promise<BatchDetail> {
   return apiFetch<BatchDetail>(BASE, { method: "POST", body: input });
 }
 
-/** Runs, newest first. */
+/** Runs, newest first unless `order` is `oldest`. */
 export function listRuns(filters: RunFilters = {}, signal?: AbortSignal): Promise<RunPage> {
   return apiFetch<RunPage>(`${BASE}${query(filters)}`, { signal });
 }

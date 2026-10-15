@@ -87,6 +87,69 @@ describe("Runs list", () => {
     expect(api.listQueries.at(-1)).toContain("scenarioId=s-cancel");
   });
 
+  it("sorts oldest first on request, keeps the order in the URL and goes back to the first page", async () => {
+    scenarios();
+    nav.search = "page=2";
+    const many = Array.from({ length: 25 }, (_, i) =>
+      runFixture({
+        id: `r-${i + 1}`,
+        scenarioName: `Scenario ${i + 1}`,
+        createdAt: `2026-10-05T10:${String(i).padStart(2, "0")}:00Z`,
+      }),
+    );
+    const api = mockRunsApi(many);
+    renderWithClient(<RunsContainer />);
+    const user = userEvent.setup();
+    expect(await screen.findByText("21–25 of 25")).toBeInTheDocument();
+    const order = screen.getByRole("radiogroup", { name: "Order" });
+    expect(within(order).getByRole("radio", { name: "Newest first" })).toBeChecked();
+
+    await user.click(within(order).getByRole("radio", { name: "Oldest first" }));
+
+    expect(await screen.findByText("1–20 of 25")).toBeInTheDocument();
+    await waitFor(() => expect(rowNames()[0]).toBe("Scenario 1"));
+    expect(api.listQueries.at(-1)).toContain("order=oldest");
+    expect(api.listQueries.at(-1)).toContain("offset=0");
+    expect(nav.replace).toHaveBeenLastCalledWith("/runs?order=oldest", { scroll: false });
+  });
+
+  it("reads the order from the URL", async () => {
+    scenarios();
+    nav.search = "order=oldest";
+    const api = mockRunsApi([done, failed, running]);
+    renderWithClient(<RunsContainer />);
+
+    await waitFor(() => expect(rowNames()).toHaveLength(3));
+    expect(screen.getByRole("radio", { name: "Oldest first" })).toBeChecked();
+    expect(api.listQueries[0]).toContain("order=oldest");
+    expect(screen.getAllByRole("row").slice(1).map((row) => within(row).getAllByRole("cell")[0].textContent)).toEqual([
+      "r-1",
+      "r-2",
+      "r-3",
+    ]);
+  });
+
+  it("shows the same runs as cards for small screens", async () => {
+    scenarios();
+    mockRunsApi([done, failed, running]);
+    renderWithClient(<RunsContainer />);
+
+    const table = await screen.findByRole("table", { name: "Runs" });
+    const cards = screen.getByRole("list", { name: "Runs" });
+    const tableIds = within(table)
+      .getAllByRole("row")
+      .slice(1)
+      .map((row) => within(row).getAllByRole("cell")[0].textContent);
+    const items = within(cards).getAllByRole("listitem");
+    expect(items.map((item) => within(item).getByRole("button", { name: /^Copy run id / }).getAttribute("aria-label"))).toEqual(
+      tableIds.map((id) => `Copy run id ${id}`),
+    );
+    expect(within(items[0]).getByRole("link", { name: "Cancel within 24h" })).toHaveAttribute("href", "/runs/r-3");
+    // Only one of the two shows at a time: the table on wide screens, the cards below.
+    expect(table.closest("div")).toHaveClass("hidden");
+    expect(cards).toHaveClass("xl:hidden");
+  });
+
   it("shows only one batch when the URL names it, and can clear that filter", async () => {
     scenarios();
     nav.search = "batchId=b-2";
@@ -157,7 +220,7 @@ describe("Runs list", () => {
     const user = userEvent.setup();
     await screen.findByRole("table", { name: "Runs" });
 
-    await user.click(screen.getByRole("button", { name: "Cancel run r-3" }));
+    await user.click(within(screen.getByRole("table", { name: "Runs" })).getByRole("button", { name: "Cancel run r-3" }));
 
     await waitFor(() => expect(api.requests).toEqual([{ method: "POST", path: "/runs/r-3/cancel", body: undefined }]));
     const row = await screen.findByRole("row", { name: /r-3/ });

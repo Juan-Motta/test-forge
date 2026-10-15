@@ -288,6 +288,7 @@ export function mockRunsApi(initial: Run[] = [], options: MockOptions = {}) {
             (!batchId || run.batchId === batchId),
         )
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.position - a.position);
+      if (params.get("order") === "oldest") matching.reverse();
       return HttpResponse.json({ items: matching.slice(offset, offset + limit), total: matching.length });
     }),
     http.get(apiUrl("/runs/:id"), ({ params }) => {

@@ -328,14 +328,21 @@ async def list_runs(
     run_status: Annotated[RunStatus | None, Query(alias="status")] = None,
     scenario_id: Annotated[uuid.UUID | None, Query(alias="scenarioId")] = None,
     batch_id: Annotated[uuid.UUID | None, Query(alias="batchId")] = None,
+    order: Annotated[service.RunOrder, Query()] = "newest",
     limit: Limit = 50,
     offset: Offset = 0,
 ) -> RunPage:
+    """A page of runs, filtered by status, scenario and batch.
+
+    `order` is `newest` (default: newest first) or `oldest` (oldest first); a batch's runs stay in
+    launch order either way. Any other value is a 422.
+    """
     items, total = await service.list_runs(
         db,
         status=run_status,
         scenario_id=scenario_id,
         batch_id=batch_id,
+        order=order,
         limit=limit,
         offset=offset,
     )

@@ -188,6 +188,28 @@ describe("Overview recent runs", () => {
     expect(within(rows[2]).getByText("Failed")).toBeInTheDocument();
   });
 
+  it("shows the same recent runs as cards for small screens", async () => {
+    mockRunsApi(runs);
+    mockStatsApi();
+    renderWithClient(<OverviewContainer />);
+
+    const recent = await screen.findByRole("region", { name: "Recent runs" });
+    const table = await within(recent).findByRole("table", { name: "Recent runs" });
+    const cards = within(recent).getByRole("list", { name: "Recent runs" });
+    const items = within(cards).getAllByRole("listitem");
+    expect(items).toHaveLength(3);
+    expect(within(items[0]).getByRole("link", { name: "Booking with date change" })).toHaveAttribute(
+      "href",
+      "/runs/r-pass-0001",
+    );
+    expect(within(items[0]).getByText("Passed")).toBeInTheDocument();
+    expect(within(items[1]).getByText("Needs review")).toBeInTheDocument();
+    expect(within(items[2]).getByText("Failed")).toBeInTheDocument();
+    expect(within(items[0]).getByRole("button", { name: /^Copy run id / })).toBeInTheDocument();
+    expect(table.parentElement).toHaveClass("hidden");
+    expect(cards).toHaveClass("lg:hidden");
+  });
+
   it("keeps ids and names on one line, with the full text in a title", async () => {
     const longId = "7f6e5d4c-3b2a-4190-8f7e-6d5c4b3a2918";
     const long = runFixture({

@@ -244,6 +244,28 @@ async def test_list_filters_and_pagination(user_client, factory, drive):
     assert [item["id"] for item in batches["items"]] == [new["id"], old["id"]]
 
 
+async def test_list_orders_oldest_first_on_request(user_client, factory, drive):
+    scenario = await factory.scenario()
+    old = (await launch(user_client, [scenario["id"]], repetitions=2)).json()
+    new = (await launch(user_client, [scenario["id"]], repetitions=3)).json()
+    drive.release.set()
+    await wait_for(all_in(user_client, [r["id"] for r in old["runs"] + new["runs"]], TERMINAL))
+    launched = [run["id"] for run in old["runs"] + new["runs"]]  # launch order
+
+    first = (await user_client.get("/api/runs", params={"order": "oldest", "limit": 3})).json()
+    rest = (
+        await user_client.get("/api/runs", params={"order": "oldest", "limit": 3, "offset": 3})
+    ).json()
+    assert first["total"] == 5
+    assert [item["id"] for item in first["items"] + rest["items"]] == launched
+
+    newest = (await user_client.get("/api/runs", params={"order": "newest"})).json()
+    default = (await user_client.get("/api/runs")).json()
+    assert [item["id"] for item in newest["items"]] == [item["id"] for item in default["items"]]
+    assert [item["batchId"] for item in newest["items"]][:3] == [new["id"]] * 3
+    assert (await user_client.get("/api/runs", params={"order": "latest"})).status_code == 422
+
+
 async def test_finished_run_detail_has_summary_transcript_and_audio(user_client, factory, drive):
     scenario = await factory.scenario()
     batch = (await launch(user_client, [scenario["id"]])).json()

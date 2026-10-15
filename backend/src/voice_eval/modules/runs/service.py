@@ -7,7 +7,7 @@ through the functions here, each in its own short transaction.
 import uuid
 from dataclasses import replace
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal
 
 from sqlalchemy import Boolean, Integer, Numeric, Select, case, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -189,16 +189,24 @@ async def get_run(db: AsyncSession, run_id: uuid.UUID) -> Run:
     return _run(*row)
 
 
+RunOrder = Literal["newest", "oldest"]
+
+
 async def list_runs(
     db: AsyncSession,
     *,
     status: RunStatus | None = None,
     scenario_id: uuid.UUID | None = None,
     batch_id: uuid.UUID | None = None,
+    order: RunOrder = "newest",
     limit: int = 50,
     offset: int = 0,
 ) -> tuple[list[Run], int]:
-    """A page of runs, newest first (a batch's runs in launch order), and the total count."""
+    """A page of runs and the total count.
+
+    `newest` (default) lists the newest runs first, `oldest` the oldest first; a batch's runs
+    stay in launch order either way, and the run id breaks any remaining tie so pages are stable.
+    """
     conditions = []
     if status is not None:
         conditions.append(RunRecord.status == status.value)
@@ -210,7 +218,12 @@ async def list_runs(
     rows = await db.execute(
         _with_judgement()
         .where(*conditions)
-        .order_by(RunRecord.created_at.desc(), RunRecord.batch_id, RunRecord.position)
+        .order_by(
+            RunRecord.created_at.asc() if order == "oldest" else RunRecord.created_at.desc(),
+            RunRecord.batch_id,
+            RunRecord.position,
+            RunRecord.id,
+        )
         .limit(limit)
         .offset(offset)
     )

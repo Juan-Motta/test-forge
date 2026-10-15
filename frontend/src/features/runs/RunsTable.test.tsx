@@ -132,3 +132,21 @@ describe("Runs table cost column", () => {
     expect(costs).toEqual(["≈ $0.4435", "≈ $0.4435+", "—", "—"]);
   });
 });
+
+describe("Runs table started column", () => {
+  it("shows when each run started, or when it was queued before it starts", () => {
+    const runs = [
+      runFixture({ id: "r-started-1", startedAt: "2026-10-05T16:55:00Z" }),
+      runFixture({ id: "r-queued-01", status: "queued", startedAt: null, endedAt: null, createdAt: "2026-10-05T16:58:00Z" }),
+    ];
+    render(<RunsTable runs={runs} onCancel={() => {}} now={Date.parse("2026-10-05T17:00:00Z")} />);
+
+    const column = screen.getAllByRole("columnheader").map((cell) => cell.textContent).indexOf("Started");
+    const [started, queued] = screen
+      .getAllByRole("row")
+      .slice(1)
+      .map((row) => within(row).getAllByRole("cell")[column]);
+    expect(within(started).getByText("5 minutes ago")).toHaveAttribute("dateTime", "2026-10-05T16:55:00Z");
+    expect(within(queued).getByText("2 minutes ago")).toHaveAttribute("dateTime", "2026-10-05T16:58:00Z");
+  });
+});
