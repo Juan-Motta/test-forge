@@ -42,16 +42,19 @@ type CopyButtonProps = {
   /** Announced (politely) once copied. */
   copiedMessage?: string;
   iconSize?: number;
+  /** The button's size; "sm" for dense places such as table cells. */
+  size?: "md" | "sm";
   className?: string;
 };
 
 /** An icon button that copies `text`, with a screen-reader confirmation. */
-export function CopyButton({ text, label, copiedMessage = "Copied", iconSize = 16, className }: CopyButtonProps) {
+export function CopyButton({ text, label, copiedMessage = "Copied", iconSize = 16, size, className }: CopyButtonProps) {
   const [state, copy] = useClipboard();
   return (
     <>
       <IconButton
         label={label}
+        size={size}
         className={cn(className)}
         icon={state === "copied" ? <CheckIcon size={iconSize} /> : <CopyIcon size={iconSize} />}
         onClick={() => void copy(text)}

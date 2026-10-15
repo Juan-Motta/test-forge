@@ -3,8 +3,75 @@ import { describe, expect, it } from "vitest";
 import { runCostFixture } from "@/features/pricing/testing";
 import { RunsTable } from "./RunsTable";
 import { runFixture } from "./testing";
+import type { Run } from "./types";
 
-describe("Runs table score column", () => {
+const NOW = Date.parse("2026-10-05T17:00:00Z");
+
+function renderTable(runs: Run[]) {
+  render(<RunsTable runs={runs} onCancel={() => {}} now={NOW} />);
+  const headers = screen.getAllByRole("columnheader").map((cell) => cell.textContent);
+  const rows = screen.getAllByRole("row").slice(1);
+  /** The body cells of the column with this header, one per row. */
+  const column = (name: string) => {
+    const index = headers.indexOf(name);
+    expect(index).toBeGreaterThanOrEqual(0);
+    return rows.map((row) => within(row).getAllByRole("cell")[index]);
+  };
+  return { headers, rows, column };
+}
+
+describe("Runs table columns", () => {
+  it("fits the runs in eight compact columns, without a fixed minimum width", () => {
+    const { headers } = renderTable([runFixture()]);
+
+    expect(headers).toEqual(["Scenario", "Duration", "Turns", "p50 latency", "Cost", "Outcome", "Started", "Actions"]);
+    expect(screen.getByRole("table", { name: "Runs" }).className).not.toMatch(/min-w-/);
+  });
+});
+
+describe("Runs table scenario cell", () => {
+  it("links the scenario to the report and carries the agent, its kind, the persona and the run id", () => {
+    const longId = "7f6e5d4c-3b2a-4190-8f7e-6d5c4b3a2918";
+    const runs = [
+      runFixture({ id: longId, persona: "Lucía Fernández" }),
+      runFixture({ id: "r-text-0001", agentKind: "text", agentName: "Chat desk" }),
+    ];
+    const { column } = renderTable(runs);
+    const [voice, text] = column("Scenario");
+
+    const link = within(voice).getByRole("link", { name: "Booking with date change" });
+    expect(link).toHaveAttribute("href", `/runs/${longId}`);
+    expect(link).toHaveAttribute("title", "Booking with date change");
+    expect(within(voice).getByText("Hotel booking assistant")).toHaveAttribute("title", "Hotel booking assistant");
+    expect(within(voice).getByText("Voice")).toBeInTheDocument();
+    expect(within(voice).getByText("Lucía Fernández")).toHaveAttribute("title", "Lucía Fernández");
+    const id = within(voice).getByText("7f6e5d4c…18");
+    expect(id).toHaveAttribute("title", longId);
+    expect(within(voice).getByRole("button", { name: "Copy run id 7f6e5d4c…18" })).toBeInTheDocument();
+
+    expect(within(text).getByText("Chat desk")).toBeInTheDocument();
+    expect(within(text).getByText("Text")).toBeInTheDocument();
+    expect(within(text).getByRole("button", { name: "Copy run id r-text-0001" })).toBeInTheDocument();
+  });
+
+  it("truncates long scenario, agent and persona names, keeping the full text in a title", () => {
+    const long = runFixture({
+      scenarioName: "Booking with a date change and a late check-in request",
+      agentName: "Hotel booking assistant (staging, EU region)",
+      persona: "Lucía Fernández de la Torre",
+    });
+    const { column } = renderTable([long]);
+    const [cell] = column("Scenario");
+
+    for (const text of [long.scenarioName, long.agentName, "Lucía Fernández de la Torre"]) {
+      const element = within(cell).getByText(text);
+      expect(element).toHaveAttribute("title", text);
+      expect(element).toHaveClass("truncate");
+    }
+  });
+});
+
+describe("Runs table outcome column", () => {
   it("shows the score, the judgement in progress, a failed judgement or a dash", () => {
     const runs = [
       runFixture({ id: "r-scored-1", judgementStatus: "completed", score: 72 }),
@@ -12,45 +79,11 @@ describe("Runs table score column", () => {
       runFixture({ id: "r-failed-01", judgementStatus: "failed" }),
       runFixture({ id: "r-never-001" }),
     ];
-    render(<RunsTable runs={runs} onCancel={() => {}} now={Date.parse("2026-10-05T17:00:00Z")} />);
+    const { column } = renderTable(runs);
 
-    const headers = screen.getAllByRole("columnheader").map((cell) => cell.textContent);
-    const column = headers.indexOf("Score");
-    expect(column).toBeGreaterThan(0);
-    const scores = screen
-      .getAllByRole("row")
-      .slice(1)
-      .map((row) => within(row).getAllByRole("cell")[column].textContent);
-    expect(scores).toEqual(["72", "Judging…", "Failed", "—"]);
+    expect(column("Outcome").map((cell) => cell.textContent)).toEqual(["72Passed", "Judging…", "Failed", "—"]);
   });
-});
 
-describe("Runs table call columns", () => {
-  it("shows the persona, caller / agent turns and the p50 agent latency, or a dash", () => {
-    const runs = [
-      runFixture({ id: "r-measured", persona: "Lucía", callerTurns: 6, agentTurns: 7, latencyP50Ms: 640 }),
-      runFixture({ id: "r-slow-0001", persona: "Ana", callerTurns: 2, agentTurns: 3, latencyP50Ms: 1800 }),
-      runFixture({ id: "r-unknown-1" }),
-    ];
-    render(<RunsTable runs={runs} onCancel={() => {}} now={Date.parse("2026-10-05T17:00:00Z")} />);
-
-    const headers = screen.getAllByRole("columnheader").map((cell) => cell.textContent);
-    const rows = screen
-      .getAllByRole("row")
-      .slice(1)
-      .map((row) => within(row).getAllByRole("cell").map((cell) => cell.textContent));
-    const column = (name: string) => {
-      const index = headers.indexOf(name);
-      expect(index).toBeGreaterThan(0);
-      return rows.map((row) => row[index]);
-    };
-    expect(column("Persona")).toEqual(["Lucía", "Ana", "—"]);
-    expect(column("Turns")).toEqual(["6 / 7", "2 / 3", "—"]);
-    expect(column("p50 latency")).toEqual(["640 ms", "1.8 s", "—"]);
-  });
-});
-
-describe("Runs table design", () => {
   it("draws the score as a bar and the judged result as a chip", () => {
     const runs = [
       runFixture({ id: "r-passed-01", judgementStatus: "completed", score: 84 }),
@@ -58,57 +91,52 @@ describe("Runs table design", () => {
       runFixture({ id: "r-never-001" }),
       runFixture({ id: "r-must-fail", judgementStatus: "completed", score: 92, mustFailed: true }),
     ];
-    render(<RunsTable runs={runs} onCancel={() => {}} now={Date.parse("2026-10-05T17:00:00Z")} />);
+    const { column } = renderTable(runs);
+    const cells = column("Outcome");
 
-    const headers = screen.getAllByRole("columnheader").map((cell) => cell.textContent);
-    const rows = screen.getAllByRole("row").slice(1);
-    const result = headers.indexOf("Result");
-    expect(result).toBeGreaterThan(0);
-    expect(rows.map((row) => within(row).getAllByRole("cell")[result].textContent)).toEqual([
-      "Passed",
-      "Needs review",
-      "—",
-      "Needs review",
-    ]);
-    expect(within(rows[0]).getByRole("meter", { name: "Score of run r-passed-01" })).toHaveAttribute("aria-valuenow", "84");
-    expect(within(rows[1]).getByRole("meter")).toHaveAttribute("data-tone", "bad");
-    expect(within(rows[2]).getByRole("meter")).toHaveAttribute("aria-valuetext", "Not scored");
+    expect(cells.map((cell) => cell.textContent)).toEqual(["84Passed", "41Needs review", "—", "92Needs review"]);
+    expect(within(cells[0]).getByRole("meter", { name: "Score of run r-passed-01" })).toHaveAttribute("aria-valuenow", "84");
+    expect(within(cells[1]).getByRole("meter")).toHaveAttribute("data-tone", "bad");
+    expect(within(cells[2]).getByRole("meter")).toHaveAttribute("aria-valuetext", "Not scored");
   });
 
-  it("never calls a broken or cancelled call Passed, and leaves unscored runs blank", () => {
+  it("shows the status only for a run that did not complete normally or is still going", () => {
     const judged = { judgementStatus: "completed" as const, score: 88 };
     const runs = [
-      runFixture({ id: "r-failed-01", status: "failed", ...judged }),
+      runFixture({ id: "r-complete", ...judged }),
+      runFixture({ id: "r-failed-01", status: "failed", endReason: "tts_failed", ...judged }),
       runFixture({ id: "r-interrupt", status: "interrupted", ...judged }),
       runFixture({ id: "r-cancelled", status: "cancelled", ...judged }),
-      runFixture({ id: "r-unscored1", status: "completed", judgementStatus: "completed", score: null }),
-      runFixture({ id: "r-running01", status: "running", endedAt: null }),
+      runFixture({ id: "r-running01", status: "running", endReason: null, endedAt: null }),
     ];
-    render(<RunsTable runs={runs} onCancel={() => {}} now={Date.parse("2026-10-05T17:00:00Z")} />);
+    const { column } = renderTable(runs);
+    const [completed, failed, interrupted, cancelled, running] = column("Outcome");
 
-    const headers = screen.getAllByRole("columnheader").map((cell) => cell.textContent);
-    const result = headers.indexOf("Result");
-    const cells = screen
-      .getAllByRole("row")
-      .slice(1)
-      .map((row) => within(row).getAllByRole("cell")[result].textContent);
-    // The Status column says what happened to the call; the Result is never "Passed" for it.
-    expect(cells).toEqual(["—", "—", "—", "—", "—"]);
+    expect(within(completed).queryByText("Completed")).not.toBeInTheDocument();
+    expect(within(completed).getByText("Passed")).toBeInTheDocument();
+    expect(within(failed).getByText("Failed")).toBeInTheDocument();
+    expect(within(failed).getByText("Speech synthesis failed")).toBeInTheDocument();
+    expect(within(interrupted).getByText("Interrupted")).toBeInTheDocument();
+    expect(within(cancelled).getByText("Cancelled")).toBeInTheDocument();
+    expect(within(running).getByText("Running")).toBeInTheDocument();
+    // A broken or cancelled call is never "Passed", even when its judge scored it.
+    for (const cell of [failed, interrupted, cancelled, running]) {
+      expect(within(cell).queryByText("Passed")).not.toBeInTheDocument();
+    }
   });
 });
 
-describe("Runs table agent kind", () => {
-  it("marks each run's agent as voice or text", () => {
-    const runs = [runFixture({ id: "r-voice-001" }), runFixture({ id: "r-text-0001", agentKind: "text", agentName: "Chat desk" })];
-    render(<RunsTable runs={runs} onCancel={() => {}} now={Date.parse("2026-10-05T17:00:00Z")} />);
+describe("Runs table call columns", () => {
+  it("shows caller / agent turns and the p50 agent latency, or a dash", () => {
+    const runs = [
+      runFixture({ id: "r-measured", callerTurns: 6, agentTurns: 7, latencyP50Ms: 640 }),
+      runFixture({ id: "r-slow-0001", callerTurns: 2, agentTurns: 3, latencyP50Ms: 1800 }),
+      runFixture({ id: "r-unknown-1" }),
+    ];
+    const { column } = renderTable(runs);
 
-    const headers = screen.getAllByRole("columnheader").map((cell) => cell.textContent);
-    const agent = headers.indexOf("Agent");
-    const cells = screen
-      .getAllByRole("row")
-      .slice(1)
-      .map((row) => within(row).getAllByRole("cell")[agent].textContent);
-    expect(cells).toEqual(["Hotel booking assistantVoice", "Chat deskText"]);
+    expect(column("Turns").map((cell) => cell.textContent)).toEqual(["6 / 7", "2 / 3", "—"]);
+    expect(column("p50 latency").map((cell) => cell.textContent)).toEqual(["640 ms", "1.8 s", "—"]);
   });
 });
 
@@ -120,16 +148,9 @@ describe("Runs table cost column", () => {
       runFixture({ id: "r-older-01", cost: null }),
       runFixture({ id: "r-older-02" }),
     ];
-    render(<RunsTable runs={runs} onCancel={() => {}} now={Date.parse("2026-10-05T17:00:00Z")} />);
+    const { column } = renderTable(runs);
 
-    const headers = screen.getAllByRole("columnheader").map((cell) => cell.textContent);
-    const column = headers.indexOf("Cost");
-    expect(column).toBeGreaterThan(0);
-    const costs = screen
-      .getAllByRole("row")
-      .slice(1)
-      .map((row) => within(row).getAllByRole("cell")[column].textContent);
-    expect(costs).toEqual(["≈ $0.4435", "≈ $0.4435+", "—", "—"]);
+    expect(column("Cost").map((cell) => cell.textContent)).toEqual(["≈ $0.4435", "≈ $0.4435+", "—", "—"]);
   });
 });
 
@@ -139,16 +160,29 @@ describe("Runs table started column", () => {
       runFixture({ id: "r-started-1", startedAt: "2026-10-05T16:55:00Z" }),
       runFixture({ id: "r-queued-01", status: "queued", startedAt: null, endedAt: null, createdAt: "2026-10-05T16:58:00Z" }),
     ];
-    render(<RunsTable runs={runs} onCancel={() => {}} now={Date.parse("2026-10-05T17:00:00Z")} />);
+    const { column } = renderTable(runs);
+    const [started, queued] = column("Started");
 
-    const column = screen.getAllByRole("columnheader").map((cell) => cell.textContent).indexOf("Started");
-    const [started, queued] = screen
-      .getAllByRole("row")
-      .slice(1)
-      .map((row) => within(row).getAllByRole("cell")[column]);
     expect(within(started).getByText("5 minutes ago")).toHaveAttribute("dateTime", "2026-10-05T16:55:00Z");
     expect(within(queued).getByText("2 minutes ago")).toHaveAttribute("dateTime", "2026-10-05T16:58:00Z");
     expect(queued).toHaveTextContent("Not started");
     expect(started).not.toHaveTextContent("Not started");
+  });
+});
+
+describe("Runs table actions", () => {
+  it("offers live and cancel on an active run and opens every run's report", () => {
+    const runs = [
+      runFixture({ id: "r-live-001", status: "running", endReason: null, endedAt: null }),
+      runFixture({ id: "r-done-001" }),
+    ];
+    const { column } = renderTable(runs);
+    const [live, done] = column("Actions");
+
+    expect(within(live).getByRole("link", { name: "Watch run r-live-001 live" })).toHaveAttribute("href", "/runs/r-live-001/live");
+    expect(within(live).getByRole("button", { name: "Cancel run r-live-001" })).toBeInTheDocument();
+    expect(within(live).getByRole("link", { name: "Open run r-live-001" })).toHaveAttribute("href", "/runs/r-live-001");
+    expect(within(done).queryByRole("button", { name: /Cancel/ })).not.toBeInTheDocument();
+    expect(within(done).getByRole("link", { name: "Open run r-done-001" })).toHaveAttribute("href", "/runs/r-done-001");
   });
 });

@@ -40,7 +40,8 @@ function scenarios() {
 }
 
 function rowNames() {
-  return screen.getAllByRole("row").slice(1).map((row) => within(row).getAllByRole("cell")[1].textContent);
+  // The first link of each row is its scenario, linked to the report.
+  return screen.getAllByRole("row").slice(1).map((row) => within(row).getAllByRole("link")[0].textContent);
 }
 
 describe("Runs list", () => {
@@ -122,7 +123,7 @@ describe("Runs list", () => {
     await waitFor(() => expect(rowNames()).toHaveLength(3));
     expect(screen.getByRole("radio", { name: "Oldest first" })).toBeChecked();
     expect(api.listQueries[0]).toContain("order=oldest");
-    expect(screen.getAllByRole("row").slice(1).map((row) => within(row).getAllByRole("cell")[0].textContent)).toEqual([
+    expect(screen.getAllByRole("row").slice(1).map((row) => within(row).getByTitle(/^r-\d$/).textContent)).toEqual([
       "r-1",
       "r-2",
       "r-3",
@@ -139,7 +140,7 @@ describe("Runs list", () => {
     const tableIds = within(table)
       .getAllByRole("row")
       .slice(1)
-      .map((row) => within(row).getAllByRole("cell")[0].textContent);
+      .map((row) => within(row).getByTitle(/^r-\d$/).textContent);
     const items = within(cards).getAllByRole("listitem");
     expect(items.map((item) => within(item).getByRole("button", { name: /^Copy run id / }).getAttribute("aria-label"))).toEqual(
       tableIds.map((id) => `Copy run id ${id}`),

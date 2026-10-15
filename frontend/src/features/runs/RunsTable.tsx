@@ -1,12 +1,23 @@
 import { cn } from "@/ui";
 import { shortId } from "./format";
-import { KindBadge } from "./KindBadge";
-import { RUN_METRICS, RunActions, RunResult, RunScore, RunStarted, RunStatus } from "./run-fields";
-import { TruncatedText } from "./TruncatedText";
+import { RUN_METRICS, RunActions, RunIdentity, RunOutcome, RunStarted } from "./run-fields";
 import type { Run } from "./types";
 
-const HEAD = "border-b border-line px-2.5 py-2 font-medium";
-const CELL = "border-b border-line-soft px-2.5 py-3";
+const HEAD = "border-b border-line px-2 py-2 align-bottom font-medium";
+const CELL = "border-b border-line-soft px-2 py-3 align-top";
+const FIGURE = "font-mono text-xs text-muted";
+
+/**
+ * Column widths of the fixed table layout, in `RUN_METRICS` order for the metrics. The scenario
+ * takes whatever is left: the fixed columns add up to about 43rem, so at a 1280px screen (about
+ * 59rem of table) the scenario keeps about 15rem, and nothing scrolls sideways.
+ */
+const METRIC_WIDTHS: Record<string, string> = {
+  Duration: "w-[4rem]",
+  Turns: "w-[4rem]",
+  "p50 latency": "w-[5.25rem]",
+  Cost: "w-[6rem]",
+};
 
 type RunsTableProps = {
   runs: Run[];
@@ -14,31 +25,35 @@ type RunsTableProps = {
   /** Id of the run being cancelled, if any. */
   cancellingId?: string;
   now: number;
-  /** Classes of the scrolling box, e.g. to show the table on wide screens only. */
+  /** Classes of the table's box, e.g. to show the table on wide screens only. */
   className?: string;
 };
 
-/** Runs as a table: one row per run with its status, timing and actions. */
+/**
+ * Runs as a compact table: one row per run, its scenario cell carrying the agent, persona and run
+ * id, and one outcome column for the score, the result and (when it matters) the status.
+ */
 export function RunsTable({ runs, onCancel, cancellingId, now, className }: RunsTableProps) {
   return (
-    <div className={cn("overflow-x-auto rounded-xl border border-line bg-panel px-3 py-2", className)}>
-      <table aria-label="Runs" className="w-full min-w-[80rem] border-collapse text-left text-[13px]">
+    <div className={cn("rounded-xl border border-line bg-panel px-3 py-2", className)}>
+      <table aria-label="Runs" className="w-full table-fixed border-collapse text-left text-[13px]">
         <thead className="text-dim">
           <tr>
-            <th scope="col" className={HEAD}>Run</th>
-            <th scope="col" className={HEAD}>Scenario</th>
-            <th scope="col" className={HEAD}>Agent</th>
-            <th scope="col" className={HEAD}>Persona</th>
+            <th scope="col" className={HEAD}>
+              Scenario
+            </th>
             {RUN_METRICS.map((metric) => (
-              <th key={metric.label} scope="col" className={HEAD} title={metric.hint}>
+              <th key={metric.label} scope="col" className={cn(HEAD, METRIC_WIDTHS[metric.label])} title={metric.hint}>
                 {metric.label}
               </th>
             ))}
-            <th scope="col" className={HEAD}>Status</th>
-            <th scope="col" className={HEAD}>Score</th>
-            <th scope="col" className={HEAD}>Result</th>
-            <th scope="col" className={HEAD}>Started</th>
-            <th scope="col" className={HEAD}>
+            <th scope="col" className={cn(HEAD, "w-[8.5rem]")}>
+              Outcome
+            </th>
+            <th scope="col" className={cn(HEAD, "w-[7rem]")}>
+              Started
+            </th>
+            <th scope="col" className={cn(HEAD, "w-[8.5rem]")}>
               <span className="sr-only">Actions</span>
             </th>
           </tr>
@@ -48,40 +63,25 @@ export function RunsTable({ runs, onCancel, cancellingId, now, className }: Runs
             const label = shortId(run.id);
             return (
               <tr key={run.id} className="[&:last-child>td]:border-b-0">
-                <td className={cn(CELL, "whitespace-nowrap font-mono text-xs text-muted")} title={run.id}>
-                  {label}
-                </td>
-                <td className={cn(CELL, "font-medium")}>
-                  <TruncatedText text={run.scenarioName} className="max-w-[18rem]" />
-                </td>
-                <td className={cn(CELL, "text-muted")}>
-                  <span className="flex items-center gap-1.5">
-                    <TruncatedText text={run.agentName} className="max-w-[14rem]" />
-                    <KindBadge run={run} />
-                  </span>
-                </td>
-                <td className={cn(CELL, "text-muted")}>
-                  {run.persona ? <TruncatedText text={run.persona} className="max-w-[9rem]" /> : "—"}
-                </td>
-                {RUN_METRICS.map((metric) => (
-                  <td key={metric.label} className={cn(CELL, "whitespace-nowrap font-mono text-xs text-muted")}>
-                    {metric.value(run, now)}
-                  </td>
-                ))}
                 <td className={CELL}>
-                  <RunStatus run={run} />
+                  <RunIdentity run={run} />
                 </td>
+                {RUN_METRICS.map((metric) => {
+                  const value = metric.value(run, now);
+                  return (
+                    <td key={metric.label} className={cn(CELL, FIGURE, "truncate")} title={value}>
+                      {value}
+                    </td>
+                  );
+                })}
                 <td className={CELL}>
-                  <RunScore run={run} label={label} />
+                  <RunOutcome run={run} label={label} />
                 </td>
-                <td className={CELL}>
-                  <RunResult run={run} fallback={<span className="font-mono text-xs text-muted">—</span>} />
-                </td>
-                <td className={cn(CELL, "whitespace-nowrap text-xs text-dim")}>
+                <td className={cn(CELL, "text-xs text-dim")}>
                   <RunStarted run={run} now={now} />
                 </td>
                 <td className={CELL}>
-                  <div className="flex justify-end gap-2">
+                  <div className="flex flex-wrap justify-end gap-2">
                     <RunActions run={run} label={label} onCancel={onCancel} cancelling={cancellingId === run.id} />
                   </div>
                 </td>

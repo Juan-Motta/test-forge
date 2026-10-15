@@ -180,7 +180,8 @@ describe("Overview recent runs", () => {
     const table = await within(recent).findByRole("table", { name: "Recent runs" });
     const rows = within(table).getAllByRole("row").slice(1);
     expect(rows).toHaveLength(3);
-    expect(within(rows[0]).getByRole("link", { name: /r-pass/ })).toHaveAttribute("href", "/runs/r-pass-0001");
+    expect(within(rows[0]).getByRole("link", { name: "Booking with date change" })).toHaveAttribute("href", "/runs/r-pass-0001");
+    expect(within(rows[0]).getByRole("button", { name: "Copy run id r-pass-0001" })).toBeInTheDocument();
     expect(within(rows[0]).getByText("Passed")).toBeInTheDocument();
     expect(within(rows[0]).getByText("Marco")).toBeInTheDocument();
     expect(within(rows[0]).getByRole("meter", { name: "Score of run r-pass-0001" })).toHaveAttribute("aria-valuenow", "88");
@@ -210,7 +211,7 @@ describe("Overview recent runs", () => {
     expect(cards).toHaveClass("lg:hidden");
   });
 
-  it("keeps ids and names on one line, with the full text in a title", async () => {
+  it("puts the run's agent, persona and id under its scenario, ellipsized with the full text in a title", async () => {
     const longId = "7f6e5d4c-3b2a-4190-8f7e-6d5c4b3a2918";
     const long = runFixture({
       id: longId,
@@ -223,16 +224,24 @@ describe("Overview recent runs", () => {
     renderWithClient(<OverviewContainer />);
 
     const table = await screen.findByRole("table", { name: "Recent runs" });
-    const link = within(table).getByRole("link", { name: `Open run ${longId}` });
-    expect(link).toHaveTextContent("7f6e5d4c…18");
-    expect(link).toHaveAttribute("title", longId);
-    expect(link.closest("td")).toHaveClass("whitespace-nowrap");
+    expect(within(table).getAllByRole("columnheader").map((cell) => cell.textContent)).toEqual([
+      "Scenario",
+      "Duration",
+      "Score",
+      "Result",
+      "When",
+    ]);
+    const link = within(table).getByRole("link", { name: long.scenarioName });
+    expect(link).toHaveAttribute("href", `/runs/${longId}`);
+    expect(within(table).getByText("7f6e5d4c…18")).toHaveAttribute("title", longId);
+    expect(within(table).getByRole("button", { name: "Copy run id 7f6e5d4c…18" })).toBeInTheDocument();
     for (const text of [long.scenarioName, long.agentName, "Lucía Fernández"]) {
       const cell = within(table).getByText(text);
       expect(cell).toHaveAttribute("title", text);
       expect(cell).toHaveClass("truncate");
     }
     expect(table).toHaveClass("table-fixed");
+    expect(table.className).not.toMatch(/min-w-/);
   });
 
   it("filters the table to failed runs or runs that need review", async () => {
@@ -246,7 +255,7 @@ describe("Overview recent runs", () => {
       within(recent)
         .queryAllByRole("row")
         .slice(1)
-        .map((row) => within(row).getAllByRole("cell")[1].textContent);
+        .map((row) => within(row).getAllByRole("link")[0].textContent);
 
     await user.click(within(recent).getByRole("button", { name: "Failed" }));
     expect(within(recent).getByRole("button", { name: "Failed" })).toHaveAttribute("aria-pressed", "true");

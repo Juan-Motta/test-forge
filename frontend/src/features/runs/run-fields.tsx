@@ -4,10 +4,12 @@ import { absoluteTime, relativeTime } from "@/features/connections/format";
 import { isJudging } from "@/features/judgements/format";
 import { runCostLabel } from "@/features/pricing/format";
 import { runResult } from "@/features/overview/run-result";
-import { Badge, Button, ScoreBar, buttonClasses, cn } from "@/ui";
-import { STATUS_LABELS, clock, endReasonLabel, isActive, latency, runDurationMs } from "./format";
+import { Badge, Button, CopyButton, ScoreBar, buttonClasses, cn, focusRing } from "@/ui";
+import { STATUS_LABELS, clock, endReasonLabel, isActive, latency, runDurationMs, shortId } from "./format";
+import { KindBadge } from "./KindBadge";
 import { runKind } from "./kind";
 import { RunStatusChip } from "./RunStatusChip";
+import { TruncatedText } from "./TruncatedText";
 import type { Run } from "./types";
 
 /**
@@ -60,6 +62,58 @@ export function RunStarted({ run, now }: { run: Run; now: number }) {
         {relativeTime(run.createdAt, now)}
       </time>
     </span>
+  );
+}
+
+/**
+ * A table's two-line run cell: the scenario, linked to the report, and under it, muted, the agent
+ * and its kind, the persona and the short run id with a button that copies the full one. Every
+ * name is ellipsized with its full text in a title, so the cell never widens its column.
+ */
+export function RunIdentity({ run }: { run: Run }) {
+  const label = shortId(run.id);
+  return (
+    <div className="flex min-w-0 flex-col gap-0.5">
+      <Link
+        href={`/runs/${encodeURIComponent(run.id)}`}
+        title={run.scenarioName}
+        className={cn("block min-w-0 truncate rounded font-medium hover:underline", focusRing)}
+      >
+        {run.scenarioName}
+      </Link>
+      <div className="flex min-w-0 items-center gap-1.5 text-xs text-muted">
+        <TruncatedText text={run.agentName} className="min-w-0 shrink" />
+        <KindBadge run={run} />
+        {run.persona ? (
+          <>
+            <span aria-hidden="true" className="text-dim">
+              ·
+            </span>
+            <TruncatedText text={run.persona} className="min-w-0 shrink-[2]" />
+          </>
+        ) : null}
+        <span className="ml-auto flex shrink-0 items-center pl-1">
+          <span className="whitespace-nowrap font-mono text-dim" title={run.id}>
+            {label}
+          </span>
+          <CopyButton text={run.id} label={`Copy run id ${label}`} copiedMessage="Run id copied" iconSize={12} size="sm" />
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The table's outcome: the score and the judged result, plus the status (and why the run ended)
+ * only when it says something, that is when the run is still going or did not complete normally.
+ */
+export function RunOutcome({ run, label }: { run: Run; label: string }) {
+  return (
+    <div className="flex flex-col items-start gap-1.5">
+      <RunScore run={run} label={label} trackClassName="w-12" />
+      <RunResult run={run} />
+      {run.status === "completed" ? null : <RunStatus run={run} />}
+    </div>
   );
 }
 

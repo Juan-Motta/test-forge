@@ -1,14 +1,12 @@
 "use client";
 
-import Link from "next/link";
 import { useState, type ReactNode } from "react";
 import { absoluteTime, relativeTime } from "@/features/connections/format";
 import { clock, runDurationMs, shortId } from "@/features/runs/format";
-import { KindBadge } from "@/features/runs/KindBadge";
 import { RunCards } from "@/features/runs/RunCards";
-import { TruncatedText } from "@/features/runs/TruncatedText";
+import { RunIdentity } from "@/features/runs/run-fields";
 import type { Run } from "@/features/runs/types";
-import { Badge, FilterChips, ScoreBar, cn, focusRing } from "@/ui";
+import { Badge, FilterChips, ScoreBar, cn } from "@/ui";
 import { isFailedRun, needsReview, runResult } from "./run-result";
 
 type RunFilter = "all" | "failed" | "review";
@@ -40,45 +38,13 @@ const roundedScore = (run: Run) => (run.score === null || run.score === undefine
 
 /**
  * One definition per column: its header, width and body cell. Fixed widths for the short columns;
- * scenario takes a fixed share and agent and persona split the rest, all three ellipsized, so ids
- * and names stay on one line. The minimum width fits the card beside the insights column at
- * 1280px and up; between 1024px and that it scrolls sideways, and below 1024px the card shows the
- * runs as cards instead.
+ * the scenario takes the rest, a two-line cell (`RunIdentity`) that also carries the agent,
+ * persona and run id, all ellipsized. The fixed columns add up to 24rem, so the table fits the
+ * card at every width it shows at (1024px and up, beside the insights column or below it) without
+ * scrolling sideways; below 1024px the card shows the runs as cards instead.
  */
 const COLUMNS: readonly Column[] = [
-  {
-    name: "Run",
-    width: "w-[6.25rem]",
-    cellClassName: "whitespace-nowrap",
-    cell: (run) => (
-      <Link
-        href={`/runs/${encodeURIComponent(run.id)}`}
-        title={run.id}
-        aria-label={`Open run ${run.id}`}
-        className={cn("rounded font-mono text-xs text-agent hover:underline", focusRing)}
-      >
-        {shortId(run.id)}
-      </Link>
-    ),
-  },
-  { name: "Scenario", width: "w-[19%]", cellClassName: "font-medium", cell: (run) => <TruncatedText text={run.scenarioName} /> },
-  {
-    name: "Agent",
-    width: "",
-    cellClassName: "text-muted",
-    cell: (run) => (
-      <span className="flex min-w-0 items-center gap-1.5">
-        <TruncatedText text={run.agentName} />
-        <KindBadge run={run} />
-      </span>
-    ),
-  },
-  {
-    name: "Persona",
-    width: "",
-    cellClassName: "text-muted",
-    cell: (run) => (run.persona ? <TruncatedText text={run.persona} /> : "—"),
-  },
+  { name: "Scenario", width: "", cell: (run) => <RunIdentity run={run} /> },
   {
     name: "Duration",
     width: "w-[4.5rem]",
@@ -133,7 +99,7 @@ export function RecentRunsCard({ runs, search, now }: { runs: Run[]; search: str
   const [filter, setFilter] = useState<RunFilter>("all");
   const headingId = "recent-runs";
   const shown = runs.filter((run) => MATCHES[filter](run) && matchesSearch(run, search)).slice(0, SHOWN);
-  const cell = "border-b border-line-soft px-2 py-3";
+  const cell = "border-b border-line-soft px-2 py-3 align-top";
 
   return (
     <section
@@ -152,11 +118,8 @@ export function RecentRunsCard({ runs, search, now }: { runs: Run[]; search: str
         </p>
       ) : (
         <>
-          <div className="hidden overflow-x-auto lg:block">
-            <table
-              aria-labelledby={headingId}
-              className="w-full min-w-[720px] table-fixed border-collapse text-left text-[13px]"
-            >
+          <div className="hidden lg:block">
+            <table aria-labelledby={headingId} className="w-full table-fixed border-collapse text-left text-[13px]">
               <thead className="text-dim">
                 <tr>
                   {COLUMNS.map(({ name, width }) => (
