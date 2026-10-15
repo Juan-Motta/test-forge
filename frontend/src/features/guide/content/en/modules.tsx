@@ -89,7 +89,8 @@ export function ModulesEn() {
           </li>
           <li>
             <Ui>Evaluator intent</Ui>: what the caller is about to say and why, before it says it. If the agent speaks again
-            first, the decision is shown as discarded.
+            first, the decision is shown as discarded. The realtime evaluator decides as it speaks: its words appear in its
+            bubble as they are said, and the full text replaces them once it has finished.
           </li>
           <li>
             <Ui>Evaluator goals</Ui>: the plan the judge will check after the call.
@@ -100,6 +101,10 @@ export function ModulesEn() {
           </li>
           <li>
             <Ui>Listen</Ui> (calls only) with an audio mix (both, agent only or evaluator only) and a volume control.
+          </li>
+          <li>
+            The run&apos;s full thread ID under its name, with a copy button, to look the call up in your agent&apos;s logs
+            while it runs.
           </li>
         </Bullets>
         <P>
@@ -122,12 +127,19 @@ export function ModulesEn() {
 
       <Region id="runs-and-reports" title="Runs & reports">
         <P>
-          Every run ever made, newest first, with its transcript, timings and (for calls) audio. Filter by <Ui>Status</Ui> or{" "}
-          <Ui>Scenario</Ui>; <Ui>Recent batches</Ui> shows how each launch is progressing.
+          Every run ever made, with its transcript, timings and (for calls) audio. Filter by <Ui>Status</Ui> or{" "}
+          <Ui>Scenario</Ui>, and switch between <Ui>Newest first</Ui> and <Ui>Oldest first</Ui> beside the filters; the
+          filters and the order are kept in the URL, so a link or a reload shows the same list. <Ui>Recent batches</Ui> shows
+          how each launch is progressing.
         </P>
         <P>
-          The table shows the scenario, agent (marked Voice or Text), persona, duration, turns (caller / agent), median latency, status, score and
-          result. Open a run to see its report:
+          On wide screens (1280 px and up) the runs are a compact table. The <Ui>Scenario</Ui> cell holds the scenario name,
+          with the agent, its kind (Voice or Text) and the persona under it; then come <Ui>Duration</Ui>, <Ui>Turns</Ui>{" "}
+          (caller / agent), <Ui>p50 latency</Ui> and <Ui>Cost</Ui>; <Ui>Outcome</Ui> shows the score and the result, and
+          the status only when the run did not complete normally (still in progress, failed, cancelled or interrupted);{" "}
+          <Ui>Started</Ui> says when it began. <Ui>Live</Ui> and <Ui>Cancel</Ui> appear only for runs still in progress. On
+          narrower screens each run is a card with the same figures, and the card keeps the full run ID with a copy button.
+          Click a scenario name to open the run&apos;s report:
         </P>
         <VerdictMockup locale="en" />
         <Table
@@ -153,7 +165,14 @@ export function ModulesEn() {
           </li>
           <li>Click an issue marker on the audio lanes, or an evidence reference, to jump to that moment in the transcript.</li>
           <li>
-            <Ui>Copy thread ID</Ui> gives you the id to look up the call in your agent&apos;s own logs.
+            The report header shows the full thread ID with a copy button: use it to look up the call in your agent&apos;s own
+            logs.
+          </li>
+          <li>
+            <Ui>Open traces in Langfuse</Ui>, in the report header, opens Langfuse&apos;s trace list filtered on the run&apos;s
+            thread ID, so you see every turn of the call. When that list is not available, the button reads{" "}
+            <Ui>Open trace in Langfuse</Ui> and opens the single trace instead. It appears once the run has ended and its
+            agent has a Langfuse connection.
           </li>
         </Tips>
       </Region>
@@ -161,7 +180,9 @@ export function ModulesEn() {
       <Region id="scenarios" title="Scenarios">
         <P>
           Your library of conversations. A scenario describes the user the evaluator plays, what it knows and wants, and how the
-          judge scores the call. Filter by agent or tag, select several to <Ui>Launch selected</Ui>, or open one to edit it.
+          judge scores the call. Filter by agent or tag, select several to <Ui>Launch selected</Ui>, or click a scenario&apos;s
+          title to open it and edit it. Each scenario has three icon buttons, with a tooltip naming each: launch (play),
+          duplicate (copy) and delete (trash, after a confirmation).
         </P>
         <Table
           caption="The scenario editor, section by section"
@@ -178,7 +199,7 @@ export function ModulesEn() {
         />
         <Tips>
           <li>
-            <Ui>Duplicate</Ui> a good scenario to make a variant, like the same request from an angry caller.
+            Duplicate a good scenario to make a variant, like the same request from an angry caller.
           </li>
           <li>Use tags such as &ldquo;smoke&rdquo; or &ldquo;regression&rdquo; to launch the right group quickly.</li>
           <li>
@@ -261,7 +282,8 @@ export function ModulesEn() {
           <li>The full key is shown only once, right after you create it. Copy it into your CI secrets.</li>
           <li>The table shows when each key was created, last used and when it expires.</li>
           <li>
-            <Ui>Revoke</Ui> stops a key immediately. This cannot be undone.
+            The trash icon on a key&apos;s row revokes it: after you confirm with <Ui>Revoke key</Ui>, the key stops working
+            immediately. This cannot be undone.
           </li>
         </Bullets>
       </Region>

@@ -562,11 +562,12 @@ Text frames are JSON with a `type` and, where it applies, `tMs` (ms since the ru
 
 | `type` | Fields |
 | --- | --- |
-| `snapshot` | Always first: `run {id, batchId, status, endReason}`, `transcript` so far, `turns` so far. |
+| `snapshot` | Always first: `run {id, batchId, status, endReason}`, `transcript` so far (caller lines carry their `decisionId`), `turns` so far. |
 | `status` | `status` (`connecting`, `running`). |
 | `agentTranscript` | `turn`, `text`; an interrupted turn adds `interrupted`, `heardText` (an estimate), `heardTextEstimated`, `audioEndMs`. |
 | `callerDecision` | `decisionId`, `say`, `hangUp`, `reason`: the evaluator's intent, not yet said. |
 | `callerSpeaking` | `decisionId`, `say`, `reason`: the caller started saying it (only now it joins the transcript). |
+| `callerText` | `decisionId`, `text`: the next piece of the evaluator's words, in order, while the realtime evaluator speaks; it extends that caller line. The realtime evaluator's `callerSpeaking` carries only the words transcribed so far (often none), and its `callerDecision` comes after, with the whole text as `say`, which replaces the line's text. |
 | `callerDecisionDiscarded` | `decisionId`: the agent spoke again first; that decision is never said. |
 | `agentBargeIn` | `callerTurn`: the agent started talking while the caller was mid-utterance. |
 | `callerInterrupted` | `agentTurn`, `audioEndMs`, `heardText`: the caller cut the agent off. |

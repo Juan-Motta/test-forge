@@ -93,7 +93,8 @@ export function ModulesEs() {
           </li>
           <li>
             <Ui>Intención del evaluador</Ui>: lo que quien llama está por decir y por qué, antes de decirlo. Si el agente vuelve
-            a hablar primero, la decisión se muestra como descartada.
+            a hablar primero, la decisión se muestra como descartada. El evaluador en tiempo real decide mientras habla: sus
+            palabras aparecen en su burbuja a medida que las dice, y el texto completo las reemplaza cuando termina.
           </li>
           <li>
             <Ui>Objetivos del evaluador</Ui>: el plan que el juez revisará después de la llamada.
@@ -105,6 +106,10 @@ export function ModulesEs() {
           <li>
             <Ui>Escuchar</Ui> (solo llamadas), con una mezcla de audio (ambos, solo el agente o solo el evaluador) y un control
             de volumen.
+          </li>
+          <li>
+            El ID completo del hilo de la corrida, debajo de su nombre, con un botón para copiarlo y buscar la llamada en los
+            registros de tu agente mientras ocurre.
           </li>
         </Bullets>
         <P>
@@ -127,13 +132,20 @@ export function ModulesEs() {
 
       <Region id="runs-and-reports" title="Corridas y reportes">
         <P>
-          Todas las corridas hechas, de la más reciente a la más antigua, con su transcripción, sus tiempos y (en las llamadas)
-          su audio. Filtra por <Ui>Estado</Ui> o por <Ui>Escenario</Ui>; <Ui>Lotes recientes</Ui> muestra cómo avanza cada
-          lanzamiento.
+          Todas las corridas hechas, con su transcripción, sus tiempos y (en las llamadas) su audio. Filtra por{" "}
+          <Ui>Estado</Ui> o por <Ui>Escenario</Ui>, y alterna entre <Ui>Más recientes primero</Ui> y{" "}
+          <Ui>Más antiguas primero</Ui> junto a los filtros; los filtros y el orden se guardan en la URL, así que un enlace o
+          una recarga muestran la misma lista. <Ui>Lotes recientes</Ui> muestra cómo avanza cada lanzamiento.
         </P>
         <P>
-          La tabla muestra el escenario, el agente (marcado como Voz o Texto), la persona, la duración, los turnos (quien llama
-          / agente), la latencia mediana, el estado, la puntuación y el resultado. Abre una corrida para ver su reporte:
+          En pantallas anchas (1280 px o más) las corridas forman una tabla compacta. La celda <Ui>Escenario</Ui> tiene el
+          nombre del escenario y, debajo, el agente, su tipo (Voz o Texto) y la persona; luego vienen <Ui>Duración</Ui>,{" "}
+          <Ui>Turnos</Ui> (quien llama / agente), <Ui>Latencia p50</Ui> y <Ui>Costo</Ui>; <Ui>Resultado</Ui> muestra la
+          puntuación y el resultado, y el estado solo cuando la corrida no terminó con normalidad (sigue en curso, falló, se
+          canceló o se interrumpió); <Ui>Inicio</Ui> indica cuándo empezó. <Ui>En vivo</Ui> y <Ui>Cancelar</Ui> aparecen
+          solo en las corridas que siguen en curso. En pantallas más angostas cada corrida es una tarjeta con las mismas
+          cifras, y la tarjeta conserva el ID completo de la corrida con un botón para copiarlo. Haz clic en el nombre de un
+          escenario para abrir el reporte de la corrida:
         </P>
         <VerdictMockup locale="es" />
         <Table
@@ -163,7 +175,14 @@ export function ModulesEs() {
             momento de la transcripción.
           </li>
           <li>
-            <Ui>Copiar ID del hilo</Ui> te da el ID para buscar la llamada en los registros de tu propio agente.
+            El encabezado del reporte muestra el ID completo del hilo con un botón para copiarlo: úsalo para buscar la llamada en
+            los registros de tu propio agente.
+          </li>
+          <li>
+            <Ui>Abrir trazas en Langfuse</Ui>, en el encabezado del reporte, abre la lista de trazas de Langfuse filtrada por el
+            ID del hilo de la corrida, así ves todos los turnos de la llamada. Cuando esa lista no está disponible, el botón dice{" "}
+            <Ui>Abrir la traza en Langfuse</Ui> y abre solo esa traza. Aparece cuando la corrida terminó y su agente tiene
+            una conexión de Langfuse.
           </li>
         </Tips>
       </Region>
@@ -172,7 +191,8 @@ export function ModulesEs() {
         <P>
           Tu biblioteca de conversaciones. Un escenario describe al usuario que interpreta el evaluador, qué sabe y qué quiere,
           y cómo califica el juez la llamada. Filtra por agente o etiqueta, selecciona varios para <Ui>Lanzar seleccionados</Ui>{" "}
-          o abre uno para editarlo.
+          o haz clic en el título de un escenario para abrirlo y editarlo. Cada escenario tiene tres botones de ícono, cada uno
+          con una descripción emergente: lanzar (reproducir), duplicar (copiar) y eliminar (papelera, tras una confirmación).
         </P>
         <Table
           caption="El editor de escenarios, sección por sección"
@@ -189,7 +209,7 @@ export function ModulesEs() {
         />
         <Tips>
           <li>
-            <Ui>Duplicar</Ui> un buen escenario sirve para hacer una variante, como la misma solicitud de alguien molesto.
+            Duplicar un buen escenario sirve para hacer una variante, como la misma solicitud de alguien molesto.
           </li>
           <li>Usa etiquetas como «smoke» o «regression» para lanzar rápido el grupo correcto.</li>
           <li>
@@ -273,7 +293,8 @@ export function ModulesEs() {
           <li>La clave completa se muestra solo una vez, justo después de crearla. Cópiala en los secretos de tu CI.</li>
           <li>La tabla muestra cuándo se creó cada clave, cuándo se usó por última vez y cuándo vence.</li>
           <li>
-            <Ui>Revocar</Ui> detiene una clave de inmediato. No se puede deshacer.
+            El ícono de papelera en la fila de una clave la revoca: después de confirmar con <Ui>Revocar clave</Ui>, la clave
+            deja de funcionar de inmediato. No se puede deshacer.
           </li>
         </Bullets>
       </Region>

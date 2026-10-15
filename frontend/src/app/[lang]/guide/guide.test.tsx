@@ -256,6 +256,39 @@ describe("Guide in Spanish", () => {
     started.unmount();
   });
 
+  it.each([
+    {
+      lang: "en" as const,
+      facts: [
+        /Newest first.*Oldest first.*kept in the URL/,
+        /only when the run did not complete normally/,
+        /1280 px/,
+        /full run ID with a copy button/,
+        /Open traces in Langfuse.*filtered on the run's thread ID/,
+        /words appear in its bubble as they are said/,
+        /three icon buttons/,
+        /trash icon on a key's row revokes it/,
+      ],
+    },
+    {
+      lang: "es" as const,
+      facts: [
+        /Más recientes primero.*Más antiguas primero.*se guardan en la URL/,
+        /solo cuando la corrida no terminó con normalidad/,
+        /1280 px/,
+        /ID completo de la corrida con un botón para copiarlo/,
+        /Abrir trazas en Langfuse.*filtrada por el ID del hilo/,
+        /palabras aparecen en su burbuja a medida que las dice/,
+        /tres botones de ícono/,
+        /ícono de papelera en la fila de una clave la revoca/,
+      ],
+    },
+  ])("describes the runs list, report, live, scenario and API key controls ($lang)", async ({ lang, facts }) => {
+    const { container } = await show(ModulesPage, lang);
+    const text = (container.textContent ?? "").replace(/\s+/g, " ");
+    for (const fact of facts) expect(text).toMatch(fact);
+  });
+
   it("answers the Preferences questions and defines the glossary in Spanish", async () => {
     await show(FaqPage, "es");
 
