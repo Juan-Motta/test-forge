@@ -12,7 +12,7 @@ export function InsightsColumn({ stats, loading = false }: { stats: OverviewStat
   const t = useT();
   const unknown = loading ? t("overview.loadingMetrics") : t("overview.unknownMetrics");
   return (
-    <div className="flex min-w-0 flex-[1_1_320px] flex-col gap-5" aria-busy={loading || undefined}>
+    <div className="flex min-w-0 flex-[1_1_420px] min-[1700px]:flex-[1_1_600px] flex-col gap-5" aria-busy={loading || undefined}>
       <WeakestCriteria stats={stats} unknown={unknown} />
       <Suggestions stats={stats} unknown={unknown} />
     </div>
