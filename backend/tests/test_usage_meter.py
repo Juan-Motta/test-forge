@@ -7,6 +7,7 @@ from voice_eval.ports.usage import (
     UsageMeter,
     collect_usage,
     merge_usage,
+    usage_since,
 )
 
 
@@ -60,3 +61,17 @@ def test_collect_reads_the_meters_of_the_providers_that_have_one():
         "by_model": {"gpt-6-luna": {"text_in": 5}}
     }
     assert collect_usage(None, fake_without_meter) is None
+
+
+def test_usage_since_is_what_a_reused_meter_added():
+    meter = UsageMeter()
+    meter.add("gpt-6-luna", text_in=100, text_out=10)
+    before = meter.to_dict()
+    assert usage_since(before, meter.to_dict()) is None
+    meter.add("gpt-6-luna", text_in=40, text_out=5)
+    meter.add("other", text_in=1)
+    assert usage_since(before, meter.to_dict()) == {
+        "by_model": {"gpt-6-luna": {"text_in": 40, "text_out": 5}, "other": {"text_in": 1}}
+    }
+    assert usage_since(None, before) == before
+    assert usage_since(before, None) is None

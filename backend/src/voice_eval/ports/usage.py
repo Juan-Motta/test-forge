@@ -77,3 +77,21 @@ def collect_usage(*providers: Any) -> dict[str, Any] | None:
     """The merged usage of the providers' meters (those without one add nothing)."""
     meters = [getattr(provider, "usage", None) for provider in providers]
     return merge_usage(*(m.to_dict() for m in meters if isinstance(m, UsageMeter)))
+
+
+def usage_since(before: Any, after: Any) -> dict[str, Any] | None:
+    """What a meter added between two `to_dict()` readings (`after` minus `before`), for a
+    model reused across calls; notes present `after` are kept. None when nothing was added."""
+    earlier = merge_usage(before) or {"by_model": {}}
+    later = merge_usage(after)
+    if later is None:
+        return None
+    meter = UsageMeter()
+    for model, buckets in later["by_model"].items():
+        spent = earlier["by_model"].get(model, {})
+        meter.add(
+            model, **{bucket: tokens - spent.get(bucket, 0) for bucket, tokens in buckets.items()}
+        )
+    for code in later.get("notes", []):
+        meter.note(code)
+    return meter.to_dict()

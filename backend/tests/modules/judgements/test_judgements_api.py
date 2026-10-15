@@ -22,6 +22,9 @@ FIELDS = {
     "updatedAt",
     "completedAt",
     "usage",
+    "language",
+    "translationStatus",
+    "translationError",
 }
 
 

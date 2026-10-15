@@ -68,13 +68,13 @@ raw key is shown only once. A key acts as its owner. `GET /api/auth/me` checks w
 
 Launching runs and judging them call paid providers: the agent under test (a real voice session
 per run), text-to-speech, the evaluator chat model or realtime speech model, and the judge model
-(each judgement is 3 judge model calls). A batch costs roughly `scenarios x repetitions` calls.
-Re-judging costs another judgement. Testing a connection makes one request to the provider.
+(each judgement is 3 judge model calls, plus 1 call for its Spanish version). A batch costs
+roughly `scenarios x repetitions` calls. Re-judging costs another judgement. Testing a connection makes one request to the provider.
 
 Each run carries `cost` (null for runs recorded before usage capture): the evaluator's
 approximate cost in USD, never the agent's. `callerUsd` is the caller's model usage (realtime
 evaluator, or chat + TTS, or chat for text runs), `judgeUsd` the judge's over every judgement
-attempt (re-judges included), `totalUsd` their sum, `breakdown` one line per `part` (`caller`,
+attempt (re-judges and translations included), `totalUsd` their sum, `breakdown` one line per `part` (`caller`,
 `judge`) and `model`, and `notes` what is missing. `complete` is false when some tokens have no
 price or could not be metered: the TTS speech endpoint reports no usage, so its input tokens are
 estimated (4 characters a token) and its audio output is not priced. Prices come from the table
@@ -84,7 +84,8 @@ OpenAI list prices (`source`, `asOf`); Azure OpenAI may differ. `PUT /api/pricin
 `{"items": [...]}` replaces the table (non-negative numbers; ask your human first).
 
 **Ask your human before** launching runs (`POST /api/runs`), re-running one
-(`POST /api/runs/{runId}/rerun`), re-judging (`POST /api/runs/{runId}/judgement`), testing an
+(`POST /api/runs/{runId}/rerun`), re-judging (`POST /api/runs/{runId}/judgement`), translating an old judgement
+(`POST /api/runs/{runId}/judgement/translations`), testing an
 agent's connection (`POST /api/agents/{agentId}/test`, a short real session with the agent) or
 running `voice-eval judge-stability`, unless they told
 you that you may. State what you will launch (scenarios, repetitions) when you ask. Reading
@@ -437,7 +438,11 @@ otherwise:
   "attempt": 1,
   "createdAt": "2026-10-12T09:36:10Z",
   "updatedAt": "2026-10-12T09:41:55Z",
-  "completedAt": "2026-10-12T09:41:55Z"
+  "completedAt": "2026-10-12T09:41:55Z",
+  "usage": {"by_model": {"gpt-6-luna": {"text_in": 41200, "text_out": 6100}}},
+  "language": "en",
+  "translationStatus": "ready",
+  "translationError": null
 }
 ```
 
@@ -453,8 +458,25 @@ judgement within a few minutes without Langfuse and up to about 20 minutes with 
 seconds until `completed` or `failed`. Without traces the judge still runs and `traceNote` says
 why they are missing.
 
+**Languages**: the judge reasons and writes in English. After each judgement, one more call of
+the same judge model makes its Spanish version. `GET /api/runs/{runId}/judgement?lang=es`
+returns the result with the Spanish `summary`, criterion `rationale`s, suggestion `title`s and
+`detail`s, `strengths` and `brief` once that version is ready; `lang` is `en` (default) or `es`
+(anything else is `422`). Criterion texts, evidence quotes, refs, tags, scores and ids are never
+translated. `language` says which texts came back; `translationStatus` is the Spanish
+version's state: `none` (judgements made before translations), `pending`, `ready` or `failed`
+(`translationError` says why; the judgement itself is unaffected). Until it is `ready`, `lang=es`
+returns the English texts.
+
+**Translate an old judgement** (paid, one judge model call, ask first):
+`POST /api/runs/{runId}/judgement/translations?lang=es` -> `202` with the judgement in that
+language and its `translationStatus` (`pending` while it is made; poll the `GET`). Idempotent: a
+`ready` or `pending` version is returned as is, a `none` or `failed` one is (re)started. `409`
+while the run is being judged or when it has no completed judgement.
+
 **Re-judge** (paid, ask first): `POST /api/runs/{runId}/judgement` -> `202`, the judgement reset
-to `pending` with the next `attempt`; the new result replaces the old one. `409` while the run
+to `pending` with the next `attempt`; the new result replaces the old one (its Spanish version
+is made again). `409` while the run
 or a judgement of it is in progress.
 
 ### The result (version 2)

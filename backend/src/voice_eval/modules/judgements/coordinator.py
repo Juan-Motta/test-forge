@@ -10,10 +10,16 @@ up to ~15 minutes to show up in the v2 observations API. So the traces are polle
 count, for at most `TRACE_WAIT_AFTER_END` after the run ended (a re-judge long after
 the run fetches once). Without traces the judge still runs, told why they are missing.
 
+Once a judgement is stored, a separate task makes its translated versions (`judge.translation`:
+one structured call per language with a fresh judge model of the same evaluator connection);
+its usage is added to the judgement's, and a failed translation never fails the judgement.
+Old judgements are translated on demand (`translate`).
+
 Model calls and trace fetches share `MAX_CONCURRENCY` slots; waiting between polls takes none.
 Stopping the process cancels the tasks and leaves their judgements unfinished; the next start
-(`recover`) judges them again. `sleep`, `now`, `build_judge` and `build_trace_reader` are
-attributes, so tests replace them and never wait or contact a provider.
+(`recover`) judges them again and resumes the translations left pending. `sleep`, `now`,
+`build_judge` and `build_trace_reader` are attributes, so tests replace them and never wait or
+contact a provider.
 """
 
 import asyncio
@@ -30,6 +36,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from voice_eval.judge.domain import JudgeError, JudgeResult
 from voice_eval.judge.service import judge_run
+from voice_eval.judge.translation import LANGUAGES, TranslationError, translate_result
 from voice_eval.modules.agents.models import AgentRecord
 from voice_eval.modules.connections.domain import CHAT_MODEL, UnsupportedConnection
 from voice_eval.modules.connections.runtime import build_judge, build_trace_reader
@@ -44,7 +51,7 @@ from voice_eval.modules.runs.domain import Run, RunNotFound
 from voice_eval.modules.runs.manager import is_judgeable, read_json
 from voice_eval.platform.secrets import SecretBox
 from voice_eval.ports.judge import RunJudgeModel
-from voice_eval.ports.usage import collect_usage
+from voice_eval.ports.usage import collect_usage, usage_since
 from voice_eval.providers.langfuse_traces import (
     TraceDigest,
     TraceFetchError,
@@ -182,6 +189,7 @@ class JudgementCoordinator:
         self.build_trace_reader: TraceReaderFactory = self._build_trace_reader
         self._slots = asyncio.Semaphore(MAX_CONCURRENCY)
         self._tasks: dict[uuid.UUID, asyncio.Task[None]] = {}
+        self._translating: dict[tuple[uuid.UUID, str], asyncio.Task[None]] = {}
         self._stopping = False
 
     # --- lifecycle ------------------------------------------------------------------------
@@ -219,6 +227,14 @@ class JudgementCoordinator:
                 self._spawn(run_id, attempt)
             if unfinished:
                 log.warning("resumed %d unfinished judgement(s)", len(unfinished))
+        try:
+            async with self.sessionmaker() as db:
+                pending = await service.pending_translations(db)
+        except Exception as exc:
+            log.warning("could not resume pending translations (%s)", type(exc).__name__)
+        else:
+            for run_id, attempt, language in pending:
+                self._spawn_translation(run_id, attempt, language)
         await self._reconcile()
 
     async def _reconcile(self) -> None:
@@ -252,7 +268,7 @@ class JudgementCoordinator:
     async def shutdown(self) -> None:
         """Cancel every judging task; their judgements stay unfinished for the next start."""
         self._stopping = True
-        tasks = list(self._tasks.values())
+        tasks = [*self._tasks.values(), *self._translating.values()]
         for task in tasks:
             task.cancel()
         if tasks:
@@ -262,6 +278,12 @@ class JudgementCoordinator:
 
     def is_active(self, run_id: uuid.UUID) -> bool:
         return run_id in self._tasks
+
+    def is_translating(self, run_id: uuid.UUID, language: str | None = None) -> bool:
+        return any(
+            key[0] == run_id and (language is None or key[1] == language)
+            for key in self._translating
+        )
 
     def _spawn(self, run_id: uuid.UUID, attempt: int) -> None:
         if self._stopping:
@@ -276,6 +298,23 @@ class JudgementCoordinator:
     def _forget(self, run_id: uuid.UUID, task: asyncio.Task[None]) -> None:
         if self._tasks.get(run_id) is task:
             del self._tasks[run_id]
+
+    def _spawn_translation(self, run_id: uuid.UUID, attempt: int, language: str) -> None:
+        if self._stopping:
+            return  # left `pending`: the next start makes it
+        key = (run_id, language)
+        previous = self._translating.get(key)
+        if previous is not None:
+            previous.cancel()
+        task = asyncio.create_task(
+            self._translate(run_id, attempt, language), name=f"translate-{run_id}-{language}"
+        )
+        self._translating[key] = task
+        task.add_done_callback(lambda done: self._forget_translation(key, done))
+
+    def _forget_translation(self, key: tuple[uuid.UUID, str], task: asyncio.Task[None]) -> None:
+        if self._translating.get(key) is task:
+            del self._translating[key]
 
     # --- one judgement --------------------------------------------------------------------
 
@@ -332,20 +371,26 @@ class JudgementCoordinator:
         usage = await self._record_usage(run_id, model)
         result = result.model_copy(update={"usage": usage})
         async with self.sessionmaker() as db:
-            await service.mark_completed(
+            completed = await service.mark_completed(
                 db,
                 run_id,
                 attempt,
                 result=result.model_dump(mode="json", by_alias=True),
                 model=inputs.model_name,
             )
+        if completed:
+            for language in LANGUAGES:
+                self._spawn_translation(run_id, attempt, language)
 
-    async def _record_usage(self, run_id: uuid.UUID, model: RunJudgeModel) -> dict | None:
-        """This attempt's judge usage (its model's meter, if it has one), added to the run's.
+    async def _record_usage(
+        self, run_id: uuid.UUID, model: Any, *, before: dict | None = None
+    ) -> dict | None:
+        """The usage its model's meter (if it has one) added since `before`, added to the run's
+        judge usage.
 
         A cancelled attempt (shutdown, superseded) records nothing: its usage is lost.
         """
-        usage = collect_usage(model)
+        usage = usage_since(before, collect_usage(model))
         try:
             async with self.sessionmaker() as db:
                 await service.add_usage(db, run_id, usage)
@@ -354,6 +399,76 @@ class JudgementCoordinator:
                 "could not record the judge usage of run %s (%s)", run_id, type(exc).__name__
             )
         return usage
+
+    # --- translations ---------------------------------------------------------------------
+
+    async def translate(self, run_id: uuid.UUID, language: str) -> Judgement:
+        """Make the completed judgement's `language` version unless it is ready or being made
+        (idempotent); the returned judgement shows its status.
+
+        Raises `JudgementInProgress` while judging, `JudgementNotTranslatable` without a
+        completed judgement.
+        """
+        async with self.sessionmaker() as db:
+            judgement, started = await service.request_translation(
+                db,
+                run_id,
+                language,
+                restart_pending=not self.is_translating(run_id, language),
+            )
+        if started:
+            self._spawn_translation(run_id, judgement.attempt, language)
+        return judgement
+
+    async def _translate(self, run_id: uuid.UUID, attempt: int, language: str) -> None:
+        try:
+            entry = await self._translation(run_id, attempt, language)
+        except asyncio.CancelledError:
+            raise  # stays pending; `recover` resumes it
+        except Exception as exc:
+            log.exception("translation of the judgement of run %s failed", run_id)
+            entry = {"status": "failed", "error": f"internal error ({type(exc).__name__})"}
+        if entry is None:
+            return
+        try:
+            async with self.sessionmaker() as db:
+                await service.set_translation(db, run_id, attempt, language, entry)
+        except Exception:
+            log.exception("could not record the translation of run %s", run_id)
+
+    async def _translation(
+        self, run_id: uuid.UUID, attempt: int, language: str
+    ) -> dict[str, Any] | None:
+        """The translation entry to store, or None when the judgement is gone or superseded."""
+        async with self.sessionmaker() as db:
+            judgement = await service.get_judgement(db, run_id)
+            try:
+                run = await runs.get_run(db, run_id)
+            except RunNotFound:
+                return None
+        if judgement is None or judgement.attempt != attempt or not judgement.result:
+            return None
+        try:
+            model = await self.evaluator(run)
+        except JudgementFailed as exc:
+            return {"status": "failed", "error": f"no model to translate with: {exc}"}
+        agent = run.snapshot.get("agent") or {}
+        scenario = run.snapshot.get("scenario") or {}
+        keep = [agent.get("name"), scenario.get("name"), str(run.id), run.thread_id]
+        before = collect_usage(model)
+        try:
+            async with self._slots:
+                fields = await translate_result(
+                    model,
+                    judgement.result,
+                    keep=[str(term) for term in keep if term],
+                    language=language,  # type: ignore[arg-type]
+                )
+        except TranslationError as exc:
+            await self._record_usage(run_id, model, before=before)
+            return {"status": "failed", "error": str(exc)}
+        await self._record_usage(run_id, model, before=before)
+        return {"status": "ready", "error": None, "fields": fields}
 
     # --- judging without storing (voice-eval judge-stability) -----------------------------
 
@@ -372,10 +487,13 @@ class JudgementCoordinator:
 
     async def evaluator(self, run: Run) -> RunJudgeModel:
         """The judge model of the run's evaluator connection; `JudgementFailed` when unusable."""
-        evaluator = run.snapshot["connections"]["evaluator"]
+        evaluator = ((run.snapshot or {}).get("connections") or {}).get("evaluator") or {}
+        connection_id = _uuid(evaluator.get("id"))
+        if connection_id is None:
+            raise JudgementFailed("the run has no evaluator connection")
         async with self.sessionmaker() as db:
             try:
-                return await self.build_judge(db, uuid.UUID(evaluator["id"]))
+                return await self.build_judge(db, connection_id)
             except Exception as exc:
                 raise JudgementFailed(
                     f"the evaluator connection could not be used ({_detail(exc)})"

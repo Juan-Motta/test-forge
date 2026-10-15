@@ -154,13 +154,35 @@ class ScriptedReader:
         return list(item)
 
 
+def spanish(messages: list[dict[str, Any]]) -> dict[str, Any]:
+    """A well-formed translation answer: every sent text prefixed with "ES: " (tokens kept)."""
+    items = json.loads(messages[-1]["content"])["items"]
+    return {"items": [{"key": item["key"], "text": f"ES: {item['text']}"} for item in items]}
+
+
 class FakeJudgeModel:
-    """Passes the transcript criterion and fails the trace one; or raises `error`."""
+    """Passes the transcript criterion and fails the trace one; or raises `error`.
+
+    `translate` answers with the next item of `translations` (a callable of the messages, an
+    exception or a fixed answer; the last one repeats), `spanish` by default; `translate_gate`,
+    when set, is awaited before every translation."""
 
     def __init__(self, error: Exception | None = None) -> None:
         self.error = error
         self.messages: list[list[dict[str, Any]]] = []
         self.gate: asyncio.Event | None = None
+        self.translations: list[Any] = [spanish]
+        self.translated: list[list[dict[str, Any]]] = []
+        self.translate_gate: asyncio.Event | None = None
+
+    async def translate(self, messages: list[dict[str, Any]]) -> dict[str, Any]:
+        self.translated.append(messages)
+        if self.translate_gate is not None:
+            await self.translate_gate.wait()
+        item = self.translations[min(len(self.translated), len(self.translations)) - 1]
+        if isinstance(item, Exception):
+            raise item
+        return item(messages) if callable(item) else item
 
     async def judge(self, messages: list[dict[str, Any]]) -> dict[str, Any]:
         self.messages.append(messages)
@@ -199,7 +221,7 @@ MALFORMED = JudgeError("malformed judge answer (does not match the judgement sch
 
 
 async def settled(coordinator, run_id: uuid.UUID, within_s: float = 10.0) -> None:
-    """Wait until the coordinator has no task left for the run."""
+    """Wait until the coordinator has no task left for the run (judging or translating)."""
     async with asyncio.timeout(within_s):
-        while coordinator.is_active(run_id):  # noqa: ASYNC110 - the task lives in the coordinator
+        while coordinator.is_active(run_id) or coordinator.is_translating(run_id):  # noqa: ASYNC110
             await asyncio.sleep(0.01)

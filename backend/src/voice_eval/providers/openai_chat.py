@@ -5,6 +5,8 @@ room for its reasoning plus the answer; an empty or cut-off answer counts as mal
 `complete_structured` is the shared call: one strict `json_schema` request, retried on a bad
 answer or a provider error. The caller policy retries once and then hangs up safely with the
 reason, so a run always ends cleanly; the judge retries once and then raises `JudgeError`.
+The judge's `translate` asks once (the translation pass owns its retry, since it also checks
+the answer's content) and raises `JudgeError` on a bad answer.
 Logs carry error types only, never the request, the answer or a secret.
 
 Every attempt that got an answer back (a malformed one too: it was billed) adds its Chat
@@ -25,6 +27,7 @@ from openai import AsyncAzureOpenAI, AsyncOpenAI
 from voice_eval.evaluator.prompt import DECISION_SCHEMA, build_messages, parse_decision
 from voice_eval.judge.domain import JudgeError
 from voice_eval.judge.prompt import JUDGE_SCHEMA
+from voice_eval.judge.translation import TRANSLATION_SCHEMA
 from voice_eval.ports.policy import CallerDecision, PolicyState
 from voice_eval.ports.usage import UsageMeter
 
@@ -38,6 +41,7 @@ ATTEMPTS = 2
 JUDGE_TIMEOUT_S = 180.0  # the judge reads a whole call plus its traces
 JUDGE_MAX_COMPLETION_TOKENS = 16000
 JUDGE_ATTEMPTS = 2
+TRANSLATION_ATTEMPTS = 1  # the translation pass (`judge.translation`) retries a bad answer
 
 
 class MalformedOutput(ValueError):
@@ -333,3 +337,23 @@ class OpenAIJudge:
             if exc.malformed:
                 raise JudgeError(f"malformed judge answer ({exc.detail})") from None
             raise JudgeError(f"judge model unavailable ({exc.detail})") from None
+
+    async def translate(self, messages: list[dict[str, Any]]) -> dict[str, Any]:
+        """One strict `TRANSLATION_SCHEMA` answer (the judgement's texts in another language)."""
+        try:
+            return await complete_json(
+                self.client,
+                self.model,
+                messages,
+                TRANSLATION_SCHEMA,
+                max_completion_tokens=JUDGE_MAX_COMPLETION_TOKENS,
+                timeout_s=self.timeout_s,
+                attempts=TRANSLATION_ATTEMPTS,
+                label="judgement translation",
+                meter=self.usage,
+                usage_model=self.usage_model,
+            )
+        except StructuredCallError as exc:
+            if exc.malformed:
+                raise JudgeError(f"malformed translation answer ({exc.detail})") from None
+            raise JudgeError(f"translation model unavailable ({exc.detail})") from None

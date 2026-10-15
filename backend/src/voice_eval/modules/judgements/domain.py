@@ -10,7 +10,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
 
 
 class JudgementStatus(StrEnum):
@@ -25,6 +25,11 @@ ACTIVE_JUDGEMENT_STATUSES = frozenset(
     {JudgementStatus.PENDING, JudgementStatus.COLLECTING_TRACES, JudgementStatus.JUDGING}
 )
 TERMINAL_JUDGEMENT_STATUSES = frozenset({JudgementStatus.COMPLETED, JudgementStatus.FAILED})
+
+# A completed judgement's translated version, per language: `none` (never asked: judgements
+# made before translations), `pending`, `ready` or `failed` (its `error` says why).
+TranslationStatus = Literal["none", "pending", "ready", "failed"]
+TRANSLATION_STATUSES = ("pending", "ready", "failed")
 
 
 @dataclass(frozen=True)
@@ -41,14 +46,28 @@ class Judgement:
     updated_at: datetime
     completed_at: datetime | None
     usage: dict[str, Any] | None = None  # the judge's usage over every attempt (`ports.usage`)
+    # {language: {"status", "error", "fields"}}; see `translation`
+    translations: dict[str, Any] | None = None
 
     @property
     def active(self) -> bool:
         return self.status in ACTIVE_JUDGEMENT_STATUSES
 
+    def translation(self, language: str) -> dict[str, Any]:
+        """The stored translation entry for `language`: `{"status": "none"|"pending"|"ready"|
+        "failed", "error": str | None, "fields": {...}}` (`fields` only when ready)."""
+        entry = (self.translations or {}).get(language)
+        if not isinstance(entry, dict) or entry.get("status") not in TRANSLATION_STATUSES:
+            return {"status": "none", "error": None}
+        return entry
+
 
 class JudgementInProgress(Exception):
     """The run's judgement is still pending, collecting traces or judging."""
+
+
+class JudgementNotTranslatable(Exception):
+    """The run has no completed judgement to translate."""
 
 
 class JudgementFailed(Exception):

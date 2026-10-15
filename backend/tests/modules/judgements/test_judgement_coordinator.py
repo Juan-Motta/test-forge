@@ -60,7 +60,12 @@ async def test_traces_are_polled_until_stable_then_judged(app, harness, tmp_path
     assert call["session_id"] == f"thread-{str(run_id)[:8]}"
     assert call["start"] == STARTED - timedelta(minutes=5)
     assert call["end"] == ENDED + timedelta(minutes=30)
-    assert harness.built == [("traces", LANGFUSE_ID), ("judge", EVALUATOR_ID)]
+    # the second judge model is the translation's, built fresh like the judge's
+    assert harness.built == [
+        ("traces", LANGFUSE_ID),
+        ("judge", EVALUATOR_ID),
+        ("judge", EVALUATOR_ID),
+    ]
 
     assert row.trace_note is None
     assert row.trace_stats["observationCount"] == 2
