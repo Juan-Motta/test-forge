@@ -12,4 +12,9 @@ describe("Login page", () => {
     expect(screen.getByRole("heading", { name: "Sign in to Duet" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "New here? Read the guide" })).toHaveAttribute("href", "/guide");
   });
+
+  it("lets the visitor pick the theme", () => {
+    render(<LoginPage />);
+    expect(screen.getByRole("radiogroup", { name: "Theme" })).toBeInTheDocument();
+  });
 });

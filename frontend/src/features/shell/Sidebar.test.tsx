@@ -37,6 +37,11 @@ describe("activeHref", () => {
 });
 
 describe("Sidebar", () => {
+  it("offers the theme switch next to the account", () => {
+    renderSidebar("/");
+    expect(screen.getByRole("radiogroup", { name: "Theme" })).toBeInTheDocument();
+  });
+
   it("marks only the current section with aria-current=page", () => {
     const nav = renderSidebar("/runs");
 

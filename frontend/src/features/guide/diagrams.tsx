@@ -146,7 +146,7 @@ export function BargeInIllustration() {
         <Lane label="Agent" tone="agent">
           <span className="absolute inset-y-0 left-0 rounded-l-md bg-agent/70" style={{ width: `${cut}%` }} />
           <span
-            className="absolute inset-y-0 right-0 rounded-r-md border border-dashed border-agent/50 bg-[repeating-linear-gradient(135deg,transparent_0_6px,rgb(108_182_245/0.18)_6px_9px)]"
+            className="absolute inset-y-0 right-0 rounded-r-md border border-dashed border-agent/50 bg-[repeating-linear-gradient(135deg,transparent_0_6px,color-mix(in_srgb,var(--ve-agent)_18%,transparent)_6px_9px)]"
             style={{ left: `${cut}%` }}
           />
         </Lane>

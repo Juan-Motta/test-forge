@@ -164,6 +164,12 @@ export default function FaqPage() {
         <Item question="Can I use Azure AI Speech for the caller's voice?">
           <P>Not yet. You can store an Azure AI Speech connection, but use OpenAI or Azure OpenAI as the voice for now.</P>
         </Item>
+        <Item question="Is there a light theme?">
+          <P>
+            Yes. Pick <Ui>System, Light or Dark</Ui> at the bottom of the app&apos;s sidebar, on the sign-in page or in this
+            guide&apos;s header. System follows your device. The choice is remembered in this browser only.
+          </P>
+        </Item>
         <Item question="Who can read this guide?">
           <P>
             Anyone who can reach Duet: the guide and the API reference need no sign-in. Everything else in the app and the API

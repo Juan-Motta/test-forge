@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { JetBrains_Mono, Schibsted_Grotesk } from "next/font/google";
+import { THEME_INIT_SCRIPT } from "@/lib/browser/theme-init";
 import { Providers } from "./providers";
 import "./globals.css";
 
@@ -22,7 +23,11 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${sans.variable} ${mono.variable} h-full antialiased`}>
+    // The inline script sets data-theme before hydration; React keeps what it finds on <html>.
+    <html lang="en" className={`${sans.variable} ${mono.variable} h-full antialiased`} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+      </head>
       <body className="min-h-full bg-ground text-fg">
         <Providers>{children}</Providers>
       </body>

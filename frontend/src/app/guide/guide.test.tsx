@@ -103,6 +103,13 @@ describe("Guide content", () => {
     expect(screen.getByRole("figure", { name: /barge-in/i })).toBeInTheDocument();
   });
 
+  it("explains the light and dark themes", () => {
+    render(<FaqPage />);
+
+    expect(screen.getByRole("heading", { level: 3, name: /light theme/i })).toBeInTheDocument();
+    expect(screen.getByText(/System, Light or Dark/)).toBeInTheDocument();
+  });
+
   it("defines the key terms in a glossary", () => {
     render(<FaqPage />);
 

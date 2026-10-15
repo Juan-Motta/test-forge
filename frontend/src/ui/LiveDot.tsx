@@ -11,7 +11,7 @@ export function LiveDot({ label, className }: LiveDotProps) {
   return (
     <span aria-hidden={label ? undefined : true} className={cn("relative inline-flex size-2.5 shrink-0", className)}>
       <span className="absolute inset-0 rounded-full bg-danger opacity-60 motion-safe:animate-ping" />
-      <span className="relative size-2.5 rounded-full bg-danger shadow-[0_0_0_4px_rgb(240_122_106/0.18)]" />
+      <span className="relative size-2.5 rounded-full bg-danger shadow-[0_0_0_4px_color-mix(in_srgb,var(--ve-danger)_18%,transparent)]" />
       {label ? <span className="sr-only">{label}</span> : null}
     </span>
   );

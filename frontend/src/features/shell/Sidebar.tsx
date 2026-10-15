@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { confirmLeave } from "@/lib/navigation/unsaved-changes";
 import { cn, ExternalLinkIcon, focusRing } from "@/ui";
+import { ThemeControl } from "@/features/theme/ThemeControl";
 import { Brand } from "./Brand";
 import { EnvironmentBadge } from "./EnvironmentBadge";
 import { activeHref, NAV_PRIMARY, NAV_SECONDARY, type NavItem } from "./navigation";
@@ -93,6 +94,7 @@ export function Sidebar({
           </li>
         </ul>
       </nav>
+      <ThemeControl className="self-start" />
       <UserMenu
         user={user}
         onSignOut={onSignOut}

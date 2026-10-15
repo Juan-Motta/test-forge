@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Brand } from "@/features/shell/Brand";
+import { ThemeControl } from "@/features/theme/ThemeControl";
 import { ExternalLinkIcon, buttonClasses, cn, focusRing } from "@/ui";
 
 /** Sticky top bar of the public guide: brand, a way into the app and the technical reference. */
@@ -20,6 +21,10 @@ export function GuideHeader() {
           <Brand />
           <span className="hidden rounded-full border border-field-line px-2 py-0.5 text-xs font-medium text-muted sm:inline">Guide</span>
         </Link>
+        {/* Room for it from tablet width up; on phones the app sidebar and the sign-in page offer it. */}
+        <div className="ml-auto hidden md:block">
+          <ThemeControl />
+        </div>
         <nav aria-label="Guide links" className="flex shrink-0 items-center gap-1 sm:gap-2">
           {/* Served by the backend (Swagger UI), so a plain link, not a client-side one. */}
           <a

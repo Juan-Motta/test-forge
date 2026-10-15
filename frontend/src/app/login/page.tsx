@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { LoginContainer } from "@/features/auth/LoginContainer";
 import { Brand } from "@/features/shell/Brand";
+import { ThemeControl } from "@/features/theme/ThemeControl";
 import { Spinner } from "@/ui";
 
 export const metadata: Metadata = { title: "Sign in" };
@@ -32,6 +33,7 @@ export default function LoginPage() {
             New here? Read the guide
           </Link>
         </p>
+        <ThemeControl className="self-center" />
       </div>
     </main>
   );

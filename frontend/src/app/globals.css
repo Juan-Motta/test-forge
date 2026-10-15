@@ -1,7 +1,9 @@
 @import "tailwindcss";
 
-/* Design tokens from the Duet design canvas. Dark console only: blue is the agent under test,
-   amber is the evaluator (and the primary action). */
+/* Design tokens from the Duet design canvas: blue is the agent under test, amber is the evaluator
+   (and the primary action). Dark is the default palette; the light one below keeps the same names
+   and applies when the system prefers light (unless the page forces dark) or when the page forces
+   light. `data-theme` on <html> is set by the theme control (see lib/browser/theme.ts). */
 :root {
   color-scheme: dark;
 
@@ -55,6 +57,108 @@
   --ve-danger: #f07a6a;
   --ve-danger-fg: #f59a8c;
   --ve-on-danger: #1e0d0a;
+  /* Dialog backdrop. */
+  --ve-backdrop: rgb(5 6 8 / 0.7);
+}
+
+/* Light palette. Text pairs meet WCAG AA (4.5:1) on ground, panel, sidebar and tag; tinted badges
+   (tone/15 over panel) too. The two blocks must stay identical. */
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --ve-ground: #f5f4f0;
+  --ve-sidebar: #eeece7;
+  --ve-panel: #ffffff;
+  --ve-raised: #fbfaf8;
+  --ve-active: #e9e7e1;
+  --ve-chip: #e3e1da;
+  --ve-line: #e2e0d9;
+  --ve-line-soft: #eae8e2;
+  --ve-line-strong: #cdcac2;
+  --ve-field: #ffffff;
+  --ve-field-line: #d3d0c8;
+  --ve-field-border: #dfdcd5;
+  --ve-line-raised: #dad7cf;
+  --ve-tag: #ebe9e3;
+  --ve-pill: #f2f1ec;
+  --ve-selected: #efede7;
+  --ve-idle: #b8b5ad;
+  --ve-code: #f2f1ec;
+  --ve-code-fg: #1b6a3c;
+
+  --ve-fg: #1b1c1f;
+  --ve-muted: #55585e;
+  --ve-dim: #5a5d63;
+  --ve-faint: #63666c;
+  --ve-body: #2c2d31;
+  --ve-body-strong: #222326;
+  --ve-body-soft: #3b3c40;
+
+  --ve-agent: #1a63a8;
+  --ve-agent-fg: #175a9a;
+  --ve-evaluator: #a35f00;
+  --ve-evaluator-hover: #8a4f00;
+  --ve-evaluator-fg: #8a4f00;
+  --ve-on-evaluator: #ffffff;
+  --ve-evaluator-line: #e6d3ae;
+  --ve-llm: #7350cf;
+  --ve-llm-fg: #5d3cb0;
+  --ve-success: #1d7f47;
+  --ve-success-fg: #16673a;
+  --ve-danger: #c43d2b;
+  --ve-danger-fg: #a5321f;
+  --ve-on-danger: #ffffff;
+  --ve-backdrop: rgb(27 28 31 / 0.4);
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    color-scheme: light;
+
+    --ve-ground: #f5f4f0;
+    --ve-sidebar: #eeece7;
+    --ve-panel: #ffffff;
+    --ve-raised: #fbfaf8;
+    --ve-active: #e9e7e1;
+    --ve-chip: #e3e1da;
+    --ve-line: #e2e0d9;
+    --ve-line-soft: #eae8e2;
+    --ve-line-strong: #cdcac2;
+    --ve-field: #ffffff;
+    --ve-field-line: #d3d0c8;
+    --ve-field-border: #dfdcd5;
+    --ve-line-raised: #dad7cf;
+    --ve-tag: #ebe9e3;
+    --ve-pill: #f2f1ec;
+    --ve-selected: #efede7;
+    --ve-idle: #b8b5ad;
+    --ve-code: #f2f1ec;
+    --ve-code-fg: #1b6a3c;
+
+    --ve-fg: #1b1c1f;
+    --ve-muted: #55585e;
+    --ve-dim: #5a5d63;
+    --ve-faint: #63666c;
+    --ve-body: #2c2d31;
+    --ve-body-strong: #222326;
+    --ve-body-soft: #3b3c40;
+
+    --ve-agent: #1a63a8;
+    --ve-agent-fg: #175a9a;
+    --ve-evaluator: #a35f00;
+    --ve-evaluator-hover: #8a4f00;
+    --ve-evaluator-fg: #8a4f00;
+    --ve-on-evaluator: #ffffff;
+    --ve-evaluator-line: #e6d3ae;
+    --ve-llm: #7350cf;
+    --ve-llm-fg: #5d3cb0;
+    --ve-success: #1d7f47;
+    --ve-success-fg: #16673a;
+    --ve-danger: #c43d2b;
+    --ve-danger-fg: #a5321f;
+    --ve-on-danger: #ffffff;
+    --ve-backdrop: rgb(27 28 31 / 0.4);
+  }
 }
 
 @theme inline {
@@ -124,10 +228,10 @@
   }
 
   ::selection {
-    background: rgb(240 176 74 / 0.3);
+    background: color-mix(in srgb, var(--ve-evaluator) 30%, transparent);
   }
 
   dialog::backdrop {
-    background: rgb(5 6 8 / 0.7);
+    background: var(--ve-backdrop, rgb(5 6 8 / 0.7));
   }
 }
