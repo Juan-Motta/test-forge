@@ -165,8 +165,9 @@ def test_a_stale_translation_only_replaces_what_still_matches():
 
 
 def test_protected_terms_are_masked_only_as_whole_words():
+    text = "Ana booked Room 12 in Anaheim; a banana and Room 123 were mentioned."
     masker = _Masker(["Ana", "Room 12"])
-    masked = masker.mask("Ana booked Room 12 in Anaheim; a banana and Room 123 were mentioned.")
+    masked = masker.mask(text)
     assert masked.count("⟦") == 2  # "Ana" and "Room 12" once each, not inside other words
     assert "Anaheim" in masked and "banana" in masked and "Room 123" in masked
-    assert masker.unmask(masked) == "Ana booked Room 12 in Anaheim; a banana and Room 123 were mentioned."
+    assert masker.unmask(masked) == text
