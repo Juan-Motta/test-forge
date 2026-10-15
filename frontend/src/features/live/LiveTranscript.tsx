@@ -1,12 +1,12 @@
 import { clock, latency } from "@/features/runs/format";
 import { interruptedAt, splitHeard, type Interruption, type TranscriptEntry } from "@/features/runs/transcript";
+import { useT } from "@/lib/i18n";
 import { Badge, cn } from "@/ui";
 import type { PendingLine } from "./live-state";
 import { SLOW_TURN_MS } from "./live-view";
 
-const WHO = { agent: "Agent", caller: "Evaluator" } as const;
+const WHO = { agent: "common.agent", caller: "common.evaluator" } as const;
 const GUTTER = "w-11 shrink-0 pt-[3px] font-mono text-[11px] text-faint";
-const APPROXIMATE = "Approximately heard (estimated from the audio played)";
 
 type LiveTranscriptProps = {
   entries: TranscriptEntry[];
@@ -16,14 +16,15 @@ type LiveTranscriptProps = {
 
 /** The call so far: time gutter, agent bubbles in blue and evaluator bubbles in amber. */
 export function LiveTranscript({ entries, pending }: LiveTranscriptProps) {
+  const t = useT();
   return (
     <div className="flex flex-col gap-2.5">
       {entries.length === 0 ? (
         <p className="text-sm text-muted" aria-live="polite">
-          Nothing said yet.
+          {t("live.nothingSaid")}
         </p>
       ) : (
-        <ol aria-label="Transcript" aria-live="polite" aria-relevant="additions" className="flex flex-col gap-2.5">
+        <ol aria-label={t("report.transcript")} aria-live="polite" aria-relevant="additions" className="flex flex-col gap-2.5">
           {entries.map((entry) => (
             <li key={entry.key} className="flex items-start gap-3">
               <span className={GUTTER}>{entry.tMs === null ? "—" : clock(entry.tMs)}</span>
@@ -35,10 +36,10 @@ export function LiveTranscript({ entries, pending }: LiveTranscriptProps) {
               >
                 <span className="flex flex-wrap items-center gap-2 text-xs">
                   <span className={cn("font-semibold", entry.role === "agent" ? "text-agent" : "text-evaluator")}>
-                    {WHO[entry.role]}
+                    {t(WHO[entry.role])}
                   </span>
                   {entry.role === "agent" ? <Latency ms={entry.latencyMs} /> : null}
-                  {entry.interruption ? <Badge tone="danger">Caller interrupted</Badge> : null}
+                  {entry.interruption ? <Badge tone="danger">{t("transcript.callerInterrupted")}</Badge> : null}
                 </span>
                 {entry.interruption ? (
                   <InterruptedText text={entry.text} interruption={entry.interruption} />
@@ -47,7 +48,7 @@ export function LiveTranscript({ entries, pending }: LiveTranscriptProps) {
                 )}
                 {entry.intent ? (
                   <p className="text-xs text-muted">
-                    <span className="font-medium">Evaluator intent:</span> {entry.intent}
+                    <span className="font-medium">{t("transcript.intent")}</span> {entry.intent}
                   </p>
                 ) : null}
               </div>
@@ -60,10 +61,10 @@ export function LiveTranscript({ entries, pending }: LiveTranscriptProps) {
           <span className={GUTTER}>{pending.tMs === null ? "—" : clock(pending.tMs)}</span>
           <p
             role="status"
-            aria-label="Evaluator is about to say"
+            aria-label={t("live.aboutToSayLabel")}
             className="min-w-0 flex-1 rounded-[10px] border border-dashed border-evaluator/40 bg-evaluator/7 px-3 py-2.5 text-sm text-muted italic"
           >
-            {`About to say… “${pending.say}”`}
+            {t("live.aboutToSay", { text: pending.say })}
           </p>
         </div>
       ) : null}
@@ -72,46 +73,52 @@ export function LiveTranscript({ entries, pending }: LiveTranscriptProps) {
 }
 
 function Latency({ ms }: { ms: number | null | undefined }) {
+  const t = useT();
   if (ms === null || ms === undefined) return null;
   const slow = ms > SLOW_TURN_MS;
   return (
-    <span className={cn("font-mono text-[11px]", slow ? "text-danger-fg" : "text-faint")} title="Time the agent took to start answering">
-      {slow ? `${latency(ms)} · slow` : latency(ms)}
+    <span className={cn("font-mono text-[11px]", slow ? "text-danger-fg" : "text-faint")} title={t("transcript.latencyHint")}>
+      {slow ? t("live.slow", { time: latency(ms) }) : latency(ms)}
     </span>
   );
 }
 
 /** Whether the agent's server confirmed the correction; nothing when not reported yet. */
 function Confirmation({ confirmed }: { confirmed?: boolean }) {
+  const t = useT();
   if (confirmed === undefined) return null;
-  return <p className="text-xs text-muted">{confirmed ? "Correction confirmed by the agent" : "Correction not confirmed"}</p>;
+  return <p className="text-xs text-muted">{confirmed ? t("transcript.confirmed") : t("transcript.notConfirmed")}</p>;
 }
 
 /** The heard part (an estimate) and the unheard rest struck through, spelled out for screen readers. */
 function InterruptedText({ text, interruption }: { text: string; interruption: Interruption }) {
-  const at = interruptedAt(interruption.audioEndMs);
+  const t = useT();
+  const approximate = t("transcript.approximate");
+  const at = interruptedAt(t, interruption.audioEndMs);
   const split = splitHeard(text, interruption.heardText);
   if (!split) {
     return (
       <>
         <p className="text-sm leading-normal break-words">{text}</p>
         <p className="text-xs text-muted">
-          {`≈ Heard before the interruption${interruption.audioEndMs ? ` ${at}` : ""} (estimated from the audio played): “${interruption.heardText.trim()}”`}
+          {interruption.audioEndMs
+            ? t("transcript.heardBeforeAt", { at, text: interruption.heardText.trim() })
+            : t("transcript.heardBefore", { text: interruption.heardText.trim() })}
         </p>
         <Confirmation confirmed={interruption.confirmed} />
       </>
     );
   }
-  const label = `Not heard — the caller interrupted ${at}`;
+  const label = t("transcript.notHeard", { at });
   return (
     <>
       <p className="text-sm leading-normal break-words">
         {split.heard ? (
-          <span title={APPROXIMATE}>
+          <span title={approximate}>
             <span aria-hidden="true" className="mr-1 font-mono text-xs text-dim">
-              ≈ heard
+              {t("transcript.heardShort")}
             </span>
-            <span className="sr-only">{`${APPROXIMATE}: `}</span>
+            <span className="sr-only">{`${approximate}: `}</span>
             <span>{split.heard}</span>
           </span>
         ) : null}

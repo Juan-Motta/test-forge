@@ -2,6 +2,7 @@ import Link from "next/link";
 import { clock, runDurationMs } from "@/features/runs/format";
 import { runKind } from "@/features/runs/kind";
 import type { Run } from "@/features/runs/types";
+import { useT } from "@/lib/i18n";
 import { LiveDot, VolumeIcon, Waveform, buttonClasses, cn, focusRing } from "@/ui";
 import { placeholderWave } from "./format";
 
@@ -16,14 +17,15 @@ type LiveNowCardProps = {
 
 /** Runs in progress right now, each with a way to listen in (calls) or watch (text conversations). */
 export function LiveNowCard({ runs, total, error, now }: LiveNowCardProps) {
+  const t = useT();
   const headingId = "live-now";
   let content;
   if (error) {
-    content = <p className="text-sm text-danger-fg">{`Could not load live runs: ${error}`}</p>;
+    content = <p className="text-sm text-danger-fg">{t("overview.liveFailed", { error })}</p>;
   } else if (runs === undefined) {
-    content = <p className="text-sm text-muted">Loading live runs…</p>;
+    content = <p className="text-sm text-muted">{t("overview.liveLoading")}</p>;
   } else if (runs.length === 0) {
-    content = <p className="text-sm text-muted">Nothing running right now.</p>;
+    content = <p className="text-sm text-muted">{t("overview.nothingRunning")}</p>;
   } else {
     content = (
       <div className="grid grid-cols-[repeat(auto-fit,minmax(min(300px,100%),1fr))] gap-3.5">
@@ -39,16 +41,18 @@ export function LiveNowCard({ runs, total, error, now }: LiveNowCardProps) {
         <div className="flex items-center gap-2.5">
           <LiveDot />
           <h2 id={headingId} className="text-base font-semibold">
-            Live now
+            {t("overview.liveNow")}
           </h2>
-          <span className="text-[13px] text-muted">{`${total ?? "—"} ${total === 1 ? "session" : "sessions"}`}</span>
+          <span className="text-[13px] text-muted">
+            {total === null ? t("overview.sessionsUnknown") : t.plural("overview.sessions", total)}
+          </span>
         </div>
         <Link
           href="/live"
-          aria-label="Open live monitor"
+          aria-label={t("overview.openMonitor")}
           className={cn("inline-flex min-h-11 items-center rounded text-[13px] font-medium text-agent", focusRing)}
         >
-          Open live monitor →
+          {`${t("overview.openMonitor")} →`}
         </Link>
       </div>
       {content}
@@ -57,6 +61,7 @@ export function LiveNowCard({ runs, total, error, now }: LiveNowCardProps) {
 }
 
 function LiveSessionCard({ run, now }: { run: Run; now: number }) {
+  const t = useT();
   const elapsed = runDurationMs(run, now);
   const text = runKind(run) === "text";
   const wave = text ? null : placeholderWave(run.id);
@@ -80,11 +85,11 @@ function LiveSessionCard({ run, now }: { run: Run; now: number }) {
         className={buttonClasses("secondary", "min-h-10 text-[13px]")}
       >
         {text ? (
-          "Watch"
+          t("overview.watch")
         ) : (
           <>
             <VolumeIcon size={16} />
-            Listen in
+            {t("overview.listenIn")}
           </>
         )}
       </Link>

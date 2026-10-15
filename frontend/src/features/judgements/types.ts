@@ -101,10 +101,25 @@ export type JudgeResult = {
   model: string;
 };
 
-export type NoJudgement = { status: "none" };
+/** Where the judgement's Spanish version stands (`none`: never translated, e.g. judged before it). */
+export type TranslationStatus = "none" | "pending" | "ready" | "failed";
 
-/** `GET /api/runs/{id}/judgement` once the run was handed to the judge. */
-export type JudgementState = {
+/** The localized fields of a judgement GET (`?lang=`); absent before translations existed. */
+export type JudgementLanguage = {
+  /** The language the free-text fields came in. */
+  language?: "en" | "es";
+  translationStatus?: TranslationStatus;
+  translationError?: string | null;
+};
+
+export type NoJudgement = { status: "none" } & JudgementLanguage;
+
+/**
+ * `GET /api/runs/{id}/judgement?lang=` once the run was handed to the judge. With `lang=es` and a
+ * ready translation, the free-text fields (summary, rationales, suggestions, strengths, brief) are
+ * Spanish; evidence, quotes, refs, tags and scores never change.
+ */
+export type JudgementState = JudgementLanguage & {
   status: JudgementStatus;
   result: JudgeResult | null;
   traceStats: TraceStats | null;

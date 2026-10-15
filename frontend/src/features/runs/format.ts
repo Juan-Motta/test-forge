@@ -1,15 +1,10 @@
+import type { Translator } from "@/lib/i18n";
 import type { BadgeTone } from "@/ui";
 import { ACTIVE_RUN_STATUSES, type Run, type RunStatus } from "./types";
 
-export const STATUS_LABELS: Record<RunStatus, string> = {
-  queued: "Queued",
-  connecting: "Connecting",
-  running: "Running",
-  completed: "Completed",
-  failed: "Failed",
-  cancelled: "Cancelled",
-  interrupted: "Interrupted",
-};
+export function statusLabel(t: Translator, status: RunStatus): string {
+  return t(`runs.status.${status}`);
+}
 
 export const STATUS_TONES: Record<RunStatus, BadgeTone> = {
   queued: "neutral",
@@ -22,35 +17,37 @@ export const STATUS_TONES: Record<RunStatus, BadgeTone> = {
 };
 
 /** Why a run ended (the runner's reasons, plus the manager's), in words. */
-const END_REASONS: Record<string, string> = {
-  caller_hung_up: "Evaluator hung up",
-  agent_ended: "Agent ended the call",
-  max_duration: "Reached the maximum duration",
-  max_silence: "Too long without speech",
-  connect_failed: "Could not connect to the agent",
-  connection_closed: "The agent connection closed",
-  ready_timeout: "The agent never became ready",
-  protocol_error: "Protocol error",
-  evaluator_failed: "The evaluator model failed",
-  tts_failed: "Speech synthesis failed",
-  internal_error: "Internal error",
-  setup_failed: "Could not set up the providers",
-  cancelled: "Cancelled",
-  shutdown: "The server stopped",
-  server_restarted: "The server restarted",
-  max_turns: "Reached the maximum turns",
-  caller_silent: "The evaluator had nothing to say",
-  agent_error: "The agent's reply failed",
-};
+const END_REASONS = [
+  "caller_hung_up",
+  "agent_ended",
+  "max_duration",
+  "max_silence",
+  "connect_failed",
+  "connection_closed",
+  "ready_timeout",
+  "protocol_error",
+  "evaluator_failed",
+  "tts_failed",
+  "internal_error",
+  "setup_failed",
+  "cancelled",
+  "shutdown",
+  "server_restarted",
+  "max_turns",
+  "caller_silent",
+  "agent_error",
+] as const;
+type EndReason = (typeof END_REASONS)[number];
 
-/** Text runs: reasons worded for a chat rather than a call. */
-const TEXT_END_REASONS: Record<string, string> = {
-  caller_hung_up: "Evaluator ended the conversation",
-};
-
-export function endReasonLabel(reason: string | null | undefined, kind: "voice" | "text" = "voice"): string | null {
+export function endReasonLabel(
+  t: Translator,
+  reason: string | null | undefined,
+  kind: "voice" | "text" = "voice",
+): string | null {
   if (!reason) return null;
-  return (kind === "text" ? TEXT_END_REASONS[reason] : undefined) ?? END_REASONS[reason] ?? reason.replaceAll("_", " ");
+  // Text runs: worded for a chat rather than a call.
+  if (kind === "text" && reason === "caller_hung_up") return t("runs.endText.caller_hung_up");
+  return (END_REASONS as readonly string[]).includes(reason) ? t(`runs.end.${reason as EndReason}`) : reason.replaceAll("_", " ");
 }
 
 export function isActive(status: RunStatus): boolean {

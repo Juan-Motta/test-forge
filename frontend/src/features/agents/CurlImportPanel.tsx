@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useT } from "@/lib/i18n";
 import { Button, Field, Textarea } from "@/ui";
 import { parseAgentCurl, type CurlImportResult } from "./curl-import";
 
@@ -19,6 +20,7 @@ type CurlImportPanelProps = {
  * closes only this panel, not the surrounding dialog.
  */
 export function CurlImportPanel({ id, onImport, onCancel }: CurlImportPanelProps) {
+  const t = useT();
   const [text, setText] = useState("");
   const [error, setError] = useState<string>();
   const textarea = useRef<HTMLTextAreaElement>(null);
@@ -26,7 +28,7 @@ export function CurlImportPanel({ id, onImport, onCancel }: CurlImportPanelProps
   useEffect(() => textarea.current?.focus(), []);
 
   function onImportClick() {
-    const result = parseAgentCurl(text);
+    const result = parseAgentCurl(t, text);
     if (!result.ok) {
       setError(result.error);
       textarea.current?.focus();
@@ -46,13 +48,13 @@ export function CurlImportPanel({ id, onImport, onCancel }: CurlImportPanelProps
     <div
       id={id}
       role="group"
-      aria-label="Import from cURL"
+      aria-label={t("agents.importCurl")}
       onKeyDown={onKeyDown}
       className="flex flex-col gap-3 rounded-lg border border-line bg-raised p-4"
     >
       <Field
-        label="Paste the cURL command"
-        hint="In the browser's devtools, right-click the agent's WebSocket request and copy it as cURL. Name and context are not touched."
+        label={t("curl.label")}
+        hint={t("curl.hint")}
         error={error}
       >
         {(control) => (
@@ -72,11 +74,11 @@ export function CurlImportPanel({ id, onImport, onCancel }: CurlImportPanelProps
         )}
       </Field>
       <div className="flex flex-wrap justify-end gap-3">
-        <Button variant="ghost" aria-label="Cancel import" onClick={onCancel}>
-          Cancel
+        <Button variant="ghost" aria-label={t("curl.cancel")} onClick={onCancel}>
+          {t("common.cancel")}
         </Button>
         <Button variant="secondary" onClick={onImportClick}>
-          Import
+          {t("curl.import")}
         </Button>
       </div>
     </div>

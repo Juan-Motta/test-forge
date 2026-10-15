@@ -1,6 +1,7 @@
 import { isJudging } from "@/features/judgements/format";
-import { STATUS_LABELS, STATUS_TONES, isActive } from "@/features/runs/format";
+import { STATUS_TONES, isActive, statusLabel } from "@/features/runs/format";
 import type { Run } from "@/features/runs/types";
+import type { Translator } from "@/lib/i18n";
 import type { BadgeTone } from "@/ui";
 
 /** Judged runs under this score need a human look (the "warn" band starts here). */
@@ -29,14 +30,14 @@ export function needsReview(run: Judged): boolean {
 }
 
 /** One word for how a run went: its call status, then its judgement. */
-export function runResult(run: Run): RunResult {
-  if (isActive(run.status)) return { kind: "active", label: STATUS_LABELS[run.status], tone: STATUS_TONES[run.status] };
-  if (run.status === "failed") return { kind: "failed", label: "Failed", tone: "danger" };
-  if (run.status === "interrupted") return { kind: "failed", label: "Interrupted", tone: "danger" };
-  if (run.status === "cancelled") return { kind: "other", label: "Cancelled", tone: "muted" };
-  if (needsReview(run)) return { kind: "review", label: "Needs review", tone: "evaluator" };
-  if (run.score !== null && run.score !== undefined) return { kind: "passed", label: "Passed", tone: "success" };
-  if (isJudging(run.judgementStatus)) return { kind: "other", label: "Judging…", tone: "muted" };
-  if (run.judgementStatus === "failed") return { kind: "other", label: "Judge failed", tone: "muted" };
-  return { kind: "other", label: "Not judged", tone: "muted" };
+export function runResult(t: Translator, run: Run): RunResult {
+  if (isActive(run.status)) return { kind: "active", label: statusLabel(t, run.status), tone: STATUS_TONES[run.status] };
+  if (run.status === "failed") return { kind: "failed", label: t("runs.status.failed"), tone: "danger" };
+  if (run.status === "interrupted") return { kind: "failed", label: t("runs.status.interrupted"), tone: "danger" };
+  if (run.status === "cancelled") return { kind: "other", label: t("runs.status.cancelled"), tone: "muted" };
+  if (needsReview(run)) return { kind: "review", label: t("runs.result.review"), tone: "evaluator" };
+  if (run.score !== null && run.score !== undefined) return { kind: "passed", label: t("runs.result.passed"), tone: "success" };
+  if (isJudging(run.judgementStatus)) return { kind: "other", label: t("runs.result.judging"), tone: "muted" };
+  if (run.judgementStatus === "failed") return { kind: "other", label: t("runs.result.judgeFailed"), tone: "muted" };
+  return { kind: "other", label: t("runs.result.notJudged"), tone: "muted" };
 }

@@ -6,6 +6,7 @@ import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "rea
 import { useForm, useWatch, type Path } from "react-hook-form";
 import type { Agent, AgentKind } from "@/features/agents/types";
 import type { FieldErrors } from "@/lib/api";
+import { useT } from "@/lib/i18n";
 import { useUnsavedChangesGuard } from "@/lib/navigation/unsaved-changes";
 import { PageHeader } from "@/features/shell/PageHeader";
 import {
@@ -22,22 +23,12 @@ import {
   Textarea,
   cn,
   focusRing,
-  type FilterChipOption,
 } from "@/ui";
 import { CriteriaEditor, WeightsStatus } from "./CriteriaEditor";
 import { errorAt, formPath } from "./editor-form";
 import { FactsEditor } from "./FactsEditor";
 import { InterruptionsEditor } from "./InterruptionsEditor";
-import {
-  EVALUATOR_MODE_LABELS,
-  REALTIME_MODEL_LABELS,
-  HANG_UP_LABELS,
-  initialValues,
-  isHiddenFor,
-  scenarioFormSchemaFor,
-  TEMPERAMENT_LABELS,
-  type ScenarioFormValues,
-} from "./form-schema";
+import { initialValues, isHiddenFor, scenarioFormSchemaFor, temperamentLabel, type ScenarioFormValues } from "./form-schema";
 import {
   EVALUATOR_MODES,
   HANG_UP_RULES,
@@ -45,15 +36,15 @@ import {
   REALTIME_VOICES,
   TEMPERAMENTS,
   type EvaluatorMode,
+  type RealtimeModel,
   type Scenario,
-  type Temperament,
 } from "./types";
 
 const NO_SERVER_ERRORS: FieldErrors = {};
-const TEMPERAMENT_OPTIONS: FilterChipOption<Temperament>[] = TEMPERAMENTS.map((value) => ({
-  value,
-  label: TEMPERAMENT_LABELS[value],
-}));
+const REALTIME_MODEL_HINTS = {
+  "gpt-realtime-2.1-mini": "scenarios.realtimeMiniHint",
+  "gpt-realtime-2.1": "scenarios.realtimeFullHint",
+} as const satisfies Record<RealtimeModel, string>;
 
 export type ConnectionOption = { id: string; name: string };
 
@@ -109,12 +100,13 @@ export function ScenarioEditor({
   library,
   launch,
 }: ScenarioEditorProps) {
+  const t = useT();
   const editing = scenario !== undefined;
   const form = useForm<ScenarioFormValues>({
     // The chosen agent's kind decides what is required (a text agent needs the evaluator model).
     resolver: (values, context, options) => {
       const kind = agents.find((item) => item.id === values.agentId)?.kind ?? "voice";
-      return zodResolver(scenarioFormSchemaFor(kind))(values, context, options);
+      return zodResolver(scenarioFormSchemaFor(t, kind))(values, context, options);
     },
     defaultValues: initialValues(scenario, agents[0]?.id),
     shouldFocusError: false,
@@ -134,7 +126,7 @@ export function ScenarioEditor({
   // Set by a failed save; the next render that shows an error moves focus to it.
   const focusFirstError = useRef(false);
   const [saved, setSaved] = useState(false);
-  useUnsavedChangesGuard(isDirty);
+  useUnsavedChangesGuard(isDirty, t("common.leaveUnsaved"));
 
   // After a failed save, focus the first field (in page order) that shows an error.
   useEffect(() => {
@@ -183,12 +175,12 @@ export function ScenarioEditor({
   const linkedTts = scenario?.ttsConnectionId;
   const voiceOptions =
     linkedTts && !ttsOptions.some((option) => option.id === linkedTts)
-      ? [...ttsOptions, { id: linkedTts, name: "Current connection" }]
+      ? [...ttsOptions, { id: linkedTts, name: t("scenarios.currentConnection") }]
       : ttsOptions;
   const linkedEvaluator = scenario?.evaluatorConnectionId;
   const chatOptions =
     linkedEvaluator && !evaluatorOptions.some((option) => option.id === linkedEvaluator)
-      ? [...evaluatorOptions, { id: linkedEvaluator, name: "Current connection" }]
+      ? [...evaluatorOptions, { id: linkedEvaluator, name: t("scenarios.currentConnection") }]
       : evaluatorOptions;
 
   async function onValid(values: ScenarioFormValues) {
@@ -206,7 +198,7 @@ export function ScenarioEditor({
 
   const submit = (event: FormEvent<HTMLFormElement>) => handleSubmit(onValid, onInvalid)(event);
 
-  const status = isDirty ? "Unsaved changes" : saved ? "Saved" : "";
+  const status = isDirty ? t("editor.unsaved") : saved ? t("editor.saved") : "";
 
   const formId = "scenario-form";
   const temperament = useWatch({ control, name: "persona.temperament" });
@@ -227,15 +219,15 @@ export function ScenarioEditor({
               {status}
             </p>
             <Button variant="ghost" onClick={onCancel}>
-              Cancel
+              {t("common.cancel")}
             </Button>
             {onDuplicate ? (
               <Button variant="secondary" loading={duplicating} onClick={onDuplicate}>
-                {duplicating ? "Duplicating…" : "Duplicate"}
+                {duplicating ? t("editor.duplicating") : t("editor.duplicate")}
               </Button>
             ) : null}
             <Button type="submit" form={formId} loading={pending}>
-              {pending ? "Saving…" : editing ? "Save" : "Create scenario"}
+              {pending ? t("editor.saving") : editing ? t("editor.save") : t("scenarios.create")}
             </Button>
           </>
         }
@@ -247,28 +239,28 @@ export function ScenarioEditor({
           ref={formRef}
           id={formId}
           noValidate
-          aria-label="Scenario definition"
+          aria-label={t("scenarios.definition")}
           onSubmit={submit}
           className="flex min-w-0 flex-col gap-4"
         >
           <Section
             id="scenario-target"
-            title="1 · Target agent and context"
+            title={t("scenarios.section.target")}
             actions={
               <Link href="/agents" className={cn("inline-flex min-h-9 items-center rounded text-[13px]", focusRing)}>
-                Agent settings →
+                {`${t("scenarios.agentSettings")} →`}
               </Link>
             }
           >
             <div className="grid gap-3 md:grid-cols-2">
-              <Field label="Name" error={fieldError("name")}>
+              <Field label={t("scenarios.field.name")} error={fieldError("name")}>
                 {(props) => <Input autoComplete="off" {...props} {...registerField("name")} />}
               </Field>
-              <Field label="Tags" hint="Comma-separated, like booking, regression." error={fieldError("tags")}>
+              <Field label={t("scenarios.field.tags")} hint={t("scenarios.field.tagsHint")} error={fieldError("tags")}>
                 {(props) => <Input autoComplete="off" {...props} {...registerField("tags")} />}
               </Field>
             </div>
-            <Field label="Agent under test" error={fieldError("agentId")}>
+            <Field label={t("scenarios.field.agent")} error={fieldError("agentId")}>
               {(props) => (
                 <Select {...props} {...registerField("agentId")}>
                   {agents.map((item) => (
@@ -279,43 +271,43 @@ export function ScenarioEditor({
                 </Select>
               )}
             </Field>
-            <section aria-label="Agent context" className="flex flex-col gap-2 rounded-[10px] border border-line bg-field p-3.5">
+            <section aria-label={t("scenarios.agentContext")} className="flex flex-col gap-2 rounded-[10px] border border-line bg-field p-3.5">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-xs font-semibold text-muted">
-                  {agent ? `Agent context · shared by all scenarios of ${agent.name}` : "Agent context"}
+                  {agent ? t("scenarios.agentContextOf", { agent: agent.name }) : t("scenarios.agentContext")}
                 </p>
                 <Badge tone="agent" className="text-[11px]">
-                  Inherited
+                  {t("scenarios.inherited")}
                 </Badge>
               </div>
               <p className="text-sm leading-relaxed whitespace-pre-wrap text-body">
-                {agent?.context || "This agent has no shared context yet."}
+                {agent?.context || t("scenarios.noAgentContext")}
               </p>
             </section>
             <Field
-              label="Scenario-specific context"
-              hint="Added on top of the agent's shared context for this scenario only."
+              label={t("scenarios.field.context")}
+              hint={t("scenarios.field.contextHint")}
               error={fieldError("context")}
             >
               {(props) => <Textarea rows={3} {...props} {...registerField("context")} />}
             </Field>
           </Section>
 
-          <Section id="scenario-persona" title="2 · Persona the evaluator plays">
+          <Section id="scenario-persona" title={t("scenarios.section.persona")}>
             <div className="grid gap-3 sm:grid-cols-[repeat(auto-fit,minmax(min(180px,100%),1fr))]">
-              <Field label="Persona name" error={fieldError("persona.name")}>
+              <Field label={t("scenarios.field.personaName")} error={fieldError("persona.name")}>
                 {(props) => <Input autoComplete="off" {...props} {...registerField("persona.name")} />}
               </Field>
-              <Field label="Locale" hint="Language tag, like es-MX or en-US." error={fieldError("persona.locale")}>
+              <Field label={t("scenarios.field.locale")} hint={t("scenarios.field.localeHint")} error={fieldError("persona.locale")}>
                 {(props) => <Input mono autoComplete="off" spellCheck={false} {...props} {...registerField("persona.locale")} />}
               </Field>
               {text ? null : (
                 <Field
-                  label="Voice override (optional)"
+                  label={t("scenarios.field.voice")}
                   hint={
                     evaluatorMode === "realtime"
-                      ? `A realtime voice: ${REALTIME_VOICES.join(", ")}.`
-                      : "A voice ID of the voice connection, like coral."
+                      ? t("scenarios.field.voiceRealtimeHint", { voices: REALTIME_VOICES.join(", ") })
+                      : t("scenarios.field.voiceHint")
                   }
                   error={fieldError("voiceOverride")}
                 >
@@ -325,13 +317,13 @@ export function ScenarioEditor({
             </div>
             <div className="flex flex-col gap-2">
               <span aria-hidden="true" className="text-xs font-medium text-muted">
-                Temperament
+                {t("scenarios.field.temperament")}
               </span>
               <FilterChips
-                label="Temperament"
+                label={t("scenarios.field.temperament")}
                 tone="evaluator"
                 size="md"
-                options={TEMPERAMENT_OPTIONS}
+                options={TEMPERAMENTS.map((value) => ({ value, label: temperamentLabel(t, value) }))}
                 selected={[temperament]}
                 onToggle={(value) => {
                   setValue("persona.temperament", value, { shouldDirty: true });
@@ -342,43 +334,43 @@ export function ScenarioEditor({
                 <p className="text-xs text-danger-fg">{fieldError("persona.temperament")}</p>
               ) : null}
             </div>
-            <Field label="Persona notes" hint="Habits and quirks, like interrupting." error={fieldError("persona.notes")}>
+            <Field label={t("scenarios.field.notes")} hint={t("scenarios.field.notesHint")} error={fieldError("persona.notes")}>
               {(props) => <Textarea rows={2} {...props} {...registerField("persona.notes")} />}
             </Field>
           </Section>
 
-          <Section id="scenario-goal" title="3 · Goal and instructions">
-            <Field label="Goal" hint="What the evaluator wants to achieve; the judge checks it." error={fieldError("goal")}>
+          <Section id="scenario-goal" title={t("scenarios.section.goal")}>
+            <Field label={t("scenarios.field.goal")} hint={t("scenarios.field.goalHint")} error={fieldError("goal")}>
               {(props) => <Textarea rows={3} {...props} {...registerField("goal")} />}
             </Field>
-            <Field label="How to behave" hint="How the evaluator talks and reacts." error={fieldError("instructions")}>
+            <Field label={t("scenarios.field.instructions")} hint={t("scenarios.field.instructionsHint")} error={fieldError("instructions")}>
               {(props) => <Textarea rows={3} {...props} {...registerField("instructions")} />}
             </Field>
             <div className="flex flex-col gap-2">
-              <h3 className="text-xs font-medium text-muted">Facts the caller knows (only revealed when asked)</h3>
+              <h3 className="text-xs font-medium text-muted">{t("scenarios.facts")}</h3>
               <FactsEditor control={control} registerField={registerField} fieldError={fieldError} />
             </div>
           </Section>
 
           <Section
             id="scenario-criteria"
-            title="4 · Success criteria for the judge"
+            title={t("scenarios.section.criteria")}
             actions={<WeightsStatus control={control} />}
           >
             <CriteriaEditor control={control} registerField={registerField} fieldError={fieldError} />
           </Section>
 
-          <Section id="scenario-end" title={`5 · When the ${text ? "conversation" : "call"} ends`}>
+          <Section id="scenario-end" title={text ? t("scenarios.section.endText") : t("scenarios.section.endVoice")}>
             <div className="grid gap-3 sm:grid-cols-[repeat(auto-fit,minmax(min(180px,100%),1fr))]">
-              <Field label="Max duration (s)" error={fieldError("endConditions.maxDurationS")}>
+              <Field label={t("scenarios.field.maxDuration")} error={fieldError("endConditions.maxDurationS")}>
                 {(props) => (
                   <Input mono type="number" inputMode="numeric" min={30} max={1800} {...props} {...registerField("endConditions.maxDurationS")} />
                 )}
               </Field>
               {text ? (
                 <Field
-                  label="Max turns"
-                  hint="Messages the evaluator sends before it stops, 1–100."
+                  label={t("scenarios.field.maxTurns")}
+                  hint={t("scenarios.field.maxTurnsHint")}
                   error={fieldError("endConditions.maxTurns")}
                 >
                   {(props) => (
@@ -386,18 +378,18 @@ export function ScenarioEditor({
                   )}
                 </Field>
               ) : (
-                <Field label="Max silence (s)" error={fieldError("endConditions.maxSilenceS")}>
+                <Field label={t("scenarios.field.maxSilence")} error={fieldError("endConditions.maxSilenceS")}>
                   {(props) => (
                     <Input mono type="number" inputMode="numeric" min={5} max={120} {...props} {...registerField("endConditions.maxSilenceS")} />
                   )}
                 </Field>
               )}
-              <Field label="Hang up when" error={fieldError("endConditions.hangUpWhen")}>
+              <Field label={t("scenarios.field.hangUp")} error={fieldError("endConditions.hangUpWhen")}>
                 {(props) => (
                   <Select {...props} {...registerField("endConditions.hangUpWhen")}>
                     {HANG_UP_RULES.map((rule) => (
                       <option key={rule} value={rule}>
-                        {HANG_UP_LABELS[rule]}
+                        {t(`scenarios.hangUp.${rule}`)}
                       </option>
                     ))}
                   </Select>
@@ -409,8 +401,8 @@ export function ScenarioEditor({
           {text ? null : (
             <Section
               id="scenario-interruptions"
-              title="6 · Interruptions"
-              description="The caller cuts the agent off mid-reply, like a person barging in. Agent replies count from 1."
+              title={t("scenarios.section.interruptions")}
+              description={t("scenarios.section.interruptionsHint")}
             >
               <InterruptionsEditor control={control} registerField={registerField} fieldError={fieldError} />
             </Section>
@@ -419,17 +411,17 @@ export function ScenarioEditor({
           {text ? (
             <Section
               id="scenario-evaluator"
-              title={`${evaluatorNumber} · Evaluator`}
-              description="A chat model plays the user and writes every message to the agent."
+              title={t("scenarios.section.evaluator", { n: evaluatorNumber })}
+              description={t("scenarios.section.evaluatorTextHint")}
             >
               <Field
-                label="Evaluator model connection"
-                hint="Required for text agents: its chat model writes the user's messages. Azure OpenAI connections need a chat deployment."
+                label={t("scenarios.field.evaluatorModel")}
+                hint={t("scenarios.field.evaluatorModelTextHint")}
                 error={fieldError("evaluatorConnectionId")}
               >
                 {(props) => (
                   <Select {...props} {...registerField("evaluatorConnectionId")}>
-                    <option value="">Choose a connection</option>
+                    <option value="">{t("scenarios.chooseConnection")}</option>
                     {chatOptions.map((option) => (
                       <option key={option.id} value={option.id}>
                         {option.name}
@@ -442,10 +434,10 @@ export function ScenarioEditor({
           ) : (
             <Section
               id="scenario-evaluator"
-              title={`${evaluatorNumber} · Evaluator`}
-              description="How the caller hears the agent and speaks back."
+              title={t("scenarios.section.evaluator", { n: evaluatorNumber })}
+              description={t("scenarios.section.evaluatorVoiceHint")}
             >
-              <RadioCardGroup label="Evaluator">
+              <RadioCardGroup label={t("common.evaluator")}>
                 {EVALUATOR_MODES.map((mode) => (
                   <RadioCard
                     key={mode}
@@ -453,17 +445,17 @@ export function ScenarioEditor({
                     value={mode}
                     checked={evaluatorMode === mode}
                     onChange={setEvaluatorMode}
-                    title={EVALUATOR_MODE_LABELS[mode].label}
-                    description={EVALUATOR_MODE_LABELS[mode].description}
+                    title={t(`scenarios.mode.${mode}`)}
+                    description={t(`scenarios.mode.${mode}Hint`)}
                   />
                 ))}
               </RadioCardGroup>
               {evaluatorMode === "realtime" ? (
                 <div className="flex flex-col gap-2">
                   <span aria-hidden="true" className="text-xs font-medium text-muted">
-                    Realtime model
+                    {t("scenarios.realtimeModel")}
                   </span>
-                  <RadioCardGroup label="Realtime model">
+                  <RadioCardGroup label={t("scenarios.realtimeModel")}>
                     {REALTIME_MODELS.map((model) => (
                       <RadioCard
                         key={model}
@@ -475,7 +467,7 @@ export function ScenarioEditor({
                           clearErrors("realtimeModel");
                         }}
                         title={<span className="font-mono">{model}</span>}
-                        description={REALTIME_MODEL_LABELS[model]}
+                        description={t(REALTIME_MODEL_HINTS[model])}
                       />
                     ))}
                   </RadioCardGroup>
@@ -483,17 +475,13 @@ export function ScenarioEditor({
               ) : null}
               <div className="grid gap-3 md:grid-cols-2">
                 <Field
-                  label="Evaluator voice (TTS connection)"
-                  hint={
-                    evaluatorMode === "realtime"
-                      ? "The realtime session uses this OpenAI or Azure OpenAI connection. None uses the platform's default."
-                      : "None uses the platform's default evaluator voice."
-                  }
+                  label={t("scenarios.field.tts")}
+                  hint={evaluatorMode === "realtime" ? t("scenarios.field.ttsRealtimeHint") : t("scenarios.field.ttsHint")}
                   error={fieldError("ttsConnectionId")}
                 >
                   {(props) => (
                     <Select {...props} {...registerField("ttsConnectionId")}>
-                      <option value="">None</option>
+                      <option value="">{t("scenarios.none")}</option>
                       {voiceOptions.map((option) => (
                         <option key={option.id} value={option.id}>
                           {option.name}
@@ -503,13 +491,13 @@ export function ScenarioEditor({
                   )}
                 </Field>
                 <Field
-                  label="Evaluator model connection"
-                  hint="Chat model that decides what the caller says. Azure OpenAI connections need a chat deployment."
+                  label={t("scenarios.field.evaluatorModel")}
+                  hint={t("scenarios.field.evaluatorModelHint")}
                   error={fieldError("evaluatorConnectionId")}
                 >
                   {(props) => (
                     <Select {...props} {...registerField("evaluatorConnectionId")}>
-                      <option value="">Same as voice connection</option>
+                      <option value="">{t("scenarios.sameAsVoice")}</option>
                       {chatOptions.map((option) => (
                         <option key={option.id} value={option.id}>
                           {option.name}

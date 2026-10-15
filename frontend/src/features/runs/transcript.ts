@@ -1,3 +1,4 @@
+import type { Translator } from "@/lib/i18n";
 import type { TranscriptRow } from "./types";
 
 /** One line of a conversation as the UI shows it (finished runs and live runs alike). */
@@ -49,8 +50,8 @@ export function splitHeard(text: string, heardText: string): { heard: string; un
 }
 
 /** "at 4.0 s", or that nothing had played yet. */
-export function interruptedAt(audioEndMs: number | null): string {
-  return audioEndMs ? `at ${(audioEndMs / 1000).toFixed(1)} s` : "before any audio played";
+export function interruptedAt(t: Translator, audioEndMs: number | null): string {
+  return audioEndMs ? t("transcript.at", { seconds: (audioEndMs / 1000).toFixed(1) }) : t("transcript.beforeAudio");
 }
 
 function interruptionOf(row: TranscriptRow): Interruption | undefined {

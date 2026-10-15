@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { createTranslator } from "@/lib/i18n";
 import { apiKeyStatus, curlExample, maskedPrefix, statusLabel } from "./format";
+
+const t = createTranslator("en");
 import { apiKeyFixture } from "./testing";
 
 const NOW = Date.parse("2026-10-11T12:00:00Z");
@@ -15,7 +18,7 @@ describe("apiKeyStatus", () => {
   });
 
   it("labels each status", () => {
-    expect([statusLabel("active"), statusLabel("revoked"), statusLabel("expired")]).toEqual([
+    expect([statusLabel(t, "active"), statusLabel(t, "revoked"), statusLabel(t, "expired")]).toEqual([
       "Active",
       "Revoked",
       "Expired",

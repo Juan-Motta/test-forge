@@ -125,11 +125,16 @@ export function judgementFixture(overrides: Partial<JudgementState> = {}): Judge
 type MockJudgementOptions = {
   /** Detail of the 409 the re-judge returns (e.g. "Judgement already in progress"). */
   rejudgeConflict?: string;
+  /** States each run's GETs return after a translation request (default: the last state, pending). */
+  translated?: Record<string, Judgement[]>;
+  /** Detail of the 409 the translation request returns. */
+  translateConflict?: string;
 };
 
 /**
  * In-memory `/api/runs/{id}/judgement`. Each run holds a list of states: every GET returns the
- * next one and the last one sticks (to script a judgement in progress). Records GETs and POSTs.
+ * next one and the last one sticks (to script a judgement in progress). Records GETs (and the
+ * `lang` each asked for), re-judge POSTs and translation requests.
  */
 export function mockJudgementApi(initial: Record<string, Judgement | Judgement[]>, options: MockJudgementOptions = {}) {
   const state = {
@@ -137,13 +142,18 @@ export function mockJudgementApi(initial: Record<string, Judgement | Judgement[]
       Object.entries(initial).map(([id, value]) => [id, Array.isArray(value) ? [...value] : [value]]),
     ) as Record<string, Judgement[]>,
     gets: {} as Record<string, number>,
+    /** The `lang` query parameter of every GET, per run, in order ("" when absent). */
+    langs: {} as Record<string, string[]>,
     posts: [] as string[],
+    /** `POST /judgement/translations` requests: the run id and its `lang`. */
+    translations: [] as Array<{ id: string; lang: string }>,
   };
 
   server.use(
-    http.get(apiUrl("/runs/:id/judgement"), ({ params }) => {
+    http.get(apiUrl("/runs/:id/judgement"), ({ params, request }) => {
       const id = String(params.id);
       state.gets[id] = (state.gets[id] ?? 0) + 1;
+      (state.langs[id] ??= []).push(new URL(request.url).searchParams.get("lang") ?? "");
       const sequence = state.sequences[id] ?? [];
       const current = sequence.length > 1 ? sequence.shift() : sequence[0];
       return HttpResponse.json(current ?? { status: "none" });
@@ -156,6 +166,19 @@ export function mockJudgementApi(initial: Record<string, Judgement | Judgement[]
       }
       const pending = judgementFixture({ status: "pending", result: null, attempt: 2, completedAt: null });
       state.sequences[id] = [pending];
+      return HttpResponse.json(pending, { status: 202 });
+    }),
+    http.post(apiUrl("/runs/:id/judgement/translations"), ({ params, request }) => {
+      const id = String(params.id);
+      const lang = new URL(request.url).searchParams.get("lang") ?? "";
+      state.translations.push({ id, lang });
+      if (options.translateConflict) {
+        return HttpResponse.json({ detail: options.translateConflict }, { status: 409 });
+      }
+      const sequence = state.sequences[id] ?? [];
+      const last = sequence[sequence.length - 1] ?? { status: "none" };
+      const pending = { ...last, translationStatus: "pending", translationError: null } as Judgement;
+      state.sequences[id] = options.translated?.[id] ? [...options.translated[id]] : [pending];
       return HttpResponse.json(pending, { status: 202 });
     }),
   );

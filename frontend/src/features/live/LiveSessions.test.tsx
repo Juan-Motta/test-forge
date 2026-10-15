@@ -262,3 +262,29 @@ async function finish(
   await waitFor(() => expect(api.listQueries.length).toBeGreaterThanOrEqual(before + 3));
   await waitFor(() => expect(within(screen.getByRole("list", { name: "Sessions" })).queryByRole("button", { name: /Group booking/ })).toBeInTheDocument());
 }
+
+describe("Live sessions in Spanish", () => {
+  beforeEach(() => {
+    nav.search = "";
+    sockets = installFakeSockets();
+    audio = installFakeAudio();
+  });
+  afterEach(() => {
+    sockets.restore();
+    audio.restore();
+  });
+
+  it("titles the page, the follow switch and the queued session in Spanish", async () => {
+    mockRunsApi([booking, queued]);
+    renderWithClient(<LiveContainer />, { locale: "es" });
+
+    const list = await screen.findByRole("list", { name: "Sesiones" });
+    await waitFor(() => expect(within(list).getAllByRole("button")).toHaveLength(2));
+    expect(within(list).getByRole("button", { name: /Group booking/ })).toHaveTextContent(
+      "Empieza cuando se libere un lugar",
+    );
+    expect(screen.getByRole("heading", { level: 1, name: "Sesiones en vivo" })).toBeInTheDocument();
+    expect(screen.getByRole("switch", { name: "Seguir y escuchar automáticamente" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 3, name: "Transcripción en vivo" })).toBeInTheDocument();
+  });
+});

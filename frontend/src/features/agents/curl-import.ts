@@ -1,3 +1,4 @@
+import type { Translator } from "@/lib/i18n";
 import type { AgentFormValues } from "./form-schema";
 import type { AgentKind } from "./types";
 
@@ -20,7 +21,6 @@ export type CurlImportResult =
     }
   | { ok: false; error: string };
 
-const NO_URL = "No ws://, wss://, http:// or https:// URL found in the command.";
 const URL_LIKE = /^(wss?|https?):\/\//i;
 const AGENT_PATH = /^\/channelApi\/([^/]+)\/realtime$/;
 /** A text agent's channel API call; whatever precedes `/channelsApi` belongs to the base URL. */
@@ -172,7 +172,7 @@ function headerValue(headers: string[], name: string): string | undefined {
   return undefined;
 }
 
-function originFromHeaders(headers: string[], warnings: string[]): string | undefined {
+function originFromHeaders(t: Translator, headers: string[], warnings: string[]): string | undefined {
   const value = headerValue(headers, "origin");
   if (value !== undefined) {
     try {
@@ -181,7 +181,7 @@ function originFromHeaders(headers: string[], warnings: string[]): string | unde
     } catch {
       // reported below
     }
-    warnings.push(`The Origin header ${value} is not an http(s) origin; it was not used.`);
+    warnings.push(t("curl.badOrigin", { value }));
   }
   return undefined;
 }
@@ -191,7 +191,7 @@ function originFromHeaders(headers: string[], warnings: string[]): string | unde
  * threadId, userId, pageUrl) is generated per run and never read; a `vivi-api-key` header means
  * an API channel and prefills the key.
  */
-function textAgent(url: URL, path: RegExpExecArray, headers: string[]): CurlImportResult {
+function textAgent(t: Translator, url: URL, path: RegExpExecArray, headers: string[]): CurlImportResult {
   const values: CurlImportedValues = {
     baseUrl: `${url.protocol}//${url.host}${path[1]}`,
     channelId: decode(path[2]),
@@ -201,7 +201,7 @@ function textAgent(url: URL, path: RegExpExecArray, headers: string[]): CurlImpo
   values.auth = apiKey ? "api_key" : "none";
   if (apiKey) values.apiKey = apiKey;
   const warnings: string[] = [];
-  const origin = originFromHeaders(headers, warnings);
+  const origin = originFromHeaders(t, headers, warnings);
   if (origin !== undefined) values.origin = origin;
   const ignored = [...new Set(url.searchParams.keys())];
   return { ok: true, kind: "text", values, ignored, warnings };
@@ -218,21 +218,21 @@ function textAgent(url: URL, path: RegExpExecArray, headers: string[]): CurlImpo
  * (added by the engine) and unknown query parameters are reported in `ignored`; headers other
  * than Origin are dropped silently.
  */
-export function parseAgentCurl(text: string): CurlImportResult {
-  if (!text.trim()) return { ok: false, error: "Paste a cURL command." };
+export function parseAgentCurl(t: Translator, text: string): CurlImportResult {
+  if (!text.trim()) return { ok: false, error: t("curl.empty") };
   const { url: raw, headers } = readArguments(tokenize(text));
-  if (raw === undefined) return { ok: false, error: NO_URL };
+  if (raw === undefined) return { ok: false, error: t("curl.noUrl") };
 
   let url: URL;
   try {
     url = new URL(raw);
   } catch {
-    return { ok: false, error: `Could not read the URL ${raw}.` };
+    return { ok: false, error: t("curl.badUrl", { url: raw }) };
   }
-  if (!url.hostname) return { ok: false, error: `Could not read the URL ${raw}.` };
+  if (!url.hostname) return { ok: false, error: t("curl.badUrl", { url: raw }) };
 
   const textPath = TEXT_PATH.exec(url.pathname);
-  if (textPath && (url.protocol === "https:" || url.protocol === "http:")) return textAgent(url, textPath, headers);
+  if (textPath && (url.protocol === "https:" || url.protocol === "http:")) return textAgent(t, url, textPath, headers);
 
   const values: CurlImportedValues = {};
   const ignored: string[] = [];
@@ -244,18 +244,16 @@ export function parseAgentCurl(text: string): CurlImportResult {
   const path = AGENT_PATH.exec(url.pathname);
   if (path) values.channelId = decode(path[1]);
   else {
-    warnings.push(
-      `The path ${url.pathname} is not /channelApi/{channelId}/realtime; enter the channel ID yourself.`,
-    );
+    warnings.push(t("curl.badPath", { path: url.pathname, expected: "/channelApi/{channelId}/realtime" }));
   }
 
   for (const [key, value] of url.searchParams) {
     if (key === "userId" && value) values.userId = value;
     else if (key !== "userId" && !ignored.includes(key)) ignored.push(key);
   }
-  if (values.userId === undefined) warnings.push("No userId query parameter; enter the user ID yourself.");
+  if (values.userId === undefined) warnings.push(t("curl.noUserId"));
 
-  const origin = originFromHeaders(headers, warnings);
+  const origin = originFromHeaders(t, headers, warnings);
   if (origin !== undefined) values.origin = origin;
 
   return { ok: true, kind: "voice", values, ignored, warnings };

@@ -1,9 +1,10 @@
+import { useT } from "@/lib/i18n";
 import { Badge, Pin, cn } from "@/ui";
 import { clock, latency } from "./format";
 import type { Issue } from "./report/issues";
 import type { TranscriptEntry } from "./transcript";
 
-const WHO = { agent: "Agent", caller: "User" } as const;
+const WHO = { agent: "common.agent", caller: "transcript.user" } as const;
 /** A reply whose first text took longer than this reads as slow. */
 const SLOW_FIRST_TEXT_MS = 2000;
 
@@ -26,6 +27,7 @@ type ChatTranscriptProps = {
  * whether the reply broke off.
  */
 export function ChatTranscript({ entries, live = false, emptyText, anchors = false, issues, pending }: ChatTranscriptProps) {
+  const t = useT();
   return (
     <div className="flex flex-col gap-2.5">
       {entries.length === 0 ? (
@@ -34,7 +36,7 @@ export function ChatTranscript({ entries, live = false, emptyText, anchors = fal
         </p>
       ) : (
         <ol
-          aria-label="Conversation transcript"
+          aria-label={t("transcript.conversation")}
           aria-live={live ? "polite" : undefined}
           aria-relevant="additions"
           className="flex flex-col gap-2.5"
@@ -61,21 +63,21 @@ export function ChatTranscript({ entries, live = false, emptyText, anchors = fal
                   )}
                 >
                   <div className="flex flex-wrap items-center gap-2 text-xs">
-                    <span className={cn("font-semibold", user ? "text-evaluator" : "text-agent")}>{WHO[entry.role]}</span>
+                    <span className={cn("font-semibold", user ? "text-evaluator" : "text-agent")}>{t(WHO[entry.role])}</span>
                     {anchors && entry.ref ? <span className="font-mono text-[11px] text-faint">{entry.ref}</span> : null}
                     <span className="font-mono text-[11px] text-faint">{entry.tMs === null ? "—" : clock(entry.tMs)}</span>
-                    {entry.streaming ? <Badge tone="agent">Writing…</Badge> : null}
-                    {entry.incomplete ? <Badge tone="danger">Reply broke off</Badge> : null}
+                    {entry.streaming ? <Badge tone="agent">{t("transcript.writing")}</Badge> : null}
+                    {entry.incomplete ? <Badge tone="danger">{t("transcript.brokeOff")}</Badge> : null}
                   </div>
                   <p className="text-sm leading-normal break-words whitespace-pre-wrap text-body">{entry.text}</p>
                   {entry.role === "agent" ? <ReplyTiming entry={entry} /> : null}
                   {entry.tools && entry.tools.length > 0 ? (
-                    <ul aria-label="Tools used" className="flex flex-wrap gap-1.5">
+                    <ul aria-label={t("report.metric.toolsUsed")} className="flex flex-wrap gap-1.5">
                       {entry.tools.map((tool, index) => (
                         <li key={`${tool.name}-${index}`}>
                           <Badge tone={tool.success === false ? "danger" : "outline"} mono>
                             {tool.name}
-                            {tool.success === false ? <span className="sr-only"> (failed)</span> : null}
+                            {tool.success === false ? <span className="sr-only">{` ${t("transcript.toolFailed")}`}</span> : null}
                           </Badge>
                         </li>
                       ))}
@@ -83,13 +85,13 @@ export function ChatTranscript({ entries, live = false, emptyText, anchors = fal
                   ) : null}
                   {entry.intent ? (
                     <p className="text-xs text-muted">
-                      <span className="font-medium">Evaluator intent:</span> {entry.intent}
+                      <span className="font-medium">{t("transcript.intent")}</span> {entry.intent}
                     </p>
                   ) : null}
                   {issue ? (
                     <p className="inline-flex items-center gap-1.5 text-xs text-danger-fg">
                       <Pin n={issue.n} tone={issue.tone} size="sm" />
-                      <span className="sr-only">{`Issue ${issue.n}: `}</span>
+                      <span className="sr-only">{`${t("ui.issue", { n: issue.n })}: `}</span>
                       {issue.criteria.join("; ")}
                     </p>
                   ) : null}
@@ -102,10 +104,10 @@ export function ChatTranscript({ entries, live = false, emptyText, anchors = fal
       {pending ? (
         <p
           role="status"
-          aria-label="Evaluator is about to send"
+          aria-label={t("transcript.aboutToSendLabel")}
           className="ml-8 self-end rounded-[14px] border border-dashed border-evaluator/40 bg-evaluator/7 px-3.5 py-2.5 text-sm text-muted italic"
         >
-          {`About to send… “${pending.say}”`}
+          {t("transcript.aboutToSend", { text: pending.say })}
         </p>
       ) : null}
     </div>
@@ -114,11 +116,13 @@ export function ChatTranscript({ entries, live = false, emptyText, anchors = fal
 
 /** "First text in 800 ms · full reply in 1.5 s", the first part red when slow. */
 function ReplyTiming({ entry }: { entry: TranscriptEntry }) {
+  const t = useT();
   const firstText = entry.firstTextMs ?? (entry.incomplete ? null : entry.latencyMs) ?? null;
   const parts: { text: string; slow?: boolean }[] = [];
-  if (firstText !== null) parts.push({ text: `First text in ${latency(firstText)}`, slow: firstText > SLOW_FIRST_TEXT_MS });
+  if (firstText !== null) parts.push({ text: t("transcript.firstText", { time: latency(firstText) }), slow: firstText > SLOW_FIRST_TEXT_MS });
   if (entry.fullReplyMs !== null && entry.fullReplyMs !== undefined) {
-    parts.push({ text: `${parts.length ? "full reply" : "Full reply"} in ${latency(entry.fullReplyMs)}` });
+    const time = latency(entry.fullReplyMs);
+    parts.push({ text: parts.length ? t("transcript.fullReplyAfter", { time }) : t("transcript.fullReply", { time }) });
   }
   if (parts.length === 0) return null;
   return (

@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { CriterionResult } from "@/features/judgements/types";
+import { createTranslator } from "@/lib/i18n";
 import type { TraceObservation } from "../types";
 import { bandSpread, collectIssues, goalsMet, issuePins, timeAxis } from "./issues";
 import { traceSummaryLine, waterfallRows } from "./waterfall";
+
+const t = createTranslator("en");
 
 function criterion(overrides: Partial<CriterionResult>): CriterionResult {
   return {
@@ -43,6 +46,7 @@ describe("collectIssues", () => {
 describe("issuePins", () => {
   it("places each issue at the middle of its turn on the run timeline", () => {
     const pins = issuePins(
+      t,
       [
         { n: 1, ref: "A1", tone: "warn", criteria: ["x"] },
         { n: 2, ref: "C9", tone: "danger", criteria: ["y"] },
@@ -144,7 +148,7 @@ describe("waterfallRows", () => {
 describe("traceSummaryLine", () => {
   it("sums tokens and cost when the digest has none", () => {
     expect(
-      traceSummaryLine({
+      traceSummaryLine(t, {
         available: true,
         note: null,
         stats: null,

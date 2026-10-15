@@ -1,14 +1,19 @@
 import { z } from "zod";
+import type { Translator } from "@/lib/i18n";
 
 // Limits mirror the backend's LoginRequest so the form never sends what the API would reject.
-export const loginSchema = z.object({
-  email: z
-    .string()
-    .trim()
-    .min(1, "Enter your email address.")
-    .max(320, "Use at most 320 characters.")
-    .regex(/^[^\s@]+@[^\s@]+$/, "Enter a valid email address."),
-  password: z.string().min(1, "Enter your password.").max(1024, "Use at most 1024 characters."),
-});
+export const loginSchema = (t: Translator) =>
+  z.object({
+    email: z
+      .string()
+      .trim()
+      .min(1, t("login.error.email"))
+      .max(320, t("common.maxChars", { max: 320 }))
+      .regex(/^[^\s@]+@[^\s@]+$/, t("login.error.emailInvalid")),
+    password: z
+      .string()
+      .min(1, t("login.error.password"))
+      .max(1024, t("common.maxChars", { max: 1024 })),
+  });
 
-export type LoginValues = z.infer<typeof loginSchema>;
+export type LoginValues = z.infer<ReturnType<typeof loginSchema>>;

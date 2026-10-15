@@ -330,3 +330,17 @@ describe("Overview weakest criteria and suggestions", () => {
     expect(within(suggestions).getByText("No suggestions to hand off yet.")).toBeInTheDocument();
   });
 });
+
+describe("Overview in Spanish", () => {
+  it("shows the KPIs with Spanish words and number notation", async () => {
+    mockRunsApi([runFixture()]);
+    mockStatsApi(statsFixture());
+    renderWithClient(<OverviewContainer />, { locale: "es" });
+
+    await screen.findByRole("group", { name: "Corridas · últimos 7 días" });
+    expect(screen.getByRole("heading", { level: 1, name: "Resumen" })).toBeInTheDocument();
+    expect(kpi("Corridas · últimos 7 días")).toHaveTextContent("+34 frente al periodo anterior (semana)");
+    expect(kpi("Puntuación promedio del juez")).toHaveTextContent("74,2");
+    expect(kpi("Objetivos cumplidos")).toHaveTextContent("81 %");
+  });
+});

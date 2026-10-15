@@ -1,28 +1,23 @@
 import { ApiError } from "@/lib/api";
-
-export const INVALID_CREDENTIALS = "Invalid email or password.";
-const GENERIC = "Could not sign you in. Try again.";
-
-function minutes(seconds: number): string {
-  const n = Math.max(1, Math.ceil(seconds / 60));
-  return n === 1 ? "1 minute" : `${n} minutes`;
-}
+import type { Translator } from "@/lib/i18n";
 
 /** What the login page says about a failed attempt. Never reveals whether the email exists. */
-export function loginErrorMessage(error: unknown): string {
-  if (!(error instanceof ApiError)) return GENERIC;
+export function loginErrorMessage(t: Translator, error: unknown): string {
+  if (!(error instanceof ApiError)) return t("login.error.generic");
   switch (error.status) {
     case 401:
-      return INVALID_CREDENTIALS;
+      return t("login.error.invalid");
     case 429:
       return error.retryAfterSeconds === undefined
-        ? "Too many attempts, try again later."
-        : `Too many attempts, try again in ${minutes(error.retryAfterSeconds)}.`;
+        ? t("login.error.tooManyLater")
+        : t("login.error.tooMany", {
+            wait: t.plural("login.error.minutes", Math.max(1, Math.ceil(error.retryAfterSeconds / 60))),
+          });
     case 0:
       return error.message;
     case 422:
-      return "Check the highlighted fields.";
+      return t("common.checkFields");
     default:
-      return GENERIC;
+      return t("login.error.generic");
   }
 }

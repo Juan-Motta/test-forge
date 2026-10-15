@@ -1,3 +1,4 @@
+import type { Translator } from "@/lib/i18n";
 import type { RunTrace, TraceObservation } from "../types";
 
 /** One waterfall row: its bar's `left` and `width` are percentages of the timeline. */
@@ -39,13 +40,13 @@ export function waterfallRows(observations: readonly TraceObservation[], duratio
 }
 
 /** "Matched by threadId · 23 observations · 41.2k tokens · $0.084". */
-export function traceSummaryLine(trace: RunTrace): string {
+export function traceSummaryLine(t: Translator, trace: RunTrace): string {
   const { observations, stats } = trace;
   const summed = observations.reduce((sum, item) => sum + (item.tokens ?? 0), 0);
   const tokens = typeof stats?.totalTokens === "number" ? stats.totalTokens : summed;
   const cost = observations.reduce((sum, item) => sum + (item.costUsd ?? 0), 0);
   const count = observations.length;
-  const parts = ["Matched by threadId", `${count} observation${count === 1 ? "" : "s"}`];
+  const parts = [t("report.matchedByThread"), t.plural("judgement.observations", count)];
   if (tokens > 0) parts.push(tokensLabel(tokens));
   if (cost > 0) parts.push(`$${cost.toFixed(3)}`);
   return parts.join(" · ");

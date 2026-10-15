@@ -1,17 +1,11 @@
 "use client";
 
 import { useFieldArray, useWatch, type Control } from "react-hook-form";
+import { useT } from "@/lib/i18n";
 import { Badge, Button, CloseIcon, PlusIcon, cn, focusRing } from "@/ui";
 import type { SectionProps } from "./editor-form";
 import { InlineField, inlineControl } from "./FactsEditor";
-import {
-  KIND_LABELS,
-  newCriterion,
-  SOURCE_LABELS,
-  WEIGHT_TOTAL,
-  weightTotal,
-  type ScenarioFormValues,
-} from "./form-schema";
+import { newCriterion, WEIGHT_TOTAL, weightTotal, type ScenarioFormValues } from "./form-schema";
 import { CRITERION_KINDS, EVIDENCE_SOURCES, type CriterionKind } from "./types";
 
 type CriteriaEditorProps = SectionProps & { control: Control<ScenarioFormValues> };
@@ -23,17 +17,19 @@ const KIND_TONE: Record<CriterionKind, string> = {
 
 /** The live weight total; the criteria must reach exactly 100% to save. */
 export function WeightsStatus({ control }: { control: Control<ScenarioFormValues> }) {
+  const t = useT();
   const rows = useWatch({ control, name: "criteria" });
   const total = weightTotal(rows ?? []);
   return (
     <Badge tone={total === WEIGHT_TOTAL ? "success" : "danger"}>
-      <span aria-live="polite">{`Weights total ${total}%`}</span>
+      <span aria-live="polite">{t("scenarios.weightsTotal", { total })}</span>
     </Badge>
   );
 }
 
 /** Weighted success criteria for the judge: one compact row each (kind chip, text, evidence pill, weight). */
 export function CriteriaEditor({ control, registerField, fieldError }: CriteriaEditorProps) {
+  const t = useT();
   const { fields, append, remove } = useFieldArray({ control, name: "criteria" });
   const rows = useWatch({ control, name: "criteria" });
   const total = weightTotal(rows ?? []);
@@ -46,17 +42,17 @@ export function CriteriaEditor({ control, registerField, fieldError }: CriteriaE
 
   return (
     <div className="flex flex-col gap-2">
-      <p className="text-xs text-muted">The judge scores each criterion; Must criteria fail the call when missed.</p>
+      <p className="text-xs text-muted">{t("scenarios.criteriaHint")}</p>
       <ul className="flex flex-col gap-2">
         {fields.map((row, index) => {
-          const prefix = `Criterion ${index + 1}`;
+          const prefix = t("scenarios.criterionN", { n: index + 1 });
           const kind = rows?.[index]?.kind ?? row.kind;
           return (
             <li
               key={row.id}
               className="flex flex-wrap items-start gap-2.5 rounded-lg border border-line bg-field px-2.5 py-1.5"
             >
-              <InlineField label={`${prefix} Kind`} error={fieldError(`criteria.${index}.kind`)}>
+              <InlineField label={`${prefix} ${t("scenarios.kind")}`} error={fieldError(`criteria.${index}.kind`)}>
                 {(props) => (
                   <select
                     className={cn(
@@ -69,24 +65,24 @@ export function CriteriaEditor({ control, registerField, fieldError }: CriteriaE
                   >
                     {CRITERION_KINDS.map((value) => (
                       <option key={value} value={value}>
-                        {KIND_LABELS[value]}
+                        {t(`scenarios.criterionKind.${value}`)}
                       </option>
                     ))}
                   </select>
                 )}
               </InlineField>
-              <InlineField label={`${prefix} Text`} error={fieldError(`criteria.${index}.text`)} className="min-w-0 flex-[1_1_240px]">
+              <InlineField label={`${prefix} ${t("scenarios.text")}`} error={fieldError(`criteria.${index}.text`)} className="min-w-0 flex-[1_1_240px]">
                 {(props) => (
                   <input
                     autoComplete="off"
-                    placeholder="What the agent must do"
+                    placeholder={t("scenarios.criterionPlaceholder")}
                     className={inlineControl("text-sm text-fg")}
                     {...props}
                     {...registerField(`criteria.${index}.text`)}
                   />
                 )}
               </InlineField>
-              <InlineField label={`${prefix} Evidence`} error={fieldError(`criteria.${index}.source`)}>
+              <InlineField label={`${prefix} ${t("scenarios.evidence")}`} error={fieldError(`criteria.${index}.source`)}>
                 {(props) => (
                   <select
                     className={cn(
@@ -98,13 +94,13 @@ export function CriteriaEditor({ control, registerField, fieldError }: CriteriaE
                   >
                     {EVIDENCE_SOURCES.map((source) => (
                       <option key={source} value={source}>
-                        {SOURCE_LABELS[source]}
+                        {t(`scenarios.source.${source}`)}
                       </option>
                     ))}
                   </select>
                 )}
               </InlineField>
-              <InlineField label={`${prefix} Weight`} error={fieldError(`criteria.${index}.weight`)} className="w-[5.5rem]">
+              <InlineField label={`${prefix} ${t("scenarios.weight")}`} error={fieldError(`criteria.${index}.weight`)} className="w-[5.5rem]">
                 {(props) => (
                   <span className="flex items-center gap-0.5 font-mono text-xs text-muted">
                     <input
@@ -123,7 +119,7 @@ export function CriteriaEditor({ control, registerField, fieldError }: CriteriaE
               </InlineField>
               <button
                 type="button"
-                aria-label={`Remove criterion ${index + 1}`}
+                aria-label={t("scenarios.removeCriterion", { n: index + 1 })}
                 disabled={fields.length === 1}
                 onClick={() => remove(index)}
                 className={cn(
@@ -145,7 +141,7 @@ export function CriteriaEditor({ control, registerField, fieldError }: CriteriaE
       ) : null}
       <div>
         <Button variant="secondary" icon={<PlusIcon size={16} />} onClick={add} disabled={fields.length >= 30}>
-          Add criterion
+          {t("scenarios.addCriterion")}
         </Button>
       </div>
     </div>

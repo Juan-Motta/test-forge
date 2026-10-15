@@ -785,3 +785,20 @@ describe("Scenario editor: layout", () => {
     expect(screen.queryByRole("button", { name: "Duplicate" })).not.toBeInTheDocument();
   });
 });
+
+describe("Scenario editor in Spanish", () => {
+  it("labels the editor and explains its validation errors in Spanish", async () => {
+    setup([]);
+    const user = userEvent.setup({ delay: null });
+    renderWithClient(<ScenarioEditorContainer />, { locale: "es" });
+    await screen.findByLabelText("Nombre");
+
+    expect(screen.getByRole("region", { name: "1 · Agente evaluado y contexto" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Crear escenario" }));
+
+    await waitFor(() => expect(field("Nombre")).toHaveFocus());
+    expect(field("Nombre")).toHaveAccessibleDescription("Ingresa un nombre.");
+    expect(field("Nombre de la persona")).toHaveAccessibleDescription("Ingresa el nombre de la persona.");
+    expect(field("Criterio 1 Texto")).toHaveAccessibleDescription("Describe el criterio.");
+  });
+});

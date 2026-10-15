@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useRef } from "react";
+import { useT } from "@/lib/i18n";
 import { formErrorView } from "./errors";
 import { ConnectionForm, type TestOutcome, type TestTarget } from "./ConnectionForm";
 import { toChanges, toDraft, toNewConnection, type ConnectionFormValues } from "./form-schema";
@@ -24,6 +25,7 @@ type ConnectionFormContainerProps = {
  * Mounted only while its dialog is open, so every opening starts with clean mutation state.
  */
 export function ConnectionFormContainer({ connection, onCancel, onSaved }: ConnectionFormContainerProps) {
+  const t = useT();
   const create = useCreateConnection();
   const update = useUpdateConnection();
   const testDraft = useTestDraftConnection();
@@ -74,7 +76,7 @@ export function ConnectionFormContainer({ connection, onCancel, onSaved }: Conne
   // Every save or test resets the others first, so at most one of these holds an error.
   const failure = save.error ?? testDraft.error ?? testStored.error;
   // Memoized per failure: a new `fieldErrors` object tells the form to show a new set of errors.
-  const view = useMemo(() => (failure ? formErrorView(failure) : undefined), [failure]);
+  const view = useMemo(() => (failure ? formErrorView(t, failure) : undefined), [failure, t]);
 
   return (
     <ConnectionForm

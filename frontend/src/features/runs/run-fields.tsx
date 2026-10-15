@@ -3,9 +3,9 @@ import type { ReactNode } from "react";
 import { isJudging } from "@/features/judgements/format";
 import { runCostLabel } from "@/features/pricing/format";
 import { runResult } from "@/features/overview/run-result";
-import { useFormat, useT } from "@/lib/i18n";
+import { useFormat, useT, type Format, type MessageKey } from "@/lib/i18n";
 import { Badge, Button, CopyButton, ScoreBar, buttonClasses, cn, focusRing } from "@/ui";
-import { STATUS_LABELS, clock, endReasonLabel, isActive, latency, runDurationMs, shortId } from "./format";
+import { clock, endReasonLabel, isActive, latency, runDurationMs, shortId, statusLabel } from "./format";
 import { KindBadge } from "./KindBadge";
 import { runKind } from "./kind";
 import { RunStatusChip } from "./RunStatusChip";
@@ -17,26 +17,29 @@ import type { Run } from "./types";
  * so both views always show the same values under the same names.
  */
 export type RunMetric = {
-  label: string;
+  id: "duration" | "turns" | "latency" | "cost";
+  label: MessageKey;
   /** What the figure means, shown as the header's tooltip. */
-  hint?: string;
-  value: (run: Run, now: number) => string;
+  hint?: MessageKey;
+  value: (run: Run, now: number, format: Format) => string;
 };
 
 export const RUN_METRICS: readonly RunMetric[] = [
   {
-    label: "Duration",
+    id: "duration",
+    label: "runs.metric.duration",
     value: (run, now) => {
       const duration = runDurationMs(run, now);
       return duration === null ? "—" : clock(duration);
     },
   },
-  { label: "Turns", hint: "Caller turns / agent turns", value: (run) => turnsLabel(run) },
-  { label: "p50 latency", hint: "Median agent response latency", value: (run) => latency(run.latencyP50Ms) },
+  { id: "turns", label: "runs.metric.turns", hint: "runs.metric.turnsHint", value: (run) => turnsLabel(run) },
+  { id: "latency", label: "runs.metric.latency", hint: "runs.metric.latencyHint", value: (run) => latency(run.latencyP50Ms) },
   {
-    label: "Cost",
-    hint: "The evaluator's approximate cost: its caller and its judge (OpenAI list prices)",
-    value: (run) => runCostLabel(run.cost),
+    id: "cost",
+    label: "runs.metric.cost",
+    hint: "runs.metric.costHint",
+    value: (run, _now, format) => runCostLabel(format, run.cost),
   },
 ];
 
@@ -73,6 +76,7 @@ export function RunStarted({ run, now }: { run: Run; now: number }) {
  * name is ellipsized with its full text in a title, so the cell never widens its column.
  */
 export function RunIdentity({ run }: { run: Run }) {
+  const t = useT();
   const label = shortId(run.id);
   return (
     <div className="flex min-w-0 flex-col gap-0.5">
@@ -98,7 +102,13 @@ export function RunIdentity({ run }: { run: Run }) {
           <span className="whitespace-nowrap font-mono text-dim" title={run.id}>
             {label}
           </span>
-          <CopyButton text={run.id} label={`Copy run id ${label}`} copiedMessage="Run id copied" iconSize={12} size="sm" />
+          <CopyButton
+            text={run.id}
+            label={t("runs.copyRunId", { id: label })}
+            copiedMessage={t("runs.runIdCopied")}
+            iconSize={12}
+            size="sm"
+          />
         </span>
       </div>
     </div>
@@ -121,8 +131,9 @@ export function RunOutcome({ run, label }: { run: Run; label: string }) {
 
 /** The status chip and, when it adds something, why the run ended. */
 export function RunStatus({ run }: { run: Run }) {
-  const reason = endReasonLabel(run.endReason, runKind(run));
-  const showReason = reason && !isActive(run.status) && reason !== STATUS_LABELS[run.status];
+  const t = useT();
+  const reason = endReasonLabel(t, run.endReason, runKind(run));
+  const showReason = reason && !isActive(run.status) && reason !== statusLabel(t, run.status);
   return (
     <div className="flex flex-col items-start gap-1">
       <RunStatusChip status={run.status} />
@@ -133,15 +144,20 @@ export function RunStatus({ run }: { run: Run }) {
 
 /** The judge's overall score as a number and a bar, or where its judgement stands. */
 export function RunScore({ run, label, trackClassName = "w-16" }: { run: Run; label: string; trackClassName?: string }) {
+  const t = useT();
   const score = run.score ?? null;
-  if (score === null && isJudging(run.judgementStatus)) return <span className="text-xs text-muted">Judging…</span>;
-  if (score === null && run.judgementStatus === "failed") return <span className="text-xs text-danger-fg">Failed</span>;
+  if (score === null && isJudging(run.judgementStatus)) {
+    return <span className="text-xs text-muted">{t("runs.result.judging")}</span>;
+  }
+  if (score === null && run.judgementStatus === "failed") {
+    return <span className="text-xs text-danger-fg">{t("runs.status.failed")}</span>;
+  }
   return (
     <div className="flex items-center gap-2">
       <span className={cn("w-7 font-mono tabular-nums", score === null ? "text-xs text-muted" : "text-sm font-semibold")}>
         {score ?? "—"}
       </span>
-      <ScoreBar score={score} label={`Score of run ${label}`} trackClassName={trackClassName} />
+      <ScoreBar score={score} label={t("runs.scoreOf", { id: label })} trackClassName={trackClassName} />
     </div>
   );
 }
@@ -152,7 +168,8 @@ export function RunScore({ run, label, trackClassName = "w-16" }: { run: Run; la
  * happened, so this one is empty (`fallback`), like a run in progress or unscored.
  */
 export function RunResult({ run, fallback = null }: { run: Run; fallback?: ReactNode }) {
-  const result = runResult(run);
+  const t = useT();
+  const result = runResult(t, run);
   if (result.kind === "passed" || result.kind === "review") return <Badge tone={result.tone}>{result.label}</Badge>;
   return <>{fallback}</>;
 }
@@ -166,24 +183,25 @@ type RunActionsProps = {
 
 /** Watch live and cancel while the run is active (the scenario name opens the report). */
 export function RunActions({ run, label, onCancel, cancelling }: RunActionsProps) {
+  const t = useT();
   if (!isActive(run.status)) return null;
   return (
     <>
       <Link
         href={`/runs/${encodeURIComponent(run.id)}/live`}
-        aria-label={`Watch run ${label} live`}
+        aria-label={t("runs.watchLive", { id: label })}
         className={buttonClasses("secondary", "min-h-9 px-3")}
       >
-        Live
+        {t("runs.live")}
       </Link>
       <Button
         variant="ghost"
         className="min-h-9 px-3"
         loading={cancelling}
-        aria-label={`Cancel run ${label}`}
+        aria-label={t("runs.cancelRun", { id: label })}
         onClick={() => onCancel(run)}
       >
-        Cancel
+        {t("common.cancel")}
       </Button>
     </>
   );

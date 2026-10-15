@@ -1,9 +1,11 @@
 import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { runCostFixture } from "@/features/pricing/testing";
-import { absoluteTime } from "@/features/connections/format";
+import { createFormat } from "@/lib/i18n";
 import { RunCards } from "./RunCards";
 import { runFixture } from "./testing";
+
+const { absoluteTime } = createFormat("en");
 
 const NOW = Date.parse("2026-10-05T17:00:00Z");
 

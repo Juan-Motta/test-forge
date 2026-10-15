@@ -1,13 +1,13 @@
 import Link from "next/link";
-import { relativeTime } from "@/features/connections/format";
+import { useFormat, useT, type Translator } from "@/lib/i18n";
 import { Badge, Card, CardHeader, LiveDot, buttonClasses, cn, focusRing } from "@/ui";
 import { shortId } from "./format";
 import type { Batch, RunStatus } from "./types";
 
 const FINISHED: RunStatus[] = ["completed", "failed", "cancelled", "interrupted"];
 
-export function batchName(batch: Pick<Batch, "id" | "label">): string {
-  return batch.label ?? `Batch ${shortId(batch.id)}`;
+export function batchName(t: Translator, batch: Pick<Batch, "id" | "label">): string {
+  return batch.label ?? t("runs.batch", { id: shortId(batch.id) });
 }
 
 export function finishedCount(batch: Pick<Batch, "counts">): number {
@@ -25,13 +25,15 @@ const isLive = (batch: Batch) => batch.status === "queued" || batch.status === "
 
 /** Recent batches with their progress; picking one filters the runs list. */
 export function BatchesPanel({ batches, now, onPick }: { batches: Batch[]; now: number; onPick: (batch: Batch) => void }) {
+  const t = useT();
+  const { relativeTime } = useFormat();
   const headingId = "recent-batches";
   return (
     <Card aria-labelledby={headingId}>
-      <CardHeader id={headingId} title="Recent batches" />
+      <CardHeader id={headingId} title={t("runs.recentBatches")} />
       <ul className="grid grid-cols-[repeat(auto-fill,minmax(min(260px,100%),1fr))] gap-3">
         {batches.map((batch) => {
-          const name = batchName(batch);
+          const name = batchName(t, batch);
           const finished = finishedCount(batch);
           const live = isLive(batch);
           return (
@@ -54,13 +56,13 @@ export function BatchesPanel({ batches, now, onPick }: { batches: Batch[]; now: 
                 {live ? (
                   <Badge tone="evaluator">
                     <LiveDot />
-                    In progress
+                    {t("runs.inProgress")}
                   </Badge>
                 ) : null}
               </div>
               <div
                 role="progressbar"
-                aria-label={`${name} progress`}
+                aria-label={t("runs.batchProgress", { name })}
                 aria-valuemin={0}
                 aria-valuemax={batch.total}
                 aria-valuenow={finished}
@@ -75,17 +77,17 @@ export function BatchesPanel({ batches, now, onPick }: { batches: Batch[]; now: 
               </div>
               <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted">
                 <span className="flex items-center gap-2">
-                  <span>{`${finished} of ${batch.total} finished`}</span>
+                  <span>{t("runs.finishedOf", { finished, total: batch.total })}</span>
                   <span aria-hidden="true">·</span>
                   <span>{relativeTime(batch.createdAt, now)}</span>
                 </span>
                 {live ? (
                   <Link
                     href={`/live?batchId=${encodeURIComponent(batch.id)}`}
-                    aria-label={`Watch ${name} live`}
+                    aria-label={t("runs.watchBatchLive", { name })}
                     className={buttonClasses("secondary", "min-h-9 px-3 text-[13px]")}
                   >
-                    Live
+                    {t("runs.live")}
                   </Link>
                 ) : null}
               </div>

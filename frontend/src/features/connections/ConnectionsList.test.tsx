@@ -277,3 +277,16 @@ describe("Connections list", () => {
     expect(document.activeElement).not.toBe(document.body);
   });
 });
+
+describe("Connections in Spanish", () => {
+  it("labels each connection card in Spanish and keeps the server's test detail as sent", async () => {
+    mockConnectionsApi([connectionFixture({ lastTest: passed })]);
+    renderWithClient(<ConnectionsContainer />, { locale: "es" });
+
+    const openai = await findRow("OpenAI prod");
+    expect(screen.getByRole("heading", { level: 1, name: "Conexiones" })).toBeInTheDocument();
+    expect(within(openai).getByText("Superada")).toBeInTheDocument();
+    expect(within(openai).getByText("HTTP 200: credentials accepted")).toBeInTheDocument();
+    expect(within(openai).getByRole("button", { name: "Editar OpenAI prod" })).toBeInTheDocument();
+  });
+});

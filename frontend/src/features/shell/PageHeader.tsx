@@ -1,7 +1,7 @@
 import type { ReactNode, Ref } from "react";
 
 type PageHeaderProps = {
-  title: string;
+  title: ReactNode;
   /** Small dim line above the title (breadcrumb, run id, section). */
   eyebrow?: ReactNode;
   description?: ReactNode;

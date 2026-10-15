@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { absoluteTime, relativeTime } from "@/features/connections/format";
+import { useFormat, useT } from "@/lib/i18n";
 import { Badge, type BadgeTone, Button } from "@/ui";
 import { apiKeyStatus, maskedPrefix, statusLabel } from "./format";
 import type { ApiKey, ApiKeyStatus } from "./types";
@@ -24,7 +24,9 @@ function CellLabel({ children }: { children: ReactNode }) {
 
 /** An absolute date, or a relative one when `now` is given; "Never" when there is none. */
 function When({ iso, now }: { iso: string | null; now?: number }) {
-  if (!iso) return <span className="text-xs text-muted">Never</span>;
+  const t = useT();
+  const { absoluteTime, relativeTime } = useFormat();
+  if (!iso) return <span className="text-xs text-muted">{t("apiKeys.never")}</span>;
   return (
     <time dateTime={iso} title={absoluteTime(iso)} className="text-xs text-muted">
       {now === undefined ? absoluteTime(iso) : relativeTime(iso, now)}
@@ -40,20 +42,21 @@ const CELL = "align-top md:px-4 md:py-3.5";
  * some browsers (Safari) drop the implicit table roles, so every element states its role.
  */
 export function ApiKeysTable({ apiKeys, onRevoke, now }: ApiKeysTableProps) {
+  const t = useT();
   return (
     <div className="md:-mx-5 md:-mb-5 md:overflow-x-auto md:border-t md:border-line">
       <table role="table" className="w-full text-sm max-md:block">
-        <caption className="sr-only">API keys</caption>
+        <caption className="sr-only">{t("nav.apiKeys")}</caption>
         <thead role="rowgroup" className="border-b border-line max-md:sr-only">
           <tr role="row">
-            <th scope="col" role="columnheader" className={HEAD}>Name</th>
-            <th scope="col" role="columnheader" className={HEAD}>Key</th>
-            <th scope="col" role="columnheader" className={HEAD}>Created</th>
-            <th scope="col" role="columnheader" className={HEAD}>Last used</th>
-            <th scope="col" role="columnheader" className={HEAD}>Expires</th>
-            <th scope="col" role="columnheader" className={HEAD}>Status</th>
+            <th scope="col" role="columnheader" className={HEAD}>{t("scenarios.field.name")}</th>
+            <th scope="col" role="columnheader" className={HEAD}>{t("connections.field.key")}</th>
+            <th scope="col" role="columnheader" className={HEAD}>{t("apiKeys.created")}</th>
+            <th scope="col" role="columnheader" className={HEAD}>{t("apiKeys.lastUsed")}</th>
+            <th scope="col" role="columnheader" className={HEAD}>{t("apiKeys.expires")}</th>
+            <th scope="col" role="columnheader" className={HEAD}>{t("runs.filter.status")}</th>
             <th scope="col" role="columnheader" className={HEAD}>
-              <span className="sr-only">Actions</span>
+              <span className="sr-only">{t("common.actions")}</span>
             </th>
           </tr>
         </thead>
@@ -70,30 +73,34 @@ export function ApiKeysTable({ apiKeys, onRevoke, now }: ApiKeysTableProps) {
                   {apiKey.name}
                 </th>
                 <td role="cell" className={CELL}>
-                  <CellLabel>Key</CellLabel>
+                  <CellLabel>{t("connections.field.key")}</CellLabel>
                   <span className="font-mono text-xs text-muted">{maskedPrefix(apiKey.prefix)}</span>
                 </td>
                 <td role="cell" className={CELL}>
-                  <CellLabel>Created</CellLabel>
+                  <CellLabel>{t("apiKeys.created")}</CellLabel>
                   <When iso={apiKey.createdAt} />
                 </td>
                 <td role="cell" className={CELL}>
-                  <CellLabel>Last used</CellLabel>
+                  <CellLabel>{t("apiKeys.lastUsed")}</CellLabel>
                   <When iso={apiKey.lastUsedAt} now={now} />
                 </td>
                 <td role="cell" className={CELL}>
-                  <CellLabel>Expires</CellLabel>
+                  <CellLabel>{t("apiKeys.expires")}</CellLabel>
                   <When iso={apiKey.expiresAt} />
                 </td>
                 <td role="cell" className={CELL}>
-                  <CellLabel>Status</CellLabel>
-                  <Badge tone={STATUS_TONES[status]}>{statusLabel(status)}</Badge>
+                  <CellLabel>{t("runs.filter.status")}</CellLabel>
+                  <Badge tone={STATUS_TONES[status]}>{statusLabel(t, status)}</Badge>
                 </td>
                 <td role="cell" className={`${CELL} max-md:col-span-2`}>
                   {status === "revoked" ? null : (
                     <div className="flex flex-wrap gap-2 md:justify-end">
-                      <Button variant="ghost" aria-label={`Revoke ${apiKey.name}`} onClick={() => onRevoke(apiKey)}>
-                        Revoke
+                      <Button
+                        variant="ghost"
+                        aria-label={t("apiKeys.revokeNamed", { name: apiKey.name })}
+                        onClick={() => onRevoke(apiKey)}
+                      >
+                        {t("apiKeys.revoke")}
                       </Button>
                     </div>
                   )}

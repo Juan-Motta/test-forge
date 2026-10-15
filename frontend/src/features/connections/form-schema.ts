@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { Translator } from "@/lib/i18n";
 import { KINDS, type FieldFormat } from "./kinds";
 import {
   CONNECTION_KINDS,
@@ -42,32 +43,31 @@ function hasUnsafeCharacter(value: string): boolean {
 }
 
 /** Same rules as the backend's `check_url`; `http://localhost` is left for the server to judge. */
-export function urlProblem(value: string): string | undefined {
-  if (value.length > MAX_URL) return "URL is too long.";
-  if (hasUnsafeCharacter(value)) return "URL must not contain spaces, backslashes or control characters.";
+export function urlProblem(t: Translator, value: string): string | undefined {
+  if (value.length > MAX_URL) return t("agents.url.tooLong");
+  if (hasUnsafeCharacter(value)) return t("agents.url.unsafe");
   let url: URL;
   try {
     url = new URL(value);
   } catch {
-    return "URL must be absolute, like https://host/path.";
+    return t("connections.error.absolute");
   }
-  if (!url.hostname) return "URL must be absolute, like https://host/path.";
+  if (!url.hostname) return t("connections.error.absolute");
   if (url.username || url.password || value.split("//")[1]?.split("/")[0].includes("@")) {
-    return "URL must not contain credentials.";
+    return t("agents.url.credentials");
   }
   if (url.search || url.hash || value.endsWith("?") || value.endsWith("#")) {
-    return "URL must not contain a query string or fragment.";
+    return t("agents.url.query");
   }
   const localHttp = url.protocol === "http:" && LOCAL_HOSTS.has(url.hostname);
-  if (url.protocol !== "https:" && !localHttp) return "URL must use https.";
+  if (url.protocol !== "https:" && !localHttp) return t("connections.error.https");
   return undefined;
 }
 
-const FORMAT_CHECKS: Record<FieldFormat, (value: string) => string | undefined> = {
+const FORMAT_CHECKS: Record<FieldFormat, (t: Translator, value: string) => string | undefined> = {
   url: urlProblem,
-  identifier: (value) =>
-    IDENTIFIER.test(value) ? undefined : "Use only letters, digits and . _ : - (up to 100 characters).",
-  region: (value) => (REGION.test(value) ? undefined : "Use lowercase letters and digits only, like eastus."),
+  identifier: (t, value) => (IDENTIFIER.test(value) ? undefined : t("scenarios.error.identifier")),
+  region: (t, value) => (REGION.test(value) ? undefined : t("connections.error.region")),
 };
 
 /**
@@ -75,16 +75,22 @@ const FORMAT_CHECKS: Record<FieldFormat, (value: string) => string | undefined> 
  * one" on edit. A typed secret is never trimmed: surrounding whitespace is reported instead of
  * silently changing a key the user pasted.
  */
-function secretProblem(secret: string, label: string, options: { secretRequired: boolean }): string | undefined {
-  if (!secret.trim()) return options.secretRequired ? `Enter the ${label}.` : undefined;
-  if (secret !== secret.trim()) return `The ${label} must not start or end with spaces or line breaks.`;
-  if (!HEADER_SAFE.test(secret)) return `The ${label} may contain only printable ASCII characters, without spaces.`;
-  if (secret.length > MAX_SECRET) return `Use at most ${MAX_SECRET} characters.`;
+function secretProblem(
+  t: Translator,
+  secret: string,
+  label: string,
+  options: { secretRequired: boolean },
+): string | undefined {
+  if (!secret.trim()) return options.secretRequired ? t("connections.error.enter", { field: label }) : undefined;
+  if (secret !== secret.trim()) return t("connections.error.secretSpaces", { field: label });
+  if (!HEADER_SAFE.test(secret)) return t("connections.error.secretAscii", { field: label });
+  if (secret.length > MAX_SECRET) return t("common.maxChars", { max: MAX_SECRET });
   return undefined;
 }
 
 /** Problems with the kind-specific part of the form: config fields and, if required, the secret. */
 export function draftIssues(
+  t: Translator,
   values: Pick<ConnectionFormValues, "kind" | "config" | "secrets">,
   options: { secretRequired: boolean },
 ): FormIssue[] {
@@ -94,33 +100,37 @@ export function draftIssues(
     const value = (values.config[field.key] ?? "").trim();
     const path = `config.${field.key}`;
     if (!value) {
-      if (field.required) issues.push({ path, message: `Enter the ${field.label.toLowerCase()}.` });
+      if (field.required) issues.push({ path, message: t("connections.error.enter", { field: t(field.label).toLowerCase() }) });
       continue;
     }
-    const problem = FORMAT_CHECKS[field.format](value);
+    const problem = FORMAT_CHECKS[field.format](t, value);
     if (problem) issues.push({ path, message: problem });
   }
   if (kind.exactlyOneOf) {
     const [first, second] = kind.exactlyOneOf;
     const set = [first, second].filter((key) => (values.config[key] ?? "").trim());
-    if (set.length === 0) issues.push({ path: `config.${first}`, message: "Set a region or an endpoint." });
-    if (set.length === 2) issues.push({ path: `config.${second}`, message: "Set a region or an endpoint, not both." });
+    if (set.length === 0) issues.push({ path: `config.${first}`, message: t("connections.error.regionOrEndpoint") });
+    if (set.length === 2) issues.push({ path: `config.${second}`, message: t("connections.error.notBoth") });
   }
-  const secretIssue = secretProblem(values.secrets[kind.secret.key] ?? "", kind.secret.label, options);
+  const secretIssue = secretProblem(t, values.secrets[kind.secret.key] ?? "", t(kind.secret.label), options);
   if (secretIssue) issues.push({ path: `secrets.${kind.secret.key}`, message: secretIssue });
   return issues;
 }
 
-export function connectionFormSchema(options: { secretRequired: boolean }) {
+export function connectionFormSchema(t: Translator, options: { secretRequired: boolean }) {
   return z
     .object({
       kind: z.enum(CONNECTION_KINDS),
-      name: z.string().trim().min(1, "Enter a name.").max(MAX_NAME, `Use at most ${MAX_NAME} characters.`),
+      name: z
+        .string()
+        .trim()
+        .min(1, t("scenarios.error.name"))
+        .max(MAX_NAME, t("common.maxChars", { max: MAX_NAME })),
       config: z.record(z.string(), z.string()),
       secrets: z.record(z.string(), z.string()),
     })
     .superRefine((values, ctx) => {
-      for (const issue of draftIssues(values, options)) {
+      for (const issue of draftIssues(t, values, options)) {
         ctx.addIssue({ code: "custom", path: issue.path.split("."), message: issue.message });
       }
     });

@@ -1,6 +1,7 @@
 import { runKind } from "@/features/runs/kind";
 import type { Run } from "@/features/runs/types";
 import { dominantTones, type ChannelLevels } from "@/lib/live/levels";
+import { useT } from "@/lib/i18n";
 import { Badge, Waveform, cn, focusRing } from "@/ui";
 import { sessionChip, sessionMeta, type SessionStats } from "./live-view";
 
@@ -17,7 +18,8 @@ type SessionCardProps = {
 
 /** One session in the live list: pick it to focus (and, for a call, listen to) that run. */
 export function SessionCard({ run, selected, now, onSelect, levels, stats }: SessionCardProps) {
-  const chip = sessionChip(run);
+  const t = useT();
+  const chip = sessionChip(t, run);
   // Text runs stream no audio: no levels to draw.
   const wave = levels && run.status === "running" && runKind(run) !== "text" ? dominantTones(levels) : null;
   const who = [run.persona, run.agentName].filter(Boolean).join(" · ");
@@ -41,9 +43,9 @@ export function SessionCard({ run, selected, now, onSelect, levels, stats }: Ses
         <Badge tone={chip.tone}>{chip.label}</Badge>
       </span>
       {wave ? (
-        <Waveform values={wave.values} tones={wave.tones} height={26} label="Recent audio levels" className="w-full" />
+        <Waveform values={wave.values} tones={wave.tones} height={26} label={t("live.recentLevels")} className="w-full" />
       ) : null}
-      <span className="font-mono text-xs text-dim">{sessionMeta(run, now, selected ? stats : undefined)}</span>
+      <span className="font-mono text-xs text-dim">{sessionMeta(t, run, now, selected ? stats : undefined)}</span>
     </button>
   );
 }

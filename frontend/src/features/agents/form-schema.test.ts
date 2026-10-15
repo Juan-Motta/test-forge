@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { createTranslator } from "@/lib/i18n";
 import { agentFormSchema, baseUrlProblem, originProblem, toChanges, toNewAgent, initialValues } from "./form-schema";
 import { agentFixture } from "./testing";
+
+const t = createTranslator("en");
 
 describe("baseUrlProblem", () => {
   it.each([
@@ -18,7 +21,7 @@ describe("baseUrlProblem", () => {
     ["wss://agent example.com", "URL must not contain spaces, backslashes or control characters."],
     ["agent.example.com", "URL must be absolute and name a host."],
   ])("%s → %s", (value, problem) => {
-    expect(baseUrlProblem(value)).toBe(problem);
+    expect(baseUrlProblem(t, value)).toBe(problem);
   });
 });
 
@@ -30,7 +33,7 @@ describe("originProblem", () => {
     ["https://app.example.com/path", "Origin must be only scheme, host and port."],
     ["wss://app.example.com", "Origin must use https or http."],
   ])("%s → %s", (value, problem) => {
-    expect(originProblem(value)).toBe(problem);
+    expect(originProblem(t, value)).toBe(problem);
   });
 });
 
@@ -66,7 +69,7 @@ describe("text agents", () => {
     ...overrides,
   });
   const problems = (values: ReturnType<typeof initialValues>, hasStoredKey = false) => {
-    const result = agentFormSchema(hasStoredKey).safeParse(values);
+    const result = agentFormSchema(t, hasStoredKey).safeParse(values);
     return result.success ? {} : Object.fromEntries(result.error.issues.map((issue) => [issue.path.join("."), issue.message]));
   };
 
@@ -76,7 +79,7 @@ describe("text agents", () => {
     ["http://api.example.com", "URL must use https://."],
     ["wss://api.example.com", "URL must use https://."],
   ])("text base URL %s → %s", (value, problem) => {
-    expect(baseUrlProblem(value, "text")).toBe(problem);
+    expect(baseUrlProblem(t, value, "text")).toBe(problem);
   });
 
   it("needs a UUID channel and no user ID", () => {

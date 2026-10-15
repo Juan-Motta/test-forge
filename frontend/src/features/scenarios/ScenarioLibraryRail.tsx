@@ -3,11 +3,13 @@
 import Link from "next/link";
 import { useState } from "react";
 import { confirmLeave } from "@/lib/navigation/unsaved-changes";
+import { useT } from "@/lib/i18n";
 import { PlusIcon, SearchField, cn, focusRing } from "@/ui";
-import { TEMPERAMENT_LABELS } from "./form-schema";
+import { temperamentLabel } from "./form-schema";
 import type { Scenario } from "./types";
 
-const UNTAGGED = "Untagged";
+/** The group of scenarios without tags (its name is translated when shown). */
+const UNTAGGED = "";
 
 type RailGroup = { name: string; scenarios: Scenario[] };
 
@@ -33,6 +35,7 @@ type ScenarioLibraryRailProps = {
 
 /** Compact scenario library beside the editor: filter, groups by tag, the open one highlighted. */
 export function ScenarioLibraryRail({ scenarios, failed, currentId }: ScenarioLibraryRailProps) {
+  const t = useT();
   const [query, setQuery] = useState("");
   const needle = query.trim().toLowerCase();
   const visible = (scenarios ?? []).filter((scenario) => !needle || scenario.name.toLowerCase().includes(needle));
@@ -40,20 +43,20 @@ export function ScenarioLibraryRail({ scenarios, failed, currentId }: ScenarioLi
   const leave = (event: { preventDefault: () => void }) => (confirmLeave() ? undefined : event.preventDefault());
 
   let body;
-  if (failed) body = <p className="px-1 text-xs text-muted">Could not load the scenario library.</p>;
+  if (failed) body = <p className="px-1 text-xs text-muted">{t("library.loadFailed")}</p>;
   else if (scenarios === undefined) body = <RailSkeleton />;
   else if (groups.length === 0)
-    body = <p className="px-1 text-xs text-muted">{needle ? "No scenarios match." : "No scenarios yet."}</p>;
+    body = <p className="px-1 text-xs text-muted">{needle ? t("library.noMatch") : t("scenarios.emptyTitle")}</p>;
   else
     body = groups.map((group, index) => {
       const headingId = `rail-group-${index}`;
       return (
-        <section key={group.name} aria-labelledby={headingId} className="flex flex-col gap-1">
+        <section key={group.name || "untagged"} aria-labelledby={headingId} className="flex flex-col gap-1">
           <h3
             id={headingId}
             className="flex items-center justify-between px-1 py-1.5 text-xs font-semibold tracking-[0.06em] text-muted uppercase"
           >
-            <span>{group.name}</span>{" "}
+            <span>{group.name || t("library.untagged")}</span>{" "}
             <span className="font-normal text-dim">{group.scenarios.length}</span>
           </h3>
           <ul className="flex flex-col gap-0.5">
@@ -72,7 +75,7 @@ export function ScenarioLibraryRail({ scenarios, failed, currentId }: ScenarioLi
                     )}
                   >
                     <span className="text-[13px] font-medium break-words">{scenario.name}</span>
-                    <span className="text-xs text-muted">{TEMPERAMENT_LABELS[scenario.persona.temperament]}</span>
+                    <span className="text-xs text-muted">{temperamentLabel(t, scenario.persona.temperament)}</span>
                   </Link>
                 </li>
               );
@@ -83,10 +86,10 @@ export function ScenarioLibraryRail({ scenarios, failed, currentId }: ScenarioLi
     });
 
   return (
-    <aside aria-label="Scenario library" className="flex min-w-0 flex-col gap-3.5">
+    <aside aria-label={t("library.label")} className="flex min-w-0 flex-col gap-3.5">
       <SearchField
-        label="Filter scenarios"
-        placeholder="Filter scenarios"
+        label={t("library.filter")}
+        placeholder={t("library.filter")}
         value={query}
         onChange={(event) => setQuery(event.target.value)}
         className="bg-panel"
@@ -101,7 +104,7 @@ export function ScenarioLibraryRail({ scenarios, failed, currentId }: ScenarioLi
         )}
       >
         <PlusIcon size={14} />
-        New scenario
+        {t("scenarios.new")}
       </Link>
     </aside>
   );
@@ -109,8 +112,9 @@ export function ScenarioLibraryRail({ scenarios, failed, currentId }: ScenarioLi
 
 /** Placeholder rows while the library loads; the editor beside it does not wait for them. */
 function RailSkeleton() {
+  const t = useT();
   return (
-    <div role="status" aria-label="Loading scenarios" className="flex flex-col gap-1.5 px-1">
+    <div role="status" aria-label={t("scenarios.loading")} className="flex flex-col gap-1.5 px-1">
       <span aria-hidden="true" className="h-3 w-24 animate-pulse rounded bg-chip motion-reduce:animate-none" />
       {[0, 1, 2, 3].map((row) => (
         <span

@@ -1,5 +1,6 @@
 import type { MouseEvent } from "react";
 import { turnAnchorId } from "@/features/judgements/format";
+import { useT } from "@/lib/i18n";
 import { focusRing } from "@/ui";
 
 type EvidenceRefProps = {
@@ -10,6 +11,7 @@ type EvidenceRefProps = {
 
 /** A transcript turn ref (A3, C2) links to its row in the transcript; other refs (T2, R1) are plain. */
 export function EvidenceRef({ value, onGoToTurn }: EvidenceRefProps) {
+  const t = useT();
   const anchor = turnAnchorId(value);
   const code = <code className="rounded bg-chip px-1 font-mono text-[11px]">{value}</code>;
   if (!anchor) return code;
@@ -19,7 +21,7 @@ export function EvidenceRef({ value, onGoToTurn }: EvidenceRefProps) {
     onGoToTurn(value.trim());
   }
   return (
-    <a href={`#${anchor}`} aria-label={`Go to transcript turn ${value}`} onClick={onClick} className={`rounded ${focusRing}`}>
+    <a href={`#${anchor}`} aria-label={t("report.goToTurn", { ref: value })} onClick={onClick} className={`rounded ${focusRing}`}>
       {code}
     </a>
   );

@@ -1,26 +1,10 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import { useT } from "@/lib/i18n";
 import { Alert, Button, Input } from "@/ui";
 import { PRICE_BUCKETS, type ModelPrice, type PriceBucket } from "./types";
 
-export const BUCKET_LABELS: Record<PriceBucket, string> = {
-  textIn: "text input",
-  cachedTextIn: "cached text input",
-  audioIn: "audio input",
-  cachedAudioIn: "cached audio input",
-  textOut: "text output",
-  audioOut: "audio output",
-};
-const HEADERS: Record<PriceBucket, string> = {
-  textIn: "Text in",
-  cachedTextIn: "Cached text in",
-  audioIn: "Audio in",
-  cachedAudioIn: "Cached audio in",
-  textOut: "Text out",
-  audioOut: "Audio out",
-};
-const NEGATIVE = "Prices must be zero or more, as plain numbers with at most 4 decimals.";
 
 type Draft = Record<string, Record<PriceBucket, string>>;
 
@@ -55,6 +39,7 @@ type ModelPricesFormProps = {
 
 /** The editable price table: USD per 1M tokens per model and usage bucket; empty is no price. */
 export function ModelPricesForm({ items, saving, error, onSave }: ModelPricesFormProps) {
+  const t = useT();
   const [draft, setDraft] = useState<Draft>(() => draftOf(items));
   const [invalid, setInvalid] = useState<Set<string>>(new Set());
 
@@ -81,15 +66,15 @@ export function ModelPricesForm({ items, saving, error, onSave }: ModelPricesFor
   return (
     <form onSubmit={submit} noValidate className="flex flex-col gap-4">
       <div className="overflow-x-auto">
-        <table aria-label="Model prices" className="w-full min-w-[52rem] border-collapse text-left text-[13px]">
+        <table aria-label={t("prices.title")} className="w-full min-w-[52rem] border-collapse text-left text-[13px]">
           <thead className="text-dim">
             <tr>
               <th scope="col" className="border-b border-line px-2 py-2 font-medium">
-                Model
+                {t("prices.model")}
               </th>
               {PRICE_BUCKETS.map((bucket) => (
                 <th key={bucket} scope="col" className="border-b border-line px-2 py-2 font-medium">
-                  {HEADERS[bucket]}
+                  {t(`prices.header.${bucket}`)}
                 </th>
               ))}
             </tr>
@@ -109,7 +94,7 @@ export function ModelPricesForm({ items, saving, error, onSave }: ModelPricesFor
                       min={0}
                       step="any"
                       placeholder="—"
-                      aria-label={`${item.model} ${BUCKET_LABELS[bucket]}`}
+                      aria-label={`${item.model} ${t(`prices.bucket.${bucket}`)}`}
                       aria-invalid={invalid.has(`${item.model}:${bucket}`) || undefined}
                       value={draft[item.model]?.[bucket] ?? ""}
                       onChange={(event) => change(item.model, bucket, event.target.value)}
@@ -122,12 +107,12 @@ export function ModelPricesForm({ items, saving, error, onSave }: ModelPricesFor
           </tbody>
         </table>
       </div>
-      {invalid.size > 0 ? <Alert>{NEGATIVE}</Alert> : error ? <Alert>{error}</Alert> : null}
+      {invalid.size > 0 ? <Alert>{t("prices.invalid")}</Alert> : error ? <Alert>{error}</Alert> : null}
       <div className="flex flex-wrap items-center gap-3">
         <Button type="submit" loading={saving}>
-          Save prices
+          {t("prices.save")}
         </Button>
-        <span className="text-xs text-dim">USD per 1M tokens. Leave a field empty when the model has no such price.</span>
+        <span className="text-xs text-dim">{t("prices.unitHint")}</span>
       </div>
     </form>
   );

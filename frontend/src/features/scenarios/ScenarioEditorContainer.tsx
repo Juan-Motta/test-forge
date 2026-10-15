@@ -10,6 +10,7 @@ import { LaunchPanel } from "@/features/runs/LaunchPanel";
 import { useConnections } from "@/features/connections/queries";
 import { PageHeader } from "@/features/shell/PageHeader";
 import { ApiError, errorMessage, formErrorView } from "@/lib/api";
+import { localizeFormError, useT } from "@/lib/i18n";
 import { confirmLeave, useUnsavedChangesGuard } from "@/lib/navigation/unsaved-changes";
 import { Alert, Button, Card, EmptyState, ScenariosIcon, Spinner, buttonClasses } from "@/ui";
 import { toChanges, toNewScenario, type ScenarioFormValues } from "./form-schema";
@@ -18,8 +19,6 @@ import { ScenarioEditor, type ConnectionOption } from "./ScenarioEditor";
 import { ScenarioLibraryRail } from "./ScenarioLibraryRail";
 import type { Scenario } from "./types";
 
-export const LAUNCH_LEAVE_MESSAGE = "Runs are still being launched. Leave this page anyway? You will not be taken to their live view.";
-export const DUPLICATE_SCENARIO_NAME = "A scenario with this name already exists for this agent.";
 const TTS_KINDS = new Set(["openai", "azure_openai"]);
 
 /** A load failed before any data arrived; a failed background refetch keeps the editor (and its edits). */
@@ -37,6 +36,7 @@ type ScenarioEditorContainerProps = {
  * (create, or PATCH with only the changed top-level fields).
  */
 export function ScenarioEditorContainer({ scenarioId }: ScenarioEditorContainerProps) {
+  const t = useT();
   const router = useRouter();
   const scenario = useScenario(scenarioId);
   const agents = useAgents();
@@ -51,12 +51,15 @@ export function ScenarioEditorContainer({ scenarioId }: ScenarioEditorContainerP
   const save = scenarioId ? update : create;
   // While the rail is launching, leaving would drop the launch's result (the batch to open).
   const [launching, setLaunching] = useState(false);
-  useUnsavedChangesGuard(launching, LAUNCH_LEAVE_MESSAGE);
+  useUnsavedChangesGuard(launching, t("scenarios.leaveWhileLaunching"));
 
   // Memoized per failure: a new `fieldErrors` object tells the editor to show a new set of errors.
   const view = useMemo(
-    () => (save.error ? formErrorView(save.error, DUPLICATE_SCENARIO_NAME) : undefined),
-    [save.error],
+    () =>
+      save.error
+        ? localizeFormError(t, save.error, formErrorView(save.error, t("scenarios.duplicateName")))
+        : undefined,
+    [save.error, t],
   );
 
   async function onSubmit(values: ScenarioFormValues, kind: AgentKind): Promise<Scenario | undefined> {
@@ -95,12 +98,12 @@ export function ScenarioEditorContainer({ scenarioId }: ScenarioEditorContainerP
     });
   }
 
-  const title = scenarioId ? (scenario.data?.name ?? "Scenario") : "New scenario";
+  const title = scenarioId ? (scenario.data?.name ?? t("scenarios.one")) : t("scenarios.new");
   const tag = scenario.data?.tags[0];
   const eyebrow = (
-    <nav aria-label="Breadcrumb">
+    <nav aria-label={t("common.breadcrumb")}>
       <Link href="/scenarios" onNavigate={(event) => (confirmLeave() ? undefined : event.preventDefault())}>
-        Scenarios
+        {t("nav.scenarios")}
       </Link>
       {tag ? (
         <>
@@ -119,11 +122,11 @@ export function ScenarioEditorContainer({ scenarioId }: ScenarioEditorContainerP
     return (
       <EmptyState
         icon={<ScenariosIcon size={22} />}
-        title="Scenario not found"
-        description="It may have been deleted, or the link is wrong."
+        title={t("scenarios.notFound")}
+        description={t("scenarios.notFoundHint")}
         action={
           <Link href="/scenarios" className={buttonClasses("secondary")}>
-            Back to scenarios
+            {t("scenarios.back")}
           </Link>
         }
       />
@@ -135,30 +138,30 @@ export function ScenarioEditorContainer({ scenarioId }: ScenarioEditorContainerP
   ) {
     // Without connections the voice and model selects would silently offer nothing.
     const failed = loadFailed(scenario) ? scenario : loadFailed(agents) ? agents : connections;
-    const what = loadFailed(scenario)
-      ? "the scenario"
+    const failedTitle = loadFailed(scenario)
+      ? t("scenarios.loadOneFailed")
       : loadFailed(agents)
-        ? "agents"
-        : "connections";
+        ? t("agents.loadFailed")
+        : t("connections.loadFailed");
     body = (
-      <Alert title={`Could not load ${what}`}>
+      <Alert title={failedTitle}>
         <span className="block">{errorMessage(failed.error)}</span>
         <Button variant="secondary" className="mt-3" onClick={() => failed.refetch()}>
-          Try again
+          {t("common.tryAgain")}
         </Button>
       </Alert>
     );
   } else if ((scenarioId && scenario.isPending) || agents.isPending || connections.isPending) {
-    body = <Spinner label="Loading scenario editor" />;
+    body = <Spinner label={t("scenarios.loadingEditor")} />;
   } else if (!scenarioId && (agents.data ?? []).length === 0) {
     body = (
       <EmptyState
         icon={<ScenariosIcon size={22} />}
-        title="Add an agent first"
-        description="Scenarios are written against an agent under test."
+        title={t("scenarios.addAgentFirst")}
+        description={t("scenarios.addAgentFirstHint")}
         action={
           <Link href="/agents" className={buttonClasses("primary")}>
-            Go to agents
+            {t("scenarios.goToAgents")}
           </Link>
         }
       />
@@ -185,7 +188,9 @@ export function ScenarioEditorContainer({ scenarioId }: ScenarioEditorContainerP
         eyebrow={eyebrow}
         onDuplicate={scenario.data ? onDuplicate : undefined}
         duplicating={duplicate.isPending}
-        banner={duplicate.isError ? <Alert>{`Could not duplicate: ${errorMessage(duplicate.error)}`}</Alert> : null}
+        banner={
+          duplicate.isError ? <Alert>{t("scenarios.duplicateFailed", { error: errorMessage(duplicate.error) })}</Alert> : null
+        }
         library={
           <ScenarioLibraryRail
             scenarios={library.data?.filter((item) => !scenario.data || item.agentId === scenario.data.agentId)}
@@ -229,28 +234,29 @@ function LaunchRail({
 }) {
   // A panel unmounted mid-launch never reports the end of it; do not leave the page guarded.
   // `onBusyChange` is a state setter, so this runs on unmount only.
+  const t = useT();
   useEffect(() => () => onBusyChange(false), [onBusyChange]);
   if (!scenario) {
     return (
-      <aside aria-label="Launch" className="flex min-w-0 flex-col">
+      <aside aria-label={t("scenarios.launch")} className="flex min-w-0 flex-col">
         <Card className="gap-2">
-          <h2 className="text-[15px] font-semibold">Launch a batch</h2>
-          <p className="text-sm text-muted">Save the scenario to launch runs.</p>
+          <h2 className="text-[15px] font-semibold">{t("scenarios.launchBatch")}</h2>
+          <p className="text-sm text-muted">{t("scenarios.saveToLaunch")}</p>
         </Card>
       </aside>
     );
   }
   return (
-    <aside aria-label="Launch" className="flex min-w-0 flex-col">
+    <aside aria-label={t("scenarios.launch")} className="flex min-w-0 flex-col">
       <section
         aria-labelledby="launch-batch-heading"
         className="flex flex-col gap-4 rounded-xl border border-evaluator-line bg-panel p-5"
       >
         <div className="flex flex-col gap-1">
           <h2 id="launch-batch-heading" className="text-[15px] font-semibold">
-            Launch a batch
+            {t("scenarios.launchBatch")}
           </h2>
-          <p className="text-xs text-dim">Launches the saved version.</p>
+          <p className="text-xs text-dim">{t("scenarios.launchesSaved")}</p>
         </div>
         <LaunchPanel
           scenarios={[

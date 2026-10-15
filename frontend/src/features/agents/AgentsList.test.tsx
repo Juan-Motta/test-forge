@@ -252,3 +252,23 @@ describe("Langfuse connection select", () => {
     expect(options).toEqual(["None", "Traces", "Traces staging"]);
   });
 });
+
+describe("Agents in Spanish", () => {
+  it("labels the rail and the agent's settings in Spanish", async () => {
+    mockConnectionsApi([]);
+    mockAgentsApi([agentFixture(), support]);
+    renderWithClient(<AgentsContainer scenarioCounts={new Map([["a-hotel", 6], ["a-support", 1]])} />, {
+      locale: "es",
+    });
+
+    const spanishRail = await screen.findByRole("complementary", { name: "Agentes" });
+    const hotel = await within(spanishRail).findByRole("button", { name: /Hotel booking assistant/ });
+    expect(hotel).toHaveTextContent("6 escenarios · Realtime");
+    expect(hotel).toHaveTextContent("Sin probar");
+    expect(within(spanishRail).getByRole("button", { name: /Support triage/ })).toHaveTextContent(
+      "1 escenario · Detección automática",
+    );
+    expect(screen.getByRole("button", { name: "Guardar cambios" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Probar la conexión" })).toBeInTheDocument();
+  });
+});

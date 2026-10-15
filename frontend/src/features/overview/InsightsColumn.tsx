@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { useId } from "react";
+import { useFormat, useT } from "@/lib/i18n";
 import { SCORE_TEXT, ScoreBar, buttonClasses, cn, scoreTone } from "@/ui";
 import type { OverviewStats } from "./types";
 
@@ -8,7 +9,8 @@ import type { OverviewStats } from "./types";
  * (still `loading`, or failed to load).
  */
 export function InsightsColumn({ stats, loading = false }: { stats: OverviewStats | undefined; loading?: boolean }) {
-  const unknown = loading ? LOADING : UNKNOWN;
+  const t = useT();
+  const unknown = loading ? t("overview.loadingMetrics") : t("overview.unknownMetrics");
   return (
     <div className="flex min-w-0 flex-[1_1_320px] flex-col gap-5" aria-busy={loading || undefined}>
       <WeakestCriteria stats={stats} unknown={unknown} />
@@ -17,24 +19,23 @@ export function InsightsColumn({ stats, loading = false }: { stats: OverviewStat
   );
 }
 
-const UNKNOWN = "Unavailable until the metrics load.";
-const LOADING = "Loading metrics…";
-
 function WeakestCriteria({ stats, unknown }: { stats: OverviewStats | undefined; unknown: string }) {
+  const t = useT();
+  const format = useFormat();
   const headingId = "weakest-criteria";
   const criteria = stats?.weakestCriteria ?? [];
   return (
     <section aria-labelledby={headingId} className="flex flex-col gap-4 rounded-xl border border-line bg-panel p-5">
       <div className="flex flex-col gap-1">
         <h2 id={headingId} className="text-base font-semibold">
-          Weakest criteria
+          {t("overview.weakest")}
         </h2>
-        <span className="text-xs text-dim">{`Average judge score, last ${stats?.periodDays ?? 7} days`}</span>
+        <span className="text-xs text-dim">{t("overview.weakestHint", { count: stats?.periodDays ?? 7 })}</span>
       </div>
       {!stats ? (
         <p className="text-sm text-muted">{unknown}</p>
       ) : criteria.length === 0 ? (
-        <p className="text-sm text-muted">{`No judged criteria in the last ${stats.periodDays} days.`}</p>
+        <p className="text-sm text-muted">{t("overview.noJudgedCriteria", { count: stats.periodDays })}</p>
       ) : (
         <ul className="flex flex-col gap-4">
           {criteria.map((criterion) => (
@@ -42,13 +43,13 @@ function WeakestCriteria({ stats, unknown }: { stats: OverviewStats | undefined;
               <div className="flex justify-between gap-2 text-[13px]">
                 <span className="flex min-w-0 flex-col">
                   <span>{criterion.text}</span>
-                  <span className="text-xs text-dim">{`${criterion.scenarioName} · ${criterion.judged} judged`}</span>
+                  <span className="text-xs text-dim">{`${criterion.scenarioName} · ${t("overview.judgedCount", { count: criterion.judged })}`}</span>
                 </span>
                 <span className={cn("font-semibold tabular-nums", SCORE_TEXT[scoreTone(criterion.averageScore)])}>
-                  {criterion.averageScore.toFixed(1)}
+                  {format.number(criterion.averageScore, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
                 </span>
               </div>
-              <ScoreBar score={criterion.averageScore} label={`${criterion.text} average score`} />
+              <ScoreBar score={criterion.averageScore} label={t("overview.criterionAverage", { criterion: criterion.text })} />
             </li>
           ))}
         </ul>
@@ -58,28 +59,29 @@ function WeakestCriteria({ stats, unknown }: { stats: OverviewStats | undefined;
 }
 
 function Suggestions({ stats, unknown }: { stats: OverviewStats | undefined; unknown: string }) {
+  const t = useT();
   const headingId = "handoff-suggestions";
   const open = stats?.suggestions.open ?? null;
   return (
     <section aria-labelledby={headingId} className="flex flex-col gap-3.5 rounded-xl border border-line bg-panel p-5">
       <h2 id={headingId} className="text-base font-semibold">
-        Suggestions ready for handoff
+        {t("overview.suggestions")}
       </h2>
       <div className="flex gap-6">
-        <Figure label="open" value={open} />
-        <Figure label="high impact" value={stats?.suggestions.highPriority ?? null} danger />
+        <Figure label={t("overview.open")} value={open} />
+        <Figure label={t("overview.highImpact")} value={stats?.suggestions.highPriority ?? null} danger />
       </div>
       {!stats ? (
         <p className="text-[13px] text-muted">{unknown}</p>
       ) : open === 0 ? (
-        <p className="text-[13px] text-muted">No suggestions to hand off yet.</p>
+        <p className="text-[13px] text-muted">{t("overview.noSuggestions")}</p>
       ) : (
         <>
           <p className="text-[13px] leading-normal text-muted">
-            From the judge&apos;s reports across runs, ready to export to your coding agent.
+            {t("overview.suggestionsHint")}
           </p>
           <Link href="/runs" className={buttonClasses("secondary", "text-[13px]")}>
-            Review suggestions
+            {t("overview.reviewSuggestions")}
           </Link>
         </>
       )}

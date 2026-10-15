@@ -4,6 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { get, useForm, useWatch, type Path } from "react-hook-form";
 import type { FieldErrors } from "@/lib/api";
+import { useT, type MessageKey } from "@/lib/i18n";
 import {
   Alert,
   Badge,
@@ -17,16 +18,7 @@ import {
   Select,
   Textarea,
 } from "@/ui";
-import {
-  AGENT_FIELDS,
-  agentFormSchema,
-  initialValues,
-  KIND_LABELS,
-  PROTOCOL_LABELS,
-  TEXT_AUTH_LABELS,
-  TEXT_MODE_LABELS,
-  type AgentFormValues,
-} from "./form-schema";
+import { AGENT_FIELDS, agentFormSchema, initialValues, type AgentFormValues } from "./form-schema";
 import { CurlImportPanel, type CurlImportSuccess } from "./CurlImportPanel";
 import { AGENT_KINDS, AGENT_PROTOCOLS, TEXT_AUTHS, TEXT_MODES, type Agent, type AgentKind } from "./types";
 
@@ -34,18 +26,21 @@ const NO_SERVER_ERRORS: FieldErrors = {};
 
 /** How the import summary names each field it filled, per kind, in form order. */
 const IMPORTED_FIELD_LABELS = {
-  voice: { baseUrl: "WebSocket URL", channelId: "channel ID", userId: "user ID", origin: "origin" },
-  text: {
-    baseUrl: "base URL",
-    channelId: "channel ID",
-    textMode: "mode",
-    auth: "authentication",
-    apiKey: "API key",
-    origin: "origin",
+  voice: {
+    baseUrl: "agents.imported.wsUrl",
+    channelId: "agents.imported.channelId",
+    userId: "agents.imported.userId",
+    origin: "agents.imported.origin",
   },
-} as const satisfies Record<AgentKind, Partial<Record<keyof AgentFormValues, string>>>;
-
-const KIND_NAMES: Record<AgentKind, string> = { voice: "a voice agent", text: "a text agent" };
+  text: {
+    baseUrl: "agents.imported.baseUrl",
+    channelId: "agents.imported.channelId",
+    textMode: "agents.imported.mode",
+    auth: "agents.imported.auth",
+    apiKey: "agents.imported.apiKey",
+    origin: "agents.imported.origin",
+  },
+} as const satisfies Record<AgentKind, Partial<Record<keyof AgentFormValues, MessageKey>>>;
 
 type ImportSummary = { filled: string[]; ignored: string[]; warnings: string[]; mismatch?: boolean };
 
@@ -108,6 +103,7 @@ export function AgentForm({
   extraCards,
   onDirtyChange,
 }: AgentFormProps) {
+  const t = useT();
   const editing = agent !== undefined;
   const {
     register,
@@ -119,7 +115,7 @@ export function AgentForm({
     control,
     formState: { errors, isDirty },
   } = useForm<AgentFormValues>({
-    resolver: zodResolver(agentFormSchema(agent?.hasApiKey ?? false)),
+    resolver: zodResolver(agentFormSchema(t, agent?.hasApiKey ?? false)),
     defaultValues: initialValues(agent),
   });
   const kind = useWatch({ control, name: "kind" });
@@ -155,13 +151,15 @@ export function AgentForm({
       setImportSummary({
         filled: [],
         ignored: [],
-        warnings: [`This command is for ${KIND_NAMES[imported]}; this agent is ${KIND_NAMES[kind]}. Nothing filled.`],
+        warnings: [
+          t("agents.import.mismatch", { imported: t(`agents.aKind.${imported}`), kind: t(`agents.aKind.${kind}`) }),
+        ],
         mismatch: true,
       });
       closeImport();
       return;
     }
-    const labels: Partial<Record<keyof AgentFormValues, string>> = IMPORTED_FIELD_LABELS[imported];
+    const labels: Partial<Record<keyof AgentFormValues, MessageKey>> = IMPORTED_FIELD_LABELS[imported];
     const fields = (Object.keys(labels) as (keyof typeof values)[]).filter((field) => values[field] !== undefined);
     if (imported !== kind) setValue("kind", imported, { shouldDirty: true });
     for (const field of fields) {
@@ -169,8 +167,11 @@ export function AgentForm({
       clearErrors(field);
     }
     if (values.apiKey !== undefined) setReplacingKey(true);
-    const filled = fields.map((field) => labels[field] ?? field);
-    if (imported !== kind) filled.unshift(`kind (${imported})`);
+    const filled = fields.map((field) => {
+      const label = labels[field];
+      return label ? t(label) : field;
+    });
+    if (imported !== kind) filled.unshift(t("agents.imported.kind", { kind: t(`agents.kind.${imported}`).toLowerCase() }));
     setImportSummary({ filled, ignored, warnings });
     closeImport();
   }
@@ -196,7 +197,7 @@ export function AgentForm({
   const linked = agent?.langfuseConnectionId;
   const options =
     linked && !langfuseOptions.some((option) => option.id === linked)
-      ? [...langfuseOptions, { id: linked, name: "Current connection" }]
+      ? [...langfuseOptions, { id: linked, name: t("scenarios.currentConnection") }]
       : langfuseOptions;
 
 
@@ -219,7 +220,7 @@ export function AgentForm({
             setImportOpen(true);
           }}
         >
-          Import from cURL
+          {t("agents.importCurl")}
         </Button>
       </div>
       {importOpen ? <CurlImportPanel id={importPanelId} onImport={applyImport} onCancel={closeImport} /> : null}
@@ -227,8 +228,12 @@ export function AgentForm({
         <Alert tone="info">
           {importSummary.mismatch ? null : (
             <span className="block">
-              {importSummary.filled.length > 0 ? `Filled: ${importSummary.filled.join(", ")}.` : "Nothing filled."}
-              {importSummary.ignored.length > 0 ? ` Ignored: ${importSummary.ignored.join(", ")}.` : null}
+              {importSummary.filled.length > 0
+                ? t("agents.import.filled", { fields: importSummary.filled.join(", ") })
+                : t("agents.import.nothing")}
+              {importSummary.ignored.length > 0
+                ? ` ${t("agents.import.ignored", { fields: importSummary.ignored.join(", ") })}`
+                : null}
             </span>
           )}
           {importSummary.warnings.map((warning) => (
@@ -242,15 +247,15 @@ export function AgentForm({
   );
 
   const nameField = (
-    <Field label="Name" hint="Unique; scenarios and runs refer to the agent by it." error={fieldError("name")}>
+    <Field label={t("scenarios.field.name")} hint={t("agents.field.nameHint")} error={fieldError("name")}>
       {(control) => <Input autoComplete="off" {...control} {...registerField("name")} />}
     </Field>
   );
 
   const contextField = (
     <Field
-      label="What this agent does — shared by all its scenarios"
-      hint="The evaluator and the judge read this before every scenario run against this agent."
+      label={t("agents.field.context")}
+      hint={t("agents.field.contextHint")}
       error={fieldError("context")}
     >
       {(control) => <Textarea rows={5} {...control} {...registerField("context")} />}
@@ -259,15 +264,15 @@ export function AgentForm({
 
   const protocolField = (
     <Field
-      label="Protocol"
-      hint="Auto-detect probes the agent on each run; pick one to skip the probe."
+      label={t("agents.field.protocol")}
+      hint={t("agents.field.protocolHint")}
       error={fieldError("protocol")}
     >
       {(control) => (
         <Select {...control} {...registerField("protocol")}>
           {AGENT_PROTOCOLS.map((protocol) => (
             <option key={protocol} value={protocol}>
-              {PROTOCOL_LABELS[protocol]}
+              {t(`agents.protocol.${protocol}`)}
             </option>
           ))}
         </Select>
@@ -277,12 +282,8 @@ export function AgentForm({
 
   const baseUrlField = (
     <Field
-      label={text ? "Base URL" : "WebSocket URL"}
-      hint={
-        text
-          ? "https:// host of the channel API, without /channelsApi. http:// works for a local agent (localhost, 127.0.0.1, host.docker.internal)."
-          : "wss:// without query string. ws:// works for a local agent (localhost, 127.0.0.1, host.docker.internal)."
-      }
+      label={text ? t("agents.field.baseUrl") : t("agents.field.wsUrl")}
+      hint={text ? t("agents.field.baseUrlHint") : t("agents.field.wsUrlHint")}
       error={fieldError("baseUrl")}
     >
       {(control) => (
@@ -300,7 +301,7 @@ export function AgentForm({
   );
 
   const kindField = (
-    <RadioCardGroup label="Agent kind">
+    <RadioCardGroup label={t("agents.field.kind")}>
       {AGENT_KINDS.map((value) => (
         <RadioCard
           key={value}
@@ -311,21 +312,21 @@ export function AgentForm({
             setValue("kind", next, { shouldDirty: true });
             clearErrors();
           }}
-          title={KIND_LABELS[value].label}
-          description={KIND_LABELS[value].description}
+          title={t(`agents.kind.${value}`)}
+          description={t(`agents.kind.${value}Hint`)}
         />
       ))}
     </RadioCardGroup>
   );
 
-  const kindBadge = <Badge tone="outline">{text ? "Text agent" : "Voice agent"}</Badge>;
+  const kindBadge = <Badge tone="outline">{text ? t("runs.textAgent") : t("agents.voiceAgent")}</Badge>;
 
   const textModeField = (
     <div className="flex flex-col gap-2">
       <span aria-hidden="true" className="text-xs font-medium text-muted">
-        Mode
+        {t("report.metric.mode")}
       </span>
-      <RadioCardGroup label="Mode">
+      <RadioCardGroup label={t("report.metric.mode")}>
         {TEXT_MODES.map((value) => (
           <RadioCard
             key={value}
@@ -333,8 +334,8 @@ export function AgentForm({
             value={value}
             checked={textMode === value}
             onChange={(next) => setValue("textMode", next, { shouldDirty: true })}
-            title={TEXT_MODE_LABELS[value].label}
-            description={TEXT_MODE_LABELS[value].description}
+            title={t(`runs.textMode.${value}`)}
+            description={t(`agents.textMode.${value}Hint`)}
           />
         ))}
       </RadioCardGroup>
@@ -346,9 +347,9 @@ export function AgentForm({
     <div className="flex flex-col gap-3">
       <div className="flex flex-col gap-2">
         <span aria-hidden="true" className="text-xs font-medium text-muted">
-          Authentication
+          {t("agents.field.auth")}
         </span>
-        <RadioCardGroup label="Authentication">
+        <RadioCardGroup label={t("agents.field.auth")}>
           {TEXT_AUTHS.map((value) => (
             <RadioCard
               key={value}
@@ -359,18 +360,18 @@ export function AgentForm({
                 setValue("auth", next, { shouldDirty: true });
                 clearErrors("apiKey");
               }}
-              title={TEXT_AUTH_LABELS[value].label}
-              description={TEXT_AUTH_LABELS[value].description}
+              title={t(`agents.auth.${value}`)}
+              description={t(`agents.auth.${value}Hint`)}
             />
           ))}
         </RadioCardGroup>
       </div>
       {auth !== "api_key" ? null : storedKey ? (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-field-line bg-field px-3 py-2">
-          <span className="font-mono text-[13px]">Saved {agent?.apiKeyHint ?? ""}</span>
+          <span className="font-mono text-[13px]">{t("agents.savedKey", { hint: agent?.apiKeyHint ?? "" })}</span>
           <span className="flex gap-2">
             <Button variant="secondary" onClick={() => setReplacingKey(true)}>
-              Replace
+              {t("agents.replace")}
             </Button>
             <Button
               variant="ghost"
@@ -379,24 +380,20 @@ export function AgentForm({
                 clearErrors("apiKey");
               }}
             >
-              Remove
+              {t("agents.remove")}
             </Button>
           </span>
         </div>
       ) : (
         <Field
-          label="API key value"
-          hint={
-            agent?.hasApiKey
-              ? "Replaces the saved key on save; it is stored encrypted and never shown again."
-              : "Stored encrypted and never shown again; sent as the vivi-api-key header."
-          }
+          label={t("agents.field.apiKey")}
+          hint={agent?.hasApiKey ? t("agents.field.apiKeyReplaceHint") : t("agents.field.apiKeyHint")}
           error={fieldError("apiKey")}
         >
           {(control) => (
             <PasswordInput
               mono
-              subject="API key"
+              subject={t("agents.apiKeySubject")}
               autoComplete="new-password"
               spellCheck={false}
               {...control}
@@ -411,7 +408,7 @@ export function AgentForm({
   const originField = (label: string) => (
     <Field
       label={label}
-      hint="Optional. Sent as the Origin header when the agent checks it, like https://app.example.com."
+      hint={t("agents.field.originHint")}
       error={fieldError("origin")}
     >
       {(control) => (
@@ -422,13 +419,13 @@ export function AgentForm({
 
   const langfuseField = (
     <Field
-      label="Langfuse connection"
-      hint={langfuseHint ?? "Traces are fetched after each run and handed to the judge."}
+      label={t("agents.field.langfuse")}
+      hint={langfuseHint ?? t("agents.field.langfuseHint")}
       error={fieldError("langfuseConnectionId")}
     >
       {(control) => (
         <Select {...control} {...registerField("langfuseConnectionId")}>
-          <option value="">None</option>
+          <option value="">{t("scenarios.none")}</option>
           {options.map((option) => (
             <option key={option.id} value={option.id}>
               {option.name}
@@ -480,18 +477,14 @@ export function AgentForm({
       <form
         id={formId}
         noValidate
-        aria-label="Agent settings"
+        aria-label={t("agents.settings")}
         onSubmit={handleSubmit(onSubmit)}
         className="flex flex-col gap-4"
       >
         {errorAlert}
         <SectionCard
-          title={text ? "Chat connection" : "Realtime connection"}
-          subtitle={
-            text
-              ? "Each run is one conversation with a fresh threadId"
-              : "Each run opens its own socket with a fresh threadId"
-          }
+          title={text ? t("agents.chatConnection") : t("agents.realtimeConnection")}
+          subtitle={text ? t("agents.chatConnectionHint") : t("agents.realtimeConnectionHint")}
           badge={kindBadge}
           status={connectionStatus}
         >
@@ -500,10 +493,10 @@ export function AgentForm({
           <ParamsTable
             fixed={
               text
-                ? [{ key: "channelId", input: paramInput("channelId", "Channel ID") }]
+                ? [{ key: "channelId", input: paramInput("channelId", t("agents.field.channelId")) }]
                 : [
-                    { key: "channelId", input: paramInput("channelId", "Channel ID") },
-                    { key: "userId", input: paramInput("userId", "User ID") },
+                    { key: "channelId", input: paramInput("channelId", t("agents.field.channelId")) },
+                    { key: "userId", input: paramInput("userId", t("agents.field.userId")) },
                   ]
             }
           />
@@ -511,50 +504,48 @@ export function AgentForm({
             <>
               {textModeField}
               {authField}
-              {originField("Origin header")}
+              {originField(t("agents.field.originHeader"))}
             </>
           ) : (
             <div className="grid gap-3 sm:grid-cols-2">
-              {originField("Origin header")}
+              {originField(t("agents.field.originHeader"))}
               {protocolField}
             </div>
           )}
           {connectionCheck}
         </SectionCard>
         <SectionCard
-          title="Langfuse traces"
-          subtitle="Fetched after each run and handed to the judge with the transcript"
+          title={t("agents.langfuseTraces")}
+          subtitle={t("agents.langfuseTracesHint")}
           status={
             selectedLangfuse ? (
               <Badge tone="success">
                 <span aria-hidden="true" className="size-[7px] rounded-full bg-success" />
-                Linked
+                {t("agents.linked")}
               </Badge>
             ) : (
-              <Badge tone="muted">Not linked</Badge>
+              <Badge tone="muted">{t("agents.notLinked")}</Badge>
             )
           }
         >
           {langfuseField}
           <dl className="grid gap-3 sm:grid-cols-2">
             <div className="flex flex-col gap-1.5">
-              <dt className="text-xs font-medium text-muted">Host</dt>
+              <dt className="text-xs font-medium text-muted">{t("agents.host")}</dt>
               <dd className="min-h-11 break-all rounded-lg border border-field-line bg-field px-3 py-3 font-mono text-[13px]">
-                {selectedLangfuse ? (linkedOption?.host ?? "Unknown") : "—"}
+                {selectedLangfuse ? (linkedOption?.host ?? t("agents.unknown")) : "—"}
               </dd>
             </div>
             <div className="flex flex-col gap-1.5">
-              <dt className="text-xs font-medium text-muted">Match traces by</dt>
+              <dt className="text-xs font-medium text-muted">{t("agents.matchBy")}</dt>
               <dd className="min-h-11 rounded-lg border border-field-line bg-field px-3 py-3 text-sm">
-                Matched by threadId (session id)
+                {t("agents.matchedByThread")}
               </dd>
             </div>
           </dl>
-          <p className="text-xs text-dim">
-            After a call ends, the judge waits up to 20 minutes for its traces to reach Langfuse before it scores the run.
-          </p>
+          <p className="text-xs text-dim">{t("agents.judgeWaits")}</p>
         </SectionCard>
-        <SectionCard title="Agent context" subtitle="Shared by every scenario written against this agent">
+        <SectionCard title={t("scenarios.agentContext")} subtitle={t("agents.contextHint")}>
           {nameField}
           {contextField}
         </SectionCard>
@@ -564,38 +555,36 @@ export function AgentForm({
   }
 
   return (
-    <form id={formId} noValidate aria-label="Agent" onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-5">
+    <form id={formId} noValidate aria-label={t("common.agent")} onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-5">
       {editing ? null : kindField}
       {importBlock}
       {nameField}
       {contextField}
 
       <fieldset className="flex flex-col gap-4 rounded-lg border border-line bg-raised p-4">
-        <legend className="px-1 text-sm font-semibold">Connection</legend>
+        <legend className="px-1 text-sm font-semibold">{t("agents.connection")}</legend>
         <p className="text-xs text-muted">
-          {text
-            ? "Each run is one conversation with a fresh thread ID."
-            : "Each run opens its own socket with a fresh thread ID."}
+          {text ? t("agents.connectionTextHint") : t("agents.connectionVoiceHint")}
         </p>
         {text ? null : protocolField}
         {baseUrlField}
         <div className="grid gap-4 sm:grid-cols-2">
           <Field
-            label="Channel ID"
-            hint={text ? "The channel's UUID, from /channelsApi/{channelId}/…" : undefined}
+            label={t("agents.field.channelId")}
+            hint={text ? t("agents.field.channelIdHint") : undefined}
             error={fieldError("channelId")}
           >
             {(control) => <Input mono autoComplete="off" spellCheck={false} {...control} {...registerField("channelId")} />}
           </Field>
           {text ? null : (
-            <Field label="User ID" error={fieldError("userId")}>
+            <Field label={t("agents.field.userId")} error={fieldError("userId")}>
               {(control) => <Input mono autoComplete="off" spellCheck={false} {...control} {...registerField("userId")} />}
             </Field>
           )}
         </div>
         {text ? textModeField : null}
         {text ? authField : null}
-        {originField("Origin (optional)")}
+        {originField(t("agents.field.origin"))}
       </fieldset>
 
       {langfuseField}
@@ -604,11 +593,11 @@ export function AgentForm({
       <div className="flex flex-wrap justify-end gap-3">
         {onCancel ? (
           <Button variant="secondary" onClick={onCancel}>
-            Cancel
+            {t("common.cancel")}
           </Button>
         ) : null}
         <Button type="submit" loading={pending}>
-          {pending ? "Saving…" : editing ? "Save changes" : "Create agent"}
+          {pending ? t("editor.saving") : editing ? t("agents.saveChanges") : t("agents.create")}
         </Button>
       </div>
     </form>
@@ -643,19 +632,20 @@ const PARAM_CELL = "border-b border-line-soft px-2.5 py-2.5 align-top";
 
 /** The values every run sends: the fixed ones (channel, and user for voice); the thread ID is new per run. */
 function ParamsTable({ fixed }: { fixed: { key: string; input: ReactNode }[] }) {
+  const t = useT();
   const labelId = useId();
   return (
     <div className="flex flex-col gap-2">
       <span id={labelId} className="text-xs font-medium text-muted">
-        Connection parameters
+        {t("agents.params")}
       </span>
       <div className="overflow-x-auto">
         <table aria-labelledby={labelId} className="w-full min-w-[520px] border-collapse text-[13px]">
           <thead>
             <tr className="text-left text-dim">
-              <th scope="col" className="border-b border-line px-2.5 py-2 font-medium">Key</th>
-              <th scope="col" className="border-b border-line px-2.5 py-2 font-medium">Value</th>
-              <th scope="col" className="border-b border-line px-2.5 py-2 font-medium">Per run</th>
+              <th scope="col" className="border-b border-line px-2.5 py-2 font-medium">{t("scenarios.key")}</th>
+              <th scope="col" className="border-b border-line px-2.5 py-2 font-medium">{t("scenarios.value")}</th>
+              <th scope="col" className="border-b border-line px-2.5 py-2 font-medium">{t("agents.perRun")}</th>
             </tr>
           </thead>
           <tbody>
@@ -666,15 +656,15 @@ function ParamsTable({ fixed }: { fixed: { key: string; input: ReactNode }[] }) 
                 </th>
                 <td className={PARAM_CELL}>{input}</td>
                 <td className={`${PARAM_CELL} pt-4`}>
-                  <Badge tone="muted">Fixed</Badge>
+                  <Badge tone="muted">{t("agents.fixed")}</Badge>
                 </td>
               </tr>
             ))}
             <tr>
               <th scope="row" className={`${PARAM_CELL} text-left font-mono text-xs font-normal`}>threadId</th>
-              <td className={`${PARAM_CELL} font-mono text-xs text-body`}>new UUID</td>
+              <td className={`${PARAM_CELL} font-mono text-xs text-body`}>{t("agents.newUuid")}</td>
               <td className={PARAM_CELL}>
-                <Badge tone="evaluator">Generated per run</Badge>
+                <Badge tone="evaluator">{t("agents.generated")}</Badge>
               </td>
             </tr>
           </tbody>

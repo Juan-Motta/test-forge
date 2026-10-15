@@ -2,31 +2,14 @@ import type { TranscriptEntry } from "@/features/runs/transcript";
 import { callerIntent, entriesFromRows } from "@/features/runs/transcript";
 import { isActive } from "@/features/runs/format";
 import { RUN_STATUSES, type RunStatus, type TranscriptRow } from "@/features/runs/types";
+import type { Translator } from "@/lib/i18n";
 
 /** What the conversation is doing right now, from the latest events. */
 export type TurnState = "waiting" | "agent" | "playback" | "evaluator" | "hanging_up" | "ended";
 
-export const TURN_STATE_LABELS: Record<TurnState, string> = {
-  waiting: "Waiting for the agent",
-  agent: "Agent speaking",
-  playback: "Agent finished · waiting for its audio to play out",
-  evaluator: "Evaluator speaking",
-  hanging_up: "Evaluator is hanging up",
-  ended: "Call ended",
-};
-
-/** Text runs: the same states, worded for a chat (`playback`: the reply is in, the evaluator writes). */
-const TEXT_TURN_STATE_LABELS: Record<TurnState, string> = {
-  waiting: "Waiting",
-  agent: "Agent replying",
-  playback: "Evaluator writing",
-  evaluator: "Message sent · waiting for the agent",
-  hanging_up: "Evaluator is ending the conversation",
-  ended: "Conversation ended",
-};
-
-export function turnStateLabel(state: TurnState, kind: "voice" | "text" = "voice"): string {
-  return (kind === "text" ? TEXT_TURN_STATE_LABELS : TURN_STATE_LABELS)[state];
+/** What the conversation is doing, in words; text runs word the same states for a chat. */
+export function turnStateLabel(t: Translator, state: TurnState, kind: "voice" | "text" = "voice"): string {
+  return kind === "text" ? t(`live.textTurn.${state}`) : t(`live.turn.${state}`);
 }
 
 export type Decision = {
@@ -368,7 +351,7 @@ export function liveReducer(state: LiveRunState, action: LiveAction): LiveRunSta
 }
 
 /** Whether the agent confirmed the correction an interruption asked for, as of now. */
-export function confirmationLabel(interruption: CallerInterruption, finished: boolean): string {
-  if (interruption.confirmed) return "Correction confirmed";
-  return finished ? "Not confirmed" : "Waiting for the agent to confirm the correction";
+export function confirmationLabel(t: Translator, interruption: CallerInterruption, finished: boolean): string {
+  if (interruption.confirmed) return t("live.correctionConfirmed");
+  return finished ? t("live.notConfirmed") : t("live.awaitingConfirmation");
 }

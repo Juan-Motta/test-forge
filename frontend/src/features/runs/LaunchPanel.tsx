@@ -3,6 +3,7 @@
 import { useRef, useState, type FormEvent } from "react";
 import type { AgentKind } from "@/features/agents/types";
 import { errorMessage } from "@/lib/api";
+import { useT, type Translator } from "@/lib/i18n";
 import { Alert, Button, Field, Input, cn } from "@/ui";
 import {
   DEFAULT_DRAFT,
@@ -26,10 +27,15 @@ import type { BatchDetail } from "./types";
 export type LaunchScenario = { id: string; name: string; maxDurationS?: number; kind?: AgentKind };
 
 /** What one run is called: a call, a conversation, or a run when the batch mixes both. */
-function runNoun(scenarios: LaunchScenario[]): string {
+function runNoun(scenarios: LaunchScenario[]): "call" | "conversation" | "run" {
   const text = scenarios.filter((scenario) => scenario.kind === "text").length;
   if (text === 0) return "call";
   return text === scenarios.length ? "conversation" : "run";
+}
+
+function launchLabel(t: Translator, busy: boolean, planned: number | null): string {
+  if (busy) return t("launch.launching");
+  return planned === null ? t("launch.launchRuns") : t.plural("launch.launchCount", planned);
 }
 
 type LaunchPanelProps = {
@@ -47,6 +53,7 @@ type LaunchPanelProps = {
  * "runs each", at most "in parallel" at a time. Each run is a real, paid call.
  */
 export function LaunchPanel({ scenarios, onLaunched, onCancel, onBusyChange }: LaunchPanelProps) {
+  const t = useT();
   const launch = useLaunchRuns();
   const [draft, setDraft] = useState<LaunchDraft>(DEFAULT_DRAFT);
   const [errors, setErrors] = useState<LaunchErrors>({});
@@ -56,7 +63,7 @@ export function LaunchPanel({ scenarios, onLaunched, onCancel, onBusyChange }: L
 
   const planned = plannedRuns(scenarios.length, draft);
   const minutes = estimatedMinutes(scenarios, draft);
-  const refused = launch.isError ? notRunnableReasons(launch.error, scenarios) : [];
+  const refused = launch.isError ? notRunnableReasons(t, launch.error, scenarios) : [];
   const noun = runNoun(scenarios);
 
   function set(field: keyof LaunchDraft, value: string) {
@@ -68,6 +75,7 @@ export function LaunchPanel({ scenarios, onLaunched, onCancel, onBusyChange }: L
     event.preventDefault();
     if (sending.current) return;
     const result = toLaunchInput(
+      t,
       scenarios.map((scenario) => scenario.id),
       draft,
     );
@@ -86,26 +94,24 @@ export function LaunchPanel({ scenarios, onLaunched, onCancel, onBusyChange }: L
     });
   }
 
-  const launchLabel = busy ? "Launching…" : planned === null ? "Launch runs" : `Launch ${planned} ${planned === 1 ? "run" : "runs"}`;
-
   return (
     <form noValidate onSubmit={onSubmit} className="flex flex-col gap-4">
       {scenarios.length === 1 ? (
-        <div role="radiogroup" aria-label="What to run" className="flex flex-col gap-2">
+        <div role="radiogroup" aria-label={t("launch.whatToRun")} className="flex flex-col gap-2">
           <label className="flex min-h-11 items-center gap-2.5 rounded-lg border border-evaluator bg-selected px-3 text-[13px]">
             <input type="radio" name="launch-scope" checked readOnly className="accent-evaluator" />
-            This scenario
+            {t("launch.thisScenario")}
           </label>
         </div>
       ) : (
-        <ul aria-label="Scenarios" className="flex flex-col gap-1 text-sm text-muted">
+        <ul aria-label={t("nav.scenarios")} className="flex flex-col gap-1 text-sm text-muted">
           {scenarios.map((scenario) => (
             <li key={scenario.id}>{scenario.name}</li>
           ))}
         </ul>
       )}
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Runs each" hint={`1–${MAX_REPETITIONS} per scenario.`} error={errors.repetitions}>
+        <Field label={t("launch.runsEach")} hint={t("launch.runsEachHint", { max: MAX_REPETITIONS })} error={errors.repetitions}>
           {(props) => (
             <Input
               {...props}
@@ -116,7 +122,7 @@ export function LaunchPanel({ scenarios, onLaunched, onCancel, onBusyChange }: L
             />
           )}
         </Field>
-        <Field label="In parallel" hint={`1–${MAX_CONCURRENCY} at a time.`} error={errors.concurrency}>
+        <Field label={t("launch.inParallel")} hint={t("launch.inParallelHint", { max: MAX_CONCURRENCY })} error={errors.concurrency}>
           {(props) => (
             <Input
               {...props}
@@ -128,7 +134,7 @@ export function LaunchPanel({ scenarios, onLaunched, onCancel, onBusyChange }: L
           )}
         </Field>
       </div>
-      <Field label="Label (optional)" hint="Helps you find this batch later." error={errors.label}>
+      <Field label={t("launch.label")} hint={t("launch.labelHint")} error={errors.label}>
         {(props) => (
           <Input
             {...props}
@@ -140,15 +146,15 @@ export function LaunchPanel({ scenarios, onLaunched, onCancel, onBusyChange }: L
       </Field>
       <label className="flex items-center gap-2.5 text-[13px] text-body">
         <input type="checkbox" checked disabled readOnly className="size-[18px] accent-evaluator" />
-        Judge automatically when each {noun} ends
+        {t(`launch.autoJudge.${noun}`)}
       </label>
       <div className="flex justify-between gap-3 border-t border-line pt-3 text-xs text-muted">
-        <span>{planned === null ? "" : planned === 1 ? `1 ${noun}` : `${planned} ${noun}s`}</span>
-        {minutes === null ? null : <span>{`≈ ${minutes} min wall time`}</span>}
+        <span>{planned === null ? "" : t.plural(`launch.count.${noun}`, planned)}</span>
+        {minutes === null ? null : <span>{t("launch.wallTime", { minutes })}</span>}
       </div>
       {launch.isError ? (
         refused.length > 0 ? (
-          <Alert title="Some scenarios cannot run">
+          <Alert title={t("launch.someCannotRun")}>
             <ul className="flex flex-col gap-1">
               {refused.map((line) => (
                 <li key={line}>{line}</li>
@@ -156,17 +162,17 @@ export function LaunchPanel({ scenarios, onLaunched, onCancel, onBusyChange }: L
             </ul>
           </Alert>
         ) : (
-          <Alert title="Could not launch">{errorMessage(launch.error)}</Alert>
+          <Alert title={t("launch.failed")}>{errorMessage(launch.error)}</Alert>
         )
       ) : null}
       <div className={cn("flex flex-wrap gap-3", onCancel ? "justify-end" : "flex-col")}>
         {onCancel ? (
           <Button variant="secondary" onClick={onCancel} disabled={busy}>
-            Cancel
+            {t("common.cancel")}
           </Button>
         ) : null}
         <Button type="submit" loading={busy} icon={<PlayIcon />} className={onCancel ? undefined : "min-h-12 text-[15px]"}>
-          {launchLabel}
+          {launchLabel(t, busy, planned)}
         </Button>
       </div>
     </form>

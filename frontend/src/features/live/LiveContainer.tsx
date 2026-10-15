@@ -9,6 +9,7 @@ import type { Run, RunStatus } from "@/features/runs/types";
 import { createLevelMeter, type ChannelLevels, type LevelMeter } from "@/lib/live/levels";
 import { PageHeader } from "@/features/shell/PageHeader";
 import { errorMessage } from "@/lib/api";
+import { useT } from "@/lib/i18n";
 import { useNow } from "@/lib/time/use-now";
 import {
   Alert,
@@ -25,7 +26,7 @@ import {
   focusRing,
 } from "@/ui";
 import { useFollowPreference } from "./follow-preference";
-import { batchEyebrow, batchSegments, type SessionStats } from "./live-view";
+import { batchEyebrow, batchSegments, liveConnectionError, type SessionStats } from "./live-view";
 import { LiveRunPanel } from "./LiveRunPanel";
 import { SessionCard } from "./SessionCard";
 import { useBatchLive } from "./use-batch-live";
@@ -70,6 +71,7 @@ export function LiveContainer() {
 }
 
 function AllActive() {
+  const t = useT();
   const running = useRuns({ ...ACTIVE_PAGE, status: "running" }, { refetchInterval: POLL_MS });
   const connecting = useRuns({ ...ACTIVE_PAGE, status: "connecting" }, { refetchInterval: POLL_MS });
   const queued = useRuns({ ...ACTIVE_PAGE, status: "queued" }, { refetchInterval: POLL_MS });
@@ -79,16 +81,16 @@ function AllActive() {
   const loaded = queries.some((query) => query.data !== undefined);
 
   let body;
-  if (queries.some((query) => query.isPending)) body = <Spinner label="Loading live sessions" />;
-  else if (failed && !loaded) body = <Alert title="Could not load live sessions">{errorMessage(failed.error)}</Alert>;
+  if (queries.some((query) => query.isPending)) body = <Spinner label={t("live.loading")} />;
+  else if (failed && !loaded) body = <Alert title={t("live.loadFailed")}>{errorMessage(failed.error)}</Alert>;
   else body = <Sessions sessions={sessions} />;
 
   return (
     <>
-      <PageHeader eyebrow="All active runs" title="Live sessions" />
+      <PageHeader eyebrow={t("live.allActive")} title={t("nav.live")} />
       {/* One failing poll must not hide what the others (or earlier polls) loaded. */}
       {failed && loaded ? (
-        <Alert title="Some live sessions could not be loaded">{errorMessage(failed.error)}</Alert>
+        <Alert title={t("live.someFailed")}>{errorMessage(failed.error)}</Alert>
       ) : null}
       {body}
     </>
@@ -96,6 +98,7 @@ function AllActive() {
 }
 
 function BatchLive({ batchId }: { batchId: string }) {
+  const t = useT();
   const batch = useBatch(batchId, { refetchInterval: POLL_MS * 2 });
   const live = useBatchLive(batchId);
   const stop = useCancelBatch();
@@ -103,54 +106,54 @@ function BatchLive({ batchId }: { batchId: string }) {
   const sessions = [...(live.state.batch ? live.state.runs : (batch.data?.runs ?? []))].sort(byProgress);
   const finished = live.state.finished || (batch.data !== undefined && !["queued", "running"].includes(batch.data.status));
   const total = live.state.batch?.total ?? batch.data?.total ?? sessions.length;
-  const runsTotal = `${total} runs total`;
+  const runsTotal = t.plural("live.runsTotal", total);
 
   return (
     <>
       <PageHeader
-        eyebrow={batch.data ? batchEyebrow(batch.data) : `Batch ${batchId.slice(0, 8)}`}
-        title="Live sessions"
+        eyebrow={batch.data ? batchEyebrow(t, batch.data) : t("runs.batch", { id: batchId.slice(0, 8) })}
+        title={t("nav.live")}
         actions={
           <>
-            {finished ? <Badge tone="success">Batch finished</Badge> : null}
+            {finished ? <Badge tone="success">{t("live.batchFinished")}</Badge> : null}
             <Link href={`/runs?batchId=${encodeURIComponent(batchId)}`} className={buttonClasses("secondary")}>
-              Runs of this batch
+              {t("live.batchRuns")}
             </Link>
             {!finished ? (
               <button type="button" onClick={() => setConfirming(true)} className={STOP_ALL}>
                 <StopIcon />
-                Stop all
+                {t("live.stopAll")}
               </button>
             ) : null}
           </>
         }
       />
-      <section aria-label="Batch progress">
+      <section aria-label={t("live.batchProgress")}>
         <StackedProgress
-          label="Batch progress"
-          segments={batchSegments(sessions)}
-          extra={batch.data ? `Concurrency ${batch.data.concurrency} · ${runsTotal}` : runsTotal}
+          label={t("live.batchProgress")}
+          segments={batchSegments(t, sessions)}
+          extra={batch.data ? `${t("live.concurrency", { count: batch.data.concurrency })} · ${runsTotal}` : runsTotal}
         />
       </section>
-      {live.connection.kind === "error" ? <Alert>{live.connection.message}</Alert> : null}
-      {stop.isError ? <Alert>{`Could not stop the batch: ${errorMessage(stop.error)}`}</Alert> : null}
-      {batch.isPending && !live.state.batch ? <Spinner label="Loading batch" /> : <Sessions sessions={sessions} />}
+      {live.connection.kind === "error" ? <Alert>{liveConnectionError(t, live.connection.code, "batch")}</Alert> : null}
+      {stop.isError ? <Alert>{t("live.stopFailed", { error: errorMessage(stop.error) })}</Alert> : null}
+      {batch.isPending && !live.state.batch ? <Spinner label={t("live.loadingBatch")} /> : <Sessions sessions={sessions} />}
       <Dialog
         open={confirming}
-        title="Stop the whole batch?"
-        description="This ends every run in progress and cancels the runs still queued. Finished runs keep their results."
+        title={t("live.stopTitle")}
+        description={t("live.stopDescription")}
         onClose={() => setConfirming(false)}
         actions={
           <>
             <Button variant="secondary" onClick={() => setConfirming(false)}>
-              Keep running
+              {t("live.keepRunning")}
             </Button>
             <Button
               variant="danger"
               loading={stop.isPending}
               onClick={() => stop.mutate(batchId, { onSettled: () => setConfirming(false) })}
             >
-              Stop all
+              {t("live.stopAll")}
             </Button>
           </>
         }
@@ -180,6 +183,7 @@ type FocusFeed = { id: string; meter: LevelMeter; stats?: SessionStats };
 const CARD_BINS = 40;
 
 function Sessions({ sessions }: { sessions: Run[] }) {
+  const t = useT();
   const now = useNow(1000);
   const [follow, setFollow] = useFollowPreference();
   // The focused run, as last listed. It stays focused (and listed) after it ends and drops out of
@@ -207,8 +211,8 @@ function Sessions({ sessions }: { sessions: Run[] }) {
     <Switch
       checked={follow}
       onChange={setFollow}
-      label="Follow and listen automatically"
-      hint="Opens each run as it starts and plays its call; stays on a run until it ends, then moves to the next."
+      label={t("live.follow")}
+      hint={t("live.followHint")}
       className="self-start"
     />
   );
@@ -219,11 +223,11 @@ function Sessions({ sessions }: { sessions: Run[] }) {
         {followSwitch}
         <EmptyState
         icon={<LiveIcon size={22} />}
-        title="Nothing running"
-        description="Launch a scenario to watch its run here (and listen in, for voice agents)."
+        title={t("live.emptyTitle")}
+        description={t("live.emptyDescription")}
         action={
           <Link href="/scenarios" className={buttonClasses("secondary")}>
-            Go to scenarios
+            {t("live.goToScenarios")}
           </Link>
         }
         />
@@ -255,7 +259,7 @@ function Sessions({ sessions }: { sessions: Run[] }) {
   return (
     <div className="flex min-w-0 flex-col gap-5">
       {followSwitch}
-      <ul aria-label="Sessions" className="-mx-1 flex snap-x gap-2.5 overflow-x-auto px-1 pb-1">
+      <ul aria-label={t("live.sessions")} className="-mx-1 flex snap-x gap-2.5 overflow-x-auto px-1 pb-1">
         {sessions.map((run) => (
           <li key={run.id} className="w-[min(340px,85vw)] shrink-0 snap-start">
             {card(run)}

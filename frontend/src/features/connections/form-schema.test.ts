@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { createTranslator } from "@/lib/i18n";
 import { draftIssues, hasTypedSecret, initialValues, toChanges, toDraft, type ConnectionFormValues } from "./form-schema";
 import { connectionFixture } from "./testing";
+
+const t = createTranslator("en");
 
 const KEY = "sk-proj-abcdefghijklmnop1234";
 
@@ -9,7 +12,7 @@ function openaiValues(secret: string): ConnectionFormValues {
 }
 
 const secretIssues = (values: ConnectionFormValues, secretRequired: boolean) =>
-  draftIssues(values, { secretRequired }).filter((issue) => issue.path === "secrets.apiKey");
+  draftIssues(t, values, { secretRequired }).filter((issue) => issue.path === "secrets.apiKey");
 
 describe("secret presence and whitespace", () => {
   it.each(["", "   ", "\t \n"])("requires a secret on create when it is blank (%j)", (secret) => {

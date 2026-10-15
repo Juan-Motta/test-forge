@@ -1,6 +1,8 @@
-import { STATUS_LABELS, clock, endReasonLabel, isActive, latency, median, runDurationMs } from "@/features/runs/format";
+import { clock, endReasonLabel, isActive, latency, median, runDurationMs, statusLabel } from "@/features/runs/format";
 import { runKind } from "@/features/runs/kind";
 import type { Batch, Run, RunSnapshot } from "@/features/runs/types";
+import type { Translator } from "@/lib/i18n";
+import { CLOSE_FORBIDDEN_ORIGIN, CLOSE_NOT_FOUND, CLOSE_UNAUTHENTICATED } from "@/lib/live/connection";
 import type { BadgeTone, ProgressSegment } from "@/ui";
 import type { LiveRunState } from "./live-state";
 
@@ -43,81 +45,96 @@ export function evaluatorGoals(snapshot: RunSnapshot | undefined): string[] {
   );
 }
 
-const EVALUATOR_LABELS = { pipeline: "Pipeline evaluator", realtime: "Realtime evaluator" } as const;
+const EVALUATOR_LABELS = { pipeline: "runs.evaluator.pipeline", realtime: "runs.evaluator.realtime" } as const;
 
 /** "Realtime evaluator · gpt-realtime-2.1", or null on runs launched before the choice existed. */
-export function evaluatorChip(snapshot: RunSnapshot | undefined): string | null {
+export function evaluatorChip(t: Translator, snapshot: RunSnapshot | undefined): string | null {
   const mode = snapshot?.scenario?.evaluatorMode;
   if (!mode) return null;
   const model = mode === "realtime" ? snapshot?.scenario?.realtimeModel : undefined;
-  return [EVALUATOR_LABELS[mode], model].filter(Boolean).join(" · ");
+  return [t(EVALUATOR_LABELS[mode]), model].filter(Boolean).join(" · ");
 }
 
 /** The status chip of a session card. */
-export function sessionChip(run: Pick<Run, "status" | "score">): { label: string; tone: BadgeTone } {
+export function sessionChip(t: Translator, run: Pick<Run, "status" | "score">): { label: string; tone: BadgeTone } {
   switch (run.status) {
     case "running":
-      return { label: "Live", tone: "danger" };
+      return { label: t("runs.live"), tone: "danger" };
     case "connecting":
-      return { label: STATUS_LABELS.connecting, tone: "agent" };
+      return { label: statusLabel(t, "connecting"), tone: "agent" };
     case "queued":
-      return { label: STATUS_LABELS.queued, tone: "muted" };
+      return { label: statusLabel(t, "queued"), tone: "muted" };
     case "completed":
-      return { label: run.score === null ? "Done" : `Done · ${Math.round(run.score)}`, tone: "success" };
+      return {
+        label: run.score === null ? t("live.done") : t("live.doneScore", { score: Math.round(run.score) }),
+        tone: "success",
+      };
     case "cancelled":
-      return { label: STATUS_LABELS.cancelled, tone: "muted" };
+      return { label: statusLabel(t, "cancelled"), tone: "muted" };
     default:
-      return { label: STATUS_LABELS[run.status], tone: "danger" };
+      return { label: statusLabel(t, run.status), tone: "danger" };
   }
 }
 
-const turnsText = (turns: number) => `${turns} ${turns === 1 ? "turn" : "turns"}`;
-
 /** "2:41 · 7 turns · p50 1.1 s": live stats for the focused run, the summary's once finished. */
-export function sessionMeta(run: Run, now: number, stats?: SessionStats): string {
-  if (run.status === "queued") return "Starts when a slot frees up";
+export function sessionMeta(t: Translator, run: Run, now: number, stats?: SessionStats): string {
+  if (run.status === "queued") return t("live.startsWhenFree");
   const duration = runDurationMs(run, now);
-  if (isActive(run.status) && duration === null) return "Starting…";
+  if (isActive(run.status) && duration === null) return t("live.starting");
   const summaryTurns = run.agentTurns === null && run.callerTurns === null ? null : (run.agentTurns ?? 0) + (run.callerTurns ?? 0);
   // Field by field: a live value the stream has not produced yet never hides a known summary one.
   const turns = stats && stats.turns > 0 ? stats.turns : summaryTurns;
   const p50 = stats?.p50Ms ?? run.latencyP50Ms;
   return [
     duration === null ? null : clock(duration),
-    turns === null || turns === 0 ? null : turnsText(turns),
+    turns === null || turns === 0 ? null : t.plural("live.turns", turns),
     p50 === null ? null : `p50 ${latency(p50)}`,
-    isActive(run.status) ? null : endReasonLabel(run.endReason, runKind(run)),
+    isActive(run.status) ? null : endReasonLabel(t, run.endReason, runKind(run)),
   ]
     .filter(Boolean)
     .join(" · ");
 }
 
 /** Batch progress bar segments; cancelled runs get their own only when there are some. */
-export function batchSegments(runs: Pick<Run, "status">[]): ProgressSegment[] {
+export function batchSegments(t: Translator, runs: Pick<Run, "status">[]): ProgressSegment[] {
   const count = (...statuses: Run["status"][]) => runs.filter((run) => statuses.includes(run.status)).length;
   const segments: ProgressSegment[] = [
-    { key: "completed", label: "completed", value: count("completed"), tone: "success" },
-    { key: "running", label: "running", value: count("running", "connecting"), tone: "evaluator" },
-    { key: "queued", label: "queued", value: count("queued"), tone: "idle" },
-    { key: "failed", label: "failed", value: count("failed", "interrupted"), tone: "danger" },
+    { key: "completed", label: t("live.segment.completed"), value: count("completed"), tone: "success" },
+    { key: "running", label: t("live.segment.running"), value: count("running", "connecting"), tone: "evaluator" },
+    { key: "queued", label: t("live.segment.queued"), value: count("queued"), tone: "idle" },
+    { key: "failed", label: t("live.segment.failed"), value: count("failed", "interrupted"), tone: "danger" },
   ];
   const cancelled = count("cancelled");
-  return cancelled ? [...segments, { key: "cancelled", label: "cancelled", value: cancelled, tone: "muted" }] : segments;
+  return cancelled ? [...segments, { key: "cancelled", label: t("live.segment.cancelled"), value: cancelled, tone: "muted" }] : segments;
 }
 
 /** "HH:MM" in the browser's time zone. */
-function hourMinute(iso: string): string {
-  return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+function hourMinute(locale: string, iso: string): string {
+  return new Date(iso).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
 }
 
 /** "Batch b0412f00 · Hotel booking regression · started 16:02". */
-export function batchEyebrow(batch: Pick<Batch, "id" | "label" | "createdAt">): string {
-  return [`Batch ${batch.id.slice(0, 8)}`, batch.label, `started ${hourMinute(batch.createdAt)}`].filter(Boolean).join(" · ");
+export function batchEyebrow(t: Translator, batch: Pick<Batch, "id" | "label" | "createdAt">): string {
+  return [
+    t("runs.batch", { id: batch.id.slice(0, 8) }),
+    batch.label,
+    t("live.startedAt", { time: hourMinute(t.locale, batch.createdAt) }),
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+/** Why the live stream stopped, in words (the close code says which); `subject` names what streams. */
+export function liveConnectionError(t: Translator, code: number, subject: "run" | "batch"): string {
+  if (code === CLOSE_UNAUTHENTICATED) return t("live.conn.expired");
+  if (code === CLOSE_FORBIDDEN_ORIGIN) return t("live.conn.origin");
+  if (code === CLOSE_NOT_FOUND) return subject === "batch" ? t("live.conn.batchGone") : t("live.conn.runGone");
+  return t("live.conn.gaveUp");
 }
 
 /** Four time labels under the audio lanes: the window's start, two steps, then "now". */
-export function laneAxis(elapsedMs: number, windowMs: number): string[] {
+export function laneAxis(t: Translator, elapsedMs: number, windowMs: number): string[] {
   const start = elapsedMs - windowMs;
   const step = windowMs / 3;
-  return [0, 1, 2].map((index) => clock(Math.max(0, start + index * step))).concat("now");
+  return [0, 1, 2].map((index) => clock(Math.max(0, start + index * step))).concat(t("live.now"));
 }

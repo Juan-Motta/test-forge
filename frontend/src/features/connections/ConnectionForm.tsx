@@ -5,6 +5,7 @@ import { useEffect } from "react";
 import { get, useForm, useWatch, type Path } from "react-hook-form";
 import { Alert, Badge, Button, Field, Input, PasswordInput, Select } from "@/ui";
 import type { FieldErrors } from "@/lib/api";
+import { useT } from "@/lib/i18n";
 import {
   connectionFormSchema,
   draftIssues,
@@ -51,6 +52,7 @@ export function ConnectionForm({
   error,
   serverFieldErrors = NO_SERVER_ERRORS,
 }: ConnectionFormProps) {
+  const t = useT();
   const editing = connection !== undefined;
   const {
     register,
@@ -62,7 +64,7 @@ export function ConnectionForm({
     clearErrors,
     formState: { errors },
   } = useForm<ConnectionFormValues>({
-    resolver: zodResolver(connectionFormSchema({ secretRequired: !editing })),
+    resolver: zodResolver(connectionFormSchema(t, { secretRequired: !editing })),
     defaultValues: initialValues(connection),
   });
   const kind = useWatch({ control, name: "kind" });
@@ -103,7 +105,7 @@ export function ConnectionForm({
       return;
     }
     clearErrors(["config", "secrets"]);
-    const issues = draftIssues(values, { secretRequired: true });
+    const issues = draftIssues(t, values, { secretRequired: true });
     for (const issue of issues) {
       setError(issue.path as Path<ConnectionFormValues>, { type: "manual", message: issue.message });
     }
@@ -111,23 +113,23 @@ export function ConnectionForm({
   }
 
   const secretHint = !editing
-    ? "Stored encrypted. Only its last 4 characters are ever shown."
+    ? t("connections.secretHintNew")
     : connection.hasSecret
-      ? `Stored key ${connection.secretHint} — leave blank to keep it`
-      : "No key stored. Enter one to use this connection.";
+      ? t("connections.secretHintStored", { hint: connection.secretHint ?? "" })
+      : t("connections.secretHintNone");
 
   return (
-    <form noValidate aria-label="Connection" onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-5">
+    <form noValidate aria-label={t("agents.connection")} onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-5">
       {editing ? (
         <div className="flex flex-col gap-1.5">
-          <span className="text-xs font-medium text-muted">Provider</span>
+          <span className="text-xs font-medium text-muted">{t("connections.provider")}</span>
           <div className="flex flex-wrap items-center gap-2">
             <Badge>{definition.label}</Badge>
-            <span className="text-xs text-dim">The provider of a connection cannot change.</span>
+            <span className="text-xs text-dim">{t("connections.providerFixed")}</span>
           </div>
         </div>
       ) : (
-        <Field label="Provider" hint={definition.description} error={fieldError("kind")}>
+        <Field label={t("connections.provider")} hint={t(definition.description)} error={fieldError("kind")}>
           {(controlProps) => (
             <Select
               {...controlProps}
@@ -148,14 +150,19 @@ export function ConnectionForm({
         </Field>
       )}
 
-      <Field label="Name" hint="Unique; runs refer to the connection by it." error={fieldError("name")}>
+      <Field label={t("scenarios.field.name")} hint={t("connections.nameHint")} error={fieldError("name")}>
         {(controlProps) => <Input autoComplete="off" {...controlProps} {...registerField("name")} />}
       </Field>
 
       {definition.config.map((field) => {
         const path = `config.${field.key}` as const;
         return (
-          <Field key={`${kind}.${field.key}`} label={field.label} hint={field.hint} error={fieldError(path)}>
+          <Field
+            key={`${kind}.${field.key}`}
+            label={t(field.label)}
+            hint={field.hint ? t(field.hint) : undefined}
+            error={fieldError(path)}
+          >
             {(controlProps) => (
               <Input
                 mono
@@ -172,11 +179,11 @@ export function ConnectionForm({
         );
       })}
 
-      <Field key={`${kind}.secret`} label={definition.secret.label} hint={secretHint} error={fieldError(secretPath)}>
+      <Field key={`${kind}.secret`} label={t(definition.secret.label)} hint={secretHint} error={fieldError(secretPath)}>
         {(controlProps) => (
           <PasswordInput
             mono
-            subject={definition.secret.label}
+            subject={t(definition.secret.label)}
             autoComplete="new-password"
             spellCheck={false}
             {...controlProps}
@@ -188,19 +195,17 @@ export function ConnectionForm({
       <div className="flex flex-col gap-3 rounded-lg border border-line bg-raised p-3.5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-xs text-muted">
-            {editing
-              ? "Leave the key blank to test the saved connection, or type a key to test these values."
-              : "Checks these values against the provider without saving them."}
+            {editing ? t("connections.testEditHint") : t("connections.testNewHint")}
           </p>
           <Button variant="secondary" loading={testing} onClick={runTest}>
-            {testing ? "Testing…" : "Test connection"}
+            {testing ? t("check.testing") : t("connections.test")}
           </Button>
         </div>
         {testOutcome ? (
-          <Alert tone={testOutcome.result.ok ? "success" : "danger"} title={testOutcome.result.ok ? "Test passed" : "Test failed"}>
+          <Alert tone={testOutcome.result.ok ? "success" : "danger"} title={testOutcome.result.ok ? t("connections.testPassed") : t("connections.testFailed")}>
             <span className="block">{testOutcome.result.detail}</span>
             {testOutcome.target === "stored" ? (
-              <span className="block text-xs text-muted">Tested the saved connection; unsaved changes were not included.</span>
+              <span className="block text-xs text-muted">{t("connections.testedStored")}</span>
             ) : null}
           </Alert>
         ) : null}
@@ -219,10 +224,10 @@ export function ConnectionForm({
 
       <div className="flex flex-wrap justify-end gap-3">
         <Button variant="secondary" onClick={onCancel}>
-          Cancel
+          {t("common.cancel")}
         </Button>
         <Button type="submit" loading={pending}>
-          {pending ? "Saving…" : editing ? "Save changes" : "Create connection"}
+          {pending ? t("editor.saving") : editing ? t("agents.saveChanges") : t("connections.create")}
         </Button>
       </div>
     </form>

@@ -1,3 +1,4 @@
+import type { Translator } from "@/lib/i18n";
 import type { ApiKey, ApiKeyStatus } from "./types";
 
 /** Revoked beats expired: a revoked key stays revoked whatever its expiry says. */
@@ -7,10 +8,8 @@ export function apiKeyStatus(key: Pick<ApiKey, "expiresAt" | "revokedAt">, now: 
   return "active";
 }
 
-const STATUS_LABELS: Record<ApiKeyStatus, string> = { active: "Active", revoked: "Revoked", expired: "Expired" };
-
-export function statusLabel(status: ApiKeyStatus): string {
-  return STATUS_LABELS[status];
+export function statusLabel(t: Translator, status: ApiKeyStatus): string {
+  return t(`apiKeys.status.${status}`);
 }
 
 /** `ve_abcd1234…`: the recognisable start of a key, never the secret part. */

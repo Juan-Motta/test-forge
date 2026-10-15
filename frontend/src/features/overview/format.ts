@@ -1,21 +1,27 @@
-/** "+34 vs previous week" style delta between two counts. */
-export function countDelta(current: number, previous: number, period: string) {
+import type { Format, Translator } from "@/lib/i18n";
+
+/**
+ * "+34 vs previous week" style delta between two counts, over a window of `days` (7 reads as a
+ * week).
+ */
+export function countDelta(t: Translator, current: number, previous: number, days: number) {
   const diff = current - previous;
-  if (diff === 0) return { text: `Same as previous ${period}`, trend: "flat" as const };
+  const period = days === 7 ? t("overview.week") : t("overview.days", { count: days });
+  if (diff === 0) return { text: t("overview.sameAsPrevious", { period }), trend: "flat" as const };
   return {
-    text: `${diff > 0 ? "+" : "−"}${Math.abs(diff)} vs previous ${period}`,
+    text: t("overview.vsPrevious", { diff: `${diff > 0 ? "+" : "−"}${Math.abs(diff)}`, period }),
     trend: diff > 0 ? ("up" as const) : ("down" as const),
   };
 }
 
-/** Milliseconds as seconds with one decimal ("1.2"). */
-export function seconds(ms: number): string {
-  return (ms / 1000).toFixed(1);
+/** Milliseconds as seconds with one decimal ("1.2"), in the page's notation. */
+export function seconds(format: Format, ms: number): string {
+  return format.number(ms / 1000, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 }
 
-/** A 0..1 share as a whole percentage ("81%"). */
-export function percent(share: number): string {
-  return `${Math.round(share * 100)}%`;
+/** A 0..1 share as a whole percentage ("81%"), in the page's notation. */
+export function percent(format: Format, share: number): string {
+  return format.number(share, { style: "percent", maximumFractionDigits: 0 });
 }
 
 /**

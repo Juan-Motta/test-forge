@@ -1,3 +1,4 @@
+import type { Translator } from "@/lib/i18n";
 import type { CriterionResult } from "@/features/judgements/types";
 import type { PinTone } from "@/ui";
 import { clock } from "../format";
@@ -37,7 +38,11 @@ export function collectIssues(criteria: readonly CriterionResult[], refsInOrder:
 export type IssuePin = { n: number; ref: string; tone: Issue["tone"]; at: number; label: string };
 
 /** Issues placed on the recording lanes, at the middle of their turn; turns the levels lack are left out. */
-export function issuePins(issues: readonly Issue[], levels: Pick<RunLevels, "durationMs" | "turns">): IssuePin[] {
+export function issuePins(
+  t: Translator,
+  issues: readonly Issue[],
+  levels: Pick<RunLevels, "durationMs" | "turns">,
+): IssuePin[] {
   if (levels.durationMs <= 0) return [];
   const turns = new Map(levels.turns.map((turn) => [turn.ref, turn]));
   return issues.flatMap((issue) => {
@@ -50,7 +55,7 @@ export function issuePins(issues: readonly Issue[], levels: Pick<RunLevels, "dur
         ref: issue.ref,
         tone: issue.tone,
         at: Math.min(1, Math.max(0, middle / levels.durationMs)),
-        label: `Issue ${issue.n} at ${clock(turn.startMs)}: ${issue.criteria.join("; ")}`,
+        label: t("report.issuePin", { n: issue.n, at: clock(turn.startMs), criteria: issue.criteria.join("; ") }),
       },
     ];
   });

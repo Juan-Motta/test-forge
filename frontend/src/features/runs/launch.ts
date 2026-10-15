@@ -1,4 +1,5 @@
 import { ApiError } from "@/lib/api";
+import type { Translator } from "@/lib/i18n";
 import type { LaunchInput } from "./types";
 
 export const MAX_REPETITIONS = 10;
@@ -19,6 +20,7 @@ function count(value: string, max: number): number | null {
 
 /** The payload for `POST /api/runs`, or the field errors (same limits as the backend). */
 export function toLaunchInput(
+  t: Translator,
   scenarioIds: string[],
   draft: LaunchDraft,
 ): { input: LaunchInput; errors?: undefined } | { input?: undefined; errors: LaunchErrors } {
@@ -26,9 +28,9 @@ export function toLaunchInput(
   const repetitions = count(draft.repetitions, MAX_REPETITIONS);
   const concurrency = count(draft.concurrency, MAX_CONCURRENCY);
   const label = draft.label.trim();
-  if (repetitions === null) errors.repetitions = `Enter a whole number between 1 and ${MAX_REPETITIONS}.`;
-  if (concurrency === null) errors.concurrency = `Enter a whole number between 1 and ${MAX_CONCURRENCY}.`;
-  if (label.length > MAX_LABEL_LENGTH) errors.label = `Use at most ${MAX_LABEL_LENGTH} characters.`;
+  if (repetitions === null) errors.repetitions = t("launch.wholeNumber", { max: MAX_REPETITIONS });
+  if (concurrency === null) errors.concurrency = t("launch.wholeNumber", { max: MAX_CONCURRENCY });
+  if (label.length > MAX_LABEL_LENGTH) errors.label = t("common.maxChars", { max: MAX_LABEL_LENGTH });
   if (repetitions === null || concurrency === null || Object.keys(errors).length > 0) return { errors };
   return { input: { scenarioIds, repetitions, concurrency, ...(label ? { label } : {}) } };
 }
@@ -56,14 +58,18 @@ export function estimatedMinutes(scenarios: { maxDurationS?: number }[], draft: 
  * The scenarios a 422 refused, as "name: reason" lines. The backend reports them under
  * `scenarioIds.<index>`; anything else (a plain validation error) yields no lines.
  */
-export function notRunnableReasons(error: unknown, scenarios: { id: string; name: string }[]): string[] {
+export function notRunnableReasons(
+  t: Translator,
+  error: unknown,
+  scenarios: { id: string; name: string }[],
+): string[] {
   if (!(error instanceof ApiError) || error.status !== 422) return [];
   const lines: string[] = [];
   for (const [path, message] of Object.entries(error.fieldErrors)) {
     const match = /^scenarioIds\.(\d+)$/.exec(path);
     if (!match) continue;
     const scenario = scenarios[Number(match[1])];
-    lines.push(`${scenario?.name ?? "A scenario"}: ${message}`);
+    lines.push(`${scenario?.name ?? t("launch.aScenario")}: ${message}`);
   }
   return lines;
 }

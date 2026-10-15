@@ -7,6 +7,7 @@ import { useAgents } from "@/features/agents/queries";
 import { LaunchRunsDialog } from "@/features/runs/LaunchRunsDialog";
 import { PageHeader } from "@/features/shell/PageHeader";
 import { errorMessage } from "@/lib/api";
+import { useT, type Translator } from "@/lib/i18n";
 import {
   Alert,
   Button,
@@ -32,6 +33,7 @@ const NO_FILTERS: LibraryFilters = { agentId: "", tag: null };
 
 /** Container for `/scenarios`: the library, filtered by agent and tag in the browser. */
 export function ScenariosContainer() {
+  const t = useT();
   const router = useRouter();
   const scenarios = useScenarios();
   const agents = useAgents();
@@ -81,7 +83,7 @@ export function ScenariosContainer() {
     setDeleteInFlight(true);
     try {
       await remove.mutateAsync(scenario);
-      setNotice(`Deleted ${scenario.name}.`);
+      setNotice(t("common.deleted", { name: scenario.name }));
       // The user may have cancelled and opened another scenario's dialog meanwhile: leave that one open.
       if (shownDelete.current?.id === scenario.id) {
         focusTitle.current = true;
@@ -98,12 +100,12 @@ export function ScenariosContainer() {
 
   const newScenario = noAgents ? (
     <Button icon={<PlusIcon size={16} />} disabled aria-describedby={NO_AGENT_HINT_ID}>
-      New scenario
+      {t("scenarios.new")}
     </Button>
   ) : (
     <Link href="/scenarios/new" className={buttonClasses("primary")}>
       <PlusIcon size={16} />
-      New scenario
+      {t("scenarios.new")}
     </Link>
   );
 
@@ -125,14 +127,14 @@ export function ScenariosContainer() {
 
   let body;
   if (scenarios.isPending || agents.isPending) {
-    body = <Spinner label="Loading scenarios" />;
+    body = <Spinner label={t("scenarios.loading")} />;
   } else if (scenarios.isError || agents.isError) {
     const failed = scenarios.isError ? scenarios : agents;
     body = (
-      <Alert title="Could not load scenarios">
+      <Alert title={t("scenarios.loadFailed")}>
         <span className="block">{errorMessage(failed.error)}</span>
         <Button variant="secondary" className="mt-3" onClick={() => failed.refetch()}>
-          Try again
+          {t("common.tryAgain")}
         </Button>
       </Alert>
     );
@@ -140,8 +142,8 @@ export function ScenariosContainer() {
     body = (
       <EmptyState
         icon={<ScenariosIcon size={22} />}
-        title="No scenarios yet"
-        description="A scenario describes the caller the evaluator plays, what it knows and wants, and how the judge scores the call."
+        title={t("scenarios.emptyTitle")}
+        description={t("scenarios.emptyDescription")}
         action={newScenario}
       />
     );
@@ -151,14 +153,14 @@ export function ScenariosContainer() {
       <>
         <div className="flex flex-wrap items-end gap-4">
           <div className="w-full sm:w-64">
-            <Field label="Agent">
+            <Field label={t("common.agent")}>
               {(props) => (
                 <Select
                   {...props}
                   value={filters.agentId}
                   onChange={(event) => setFilters((current) => ({ ...current, agentId: event.target.value }))}
                 >
-                  <option value="">All agents</option>
+                  <option value="">{t("scenarios.allAgents")}</option>
                   {agentList.map((agent) => (
                     <option key={agent.id} value={agent.id}>
                       {agent.name}
@@ -170,9 +172,9 @@ export function ScenariosContainer() {
           </div>
           {tags.length > 0 ? (
             <FilterChips
-              label="Filter by tag"
+              label={t("scenarios.filterByTag")}
               size="md"
-              options={[{ value: "", label: "All tags" }, ...tags.map((tag) => ({ value: tag, label: tag }))]}
+              options={[{ value: "", label: t("scenarios.allTags") }, ...tags.map((tag) => ({ value: tag, label: tag }))]}
               selected={[filters.tag ?? ""]}
               onToggle={(tag) => setFilters((f) => ({ ...f, tag: tag === "" || f.tag === tag ? null : tag }))}
             />
@@ -181,22 +183,22 @@ export function ScenariosContainer() {
         {picked.length > 0 || hiddenCount > 0 ? (
           <div className="flex flex-wrap items-center gap-3 rounded-xl border border-evaluator-line bg-panel px-4 py-3">
             {picked.length > 0 ? (
-              <p className="text-sm text-muted">{picked.length === 1 ? "1 scenario selected" : `${picked.length} scenarios selected`}</p>
+              <p className="text-sm text-muted">{t.plural("scenarios.selectedCount", picked.length)}</p>
             ) : null}
-            {hiddenCount > 0 ? <p className="text-sm text-muted">{hiddenSelectionText(hiddenCount, picked.length > 0)}</p> : null}
+            {hiddenCount > 0 ? <p className="text-sm text-muted">{hiddenSelectionText(t, hiddenCount, picked.length > 0)}</p> : null}
             {picked.length > 0 ? (
-              <Button onClick={() => setLaunching(picked)}>{`Launch selected (${picked.length})`}</Button>
+              <Button onClick={() => setLaunching(picked)}>{t("scenarios.launchSelected", { count: picked.length })}</Button>
             ) : null}
             <Button variant="ghost" onClick={() => setSelected(new Set())}>
-              Clear selection
+              {t("scenarios.clearSelection")}
             </Button>
           </div>
         ) : null}
         {groups.length === 0 ? (
           <div className="flex flex-wrap items-center gap-3 rounded-xl border border-dashed border-line-strong bg-panel p-5">
-            <p className="text-sm text-muted">No scenarios match these filters.</p>
+            <p className="text-sm text-muted">{t("scenarios.noMatch")}</p>
             <Button variant="secondary" onClick={() => setFilters(NO_FILTERS)}>
-              Clear filters
+              {t("common.clearFilters")}
             </Button>
           </div>
         ) : (
@@ -221,23 +223,23 @@ export function ScenariosContainer() {
     <>
       <PageHeader
         titleRef={titleRef}
-        title="Scenarios"
-        eyebrow="Library"
-        description="Conversations the evaluator plays against an agent, and how the judge scores them."
+        title={t("nav.scenarios")}
+        eyebrow={t("scenarios.eyebrow")}
+        description={t("scenarios.description")}
         actions={newScenario}
       />
       {noAgents ? (
         <div className="flex flex-wrap items-center gap-2 text-sm text-muted">
-          <p id={NO_AGENT_HINT_ID}>Add an agent first: scenarios are written against an agent.</p>
+          <p id={NO_AGENT_HINT_ID}>{t("scenarios.noAgentHint")}</p>
           <Link href="/agents" className={cn("rounded", focusRing)}>
-            Add an agent
+            {t("scenarios.addAgent")}
           </Link>
         </div>
       ) : null}
       <p role="status" className="sr-only">
         {notice}
       </p>
-      {duplicate.isError ? <Alert>{`Could not duplicate: ${errorMessage(duplicate.error)}`}</Alert> : null}
+      {duplicate.isError ? <Alert>{t("scenarios.duplicateFailed", { error: errorMessage(duplicate.error) })}</Alert> : null}
       {body}
 
       <DeleteScenarioDialog
@@ -263,7 +265,6 @@ export function ScenariosContainer() {
 }
 
 /** Selected scenarios the filters hide: kept, but never launched while hidden. */
-function hiddenSelectionText(count: number, othersVisible: boolean): string {
-  if (othersVisible) return `${count} more ${count === 1 ? "is" : "are"} hidden by the filters and will not launch.`;
-  return count === 1 ? "1 selected scenario is hidden by the filters." : `${count} selected scenarios are hidden by the filters.`;
+function hiddenSelectionText(t: Translator, count: number, othersVisible: boolean): string {
+  return othersVisible ? t.plural("scenarios.hiddenMore", count) : t.plural("scenarios.hiddenOnly", count);
 }

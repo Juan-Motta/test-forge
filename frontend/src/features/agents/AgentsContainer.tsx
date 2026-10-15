@@ -5,10 +5,11 @@ import { useEffect, useId, useRef, useState } from "react";
 import { useConnections } from "@/features/connections/queries";
 import { PageHeader } from "@/features/shell/PageHeader";
 import { ApiError, errorMessage } from "@/lib/api";
+import { useT } from "@/lib/i18n";
 import { confirmLeave, useUnsavedChangesGuard } from "@/lib/navigation/unsaved-changes";
 import { AgentsIcon, Alert, Button, Card, Dialog, EmptyState, PlusIcon, Spinner, buttonClasses } from "@/ui";
 import { AgentForm } from "./AgentForm";
-import { AgentFormContainer, LANGFUSE_UNAVAILABLE_HINT, langfuseOptionsOf } from "./AgentFormContainer";
+import { AgentFormContainer, langfuseOptionsOf } from "./AgentFormContainer";
 import { AgentsRail } from "./AgentsRail";
 import { ConnectionCheck, IDLE_TEST, ReachabilityPill, type ConnectionTestState } from "./ConnectionCheck";
 import { DeleteAgentDialog } from "./DeleteAgentDialog";
@@ -43,6 +44,7 @@ type AgentsContainerProps = {
  * one inline, runs its connection test and deletes it. New agents are created in a dialog.
  */
 export function AgentsContainer({ scenarioCounts }: AgentsContainerProps = {}) {
+  const t = useT();
   const agents = useAgents();
   const connections = useConnections();
   const remove = useDeleteAgent();
@@ -66,7 +68,7 @@ export function AgentsContainer({ scenarioCounts }: AgentsContainerProps = {}) {
   const focusTitle = useRef(false);
   // The open agent's form holds unsaved edits: switching agents (or leaving the page) asks first.
   const [dirty, setDirty] = useState(false);
-  useUnsavedChangesGuard(dirty);
+  useUnsavedChangesGuard(dirty, t("common.leaveUnsaved"));
   // Bumped per agent after a successful save: the form remounts on what is stored now. A
   // background refetch alone never remounts it, so it never discards edits.
   const [formVersions, setFormVersions] = useState<Record<string, number>>({});
@@ -91,12 +93,12 @@ export function AgentsContainer({ scenarioCounts }: AgentsContainerProps = {}) {
 
   function onSaved(agent: Agent, outcome: SaveOutcome) {
     if (outcome === "created") {
-      setNotice(`Created ${agent.name}.`);
+      setNotice(t("common.created", { name: agent.name }));
       setCreating(false);
       setRequestedId(agent.id);
       writeAgentToAddress(agent.id);
     } else {
-      setNotice(outcome === "saved" ? `Saved ${agent.name}.` : "No changes to save.");
+      setNotice(outcome === "saved" ? t("common.savedNamed", { name: agent.name }) : t("common.noChanges"));
       if (outcome === "saved") setFormVersions((current) => ({ ...current, [agent.id]: (current[agent.id] ?? 0) + 1 }));
     }
   }
@@ -109,7 +111,7 @@ export function AgentsContainer({ scenarioCounts }: AgentsContainerProps = {}) {
     try {
       const result = await testConnection.mutateAsync(agent);
       setTests((current) => ({ ...current, [agent.id]: { status: "done", result, checkedAt: new Date() } }));
-      setNotice(`${agent.name} is ${result.reachable ? "reachable" : "unreachable"}.`);
+      setNotice(t(result.reachable ? "agents.isReachable" : "agents.isUnreachable", { name: agent.name }));
     } catch (error) {
       setTests((current) => ({ ...current, [agent.id]: { status: "error", message: errorMessage(error) } }));
     } finally {
@@ -129,7 +131,7 @@ export function AgentsContainer({ scenarioCounts }: AgentsContainerProps = {}) {
     setDeleteInFlight(true);
     try {
       await remove.mutateAsync(agent);
-      setNotice(`Deleted ${agent.name}.`);
+      setNotice(t("common.deleted", { name: agent.name }));
       if (agentFromAddress() === agent.id) writeAgentToAddress(null);
       // The user may have cancelled and opened another agent's dialog meanwhile: leave that one open.
       if (shownDelete.current?.id === agent.id) {
@@ -148,7 +150,7 @@ export function AgentsContainer({ scenarioCounts }: AgentsContainerProps = {}) {
   const openCreate = () => setCreating(true);
   const addButton = (
     <Button variant={selected ? "secondary" : "primary"} icon={<PlusIcon size={16} />} onClick={openCreate}>
-      Add agent
+      {t("agents.add")}
     </Button>
   );
 
@@ -156,13 +158,13 @@ export function AgentsContainer({ scenarioCounts }: AgentsContainerProps = {}) {
   let header;
   let body;
   if (agents.isPending) {
-    body = <Spinner label="Loading agents" />;
+    body = <Spinner label={t("agents.loading")} />;
   } else if (agents.isError) {
     body = (
-      <Alert title="Could not load agents">
+      <Alert title={t("agents.loadFailed")}>
         <span className="block">{errorMessage(agents.error)}</span>
         <Button variant="secondary" className="mt-3" onClick={() => agents.refetch()}>
-          Try again
+          {t("common.tryAgain")}
         </Button>
       </Alert>
     );
@@ -170,11 +172,11 @@ export function AgentsContainer({ scenarioCounts }: AgentsContainerProps = {}) {
     body = (
       <EmptyState
         icon={<AgentsIcon size={22} />}
-        title="No agents yet"
-        description="Register the agents you want to evaluate: voice agents over WebSocket or text agents over the channel API, and what they do. Scenarios are written against an agent."
+        title={t("agents.emptyTitle")}
+        description={t("agents.emptyDescription")}
         action={
           <Button icon={<PlusIcon size={16} />} onClick={openCreate}>
-            Add your first agent
+            {t("agents.addFirst")}
           </Button>
         }
       />
@@ -184,23 +186,23 @@ export function AgentsContainer({ scenarioCounts }: AgentsContainerProps = {}) {
     header = (
       <PageHeader
         titleRef={titleRef}
-        eyebrow="Agents"
+        eyebrow={t("nav.agents")}
         title={selected.name}
         actions={
           <>
             {addButton}
             <Button
               variant="ghost"
-              aria-label={`Delete ${selected.name}`}
+              aria-label={t("scenarios.deleteNamed", { name: selected.name })}
               onClick={() => {
                 remove.reset();
                 showDelete(selected);
               }}
             >
-              Delete
+              {t("common.delete")}
             </Button>
             <Button type="submit" form={formId} loading={save.pending}>
-              {save.pending ? "Saving…" : "Save changes"}
+              {save.pending ? t("editor.saving") : t("agents.saveChanges")}
             </Button>
           </>
         }
@@ -217,7 +219,7 @@ export function AgentsContainer({ scenarioCounts }: AgentsContainerProps = {}) {
         />
         <div className="flex min-w-0 flex-1 flex-col gap-4">
           {connections.isPending ? (
-            <Spinner label="Loading connections" />
+            <Spinner label={t("connections.loading")} />
           ) : (
             <AgentForm
               // A fresh form per agent and after each of its saves; not on a background refetch.
@@ -226,7 +228,7 @@ export function AgentsContainer({ scenarioCounts }: AgentsContainerProps = {}) {
               formId={formId}
               agent={selected}
               langfuseOptions={langfuseOptionsOf(connections.data)}
-              langfuseHint={connections.isError ? LANGFUSE_UNAVAILABLE_HINT : undefined}
+              langfuseHint={connections.isError ? t("agents.langfuseUnavailable") : undefined}
               onSubmit={save.onSubmit}
               pending={save.pending}
               error={save.error}
@@ -249,8 +251,8 @@ export function AgentsContainer({ scenarioCounts }: AgentsContainerProps = {}) {
       {header ?? (
         <PageHeader
           titleRef={titleRef}
-          title="Agents"
-          description="The voice and text agents under test, how to reach them and what they do."
+          title={t("nav.agents")}
+          description={t("agents.description")}
           actions={addButton}
         />
       )}
@@ -262,8 +264,8 @@ export function AgentsContainer({ scenarioCounts }: AgentsContainerProps = {}) {
       <Dialog
         open={creating}
         size="lg"
-        title="Add agent"
-        description="Every run reaches the agent with these settings and a fresh thread ID."
+        title={t("agents.add")}
+        description={t("agents.addDescription")}
         onClose={() => setCreating(false)}
       >
         {creating ? <AgentFormContainer onCancel={() => setCreating(false)} onSaved={onSaved} /> : null}
@@ -275,7 +277,7 @@ export function AgentsContainer({ scenarioCounts }: AgentsContainerProps = {}) {
         onConfirm={confirmDelete}
         pending={deleteInFlight}
         error={remove.isError ? errorMessage(remove.error) : undefined}
-        errorHint={inUse ? "Delete or move its scenarios first." : undefined}
+        errorHint={inUse ? t("agents.inUseHint") : undefined}
       />
     </>
   );
@@ -283,22 +285,20 @@ export function AgentsContainer({ scenarioCounts }: AgentsContainerProps = {}) {
 
 /** Evaluator and judge settings live on each scenario; this card says so instead of duplicating them. */
 function EvaluatorNote() {
+  const t = useT();
   const headingId = useId();
   return (
     <Card aria-labelledby={headingId} className="gap-3">
       <div className="flex flex-col gap-1">
         <h2 id={headingId} className="text-[15px] font-semibold">
-          Evaluator and judge
+          {t("agents.evaluatorNote")}
         </h2>
-        <p className="text-xs text-dim">Set per scenario, not per agent</p>
+        <p className="text-xs text-dim">{t("agents.evaluatorNoteHint")}</p>
       </div>
-      <p className="text-sm text-muted">
-        Each scenario chooses the evaluator&apos;s connections (and, for voice agents, how it speaks and its voice),
-        and the judge scores every run against that scenario&apos;s criteria.
-      </p>
+      <p className="text-sm text-muted">{t("agents.evaluatorNoteBody")}</p>
       <div>
         <Link href="/scenarios" className={buttonClasses("secondary")}>
-          Open scenarios
+          {t("agents.openScenarios")}
         </Link>
       </div>
     </Card>

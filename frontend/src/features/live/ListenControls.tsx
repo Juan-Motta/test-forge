@@ -1,11 +1,12 @@
 import type { Mix } from "@/lib/live/audio";
-import { Badge, Button, SegmentedControl, VolumeIcon, type SegmentOption } from "@/ui";
+import { useT } from "@/lib/i18n";
+import { Badge, Button, SegmentedControl, VolumeIcon } from "@/ui";
 
-const MIXES: readonly SegmentOption<Mix>[] = [
-  { value: "both", label: "Both" },
-  { value: "agent", label: "Agent only" },
-  { value: "caller", label: "Evaluator only" },
-];
+const MIXES = [
+  { value: "both", label: "live.mix.both" },
+  { value: "agent", label: "live.mix.agent" },
+  { value: "caller", label: "live.mix.caller" },
+] as const satisfies readonly { value: Mix; label: string }[];
 
 type ListenControlsProps = {
   listening: boolean;
@@ -42,6 +43,7 @@ export function ListenControls({
   onVolume,
   skipped,
 }: ListenControlsProps) {
+  const t = useT();
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-[10px] border border-line bg-raised px-3 py-2.5">
       <div className="flex flex-wrap items-center gap-2.5">
@@ -50,25 +52,30 @@ export function ListenControls({
         </span>
         {listening ? (
           <>
-            <span className="text-[13px] font-medium">Listening</span>
+            <span className="text-[13px] font-medium">{t("live.listening")}</span>
             <Button variant="secondary" className="min-h-[34px] px-3 text-xs" onClick={onStop}>
-              Stop listening
+              {t("live.stopListening")}
             </Button>
           </>
         ) : (
           <Button className="min-h-[34px] px-3 text-xs" icon={<VolumeIcon size={14} />} onClick={onListen} disabled={disabled}>
-            Listen
+            {t("live.listen")}
           </Button>
         )}
-        <SegmentedControl label="Audio mix" options={MIXES} value={mix} onChange={onMix} />
+        <SegmentedControl
+          label={t("live.mix")}
+          options={MIXES.map((option) => ({ value: option.value, label: t(option.label) }))}
+          value={mix}
+          onChange={onMix}
+        />
         {skipped ? (
-          <span title="The connection fell behind, so some audio was skipped. The transcript is complete.">
-            <Badge tone="muted">Audio skipped</Badge>
+          <span title={t("live.skippedHint")}>
+            <Badge tone="muted">{t("live.skipped")}</Badge>
           </span>
         ) : null}
       </div>
       <label className="flex items-center gap-2.5 text-xs text-muted">
-        Volume
+        {t("live.volume")}
         <input
           type="range"
           min={0}

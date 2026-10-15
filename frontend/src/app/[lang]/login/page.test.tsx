@@ -1,10 +1,15 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { renderWithClient } from "@/test/render";
 import LoginPage, { generateMetadata } from "./page";
 
 const root = vi.hoisted(() => ({ lang: "en" }));
 vi.mock("next/root-params", () => ({ lang: async () => root.lang }));
+
+// The root param is shared module state: every test starts from English, whatever ran before.
+beforeEach(() => {
+  root.lang = "en";
+});
 
 // The form has its own tests; here only the page around it matters.
 vi.mock("@/features/auth/LoginContainer", () => ({ LoginContainer: () => null }));

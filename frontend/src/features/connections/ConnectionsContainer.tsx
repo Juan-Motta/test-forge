@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { PageHeader } from "@/features/shell/PageHeader";
+import { useT } from "@/lib/i18n";
 import { Alert, Button, ConnectionsIcon, Dialog, EmptyState, PlusIcon, Spinner } from "@/ui";
 import { ConnectionFormContainer } from "./ConnectionFormContainer";
 import { ConnectionsList } from "./ConnectionsList";
@@ -14,6 +15,7 @@ type Editing = { type: "create" } | { type: "edit"; connection: Connection };
 
 /** Container for `/settings/connections`: list, create/edit dialog, row tests and deletion. */
 export function ConnectionsContainer() {
+  const t = useT();
   const connections = useConnections();
   const rowTest = useTestStoredConnection();
   const remove = useDeleteConnection();
@@ -57,9 +59,9 @@ export function ConnectionsContainer() {
     setTesting(connection.id, true);
     try {
       const result = await rowTest.mutateAsync(connection);
-      setNotice(`${connection.name}: test ${result.ok ? "passed" : "failed"}.`);
+      setNotice(t(result.ok ? "connections.rowPassed" : "connections.rowFailed", { name: connection.name }));
     } catch (error) {
-      setRowTestError(`Could not test ${connection.name}: ${errorMessage(error)}`);
+      setRowTestError(t("connections.rowTestError", { name: connection.name, error: errorMessage(t, error) }));
     } finally {
       setTesting(connection.id, false);
     }
@@ -77,7 +79,7 @@ export function ConnectionsContainer() {
     setDeleteInFlight(true);
     try {
       await remove.mutateAsync(connection);
-      setNotice(`Deleted ${connection.name}.`);
+      setNotice(t("common.deleted", { name: connection.name }));
       // The user may have cancelled and opened another connection's dialog meanwhile: leave that one open.
       if (shownDelete.current?.id === connection.id) {
         focusTitle.current = true;
@@ -93,20 +95,20 @@ export function ConnectionsContainer() {
   }
 
   function onSaved(connection: Connection) {
-    setNotice(editing?.type === "create" ? `Created ${connection.name}.` : `Saved ${connection.name}.`);
+    setNotice(t(editing?.type === "create" ? "common.created" : "common.savedNamed", { name: connection.name }));
     setEditing(null);
   }
 
   const list = connections.data ?? [];
   let body;
   if (connections.isPending) {
-    body = <Spinner label="Loading connections" />;
+    body = <Spinner label={t("connections.loading")} />;
   } else if (connections.isError) {
     body = (
-      <Alert title="Could not load connections">
-        <span className="block">{errorMessage(connections.error)}</span>
+      <Alert title={t("connections.loadFailed")}>
+        <span className="block">{errorMessage(t, connections.error)}</span>
         <Button variant="secondary" className="mt-3" onClick={() => connections.refetch()}>
-          Try again
+          {t("common.tryAgain")}
         </Button>
       </Alert>
     );
@@ -114,11 +116,11 @@ export function ConnectionsContainer() {
     body = (
       <EmptyState
         icon={<ConnectionsIcon size={22} />}
-        title="No connections yet"
-        description="Add the credentials runs use to reach OpenAI, Azure OpenAI, Azure AI Speech or Langfuse. Secrets are stored encrypted and only a hint is ever shown."
+        title={t("connections.emptyTitle")}
+        description={t("connections.emptyDescription")}
         action={
           <Button icon={<PlusIcon size={16} />} onClick={openCreate}>
-            Add your first connection
+            {t("connections.addFirst")}
           </Button>
         }
       />
@@ -142,12 +144,12 @@ export function ConnectionsContainer() {
     <>
       <PageHeader
         titleRef={titleRef}
-        eyebrow="Settings"
-        title="Connections"
-        description="Credentials for the providers runs use. Secrets are write-only: only a hint is ever shown."
+        eyebrow={t("nav.settings")}
+        title={t("nav.connections")}
+        description={t("connections.description")}
         actions={
           <Button icon={<PlusIcon size={16} />} onClick={openCreate}>
-            Add connection
+            {t("connections.add")}
           </Button>
         }
       />
@@ -160,8 +162,8 @@ export function ConnectionsContainer() {
       <Dialog
         open={editing !== null}
         size="lg"
-        title={editing?.type === "edit" ? `Edit ${editing.connection.name}` : "Add connection"}
-        description="Secrets are stored encrypted and never shown again."
+        title={editing?.type === "edit" ? t("connections.editNamed", { name: editing.connection.name }) : t("connections.add")}
+        description={t("connections.dialogDescription")}
         onClose={() => setEditing(null)}
       >
         {editing ? (
@@ -178,7 +180,7 @@ export function ConnectionsContainer() {
         onCancel={() => showDelete(undefined)}
         onConfirm={confirmDelete}
         pending={deleteInFlight}
-        error={remove.isError ? errorMessage(remove.error) : undefined}
+        error={remove.isError ? errorMessage(t, remove.error) : undefined}
       />
     </>
   );

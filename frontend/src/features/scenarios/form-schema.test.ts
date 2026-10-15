@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { createTranslator } from "@/lib/i18n";
 import {
   initialValues,
   isHiddenFor,
@@ -10,6 +11,8 @@ import {
   weightTotal,
 } from "./form-schema";
 import { scenarioFixture } from "./testing";
+
+const t = createTranslator("en");
 
 describe("scenario form helpers", () => {
   it("parses comma-separated tags like the backend stores them", () => {
@@ -47,7 +50,7 @@ describe("scenario form helpers", () => {
   it("validates interruptions: reply number, 0.3 to 60 seconds, unique replies, at most 10", () => {
     const base = initialValues(scenarioFixture());
     const problems = (interruptions: { agentTurn: string; afterS: string }[]) => {
-      const result = scenarioFormSchema.safeParse({ ...base, interruptions });
+      const result = scenarioFormSchema(t).safeParse({ ...base, interruptions });
       return result.success ? [] : result.error.issues.map((issue) => [issue.path.join("."), issue.message]);
     };
 
@@ -76,7 +79,7 @@ describe("scenario form helpers", () => {
 
     const base = initialValues(scenarioFixture());
     const problems = (evaluatorMode: "pipeline" | "realtime", voiceOverride: string) => {
-      const result = scenarioFormSchema.safeParse({ ...base, evaluatorMode, voiceOverride });
+      const result = scenarioFormSchema(t).safeParse({ ...base, evaluatorMode, voiceOverride });
       return result.success ? [] : result.error.issues.map((issue) => issue.path.join("."));
     };
     expect(problems("pipeline", "nova")).toEqual([]);
@@ -104,7 +107,7 @@ describe("scenario form helpers", () => {
     expect(toChanges(scenario, { ...initialValues(scenario), realtimeModel: "gpt-realtime-2.1" })).toEqual({
       realtimeModel: "gpt-realtime-2.1",
     });
-    const result = scenarioFormSchema.safeParse({ ...initialValues(scenario), realtimeModel: "gpt-4o-realtime" });
+    const result = scenarioFormSchema(t).safeParse({ ...initialValues(scenario), realtimeModel: "gpt-4o-realtime" });
     expect(result.success).toBe(false);
   });
 
@@ -114,8 +117,8 @@ describe("scenario form helpers", () => {
     values.evaluatorMode = "realtime";
     values.interruptions = [{ agentTurn: "x", afterS: "999" }];
     values.endConditions.maxSilenceS = "1";
-    expect(scenarioFormSchema.safeParse(values).success).toBe(false);
-    expect(scenarioFormSchemaFor("text").safeParse(values).success).toBe(true);
+    expect(scenarioFormSchema(t).safeParse(values).success).toBe(false);
+    expect(scenarioFormSchemaFor(t, "text").safeParse(values).success).toBe(true);
   });
 
   it("sends no voice-only settings for a text agent", () => {

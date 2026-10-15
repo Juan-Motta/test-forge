@@ -2,6 +2,7 @@
 
 import { useId, type ReactNode } from "react";
 import { useFieldArray, type Control } from "react-hook-form";
+import { useT } from "@/lib/i18n";
 import { Button, CloseIcon, PlusIcon, cn, focusRing, type FieldControlProps } from "@/ui";
 import type { SectionProps } from "./editor-form";
 import type { ScenarioFormValues } from "./form-schema";
@@ -10,12 +11,13 @@ type FactsEditorProps = SectionProps & { control: Control<ScenarioFormValues> };
 
 /** Key/value tiles the caller reveals only when asked: the key reads as a label, the value in mono. */
 export function FactsEditor({ control, registerField, fieldError }: FactsEditorProps) {
+  const t = useT();
   const { fields, append, remove } = useFieldArray({ control, name: "facts" });
   const listError = fieldError("facts.root") ?? fieldError("facts");
 
   return (
     <div className="flex flex-col gap-2">
-      {fields.length === 0 ? <p className="text-sm text-muted">No facts yet.</p> : null}
+      {fields.length === 0 ? <p className="text-sm text-muted">{t("scenarios.noFacts")}</p> : null}
       {fields.length > 0 ? (
         <ul className="grid gap-2 sm:grid-cols-[repeat(auto-fit,minmax(min(260px,100%),1fr))]">
           {fields.map((row, index) => (
@@ -23,22 +25,22 @@ export function FactsEditor({ control, registerField, fieldError }: FactsEditorP
               key={row.id}
               className="flex items-start gap-2 rounded-lg border border-line bg-field px-2 py-1.5 text-[13px]"
             >
-              <InlineField label={`Fact ${index + 1} Key`} error={fieldError(`facts.${index}.key`)} className="min-w-0 flex-1">
+              <InlineField label={`${t("scenarios.factN", { n: index + 1 })} ${t("scenarios.key")}`} error={fieldError(`facts.${index}.key`)} className="min-w-0 flex-1">
                 {(props) => (
                   <input
                     autoComplete="off"
-                    placeholder="Key"
+                    placeholder={t("scenarios.key")}
                     className={inlineControl("text-muted")}
                     {...props}
                     {...registerField(`facts.${index}.key`)}
                   />
                 )}
               </InlineField>
-              <InlineField label={`Fact ${index + 1} Value`} error={fieldError(`facts.${index}.value`)} className="min-w-0 flex-[1.4]">
+              <InlineField label={`${t("scenarios.factN", { n: index + 1 })} ${t("scenarios.value")}`} error={fieldError(`facts.${index}.value`)} className="min-w-0 flex-[1.4]">
                 {(props) => (
                   <input
                     autoComplete="off"
-                    placeholder="Value"
+                    placeholder={t("scenarios.value")}
                     className={inlineControl("text-right font-mono text-xs text-fg")}
                     {...props}
                     {...registerField(`facts.${index}.value`)}
@@ -47,7 +49,7 @@ export function FactsEditor({ control, registerField, fieldError }: FactsEditorP
               </InlineField>
               <button
                 type="button"
-                aria-label={`Remove fact ${index + 1}`}
+                aria-label={t("scenarios.removeFact", { n: index + 1 })}
                 onClick={() => remove(index)}
                 className={cn("mt-1 grid size-8 shrink-0 place-items-center rounded-md text-dim hover:bg-active hover:text-fg", focusRing)}
               >
@@ -64,7 +66,7 @@ export function FactsEditor({ control, registerField, fieldError }: FactsEditorP
       ) : null}
       <div>
         <Button variant="secondary" icon={<PlusIcon size={16} />} onClick={() => append({ key: "", value: "" })}>
-          Add fact
+          {t("scenarios.addFact")}
         </Button>
       </div>
     </div>

@@ -5,6 +5,7 @@ import { useState } from "react";
 import { useRuns } from "@/features/runs/queries";
 import { PageHeader } from "@/features/shell/PageHeader";
 import { errorMessage } from "@/lib/api";
+import { useT } from "@/lib/i18n";
 import { useNow } from "@/lib/time/use-now";
 import { Alert, EmptyState, OverviewIcon, PlusIcon, SearchField, Spinner, buttonClasses } from "@/ui";
 import { InsightsColumn } from "./InsightsColumn";
@@ -22,6 +23,7 @@ const STATS_POLL_MS = 30_000;
  * latest runs. Nothing is estimated: an unknown metric reads "—".
  */
 export function OverviewContainer() {
+  const t = useT();
   const now = useNow(5000);
   const [search, setSearch] = useState("");
   const stats = useOverviewStats(DAYS, { refetchInterval: STATS_POLL_MS });
@@ -31,18 +33,18 @@ export function OverviewContainer() {
   let body;
   // Only the runs gate the page; the metrics areas show their own loading and error.
   if (recent.isPending) {
-    body = <Spinner label="Loading overview" />;
+    body = <Spinner label={t("overview.loading")} />;
   } else if (recent.isError) {
-    body = <Alert title="Could not load runs">{errorMessage(recent.error)}</Alert>;
+    body = <Alert title={t("runs.loadFailed")}>{errorMessage(recent.error)}</Alert>;
   } else if ((recent.data?.total ?? 0) === 0) {
     body = (
       <EmptyState
         icon={<OverviewIcon size={22} />}
-        title="No runs yet"
-        description="Launch a scenario against an agent: metrics, what is running now and recent runs will show up here."
+        title={t("runs.emptyTitle")}
+        description={t("overview.emptyDescription")}
         action={
           <Link href="/scenarios" className={buttonClasses("primary")}>
-            Go to scenarios
+            {t("live.goToScenarios")}
           </Link>
         }
       />
@@ -52,7 +54,7 @@ export function OverviewContainer() {
     body = (
       <>
         {stats.isError ? (
-          <Alert title="Some metrics could not be loaded">{errorMessage(stats.error)}</Alert>
+          <Alert title={t("overview.someMetricsFailed")}>{errorMessage(stats.error)}</Alert>
         ) : null}
         <OverviewKpis stats={stats.data} loading={stats.isPending} />
         <LiveNowCard runs={live.data?.items} total={live.data?.total ?? null} error={liveError} now={now} />
@@ -67,20 +69,20 @@ export function OverviewContainer() {
   return (
     <>
       <PageHeader
-        title="Overview"
-        description={`Last ${DAYS} days across all agents`}
+        title={t("nav.overview")}
+        description={t("overview.description", { count: DAYS })}
         actions={
           <>
             <SearchField
-              label="Search runs"
-              placeholder="Search runs, scenarios, threads"
+              label={t("overview.search")}
+              placeholder={t("overview.searchPlaceholder")}
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               className="w-full sm:w-72"
             />
             <Link href="/scenarios" className={buttonClasses("primary")}>
               <PlusIcon size={16} strokeWidth={2.2} />
-              New run
+              {t("overview.newRun")}
             </Link>
           </>
         }

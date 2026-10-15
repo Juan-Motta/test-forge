@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { PageHeader } from "@/features/shell/PageHeader";
 import { useScenarios } from "@/features/scenarios/queries";
 import { errorMessage } from "@/lib/api";
+import { useT } from "@/lib/i18n";
 import { useNow } from "@/lib/time/use-now";
 import {
   Alert,
@@ -22,7 +23,7 @@ import {
   focusRing,
 } from "@/ui";
 import { BatchesPanel, batchName } from "./BatchesPanel";
-import { STATUS_LABELS } from "./format";
+import { statusLabel } from "./format";
 import { useBatch, useBatches, useCancelRun, useRuns } from "./queries";
 import { RunCards } from "./RunCards";
 import { RunsTable } from "./RunsTable";
@@ -32,8 +33,8 @@ export const PAGE_SIZE = 20;
 const POLL_MS = 4000;
 
 const ORDERS = [
-  { value: "newest", label: "Newest first" },
-  { value: "oldest", label: "Oldest first" },
+  { value: "newest", label: "runs.order.newest" },
+  { value: "oldest", label: "runs.order.oldest" },
 ] as const satisfies readonly { value: RunOrder; label: string }[];
 
 type Filters = { status: RunStatus | ""; scenarioId: string; batchId: string; order: RunOrder; page: number };
@@ -66,6 +67,7 @@ function hrefOf(filters: Filters): string {
  * batch. Wide screens get the runs table; narrower ones the same runs as cards.
  */
 export function RunsContainer() {
+  const t = useT();
   const router = useRouter();
   const searchParams = useSearchParams();
   // Filters live in state (seeded from the URL) and are mirrored into the URL for sharing. A URL
@@ -124,33 +126,37 @@ export function RunsContainer() {
   const first = total === 0 ? 0 : (filters.page - 1) * PAGE_SIZE + 1;
   const last = Math.min(total, filters.page * PAGE_SIZE);
   const filtered = Boolean(filters.status || filters.scenarioId || filters.batchId);
-  const batchLabel = batch.data ? batchName(batch.data) : filters.batchId ? `Batch ${filters.batchId.slice(0, 8)}` : "";
+  const batchLabel = batch.data
+    ? batchName(t, batch.data)
+    : filters.batchId
+      ? t("runs.batch", { id: filters.batchId.slice(0, 8) })
+      : "";
 
   let body;
   if (runs.isPending) {
-    body = <Spinner label="Loading runs" />;
+    body = <Spinner label={t("runs.loading")} />;
   } else if (runs.isError) {
     body = (
-      <Alert title="Could not load runs">
+      <Alert title={t("runs.loadFailed")}>
         <span className="block">{errorMessage(runs.error)}</span>
         <Button variant="secondary" className="mt-3" onClick={() => runs.refetch()}>
-          Try again
+          {t("common.tryAgain")}
         </Button>
       </Alert>
     );
   } else if (total === 0) {
     body = filtered ? (
       <div className="flex flex-wrap items-center gap-3 rounded-xl border border-dashed border-line-strong bg-panel p-5">
-        <p className="text-sm text-muted">No runs match these filters.</p>
+        <p className="text-sm text-muted">{t("runs.noMatch")}</p>
         <Button variant="secondary" onClick={() => update({ status: "", scenarioId: "", batchId: "" })}>
-          Clear filters
+          {t("common.clearFilters")}
         </Button>
       </div>
     ) : (
       <EmptyState
         icon={<RunsIcon size={22} />}
-        title="No runs yet"
-        description="Launch a scenario from the Scenarios page: every run is recorded here with its transcript and audio."
+        title={t("runs.emptyTitle")}
+        description={t("runs.emptyDescription")}
       />
     );
   } else {
@@ -171,24 +177,24 @@ export function RunsContainer() {
           cancellingId={cancel.isPending ? cancel.variables : undefined}
           className="xl:hidden"
         />
-        <nav aria-label="Pagination" className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted">
-          <span>{`${first}–${last} of ${total}`}</span>
+        <nav aria-label={t("common.pagination")} className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted">
+          <span>{t("common.range", { first, last, total })}</span>
           <div className="flex gap-2">
             <Button
               variant="secondary"
               disabled={filters.page <= 1}
               onClick={() => update({ page: filters.page - 1 })}
-              aria-label="Previous page"
+              aria-label={t("common.previousPage")}
             >
-              Previous
+              {t("common.previous")}
             </Button>
             <Button
               variant="secondary"
               disabled={last >= total}
               onClick={() => update({ page: filters.page + 1 })}
-              aria-label="Next page"
+              aria-label={t("common.nextPage")}
             >
-              Next
+              {t("common.next")}
             </Button>
           </div>
         </nav>
@@ -199,11 +205,11 @@ export function RunsContainer() {
   return (
     <>
       <PageHeader
-        title="Runs & reports"
-        description="Every evaluation run with its transcript, audio and timings."
+        title={t("nav.runs")}
+        description={t("runs.description")}
         actions={
           <Link href="/live" className={buttonClasses("secondary")}>
-            Live sessions
+            {t("nav.live")}
           </Link>
         }
       />
@@ -212,17 +218,17 @@ export function RunsContainer() {
       ) : null}
       <div className="flex flex-wrap items-end gap-4">
         <div className="w-full sm:w-48">
-          <Field label="Status">
+          <Field label={t("runs.filter.status")}>
             {(props) => (
               <Select
                 {...props}
                 value={filters.status}
                 onChange={(event) => update({ status: event.target.value as RunStatus | "" })}
               >
-                <option value="">All statuses</option>
+                <option value="">{t("runs.filter.allStatuses")}</option>
                 {RUN_STATUSES.map((status) => (
                   <option key={status} value={status}>
-                    {STATUS_LABELS[status]}
+                    {statusLabel(t, status)}
                   </option>
                 ))}
               </Select>
@@ -230,10 +236,10 @@ export function RunsContainer() {
           </Field>
         </div>
         <div className="w-full sm:w-64">
-          <Field label="Scenario">
+          <Field label={t("runs.column.scenario")}>
             {(props) => (
               <Select {...props} value={filters.scenarioId} onChange={(event) => update({ scenarioId: event.target.value })}>
-                <option value="">All scenarios</option>
+                <option value="">{t("runs.filter.allScenarios")}</option>
                 {(scenarios.data ?? []).map((scenario) => (
                   <option key={scenario.id} value={scenario.id}>
                     {scenario.name}
@@ -244,8 +250,8 @@ export function RunsContainer() {
           </Field>
         </div>
         <SegmentedControl
-          label="Order"
-          options={ORDERS}
+          label={t("runs.filter.order")}
+          options={ORDERS.map((order) => ({ value: order.value, label: t(order.label) }))}
           value={filters.order}
           onChange={(order) => update({ order })}
         />
@@ -254,7 +260,7 @@ export function RunsContainer() {
             {batchLabel}
             <button
               type="button"
-              aria-label={`Clear batch filter ${batchLabel}`}
+              aria-label={t("runs.clearBatch", { name: batchLabel })}
               onClick={() => update({ batchId: "" })}
               className={cn("inline-flex size-7 items-center justify-center rounded-full hover:bg-active", focusRing)}
             >
@@ -263,7 +269,7 @@ export function RunsContainer() {
           </span>
         ) : null}
       </div>
-      {cancel.isError ? <Alert>{`Could not cancel: ${errorMessage(cancel.error)}`}</Alert> : null}
+      {cancel.isError ? <Alert>{t("runs.cancelFailed", { error: errorMessage(cancel.error) })}</Alert> : null}
       {body}
     </>
   );

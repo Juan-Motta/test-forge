@@ -1,7 +1,11 @@
 import type { Metadata } from "next";
 import { ApiKeysContainer } from "@/features/api-keys/ApiKeysContainer";
+import { getTranslator } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "API keys" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslator();
+  return { title: t("nav.apiKeys") };
+}
 
 export default function Page() {
   return <ApiKeysContainer />;

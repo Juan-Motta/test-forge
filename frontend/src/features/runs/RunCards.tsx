@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { useFormat, useT } from "@/lib/i18n";
 import { CopyButton, cn, focusRing } from "@/ui";
 import { shortId } from "./format";
 import { KindBadge } from "./KindBadge";
@@ -14,7 +15,7 @@ type RunCardsProps = {
   /** Id of the run being cancelled, if any. */
   cancellingId?: string;
   now: number;
-  /** Accessible name of the list; defaults to "Runs". */
+  /** Accessible name of the list; defaults to "Runs" (translated). */
   label?: string;
   /** Classes of the list, e.g. to show the cards on small screens only. */
   className?: string;
@@ -24,9 +25,10 @@ type RunCardsProps = {
  * Runs as a list of cards, for screens too narrow for the runs table: the same runs and the same
  * figures (`RUN_METRICS`), stacked so nothing scrolls sideways.
  */
-export function RunCards({ runs, onCancel, cancellingId, now, label = "Runs", className }: RunCardsProps) {
+export function RunCards({ runs, onCancel, cancellingId, now, label, className }: RunCardsProps) {
+  const t = useT();
   return (
-    <ul aria-label={label} className={cn("grid gap-3 sm:grid-cols-2", className)}>
+    <ul aria-label={label ?? t("runs.listLabel")} className={cn("grid gap-3 sm:grid-cols-2", className)}>
       {runs.map((run) => (
         <RunCard
           key={run.id}
@@ -43,6 +45,8 @@ export function RunCards({ runs, onCancel, cancellingId, now, label = "Runs", cl
 type RunCardProps = { run: Run; now: number; onCancel?: (run: Run) => void; cancelling: boolean };
 
 function RunCard({ run, now, onCancel, cancelling }: RunCardProps) {
+  const t = useT();
+  const format = useFormat();
   const label = shortId(run.id);
   return (
     <li className="flex min-w-0 flex-col gap-3 rounded-xl border border-line bg-panel p-4 text-[13px]">
@@ -64,16 +68,16 @@ function RunCard({ run, now, onCancel, cancelling }: RunCardProps) {
         <KindBadge run={run} />
       </span>
       <dl className="grid grid-cols-2 gap-x-4 gap-y-2">
-        <Term label="Persona">{run.persona ? <TruncatedText text={run.persona} /> : "—"}</Term>
-        <Term label="Started">
+        <Term label={t("runs.persona")}>{run.persona ? <TruncatedText text={run.persona} /> : "—"}</Term>
+        <Term label={t("runs.column.started")}>
           <RunStarted run={run} now={now} />
         </Term>
         {RUN_METRICS.map((metric) => (
-          <Term key={metric.label} label={metric.label} mono>
-            {metric.value(run, now)}
+          <Term key={metric.id} label={t(metric.label)} mono>
+            {metric.value(run, now, format)}
           </Term>
         ))}
-        <Term label="Score">
+        <Term label={t("runs.score")}>
           <RunScore run={run} label={label} trackClassName="w-12" />
         </Term>
       </dl>
@@ -82,7 +86,12 @@ function RunCard({ run, now, onCancel, cancelling }: RunCardProps) {
           <span className="truncate font-mono text-xs text-muted" title={run.id}>
             {run.id}
           </span>
-          <CopyButton text={run.id} label={`Copy run id ${label}`} copiedMessage="Run id copied" iconSize={14} />
+          <CopyButton
+            text={run.id}
+            label={t("runs.copyRunId", { id: label })}
+            copiedMessage={t("runs.runIdCopied")}
+            iconSize={14}
+          />
         </span>
         {onCancel ? (
           <div className="flex gap-2">

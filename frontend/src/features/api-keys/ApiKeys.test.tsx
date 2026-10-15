@@ -238,3 +238,17 @@ describe("Revoking an API key", () => {
     expect(api.requests).toEqual([{ method: "DELETE", path: "/api-keys/k-ci", body: undefined }]);
   });
 });
+
+describe("API keys in Spanish", () => {
+  it("shows the keys table and its dates in Spanish", async () => {
+    mockApiKeysApi([apiKeyFixture({ lastUsedAt: new Date(Date.now() - 2.5 * 3_600_000).toISOString() })]);
+    renderWithClient(<ApiKeysContainer />, { locale: "es" });
+
+    const ci = await findRow("CI pipeline");
+    expect(screen.getByRole("heading", { level: 1, name: "Claves de API" })).toBeInTheDocument();
+    expect(within(ci).getByText("hace 2 horas")).toBeInTheDocument();
+    expect(within(ci).getByText("Nunca")).toBeInTheDocument();
+    expect(within(ci).getByText("Activa")).toBeInTheDocument();
+    expect(within(ci).getByRole("button", { name: "Revocar CI pipeline" })).toBeInTheDocument();
+  });
+});

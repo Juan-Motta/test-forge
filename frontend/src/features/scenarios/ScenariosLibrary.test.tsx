@@ -302,3 +302,17 @@ describe("Scenarios library: launch", () => {
     expect(screen.queryByRole("button", { name: /Launch selected/ })).not.toBeInTheDocument();
   });
 });
+
+describe("Scenarios library in Spanish", () => {
+  it("shows the library chrome in Spanish and the scenario data untouched", async () => {
+    mockAgentsApi(agents);
+    mockScenariosApi([booking, cancel, refund], { agents });
+    renderWithClient(<ScenariosContainer />, { locale: "es" });
+
+    const hotelGroup = await screen.findByRole("region", { name: "Hotel booking assistant" });
+    expect(screen.getByRole("heading", { level: 1, name: "Escenarios" })).toBeInTheDocument();
+    const first = within(hotelGroup).getByRole("listitem", { name: "Booking with date change" });
+    expect(within(first).getByRole("button", { name: "Lanzar Booking with date change" })).toBeInTheDocument();
+    expect(within(first).getByText(/criterios?$/)).toBeInTheDocument();
+  });
+});

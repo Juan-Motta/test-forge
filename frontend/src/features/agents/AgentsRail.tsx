@@ -1,6 +1,6 @@
+import { useT } from "@/lib/i18n";
 import { Badge, cn, focusRing } from "@/ui";
 import { IDLE_TEST, ReachabilityDot, reachabilityLabel, type ConnectionTestState } from "./ConnectionCheck";
-import { KIND_LABELS, PROTOCOL_LABELS, TEXT_MODE_LABELS } from "./form-schema";
 import type { Agent } from "./types";
 
 type AgentsRailProps = {
@@ -13,21 +13,18 @@ type AgentsRailProps = {
   tests: Readonly<Record<string, ConnectionTestState>>;
 };
 
-function scenarioLabel(count: number): string {
-  return count === 1 ? "1 scenario" : `${count} scenarios`;
-}
-
 /** The master list: one card per agent, the open one marked current. */
 export function AgentsRail({ agents, selectedId, onSelect, scenarioCounts, tests }: AgentsRailProps) {
+  const t = useT();
   return (
-    <aside aria-label="Agents" className="flex min-w-0 flex-col gap-2 lg:w-60 lg:shrink-0">
+    <aside aria-label={t("nav.agents")} className="flex min-w-0 flex-col gap-2 lg:w-60 lg:shrink-0">
       <ul className="flex flex-col gap-2">
         {agents.map((agent) => {
           const selected = agent.id === selectedId;
           const test = tests[agent.id] ?? IDLE_TEST;
           const meta = [
-            scenarioCounts ? scenarioLabel(scenarioCounts.get(agent.id) ?? 0) : null,
-            agent.kind === "text" ? TEXT_MODE_LABELS[agent.textMode ?? "stream"].label : PROTOCOL_LABELS[agent.protocol],
+            scenarioCounts ? t.plural("agents.scenarioCount", scenarioCounts.get(agent.id) ?? 0) : null,
+            agent.kind === "text" ? t(`runs.textMode.${agent.textMode ?? "stream"}`) : t(`agents.protocol.${agent.protocol}`),
           ]
             .filter(Boolean)
             .join(" · ");
@@ -49,11 +46,11 @@ export function AgentsRail({ agents, selectedId, onSelect, scenarioCounts, tests
                 </span>
                 <span className="flex flex-wrap items-center gap-1.5 text-xs text-dim">
                   <Badge tone="outline" className="text-[11px]">
-                    {KIND_LABELS[agent.kind].label}
+                    {t(`agents.kind.${agent.kind}`)}
                   </Badge>
                   {meta}
                 </span>
-                <span className="sr-only">{reachabilityLabel(test)}</span>
+                <span className="sr-only">{reachabilityLabel(t, test)}</span>
               </button>
             </li>
           );

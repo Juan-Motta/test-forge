@@ -103,3 +103,16 @@ describe("Model prices settings", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("Database unavailable");
   });
 });
+
+describe("Model prices in Spanish", () => {
+  it("labels the price table in Spanish and keeps the server's note as sent", async () => {
+    mockPricingApi();
+    renderWithClient(<ModelPricesContainer />, { locale: "es" });
+
+    const table = await screen.findByRole("table", { name: "Precios de modelos" });
+    const luna = within(table).getByRole("row", { name: /gpt-6-luna/ });
+    expect(within(luna).getByRole("textbox", { name: "gpt-6-luna entrada de texto" })).toHaveValue("0.1");
+    expect(screen.getByRole("button", { name: "Guardar precios" })).toBeInTheDocument();
+    expect(screen.getByText(/Azure OpenAI prices are not published/)).toBeInTheDocument();
+  });
+});

@@ -1,3 +1,4 @@
+import { useFormat, useT } from "@/lib/i18n";
 import { KpiTile } from "@/ui";
 import { countDelta, percent, seconds } from "./format";
 import type { OverviewStats } from "./types";
@@ -7,36 +8,39 @@ import type { OverviewStats } from "./types";
  * `loading`, the section is marked busy.
  */
 export function OverviewKpis({ stats, loading = false }: { stats: OverviewStats | undefined; loading?: boolean }) {
-  const period = stats?.periodDays === 7 || !stats ? "week" : `${stats.periodDays} days`;
+  const t = useT();
+  const format = useFormat();
+  const days = stats?.periodDays ?? 7;
+  const oneDecimal = (value: number) => format.number(value, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
   const p50 = stats?.latency.p50Ms ?? null;
   const p95 = stats?.latency.p95Ms ?? null;
   return (
     <section
-      aria-label="Key metrics"
+      aria-label={t("overview.keyMetrics")}
       aria-busy={loading || undefined}
       className="grid grid-cols-[repeat(auto-fit,minmax(min(220px,100%),1fr))] gap-4"
     >
       <KpiTile
-        label={`Runs · last ${stats?.periodDays ?? 7} days`}
+        label={t("overview.runsLastDays", { count: days })}
         value={stats ? stats.runs.count : "—"}
-        delta={stats ? countDelta(stats.runs.count, stats.runs.previousCount, period) : undefined}
+        delta={stats ? countDelta(t, stats.runs.count, stats.runs.previousCount, days) : undefined}
       />
       <KpiTile
-        label="Average judge score"
-        value={stats?.averageScore != null ? stats.averageScore.toFixed(1) : "—"}
+        label={t("overview.averageScore")}
+        value={stats?.averageScore != null ? oneDecimal(stats.averageScore) : "—"}
         unit="/ 100"
-        sub={stats && stats.averageScore === null ? "No judged runs yet" : undefined}
+        sub={stats && stats.averageScore === null ? t("overview.noJudged") : undefined}
       />
       <KpiTile
-        label="Goal completion"
-        value={stats?.goalCompletion != null ? percent(stats.goalCompletion) : "—"}
-        sub={stats && stats.goalCompletion === null ? "No judged runs yet" : "Must criteria passed"}
+        label={t("overview.goalCompletion")}
+        value={stats?.goalCompletion != null ? percent(format, stats.goalCompletion) : "—"}
+        sub={stats && stats.goalCompletion === null ? t("overview.noJudged") : t("overview.mustPassed")}
       />
       <KpiTile
-        label="Agent turn latency · p50"
-        value={p50 !== null ? seconds(p50) : "—"}
+        label={t("overview.latency")}
+        value={p50 !== null ? seconds(format, p50) : "—"}
         unit={p50 !== null ? "s" : undefined}
-        sub={p95 !== null ? `p95 ${seconds(p95)} s` : undefined}
+        sub={p95 !== null ? `p95 ${seconds(format, p95)} s` : undefined}
       />
     </section>
   );

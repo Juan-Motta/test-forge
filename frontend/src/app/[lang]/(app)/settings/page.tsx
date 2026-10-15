@@ -2,9 +2,14 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { KeyIcon } from "@/features/api-keys/KeyIcon";
 import { PageHeader } from "@/features/shell/PageHeader";
+import { T } from "@/lib/i18n";
+import { getTranslator } from "@/lib/i18n/server";
 import { ConnectionsIcon, ExternalLinkIcon, PriceIcon, cn, focusRing } from "@/ui";
 
-export const metadata: Metadata = { title: "Settings" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslator();
+  return { title: t("nav.settings") };
+}
 
 const CARD = cn(
   "flex h-full min-h-11 items-start gap-3.5 rounded-xl border border-line bg-panel p-5 text-fg no-underline",
@@ -15,7 +20,7 @@ const CARD = cn(
 export default function Page() {
   return (
     <>
-      <PageHeader title="Settings" description="Workspace configuration." />
+      <PageHeader title={<T k="nav.settings" />} description={<T k="settings.description" />} />
       <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <li>
           <Link
@@ -26,9 +31,11 @@ export default function Page() {
               <ConnectionsIcon size={20} />
             </span>
             <span className="flex flex-col gap-1">
-              <span className="text-sm font-semibold">Connections</span>
+              <span className="text-sm font-semibold">
+                <T k="nav.connections" />
+              </span>
               <span className="text-sm leading-relaxed text-muted">
-                Provider credentials for OpenAI, Azure OpenAI, Azure AI Speech and Langfuse.
+                <T k="settings.connections" />
               </span>
             </span>
           </Link>
@@ -42,9 +49,11 @@ export default function Page() {
               <KeyIcon size={20} />
             </span>
             <span className="flex flex-col gap-1">
-              <span className="text-sm font-semibold">API keys</span>
+              <span className="text-sm font-semibold">
+                <T k="nav.apiKeys" />
+              </span>
               <span className="text-sm leading-relaxed text-muted">
-                Personal keys for CI, scripts and coding agents to use the API.
+                <T k="settings.apiKeys" />
               </span>
             </span>
           </Link>
@@ -55,9 +64,11 @@ export default function Page() {
               <PriceIcon size={20} />
             </span>
             <span className="flex flex-col gap-1">
-              <span className="text-sm font-semibold">Model prices</span>
+              <span className="text-sm font-semibold">
+                <T k="prices.title" />
+              </span>
               <span className="text-sm leading-relaxed text-muted">
-                Token prices used to estimate what each evaluation costs (approximate, OpenAI list prices).
+                <T k="settings.prices" />
               </span>
             </span>
           </Link>
@@ -70,11 +81,14 @@ export default function Page() {
             </span>
             <span className="flex flex-col gap-1">
               <span className="text-sm font-semibold">
-                API docs <span aria-hidden="true">↗</span>
-                <span className="sr-only"> (opens in a new tab)</span>
+                <T k="nav.apiDocs" /> <span aria-hidden="true">↗</span>
+                <span className="sr-only">
+                  {" "}
+                  <T k="common.newTab" />
+                </span>
               </span>
               <span className="text-sm leading-relaxed text-muted">
-                Every endpoint, its request and response, in Swagger. Use an API key to call them.
+                <T k="settings.apiDocs" />
               </span>
             </span>
           </a>

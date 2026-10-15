@@ -1,6 +1,6 @@
 import { useId } from "react";
+import { useFormat, useT } from "@/lib/i18n";
 import { Badge, Button } from "@/ui";
-import { absoluteTime, relativeTime } from "./format";
 import { KINDS, kindLabel } from "./kinds";
 import { TestStatus } from "./TestStatus";
 import type { Connection } from "./types";
@@ -26,8 +26,9 @@ export function connectionTarget(connection: Connection): string | undefined {
 
 /** The connections as cards: provider, target, key hint, last test and actions. */
 export function ConnectionsList({ connections, onEdit, onTest, onDelete, testingIds }: ConnectionsListProps) {
+  const t = useT();
   return (
-    <ul aria-label="Provider connections" className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+    <ul aria-label={t("connections.listLabel")} className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
       {connections.map((connection) => (
         <li key={connection.id} className="flex">
           <ConnectionCard
@@ -49,6 +50,8 @@ type ConnectionCardProps = Omit<ConnectionsListProps, "connections" | "testingId
 };
 
 function ConnectionCard({ connection, testing, onEdit, onTest, onDelete }: ConnectionCardProps) {
+  const t = useT();
+  const { absoluteTime, relativeTime } = useFormat();
   const headingId = useId();
   const target = connectionTarget(connection);
   return (
@@ -67,11 +70,11 @@ function ConnectionCard({ connection, testing, onEdit, onTest, onDelete }: Conne
       </div>
       <dl className="grid grid-cols-2 gap-3 text-xs">
         <div className="flex flex-col gap-1">
-          <dt className="text-dim">Key</dt>
-          <dd className="font-mono text-muted">{connection.hasSecret ? connection.secretHint : "None"}</dd>
+          <dt className="text-dim">{t("connections.field.key")}</dt>
+          <dd className="font-mono text-muted">{connection.hasSecret ? connection.secretHint : t("scenarios.none")}</dd>
         </div>
         <div className="flex flex-col gap-1">
-          <dt className="text-dim">Updated</dt>
+          <dt className="text-dim">{t("connections.updated")}</dt>
           <dd>
             <time dateTime={connection.updatedAt} title={absoluteTime(connection.updatedAt)} className="text-muted">
               {relativeTime(connection.updatedAt)}
@@ -80,23 +83,23 @@ function ConnectionCard({ connection, testing, onEdit, onTest, onDelete }: Conne
         </div>
       </dl>
       <div className="flex flex-col gap-1">
-        <span className="text-xs text-dim">Last test</span>
+        <span className="text-xs text-dim">{t("connections.lastTest")}</span>
         <TestStatus lastTest={connection.lastTest} />
       </div>
       <div className="mt-auto flex flex-wrap gap-2 border-t border-line-soft pt-3.5">
-        <Button variant="secondary" aria-label={`Edit ${connection.name}`} onClick={() => onEdit(connection)}>
-          Edit
+        <Button variant="secondary" aria-label={t("connections.editNamed", { name: connection.name })} onClick={() => onEdit(connection)}>
+          {t("connections.edit")}
         </Button>
         <Button
           variant="secondary"
           loading={testing}
-          aria-label={`${testing ? "Testing" : "Test"} ${connection.name}`}
+          aria-label={t(testing ? "connections.testingNamed" : "connections.testNamed", { name: connection.name })}
           onClick={() => onTest(connection)}
         >
-          {testing ? "Testing…" : "Test"}
+          {testing ? t("check.testing") : t("connections.testShort")}
         </Button>
-        <Button variant="ghost" aria-label={`Delete ${connection.name}`} onClick={() => onDelete(connection)}>
-          Delete
+        <Button variant="ghost" aria-label={t("scenarios.deleteNamed", { name: connection.name })} onClick={() => onDelete(connection)}>
+          {t("common.delete")}
         </Button>
       </div>
     </article>

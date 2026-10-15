@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { PageHeader } from "@/features/shell/PageHeader";
 import { errorMessage, formErrorView } from "@/lib/api";
+import { localizeFormError, useT } from "@/lib/i18n";
 import { useOrigin } from "@/lib/browser/use-origin";
 import { useNow } from "@/lib/time/use-now";
 import { Alert, Button, Card, CardHeader, Dialog, EmptyState, PlusIcon, Spinner, buttonClasses } from "@/ui";
@@ -15,10 +16,9 @@ import { useApiKeys, useCreateApiKey, useRefreshApiKeys, useRevokeApiKey } from 
 import { RevokeApiKeyDialog } from "./RevokeApiKeyDialog";
 import type { ApiKey, NewApiKey } from "./types";
 
-const DUPLICATE_NAME = "An API key with this name already exists.";
-
 /** Container for `/settings/api-keys`: list, create-once dialog and revocation. */
 export function ApiKeysContainer() {
+  const t = useT();
   const origin = useOrigin();
   const apiKeys = useApiKeys();
   const create = useCreateApiKey();
@@ -57,7 +57,7 @@ export function ApiKeysContainer() {
     try {
       const result = await create.mutateAsync(input);
       setSecret(result.key);
-      setNotice(`Created ${result.name}.`);
+      setNotice(t("common.created", { name: result.name }));
     } catch {
       // Shown through the mutation's error state inside the dialog.
     }
@@ -84,7 +84,7 @@ export function ApiKeysContainer() {
     setRevokeInFlight(true);
     try {
       await revoke.mutateAsync(key);
-      setNotice(`Revoked ${key.name}.`);
+      setNotice(t("apiKeys.revoked", { name: key.name }));
       if (shownRevoke.current?.id === key.id) {
         focusTitle.current = true;
         showRevoke(undefined);
@@ -98,17 +98,19 @@ export function ApiKeysContainer() {
     }
   }
 
-  const createError = create.isError ? formErrorView(create.error, DUPLICATE_NAME) : undefined;
+  const createError = create.isError
+    ? localizeFormError(t, create.error, formErrorView(create.error, t("apiKeys.duplicateName")))
+    : undefined;
   const list = apiKeys.data ?? [];
   let body;
   if (apiKeys.isPending) {
-    body = <Spinner label="Loading API keys" />;
+    body = <Spinner label={t("apiKeys.loading")} />;
   } else if (apiKeys.isError) {
     body = (
-      <Alert title="Could not load API keys">
+      <Alert title={t("apiKeys.loadFailed")}>
         <span className="block">{errorMessage(apiKeys.error)}</span>
         <Button variant="secondary" className="mt-3" onClick={() => apiKeys.refetch()}>
-          Try again
+          {t("common.tryAgain")}
         </Button>
       </Alert>
     );
@@ -116,11 +118,11 @@ export function ApiKeysContainer() {
     body = (
       <EmptyState
         icon={<KeyIcon size={22} />}
-        title="No API keys yet"
-        description="Create a key so CI, scripts or a coding agent can launch runs and read results without signing in."
+        title={t("apiKeys.emptyTitle")}
+        description={t("apiKeys.emptyDescription")}
         action={
           <Button icon={<PlusIcon size={16} />} onClick={openCreate}>
-            Create your first API key
+            {t("apiKeys.createFirst")}
           </Button>
         }
       />
@@ -130,8 +132,8 @@ export function ApiKeysContainer() {
       <Card aria-labelledby={keysHeadingId}>
         <CardHeader
           id={keysHeadingId}
-          title="Your keys"
-          actions={<span className="text-xs text-dim">{list.length === 1 ? "1 key" : `${list.length} keys`}</span>}
+          title={t("apiKeys.yourKeys")}
+          actions={<span className="text-xs text-dim">{t.plural("apiKeys.count", list.length)}</span>}
         />
         <ApiKeysTable
           apiKeys={list}
@@ -149,9 +151,9 @@ export function ApiKeysContainer() {
     <>
       <PageHeader
         titleRef={titleRef}
-        eyebrow="Settings"
-        title="API keys"
-        description="Keys act as you on the API. The full key is shown once, when it is created."
+        eyebrow={t("nav.settings")}
+        title={t("nav.apiKeys")}
+        description={t("apiKeys.description")}
         actions={
           <>
             {/* Served by the backend (Swagger UI), so a plain link, not a client-side one. */}
@@ -159,13 +161,13 @@ export function ApiKeysContainer() {
               href="/api/docs"
               target="_blank"
               rel="noopener noreferrer"
-              aria-label="API docs (opens in a new tab)"
+              aria-label={t("nav.apiDocsNewTab")}
               className={buttonClasses("secondary", "no-underline")}
             >
-              API docs <span aria-hidden="true">↗</span>
+              {t("nav.apiDocs")} <span aria-hidden="true">↗</span>
             </a>
             <Button icon={<PlusIcon size={16} />} onClick={openCreate}>
-              Create API key
+              {t("apiKeys.create")}
             </Button>
           </>
         }
@@ -179,9 +181,9 @@ export function ApiKeysContainer() {
       <Dialog
         open={creating}
         size="lg"
-        title={secret === null ? "Create API key" : "Copy your new API key"}
+        title={secret === null ? t("apiKeys.create") : t("apiKeys.copyNew")}
         description={
-          secret === null ? "Use it as a Bearer token in the Authorization header." : undefined
+          secret === null ? t("apiKeys.bearerHint") : undefined
         }
         onClose={closeCreate}
       >

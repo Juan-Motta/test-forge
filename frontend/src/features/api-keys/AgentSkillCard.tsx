@@ -1,6 +1,7 @@
 "use client";
 
 import { type ReactNode, useId, useState } from "react";
+import { useT } from "@/lib/i18n";
 import { Alert, Button, Card, CardHeader, CheckIcon, CodeBlock, CopyIcon, Input } from "@/ui";
 
 type AgentSkillCardProps = {
@@ -20,6 +21,7 @@ export function skillCurlCommand(origin: string): string {
 
 /** Where an agent gets the skill: both URLs, a curl command and a session download. */
 export function AgentSkillCard({ origin, onDownload, downloading, downloadError }: AgentSkillCardProps) {
+  const t = useT();
   const headingId = useId();
   const [copied, setCopied] = useState<Copied>(null);
   const markdownUrl = `${origin}/api/skill`;
@@ -42,48 +44,48 @@ export function AgentSkillCard({ origin, onDownload, downloading, downloadError 
     <Card aria-labelledby={headingId} className="mt-6">
       <CardHeader
         id={headingId}
-        title="Agent skill"
+        title={t("skill.title")}
         actions={
           <Button variant="secondary" onClick={onDownload} disabled={downloading}>
-            {downloading ? "Downloading…" : "Download skill (.zip)"}
+            {downloading ? t("skill.downloading") : t("skill.download")}
           </Button>
         }
       />
       <p className="text-sm text-muted">
-        Give an AI agent this skill so it knows every endpoint, the flows and how to read results. Using the API itself needs an API key.
+        {t("skill.description")}
       </p>
       <SkillUrl
-        label="SKILL.md (Markdown)"
+        label={t("skill.markdown")}
         value={markdownUrl}
-        copyLabel="Copy SKILL.md URL"
+        copyLabel={t("skill.copyMarkdown")}
         icon={copyIcon("markdown")}
         onCopy={() => void copy("markdown", markdownUrl)}
       />
       <SkillUrl
-        label="Skill folder (.zip)"
+        label={t("skill.zip")}
         value={zipUrl}
-        copyLabel="Copy zip URL"
+        copyLabel={t("skill.copyZip")}
         icon={copyIcon("zip")}
         onCopy={() => void copy("zip", zipUrl)}
       />
       <div className="flex flex-col gap-1.5">
-        <p className="text-xs font-medium text-muted">Save it</p>
+        <p className="text-xs font-medium text-muted">{t("skill.saveIt")}</p>
         <div className="flex items-start gap-2">
-          <CodeBlock code={command} label="Command to save the skill" tone="command" className="min-w-0 flex-1 break-all" />
+          <CodeBlock code={command} label={t("skill.command")} tone="command" className="min-w-0 flex-1 break-all" />
           <Button
             variant="secondary"
-            aria-label="Copy command"
+            aria-label={t("skill.copyCommand")}
             icon={copyIcon("command")}
             onClick={() => void copy("command", command)}
           >
-            Copy
+            {t("ui.copy")}
           </Button>
         </div>
       </div>
       <p role="status" className="text-xs text-dim">
-        {copied === null ? "" : "failed" in copied ? "Could not copy. Select the text and copy it." : "Copied"}
+        {copied === null ? "" : "failed" in copied ? t("skill.copyFailed") : t("ui.copied")}
       </p>
-      {downloadError ? <Alert title="Could not download the skill">{downloadError}</Alert> : null}
+      {downloadError ? <Alert title={t("skill.downloadFailed")}>{downloadError}</Alert> : null}
     </Card>
   );
 }
@@ -97,6 +99,7 @@ type SkillUrlProps = {
 };
 
 function SkillUrl({ label, value, copyLabel, icon, onCopy }: SkillUrlProps) {
+  const t = useT();
   const id = useId();
   return (
     <div className="flex flex-col gap-1.5">
@@ -106,7 +109,7 @@ function SkillUrl({ label, value, copyLabel, icon, onCopy }: SkillUrlProps) {
       <div className="flex gap-2">
         <Input id={id} mono readOnly value={value} className="min-w-0 flex-1" />
         <Button variant="secondary" aria-label={copyLabel} icon={icon} onClick={onCopy}>
-          Copy
+          {t("ui.copy")}
         </Button>
       </div>
     </div>

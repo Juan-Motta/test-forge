@@ -1,3 +1,4 @@
+import { useT } from "@/lib/i18n";
 import { Alert, Button, Dialog } from "@/ui";
 
 type RerunDialogProps = {
@@ -13,30 +14,31 @@ type RerunDialogProps = {
 
 /** Confirms a re-run: it is a new, paid run of the scenario as it is now. */
 export function RerunDialog({ open, scenarioName, agentName, onConfirm, onClose, pending, error }: RerunDialogProps) {
+  const t = useT();
   return (
     <Dialog
       open={open}
-      title="Start a new paid run?"
+      title={t("rerun.title")}
       description={
         <>
-          {`This runs “${scenarioName}” against ${agentName} once more, with the scenario as it is now. `}
-          It is a new run: it reaches the agent and uses the evaluator (and, for a call, speech) models, which are billed.
+          {`${t("rerun.what", { scenario: scenarioName, agent: agentName })} `}
+          {t("rerun.billed")}
         </>
       }
       onClose={onClose}
       actions={
         <>
           <Button variant="secondary" onClick={onClose}>
-            Cancel
+            {t("common.cancel")}
           </Button>
           <Button loading={pending} onClick={onConfirm}>
-            Start paid run
+            {t("rerun.confirm")}
           </Button>
         </>
       }
     >
       {error ? (
-        <Alert title="Could not re-run">
+        <Alert title={t("rerun.failed")}>
           <span className="block">{error.message}</span>
           {error.reasons.length > 0 ? (
             <ul className="mt-1 list-disc pl-5">

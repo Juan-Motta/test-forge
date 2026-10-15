@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { Translator } from "@/lib/i18n";
 import {
   AGENT_KINDS,
   AGENT_PROTOCOLS,
@@ -49,27 +50,6 @@ export const AGENT_FIELDS = [
   "langfuseConnectionId",
 ] as const satisfies readonly (keyof AgentFormValues)[];
 
-export const KIND_LABELS: Record<AgentKind, { label: string; description: string }> = {
-  voice: { label: "Voice", description: "Talks over a realtime WebSocket; the evaluator calls it." },
-  text: { label: "Text", description: "Chats over Vivi's channel API; the evaluator writes to it." },
-};
-
-export const TEXT_MODE_LABELS: Record<TextMode, { label: string; description: string }> = {
-  stream: { label: "Stream", description: "The reply arrives as it is written; latency is the time to the first text." },
-  invoke: { label: "Invoke", description: "The whole reply in one response; latency is the time to the full reply." },
-};
-
-export const TEXT_AUTH_LABELS: Record<TextAuth, { label: string; description: string }> = {
-  none: { label: "None", description: "A WEB channel, like the portal's testing channel: no credentials." },
-  api_key: { label: "API key", description: "An API channel: the key is sent as the vivi-api-key header." },
-};
-
-export const PROTOCOL_LABELS: Record<AgentProtocol, string> = {
-  auto: "Auto-detect",
-  live: "Live",
-  realtime: "Realtime",
-};
-
 // Limits and patterns mirror the backend's agents domain (agents/domain.py).
 const MAX_NAME = 120;
 const MAX_CONTEXT = 20000;
@@ -90,21 +70,21 @@ function hasUnsafeCharacter(value: string): boolean {
   });
 }
 
+type UrlProblem = "unsafe" | "absolute" | "credentials" | "query";
+
 /** Shared URL shape checks, in the backend's order (`_split`); returns the parsed URL or a problem. */
-function parseUrl(value: string): URL | string {
-  if (hasUnsafeCharacter(value)) return "URL must not contain spaces, backslashes or control characters.";
+function parseUrl(value: string): URL | UrlProblem {
+  if (hasUnsafeCharacter(value)) return "unsafe";
   let url: URL;
   try {
     url = new URL(value);
   } catch {
-    return "URL must be absolute and name a host.";
+    return "absolute";
   }
-  if (!url.hostname) return "URL must be absolute and name a host.";
+  if (!url.hostname) return "absolute";
   const authority = value.split("//")[1]?.split("/")[0] ?? "";
-  if (url.username || url.password || authority.includes("@")) return "URL must not contain credentials.";
-  if (url.search || url.hash || value.endsWith("?") || value.endsWith("#")) {
-    return "URL must not contain a query string or fragment.";
-  }
+  if (url.username || url.password || authority.includes("@")) return "credentials";
+  if (url.search || url.hash || value.endsWith("?") || value.endsWith("#")) return "query";
   return url;
 }
 
@@ -113,23 +93,23 @@ function parseUrl(value: string): URL | string {
  * `https://`. The plain scheme (`ws://`, `http://`) works for a local agent (`localhost`,
  * `127.0.0.1`, `host.docker.internal`), which the server accepts in any environment.
  */
-export function baseUrlProblem(value: string, kind: AgentKind = "voice"): string | undefined {
-  if (value.length > MAX_URL) return "URL is too long.";
+export function baseUrlProblem(t: Translator, value: string, kind: AgentKind = "voice"): string | undefined {
+  if (value.length > MAX_URL) return t("agents.url.tooLong");
   const url = parseUrl(value);
-  if (typeof url === "string") return url;
+  if (typeof url === "string") return t(`agents.url.${url}`);
   const [secure, plain] = kind === "text" ? ["https:", "http:"] : ["wss:", "ws:"];
   const local = url.protocol === plain && LOCAL_HOSTS.has(url.hostname);
-  if (url.protocol !== secure && !local) return `URL must use ${secure}//.`;
+  if (url.protocol !== secure && !local) return t("agents.url.scheme", { scheme: `${secure}//` });
   return undefined;
 }
 
 /** An HTTP(S) origin: scheme, host and optional port only. */
-export function originProblem(value: string): string | undefined {
-  if (value.length > MAX_ORIGIN) return `Use at most ${MAX_ORIGIN} characters.`;
+export function originProblem(t: Translator, value: string): string | undefined {
+  if (value.length > MAX_ORIGIN) return t("common.maxChars", { max: MAX_ORIGIN });
   const url = parseUrl(value);
-  if (typeof url === "string") return url.replace(/^URL/, "Origin");
-  if (url.protocol !== "https:" && url.protocol !== "http:") return "Origin must use https or http.";
-  if (url.pathname !== "/") return "Origin must be only scheme, host and port.";
+  if (typeof url === "string") return t(`agents.origin.${url}`);
+  if (url.protocol !== "https:" && url.protocol !== "http:") return t("agents.origin.scheme");
+  if (url.pathname !== "/") return t("agents.origin.path");
   return undefined;
 }
 
@@ -139,19 +119,23 @@ const PRINTABLE = /^[^\p{Cc}\p{Cf}\p{Zl}\p{Zp}]*$/u;
  * Validates the fields of the chosen kind only. `hasStoredKey`: the agent already has an API key,
  * so `auth: api_key` needs no new one.
  */
-export function agentFormSchema(hasStoredKey = false) {
+export function agentFormSchema(t: Translator, hasStoredKey = false) {
   return z
     .object({
       kind: z.enum(AGENT_KINDS),
-      name: z.string().trim().min(1, "Enter a name.").max(MAX_NAME, `Use at most ${MAX_NAME} characters.`),
-      context: z.string().trim().max(MAX_CONTEXT, `Use at most ${MAX_CONTEXT} characters.`),
+      name: z
+        .string()
+        .trim()
+        .min(1, t("scenarios.error.name"))
+        .max(MAX_NAME, t("common.maxChars", { max: MAX_NAME })),
+      context: z.string().trim().max(MAX_CONTEXT, t("common.maxChars", { max: MAX_CONTEXT })),
       protocol: z.enum(AGENT_PROTOCOLS),
       baseUrl: z.string().trim(),
       channelId: z.string().trim(),
       userId: z.string().trim(),
       textMode: z.enum(TEXT_MODES),
       auth: z.enum(TEXT_AUTHS),
-      apiKey: z.string().trim().max(MAX_API_KEY, `Use at most ${MAX_API_KEY} characters.`),
+      apiKey: z.string().trim().max(MAX_API_KEY, t("common.maxChars", { max: MAX_API_KEY })),
       origin: z.string().trim(),
       langfuseConnectionId: z.string(),
     })
@@ -159,23 +143,23 @@ export function agentFormSchema(hasStoredKey = false) {
       const issue = (path: keyof AgentFormValues, message: string) =>
         ctx.addIssue({ code: "custom", path: [path], message });
       const text = values.kind === "text";
-      if (!values.baseUrl) issue("baseUrl", text ? "Enter the agent's base URL." : "Enter the agent's WebSocket URL.");
+      if (!values.baseUrl) issue("baseUrl", text ? t("agents.error.baseUrl") : t("agents.error.wsUrl"));
       else {
-        const url = baseUrlProblem(values.baseUrl, values.kind);
+        const url = baseUrlProblem(t, values.baseUrl, values.kind);
         if (url) issue("baseUrl", url);
       }
-      if (!values.channelId) issue("channelId", "Enter the channel ID.");
-      else if (values.channelId.length > MAX_CHANNEL_ID) issue("channelId", `Use at most ${MAX_CHANNEL_ID} characters.`);
-      else if (text && !UUID.test(values.channelId)) issue("channelId", "Use the channel's UUID.");
-      else if (!CHANNEL_ID.test(values.channelId)) issue("channelId", "Use only letters, digits and . _ ~ - (no spaces).");
+      if (!values.channelId) issue("channelId", t("agents.error.channelId"));
+      else if (values.channelId.length > MAX_CHANNEL_ID) issue("channelId", t("common.maxChars", { max: MAX_CHANNEL_ID }));
+      else if (text && !UUID.test(values.channelId)) issue("channelId", t("agents.error.channelUuid"));
+      else if (!CHANNEL_ID.test(values.channelId)) issue("channelId", t("agents.error.channelChars"));
       if (!text) {
-        if (!values.userId) issue("userId", "Enter the user ID.");
-        else if (values.userId.length > MAX_USER_ID) issue("userId", `Use at most ${MAX_USER_ID} characters.`);
-        else if (!PRINTABLE.test(values.userId)) issue("userId", "Use only printable characters.");
+        if (!values.userId) issue("userId", t("agents.error.userId"));
+        else if (values.userId.length > MAX_USER_ID) issue("userId", t("common.maxChars", { max: MAX_USER_ID }));
+        else if (!PRINTABLE.test(values.userId)) issue("userId", t("agents.error.printable"));
       } else if (values.auth === "api_key" && !values.apiKey && !hasStoredKey) {
-        issue("apiKey", "Enter the API key.");
+        issue("apiKey", t("agents.error.apiKey"));
       }
-      const origin = values.origin ? originProblem(values.origin) : undefined;
+      const origin = values.origin ? originProblem(t, values.origin) : undefined;
       if (origin) issue("origin", origin);
     });
 }

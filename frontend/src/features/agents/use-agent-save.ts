@@ -2,11 +2,10 @@
 
 import { useMemo, useRef, useState } from "react";
 import { formErrorView, type FieldErrors } from "@/lib/api";
+import { localizeFormError, useT } from "@/lib/i18n";
 import { toChanges, toNewAgent, type AgentFormValues } from "./form-schema";
 import { useCreateAgent, useUpdateAgent } from "./queries";
 import type { Agent } from "./types";
-
-export const DUPLICATE_AGENT_NAME = "An agent with this name already exists.";
 
 /** How a save ended: `unchanged` means nothing differed, so no request was sent. */
 export type SaveOutcome = "created" | "saved" | "unchanged";
@@ -31,6 +30,7 @@ const NEW_AGENT = "\u0000new";
  * on) another the user opened meanwhile.
  */
 export function useAgentSave(agent: Agent | undefined, onSaved: (agent: Agent, outcome: SaveOutcome) => void): AgentSave {
+  const t = useT();
   const create = useCreateAgent();
   const update = useUpdateAgent();
   // A ref, not mutation state: two clicks can land before React re-renders the disabled button.
@@ -72,7 +72,11 @@ export function useAgentSave(agent: Agent | undefined, onSaved: (agent: Agent, o
   }
 
   // Memoized per failure: a new `fieldErrors` object tells the form to show a new set of errors.
-  const view = useMemo(() => (save.error ? formErrorView(save.error, DUPLICATE_AGENT_NAME) : undefined), [save.error]);
+  const view = useMemo(
+    () =>
+      save.error ? localizeFormError(t, save.error, formErrorView(save.error, t("agents.duplicateName"))) : undefined,
+    [save.error, t],
+  );
 
   return { onSubmit, pending: inFlight.has(key), error: view?.message, fieldErrors: view?.fieldErrors, reset };
 }

@@ -1,3 +1,4 @@
+import type { MessageKey } from "@/lib/i18n";
 import type { Connection, ConnectionKind } from "./types";
 
 /** How a config value is checked (mirrors the backend's field types). */
@@ -6,20 +7,24 @@ export type FieldFormat = "url" | "identifier" | "region";
 export type ConfigField = {
   /** camelCase key, as the API expects it. */
   key: string;
-  label: string;
+  /** Message key of the field's label. */
+  label: MessageKey;
   format: FieldFormat;
   required: boolean;
   /** Prefilled on create (the backend's own default). */
   defaultValue?: string;
   placeholder?: string;
-  hint?: string;
+  /** Message key of the field's hint. */
+  hint?: MessageKey;
 };
 
 export type KindDefinition = {
+  /** The provider's name (a brand, never translated). */
   label: string;
-  description: string;
+  /** Message key of what the provider is. */
+  description: MessageKey;
   config: ConfigField[];
-  secret: { key: string; label: string };
+  secret: { key: string; label: MessageKey };
   /** Azure AI Speech: exactly one of these two keys must be set. */
   exactlyOneOf?: [string, string];
 };
@@ -27,92 +32,92 @@ export type KindDefinition = {
 export const KINDS: Record<ConnectionKind, KindDefinition> = {
   openai: {
     label: "OpenAI",
-    description: "OpenAI API or a compatible proxy.",
+    description: "connections.kind.openai",
     config: [
       {
         key: "baseUrl",
-        label: "Base URL",
+        label: "connections.field.baseUrl",
         format: "url",
         required: false,
         defaultValue: "https://api.openai.com/v1",
         placeholder: "https://api.openai.com/v1",
       },
-      { key: "ttsModel", label: "TTS model", format: "identifier", required: false, defaultValue: "gpt-4o-mini-tts" },
-      { key: "ttsVoice", label: "TTS voice", format: "identifier", required: false, defaultValue: "alloy" },
+      { key: "ttsModel", label: "connections.field.ttsModel", format: "identifier", required: false, defaultValue: "gpt-4o-mini-tts" },
+      { key: "ttsVoice", label: "connections.field.ttsVoice", format: "identifier", required: false, defaultValue: "alloy" },
     ],
-    secret: { key: "apiKey", label: "API key" },
+    secret: { key: "apiKey", label: "connections.field.apiKey" },
   },
   azure_openai: {
     label: "Azure OpenAI",
-    description: "An Azure OpenAI resource with a TTS deployment (and a chat deployment for the evaluator).",
+    description: "connections.kind.azure_openai",
     config: [
       {
         key: "endpoint",
-        label: "Endpoint",
+        label: "connections.field.endpoint",
         format: "url",
         required: true,
         placeholder: "https://my-resource.openai.azure.com",
       },
-      { key: "apiVersion", label: "API version", format: "identifier", required: true, placeholder: "2025-03-01-preview" },
-      { key: "ttsDeployment", label: "TTS deployment", format: "identifier", required: true },
-      { key: "ttsVoice", label: "TTS voice", format: "identifier", required: false, defaultValue: "alloy" },
+      { key: "apiVersion", label: "connections.field.apiVersion", format: "identifier", required: true, placeholder: "2025-03-01-preview" },
+      { key: "ttsDeployment", label: "connections.field.ttsDeployment", format: "identifier", required: true },
+      { key: "ttsVoice", label: "connections.field.ttsVoice", format: "identifier", required: false, defaultValue: "alloy" },
       {
         key: "chatDeployment",
-        label: "Chat deployment",
+        label: "connections.field.chatDeployment",
         format: "identifier",
         required: false,
-        hint: "A gpt-6-luna deployment the evaluator uses to decide what the caller says. Without it this connection cannot be the evaluator.",
+        hint: "connections.hint.chatDeployment",
       },
       {
         key: "realtimeDeployment",
-        label: "Realtime deployment (gpt-realtime-2.1-mini)",
+        label: "connections.field.realtimeMini",
         format: "identifier",
         required: false,
-        hint: "Deployment for realtime-evaluator scenarios that choose the realtime model gpt-realtime-2.1-mini. Without it those scenarios fail on this connection.",
+        hint: "connections.hint.realtimeMini",
       },
       {
         key: "realtimeFullDeployment",
-        label: "Realtime deployment (gpt-realtime-2.1)",
+        label: "connections.field.realtimeFull",
         format: "identifier",
         required: false,
-        hint: "Deployment for realtime-evaluator scenarios that choose the realtime model gpt-realtime-2.1. Without it those scenarios fail on this connection.",
+        hint: "connections.hint.realtimeFull",
       },
     ],
-    secret: { key: "apiKey", label: "API key" },
+    secret: { key: "apiKey", label: "connections.field.apiKey" },
   },
   azure_speech: {
     label: "Azure AI Speech",
-    description: "An Azure AI Speech resource, by region or custom endpoint.",
+    description: "connections.kind.azure_speech",
     config: [
       {
         key: "region",
-        label: "Region",
+        label: "connections.field.region",
         format: "region",
         required: false,
         placeholder: "eastus",
-        hint: "Azure region name. Use this or an endpoint.",
+        hint: "connections.hint.region",
       },
       {
         key: "endpoint",
-        label: "Endpoint",
+        label: "connections.field.endpoint",
         format: "url",
         required: false,
         placeholder: "https://eastus.api.cognitive.microsoft.com",
-        hint: "Custom endpoint. Use this or a region.",
+        hint: "connections.hint.endpoint",
       },
-      { key: "voice", label: "Voice", format: "identifier", required: false, placeholder: "es-MX-DaliaNeural" },
+      { key: "voice", label: "connections.field.voice", format: "identifier", required: false, placeholder: "es-MX-DaliaNeural" },
     ],
-    secret: { key: "key", label: "Key" },
+    secret: { key: "key", label: "connections.field.key" },
     exactlyOneOf: ["region", "endpoint"],
   },
   langfuse: {
     label: "Langfuse",
-    description: "Langfuse project for traces.",
+    description: "connections.kind.langfuse",
     config: [
-      { key: "host", label: "Host", format: "url", required: true, placeholder: "https://cloud.langfuse.com" },
-      { key: "publicKey", label: "Public key", format: "identifier", required: true, placeholder: "pk-lf-…" },
+      { key: "host", label: "connections.field.host", format: "url", required: true, placeholder: "https://cloud.langfuse.com" },
+      { key: "publicKey", label: "connections.field.publicKey", format: "identifier", required: true, placeholder: "pk-lf-…" },
     ],
-    secret: { key: "secretKey", label: "Secret key" },
+    secret: { key: "secretKey", label: "connections.field.secretKey" },
   },
 };
 

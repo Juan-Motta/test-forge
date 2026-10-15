@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { JudgementController } from "@/features/judgements/use-judgement-controller";
 import { RunCostCard } from "@/features/pricing/RunCostCard";
 import { ApiError, errorMessage } from "@/lib/api";
+import { useT, type Translator } from "@/lib/i18n";
 import { Alert, Tabs, type TabItem } from "@/ui";
 import { audioUrl, conversationUrl } from "../api";
 import { clock, latency, median } from "../format";
@@ -16,7 +17,7 @@ import type { RunDetail } from "../types";
 import { ConversationCard } from "./ConversationCard";
 import { HandoffCard } from "./HandoffCard";
 import { collectIssues, issuePins } from "./issues";
-import { JudgeButton, JudgementStatusCard } from "./JudgementStatusCard";
+import { JudgeButton, JudgementStatusCard, TranslationNotice } from "./JudgementStatusCard";
 import { RecordingCard, type RunMetric } from "./RecordingCard";
 import { Scorecard } from "./Scorecard";
 import { SuggestionsGrid } from "./SuggestionsGrid";
@@ -30,6 +31,7 @@ export type ReportTab = "transcript" | "trace" | "suggestions" | "handoff";
  * audio), and the transcript, trace, suggestions and handoff tabs.
  */
 export function FinishedReport({ run, controller }: { run: RunDetail; controller: JudgementController }) {
+  const t = useT();
   const [tab, setTab] = useState<ReportTab>("transcript");
   // A new object per request, so opening the same turn twice scrolls twice.
   const [turnRequest, setTurnRequest] = useState<{ ref: string } | null>(null);
@@ -46,7 +48,7 @@ export function FinishedReport({ run, controller }: { run: RunDetail; controller
     [result, entries],
   );
   const issuesByRef = useMemo(() => new Map(issues.map((issue) => [issue.ref, issue])), [issues]);
-  const pins = levels.data ? issuePins(issues, levels.data) : [];
+  const pins = levels.data ? issuePins(t, issues, levels.data) : [];
 
   // Opening a turn may switch tabs first: scroll once its row is rendered.
   useEffect(() => {
@@ -73,7 +75,7 @@ export function FinishedReport({ run, controller }: { run: RunDetail; controller
   const tabs: TabItem<ReportTab>[] = [
     {
       id: "transcript",
-      label: "Transcript & scorecard",
+      label: t("report.tab.transcript"),
       content: (
         <div className="flex flex-wrap items-start gap-5">
           <section
@@ -81,12 +83,12 @@ export function FinishedReport({ run, controller }: { run: RunDetail; controller
             className="flex min-w-0 flex-[999_1_480px] flex-col gap-3 rounded-xl border border-line bg-panel p-5"
           >
             <h2 id="run-transcript" className="text-[15px] font-semibold">
-              Transcript
+              {t("report.transcript")}
             </h2>
             {text ? (
-              <ChatTranscript entries={entries} emptyText="No messages were sent in this run." anchors issues={issuesByRef} />
+              <ChatTranscript entries={entries} emptyText={t("report.noMessages")} anchors issues={issuesByRef} />
             ) : (
-              <RunTranscript entries={entries} emptyText="Nothing was said in this run." anchors issues={issuesByRef} />
+              <RunTranscript entries={entries} emptyText={t("report.nothingSaid")} anchors issues={issuesByRef} />
             )}
           </section>
           <section
@@ -94,12 +96,12 @@ export function FinishedReport({ run, controller }: { run: RunDetail; controller
             className="flex min-w-0 flex-[1_1_340px] flex-col gap-3.5 rounded-xl border border-line bg-panel p-5"
           >
             <h2 id="run-scorecard" className="text-[15px] font-semibold">
-              Scorecard
+              {t("report.scorecard")}
             </h2>
             {result ? (
               <Scorecard criteria={result.criteria} onGoToTurn={goToTurn} />
             ) : (
-              <p className="text-sm text-muted">The scorecard appears once the run is judged.</p>
+              <p className="text-sm text-muted">{t("report.scorecardPending")}</p>
             )}
           </section>
         </div>
@@ -107,7 +109,7 @@ export function FinishedReport({ run, controller }: { run: RunDetail; controller
     },
     {
       id: "trace",
-      label: "Langfuse trace",
+      label: t("report.tab.trace"),
       content: (
         <TracePanel
           trace={trace.data}
@@ -119,16 +121,16 @@ export function FinishedReport({ run, controller }: { run: RunDetail; controller
     },
     {
       id: "suggestions",
-      label: result ? `Suggestions · ${result.suggestions.length}` : "Suggestions",
+      label: result ? t("report.tab.suggestionsCount", { count: result.suggestions.length }) : t("report.tab.suggestions"),
       content: result ? (
         <SuggestionsGrid suggestions={result.suggestions} onGoToTurn={goToTurn} />
       ) : (
-        <p className="text-sm text-muted">Suggestions appear once the run is judged.</p>
+        <p className="text-sm text-muted">{t("report.suggestionsPending")}</p>
       ),
     },
     {
       id: "handoff",
-      label: "Handoff",
+      label: t("report.tab.handoff"),
       content: result ? (
         <HandoffCard
           brief={controller.brief}
@@ -137,7 +139,7 @@ export function FinishedReport({ run, controller }: { run: RunDetail; controller
           onDownload={controller.downloadBrief}
         />
       ) : (
-        <p className="text-sm text-muted">The brief for a coding agent appears once the run is judged.</p>
+        <p className="text-sm text-muted">{t("report.handoffPending")}</p>
       ),
     },
   ];
@@ -146,7 +148,8 @@ export function FinishedReport({ run, controller }: { run: RunDetail; controller
     <>
       {result ? (
         <>
-          {controller.judgeError ? <Alert>{`Could not judge: ${controller.judgeError}`}</Alert> : null}
+          {controller.judgeError ? <Alert>{t("judgement.couldNotJudge", { error: controller.judgeError })}</Alert> : null}
+          <TranslationNotice controller={controller} />
           <VerdictRow result={result} action={<JudgeButton controller={controller} />} />
         </>
       ) : (
@@ -167,33 +170,34 @@ export function FinishedReport({ run, controller }: { run: RunDetail; controller
         onReloadLevels={() => void levels.refetch()}
         pins={pins}
         onPin={goToTurn}
-        metrics={runMetrics(run)}
+        metrics={runMetrics(t, run)}
         />
       )}
-      <Tabs label="Report sections" tabs={tabs} value={tab} onChange={setTab} />
+      <Tabs label={t("report.sections")} tabs={tabs} value={tab} onChange={setTab} />
       <span role="status" className="sr-only">
-        {controller.briefCopied ? "Brief copied" : ""}
+        {controller.briefCopied ? t("report.briefCopied") : ""}
       </span>
     </>
   );
 }
 
-function runMetrics(run: RunDetail): RunMetric[] {
+function runMetrics(t: Translator, run: RunDetail): RunMetric[] {
   const summary = run.summary ?? {};
   const latencies = summary.latenciesMs ?? [];
   return [
-    { label: "Duration", value: summary.durationMs === undefined ? "—" : clock(summary.durationMs) },
-    { label: "Latency p50", value: latency(median(latencies)) },
-    { label: "Slowest reply", value: latencies.length ? latency(Math.max(...latencies)) : "—" },
-    { label: "Agent turns", value: summary.agentTurns === undefined ? "—" : String(summary.agentTurns) },
-    { label: "Evaluator turns", value: summary.callerTurns === undefined ? "—" : String(summary.callerTurns) },
+    { label: t("report.metric.duration"), value: summary.durationMs === undefined ? "—" : clock(summary.durationMs) },
+    { label: t("report.metric.latencyP50"), value: latency(median(latencies)) },
+    { label: t("report.metric.slowestReply"), value: latencies.length ? latency(Math.max(...latencies)) : "—" },
+    { label: t("report.metric.agentTurns"), value: summary.agentTurns === undefined ? "—" : String(summary.agentTurns) },
+    { label: t("report.metric.evaluatorTurns"), value: summary.callerTurns === undefined ? "—" : String(summary.callerTurns) },
   ];
 }
 
 function Warnings({ warnings }: { warnings: string[] }) {
+  const t = useT();
   if (warnings.length === 0) return null;
   return (
-    <Alert tone="info" title="Warnings">
+    <Alert tone="info" title={t("report.warnings")}>
       <ul className="flex flex-col gap-1">
         {warnings.map((warning, index) => (
           <li key={index}>{warning}</li>

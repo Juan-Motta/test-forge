@@ -1,3 +1,4 @@
+import type { Translator } from "@/lib/i18n";
 import type { AgentKind, RunDetail, RunSnapshot, RunSummary, TextMode } from "./types";
 
 /** The run's agent kind: what the API, the summary or the launch snapshot says; voice otherwise. */
@@ -11,11 +12,13 @@ export function runKind(run: {
     : "voice";
 }
 
-export const TEXT_MODE_LABELS: Record<TextMode, string> = { stream: "Stream", invoke: "Invoke" };
+export function textModeName(t: Translator, mode: TextMode): string {
+  return t(`runs.textMode.${mode}`);
+}
 
 /** The text agent's mode ("Stream" / "Invoke"), from the summary or the snapshot; null when unknown. */
-export function textModeLabel(run: Pick<RunDetail, "summary" | "snapshot">): string | null {
+export function textModeLabel(t: Translator, run: Pick<RunDetail, "summary" | "snapshot">): string | null {
   const mode = run.summary?.textMode ?? run.snapshot?.agent?.textMode;
-  return mode ? TEXT_MODE_LABELS[mode] : null;
+  return mode ? textModeName(t, mode) : null;
 }
 

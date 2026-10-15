@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useT } from "@/lib/i18n";
 import { Alert, Button, EmptyState, RunsIcon, Spinner, cn } from "@/ui";
 import { latency } from "../format";
 import type { RunTrace } from "../types";
@@ -22,25 +23,26 @@ const TYPE_BAR: Record<string, string> = { llm: "bg-llm", tool: "bg-agent" };
 
 /** The agent's Langfuse observations as a waterfall over the run, warnings and errors in red. */
 export function TracePanel({ trace, loadError, onReload, durationMs }: TracePanelProps) {
+  const t = useT();
   const [onlyFlagged, setOnlyFlagged] = useState(false);
 
   if (loadError) {
     return (
-      <Alert title="Could not load the trace">
+      <Alert title={t("report.traceLoadFailed")}>
         <span className="block">{loadError}</span>
         <Button variant="secondary" className="mt-3" onClick={onReload}>
-          Try again
+          {t("common.tryAgain")}
         </Button>
       </Alert>
     );
   }
-  if (!trace) return <Spinner label="Loading trace" />;
+  if (!trace) return <Spinner label={t("report.loadingTrace")} />;
   if (!trace.available || trace.observations.length === 0) {
     return (
       <EmptyState
         icon={<RunsIcon size={22} />}
-        title="No Langfuse trace for this run"
-        description={trace.note ?? "No observations were saved for this run."}
+        title={t("report.noTrace")}
+        description={trace.note ?? t("report.noObservations")}
       />
     );
   }
@@ -54,9 +56,9 @@ export function TracePanel({ trace, loadError, onReload, durationMs }: TracePane
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-col gap-1">
           <h2 id="trace-title" className="text-[15px] font-semibold">
-            Langfuse trace
+            {t("report.tab.trace")}
           </h2>
-          <span className="text-xs text-dim">{traceSummaryLine(trace)}</span>
+          <span className="text-xs text-dim">{traceSummaryLine(t, trace)}</span>
         </div>
         <label className="flex min-h-11 items-center gap-2 text-[13px] text-body-soft">
           <input
@@ -65,14 +67,14 @@ export function TracePanel({ trace, loadError, onReload, durationMs }: TracePane
             onChange={(event) => setOnlyFlagged(event.target.checked)}
             className="size-[18px] accent-evaluator"
           />
-          {`Only flagged (${flagged})`}
+          {t("report.onlyFlagged", { count: flagged })}
         </label>
       </div>
       {shown.length === 0 ? (
-        <p className="text-sm text-muted">No observation was flagged as a warning or an error.</p>
+        <p className="text-sm text-muted">{t("report.noneFlagged")}</p>
       ) : (
         <div className="overflow-x-auto">
-          <ul aria-label="Trace observations" className="flex min-w-[760px] flex-col gap-0.5">
+          <ul aria-label={t("report.traceObservations")} className="flex min-w-[760px] flex-col gap-0.5">
             {shown.map((row, index) => (
               <WaterfallItem key={row.id ?? index} row={row} />
             ))}
@@ -84,6 +86,7 @@ export function TracePanel({ trace, loadError, onReload, durationMs }: TracePane
 }
 
 function WaterfallItem({ row }: { row: WaterfallRow }) {
+  const t = useT();
   const type = row.type.toLowerCase();
   return (
     <li
@@ -100,7 +103,7 @@ function WaterfallItem({ row }: { row: WaterfallRow }) {
           {type}
         </span>
         <span className="truncate font-mono text-xs" title={row.name ?? undefined}>
-          {row.name ?? "(unnamed)"}
+          {row.name ?? t("report.unnamed")}
         </span>
       </span>
       <span aria-hidden="true" className="relative h-3.5 flex-1 rounded-[3px] bg-raised">

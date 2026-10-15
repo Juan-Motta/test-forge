@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { useJudgementController } from "@/features/judgements/use-judgement-controller";
 import { ApiError, errorMessage } from "@/lib/api";
+import { useT } from "@/lib/i18n";
 import {
   Alert,
   Button,
@@ -37,17 +38,18 @@ type RunDetailContainerProps = {
 
 /** Container for `/runs/[id]`: the run report and, once it finished, the judge's verdict. */
 export function RunDetailContainer({ runId, judgementPollMs }: RunDetailContainerProps) {
+  const t = useT();
   const run = useRun(runId, { pollWhileActiveMs: POLL_MS });
 
   if (run.isError && run.error instanceof ApiError && run.error.status === 404) {
     return (
       <EmptyState
         icon={<RunsIcon size={22} />}
-        title="Run not found"
-        description="It may have been removed, or the link is wrong."
+        title={t("runs.notFound")}
+        description={t("runs.notFoundHint")}
         action={
           <Link href="/runs" className={buttonClasses("secondary")}>
-            Back to runs
+            {t("runs.backToRuns")}
           </Link>
         }
       />
@@ -55,19 +57,20 @@ export function RunDetailContainer({ runId, judgementPollMs }: RunDetailContaine
   }
   if (run.isError) {
     return (
-      <Alert title="Could not load the run">
+      <Alert title={t("runs.loadOneFailed")}>
         <span className="block">{errorMessage(run.error)}</span>
         <Button variant="secondary" className="mt-3" onClick={() => run.refetch()}>
-          Try again
+          {t("common.tryAgain")}
         </Button>
       </Alert>
     );
   }
-  if (run.isPending) return <Spinner label="Loading run" />;
+  if (run.isPending) return <Spinner label={t("runs.loadingOne")} />;
   return <RunReport run={run.data} judgementPollMs={judgementPollMs} />;
 }
 
 function RunReport({ run, judgementPollMs }: { run: RunDetail; judgementPollMs?: number }) {
+  const t = useT();
   const router = useRouter();
   const cancel = useCancelRun();
   const rerun = useRerun();
@@ -92,7 +95,7 @@ function RunReport({ run, judgementPollMs }: { run: RunDetail; judgementPollMs?:
   const rerunError = rerun.isError
     ? {
         message: errorMessage(rerun.error),
-        reasons: notRunnableReasons(rerun.error, [{ id: run.scenarioId ?? "", name: run.scenarioName }]),
+        reasons: notRunnableReasons(t, rerun.error, [{ id: run.scenarioId ?? "", name: run.scenarioName }]),
       }
     : null;
 
@@ -101,10 +104,10 @@ function RunReport({ run, judgementPollMs }: { run: RunDetail; judgementPollMs?:
       {active ? (
         <>
           <Link href={`/runs/${encodeURIComponent(run.id)}/live`} className={buttonClasses("primary")}>
-            Watch live
+            {t("runs.watchLiveButton")}
           </Link>
           <Button variant="secondary" loading={cancel.isPending} onClick={() => cancel.mutate(run.id)}>
-            Cancel run
+            {t("runs.cancelRunButton")}
           </Button>
         </>
       ) : null}
@@ -115,9 +118,9 @@ function RunReport({ run, judgementPollMs }: { run: RunDetail; judgementPollMs?:
           rel="noopener noreferrer"
           className={buttonClasses("secondary")}
         >
-          Open trace in Langfuse
+          {t("runs.openTrace")}
           <ExternalLinkIcon size={14} />
-          <span className="sr-only"> (opens in a new tab)</span>
+          <span className="sr-only">{` ${t("common.newTab")}`}</span>
         </a>
       ) : null}
       {run.scenarioId ? (
@@ -127,14 +130,14 @@ function RunReport({ run, judgementPollMs }: { run: RunDetail; judgementPollMs?:
             rerun.reset();
             setConfirming(true);
           }}
-          title="Launch this scenario once more (its current version)"
+          title={t("runs.rerunHint")}
         >
-          Re-run
+          {t("runs.rerun")}
         </Button>
       ) : null}
       {controller.brief ? (
         <Button icon={controller.briefCopied ? <CheckIcon size={14} /> : <CopyIcon size={14} />} onClick={controller.copyBrief}>
-          Copy brief
+          {t("report.copyBrief")}
         </Button>
       ) : null}
     </>
@@ -143,18 +146,16 @@ function RunReport({ run, judgementPollMs }: { run: RunDetail; judgementPollMs?:
   return (
     <>
       <RunHeader run={run} actions={actions} />
-      {run.error ? <Alert title="The run failed">{run.error}</Alert> : null}
-      {cancel.isError ? <Alert>{`Could not cancel: ${errorMessage(cancel.error)}`}</Alert> : null}
+      {run.error ? <Alert title={t("runs.runFailed")}>{run.error}</Alert> : null}
+      {cancel.isError ? <Alert>{t("runs.cancelFailed", { error: errorMessage(cancel.error) })}</Alert> : null}
       {active ? (
         <>
           <Alert tone="info">
-            {runKind(run) === "text"
-              ? "The transcript and its timings appear once the conversation ends. Watch it live meanwhile."
-              : "The recording and transcript appear once the run finishes. Watch it live meanwhile."}
+            {runKind(run) === "text" ? t("runs.activeTextHint") : t("runs.activeVoiceHint")}
           </Alert>
           <Card aria-labelledby="judgement-status">
-            <CardHeader id="judgement-status" title="Judgement" />
-            <p className="text-sm text-muted">The judge scores the run once it finishes.</p>
+            <CardHeader id="judgement-status" title={t("judgement.title")} />
+            <p className="text-sm text-muted">{t("judgement.afterRun")}</p>
           </Card>
         </>
       ) : (

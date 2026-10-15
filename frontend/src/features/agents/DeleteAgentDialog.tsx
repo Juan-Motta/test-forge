@@ -1,5 +1,6 @@
 "use client";
 
+import { useT } from "@/lib/i18n";
 import { Alert, Button, Dialog } from "@/ui";
 import type { Agent } from "./types";
 
@@ -15,19 +16,20 @@ type DeleteAgentDialogProps = {
 
 /** Confirmation naming the agent; nothing is deleted until the user confirms. */
 export function DeleteAgentDialog({ agent, onCancel, onConfirm, pending, error, errorHint }: DeleteAgentDialogProps) {
+  const t = useT();
   return (
     <Dialog
       open={agent !== undefined}
-      title={agent ? `Delete “${agent.name}”?` : ""}
-      description="An agent can be deleted only when no scenario uses it. This cannot be undone."
+      title={agent ? t("common.deleteTitle", { name: agent.name }) : ""}
+      description={t("agents.deleteDescription")}
       onClose={onCancel}
       actions={
         <>
           <Button variant="secondary" onClick={onCancel}>
-            Cancel
+            {t("common.cancel")}
           </Button>
           <Button variant="danger" loading={pending} onClick={() => agent && onConfirm(agent)}>
-            {pending ? "Deleting…" : "Delete agent"}
+            {pending ? t("common.deleting") : t("agents.delete")}
           </Button>
         </>
       }

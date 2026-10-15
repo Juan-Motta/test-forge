@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { relativeTime } from "./format";
+import { createFormat } from "./format";
+
+const { relativeTime } = createFormat("en");
 
 const now = Date.parse("2026-10-09T12:00:00Z");
 
-describe("relativeTime", () => {
+describe("relativeTime (English)", () => {
   it.each([
     ["2026-10-09T11:59:40Z", "just now"],
     ["2026-10-09T11:55:00Z", "5 minutes ago"],

@@ -1,3 +1,4 @@
+import type { Translator } from "@/lib/i18n";
 import { SCORE_TEXT, scoreTone, type BadgeTone, type ScoreTone } from "@/ui";
 import {
   ACTIVE_JUDGEMENT_STATUSES,
@@ -14,12 +15,9 @@ export function isJudging(status: string | null | undefined): status is ActiveJu
   return (ACTIVE_JUDGEMENT_STATUSES as readonly string[]).includes(status ?? "");
 }
 
-export const VERDICT_LABELS: Record<Verdict, string> = {
-  pass: "Pass",
-  partial: "Partial",
-  fail: "Fail",
-  not_observable: "Not observable",
-};
+export function verdictLabel(t: Translator, verdict: Verdict): string {
+  return t(`judgement.verdict.${verdict}`);
+}
 
 export const VERDICT_TONES: Record<Verdict, BadgeTone> = {
   pass: "success",
@@ -34,23 +32,20 @@ export const PRIORITY_TONES: Record<SuggestionPriority, BadgeTone> = {
   low: "neutral",
 };
 
-const FAILURE_TAG_LABELS: Record<FailureTag, string> = {
-  fabricated_information: "Fabricated information",
-  wrong_information: "Wrong information",
-  instruction_ignored: "Instruction ignored",
-  unsafe_or_policy_violation: "Unsafe or policy violation",
-  missing_information_request: "Missing information request",
-  incomplete_task: "Incomplete task",
-  off_topic: "Off topic",
-  unclear_or_unnatural_speech: "Unclear or unnatural speech",
-  cut_off_or_incomplete_reply: "Cut-off or incomplete reply",
-  slow_response: "Slow response",
-  tool_or_trace_error: "Tool or trace error",
-};
+const FAILURE_TAGS: readonly FailureTag[] = [
+  ...CAPPING_FAILURE_TAGS,
+  "missing_information_request",
+  "incomplete_task",
+  "off_topic",
+  "unclear_or_unnatural_speech",
+  "cut_off_or_incomplete_reply",
+  "slow_response",
+  "tool_or_trace_error",
+];
 
 /** Human label of a failure tag; an unknown tag is humanized (`some_new_tag` -> "Some new tag"). */
-export function failureTagLabel(tag: string): string {
-  if (Object.hasOwn(FAILURE_TAG_LABELS, tag)) return FAILURE_TAG_LABELS[tag as FailureTag];
+export function failureTagLabel(t: Translator, tag: string): string {
+  if ((FAILURE_TAGS as readonly string[]).includes(tag)) return t(`judgement.tag.${tag as FailureTag}`);
   const words = tag.replace(/[_-]+/g, " ").trim().toLowerCase();
   return words ? `${words[0].toUpperCase()}${words.slice(1)}` : tag;
 }
@@ -59,41 +54,37 @@ export function failureTagLabel(tag: string): string {
 export const CAP_BAND = 2;
 
 /** "Capped at 2/5 because of fabricated information and wrong information". */
-export function cappedExplanation(tags: readonly string[]): string {
+export function cappedExplanation(t: Translator, tags: readonly string[]): string {
   const capping = tags.filter((tag) => (CAPPING_FAILURE_TAGS as readonly string[]).includes(tag));
-  const reasons = capping.map((tag) => failureTagLabel(tag).toLowerCase());
-  const base = `Capped at ${CAP_BAND}/5`;
-  return reasons.length > 0 ? `${base} because of ${reasons.join(" and ")}` : base;
+  const reasons = capping.map((tag) => failureTagLabel(t, tag).toLowerCase());
+  if (reasons.length === 0) return t("judgement.capped", { band: CAP_BAND });
+  return t("judgement.cappedBecause", { band: CAP_BAND, reasons: reasons.join(t("judgement.and")) });
 }
 
-export const UNOBSERVABLE_REASON_LABELS: Record<UnobservableReason, string> = {
-  traces_unavailable: "Traces unavailable",
-  no_timing_data: "No timing data",
-  judge_marked_unobservable: "The judge could not observe it",
-  judge_omitted: "The judge gave no verdict",
-};
+export function unobservableReasonLabel(t: Translator, reason: string): string {
+  const known: readonly string[] = ["traces_unavailable", "no_timing_data", "judge_marked_unobservable", "judge_omitted"];
+  return known.includes(reason) ? t(`judgement.unobservable.${reason as UnobservableReason}`) : reason;
+}
 
 /** "Incomplete task: 2 criteria". */
-export function failureTagCountLabel(tag: string, count: number): string {
-  return `${failureTagLabel(tag)}: ${count} ${count === 1 ? "criterion" : "criteria"}`;
+export function failureTagCountLabel(t: Translator, tag: string, count: number): string {
+  return t.plural("judgement.tagCount", count, { tag: failureTagLabel(t, tag) });
 }
 
-const BAND_LABELS: Record<ScoreTone, string> = { good: "Good", warn: "Fair", bad: "Poor" };
+const BAND_KEYS = { good: "judgement.band.good", warn: "judgement.band.fair", bad: "judgement.band.poor" } as const;
 
 /** Score band by the app-wide rule (`scoreTone`): >= 80 good, >= 60 fair, below that poor. */
-export function scoreBand(score: number): { label: string; className: string } {
-  const tone = scoreTone(score);
-  return { label: BAND_LABELS[tone], className: SCORE_TEXT[tone] };
+export function scoreBand(t: Translator, score: number): { label: string; className: string } {
+  const tone: ScoreTone = scoreTone(score);
+  return { label: t(BAND_KEYS[tone]), className: SCORE_TEXT[tone] };
 }
 
-const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
-
 /** "3 traces · 41 observations · 1 error · gpt-x, gpt-y" from the digest stats. */
-export function traceStatsLine(stats: TraceStats): string {
+export function traceStatsLine(t: Translator, stats: TraceStats): string {
   const parts = [
-    plural(stats.traceCount ?? 0, "trace"),
-    plural(stats.observationCount ?? 0, "observation"),
-    plural(stats.errorCount ?? 0, "error"),
+    t.plural("judgement.traces", stats.traceCount ?? 0),
+    t.plural("judgement.observations", stats.observationCount ?? 0),
+    t.plural("judgement.errors", stats.errorCount ?? 0),
   ];
   if (stats.models && stats.models.length > 0) parts.push(stats.models.join(", "));
   return parts.join(" · ");

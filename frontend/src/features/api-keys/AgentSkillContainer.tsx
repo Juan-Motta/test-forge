@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { errorMessage } from "@/lib/api";
+import { localErrorMessage, useT } from "@/lib/i18n";
 import { useOrigin } from "@/lib/browser/use-origin";
 import { AgentSkillCard } from "./AgentSkillCard";
 import { fetchSkillZip } from "./api";
@@ -12,6 +12,7 @@ export const REVOKE_SKILL_URL_MS = 1000;
 
 /** Container for the agent skill card: downloads the zip with the session and saves it. */
 export function AgentSkillContainer() {
+  const t = useT();
   const origin = useOrigin();
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState<string | undefined>(undefined);
@@ -31,7 +32,7 @@ export function AgentSkillContainer() {
       link.remove();
       setTimeout(() => URL.revokeObjectURL(url), REVOKE_SKILL_URL_MS);
     } catch (cause) {
-      setError(errorMessage(cause));
+      setError(localErrorMessage(t, cause));
     } finally {
       setDownloading(false);
     }

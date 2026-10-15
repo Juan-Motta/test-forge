@@ -255,3 +255,23 @@ describe("Runs list", () => {
     expect(await screen.findByText("No runs yet")).toBeInTheDocument();
   });
 });
+
+describe("Runs list in Spanish", () => {
+  beforeEach(() => {
+    nav.search = "";
+  });
+
+  it("titles, filters and labels the runs in Spanish, leaving the scenario names as they are", async () => {
+    scenarios();
+    mockRunsApi([done, failed, running]);
+    renderWithClient(<RunsContainer />, { locale: "es" });
+
+    const table = await screen.findByRole("table", { name: "Corridas" });
+    expect(screen.getByRole("heading", { level: 1, name: "Corridas y reportes" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Estado" })).toBeInTheDocument();
+    expect(within(table).getByRole("columnheader", { name: "Escenario" })).toBeInTheDocument();
+    const row = within(table).getByRole("row", { name: /r-2/ });
+    expect(within(row).getByText("Fallida")).toBeInTheDocument();
+    expect(within(table).getAllByText("Booking with date change").length).toBeGreaterThan(0);
+  });
+});

@@ -1,6 +1,7 @@
 "use client";
 
 import { useFieldArray, useWatch, type Control } from "react-hook-form";
+import { useT } from "@/lib/i18n";
 import { Button, CloseIcon, Field, Input, PlusIcon, cn, focusRing } from "@/ui";
 import type { SectionProps } from "./editor-form";
 import { RowLabel } from "./FactsEditor";
@@ -10,6 +11,7 @@ type InterruptionsEditorProps = SectionProps & { control: Control<ScenarioFormVa
 
 /** Rows "interrupt agent reply #N after X s": the caller barges in mid-reply, like a person would. */
 export function InterruptionsEditor({ control, registerField, fieldError }: InterruptionsEditorProps) {
+  const t = useT();
   const { fields, append, remove } = useFieldArray({ control, name: "interruptions" });
   const rows = useWatch({ control, name: "interruptions" }) ?? [];
   const listError = fieldError("interruptions.root") ?? fieldError("interruptions");
@@ -17,14 +19,14 @@ export function InterruptionsEditor({ control, registerField, fieldError }: Inte
 
   return (
     <div className="flex flex-col gap-3">
-      {fields.length === 0 ? <p className="text-sm text-muted">The caller never interrupts the agent.</p> : null}
+      {fields.length === 0 ? <p className="text-sm text-muted">{t("scenarios.noInterruptions")}</p> : null}
       {fields.map((row, index) => {
-        const prefix = `Interruption ${index + 1}`;
+        const prefix = t("live.interruption", { n: index + 1 });
         const values = rows[index];
         return (
           <div key={row.id} className="flex flex-col gap-2 rounded-lg border border-line bg-field p-3">
             <div className="grid items-start gap-3 grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
-              <Field label={<RowLabel prefix={prefix} text="Agent reply #" />} error={fieldError(`interruptions.${index}.agentTurn`)}>
+              <Field label={<RowLabel prefix={prefix} text={t("scenarios.agentReply")} />} error={fieldError(`interruptions.${index}.agentTurn`)}>
                 {(props) => (
                   <Input
                     mono
@@ -37,7 +39,7 @@ export function InterruptionsEditor({ control, registerField, fieldError }: Inte
                   />
                 )}
               </Field>
-              <Field label={<RowLabel prefix={prefix} text="After (s)" />} error={fieldError(`interruptions.${index}.afterS`)}>
+              <Field label={<RowLabel prefix={prefix} text={t("scenarios.afterS")} />} error={fieldError(`interruptions.${index}.afterS`)}>
                 {(props) => (
                   <Input
                     mono
@@ -53,7 +55,7 @@ export function InterruptionsEditor({ control, registerField, fieldError }: Inte
               </Field>
               <button
                 type="button"
-                aria-label={`Remove interruption ${index + 1}`}
+                aria-label={t("scenarios.removeInterruption", { n: index + 1 })}
                 onClick={() => remove(index)}
                 className={cn(
                   "mt-7 grid size-9 place-items-center rounded-md text-dim hover:bg-active hover:text-fg",
@@ -65,7 +67,7 @@ export function InterruptionsEditor({ control, registerField, fieldError }: Inte
             </div>
             {values ? (
               <p className="font-mono text-xs text-evaluator-fg">
-                {`Interrupt agent reply #${values.agentTurn.trim() || "?"} after ${values.afterS.trim() || "?"} s`}
+                {t("scenarios.interruptionSummary", { turn: values.agentTurn.trim() || "?", seconds: values.afterS.trim() || "?" })}
               </p>
             ) : null}
           </div>
@@ -83,9 +85,9 @@ export function InterruptionsEditor({ control, registerField, fieldError }: Inte
           disabled={full}
           onClick={() => append(newInterruption(rows))}
         >
-          Add interruption
+          {t("scenarios.addInterruption")}
         </Button>
-        <p className="text-xs text-muted">{`Up to ${MAX_INTERRUPTIONS} interruptions.`}</p>
+        <p className="text-xs text-muted">{t("scenarios.upToInterruptions", { max: MAX_INTERRUPTIONS })}</p>
       </div>
     </div>
   );

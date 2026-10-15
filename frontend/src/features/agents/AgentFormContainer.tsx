@@ -2,6 +2,7 @@
 
 import { useConnections } from "@/features/connections/queries";
 import type { Connection } from "@/features/connections/types";
+import { useT } from "@/lib/i18n";
 import { Spinner } from "@/ui";
 import { AgentForm, type LangfuseOption } from "./AgentForm";
 import type { Agent } from "./types";
@@ -14,8 +15,6 @@ export function langfuseOptionsOf(connections: Connection[] | undefined): Langfu
     .map(({ id, name, config }) => ({ id, name, host: typeof config.host === "string" ? config.host : undefined }));
 }
 
-export const LANGFUSE_UNAVAILABLE_HINT = "Could not load connections; only None is offered.";
-
 type AgentFormContainerProps = {
   onCancel: () => void;
   onSaved: (agent: Agent, outcome: SaveOutcome) => void;
@@ -27,15 +26,16 @@ type AgentFormContainerProps = {
  * Existing agents are edited inline, in the page's detail.
  */
 export function AgentFormContainer({ onCancel, onSaved }: AgentFormContainerProps) {
+  const t = useT();
   const connections = useConnections();
   const save = useAgentSave(undefined, onSaved);
 
-  if (connections.isPending) return <Spinner label="Loading connections" />;
+  if (connections.isPending) return <Spinner label={t("connections.loading")} />;
 
   return (
     <AgentForm
       langfuseOptions={langfuseOptionsOf(connections.data)}
-      langfuseHint={connections.isError ? LANGFUSE_UNAVAILABLE_HINT : undefined}
+      langfuseHint={connections.isError ? t("agents.langfuseUnavailable") : undefined}
       onSubmit={save.onSubmit}
       onCancel={onCancel}
       pending={save.pending}

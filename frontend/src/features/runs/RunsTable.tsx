@@ -1,6 +1,7 @@
+import { useFormat, useT } from "@/lib/i18n";
 import { cn } from "@/ui";
 import { shortId } from "./format";
-import { RUN_METRICS, RunActions, RunIdentity, RunOutcome, RunStarted } from "./run-fields";
+import { RUN_METRICS, RunActions, RunIdentity, RunOutcome, RunStarted, type RunMetric } from "./run-fields";
 import type { Run } from "./types";
 
 const HEAD = "border-b border-line px-2 py-2 align-bottom font-medium";
@@ -12,11 +13,11 @@ const FIGURE = "font-mono text-xs text-muted";
  * takes whatever is left: the fixed columns add up to about 43rem, so at a 1280px screen (about
  * 59rem of table) the scenario keeps about 15rem, and nothing scrolls sideways.
  */
-const METRIC_WIDTHS: Record<string, string> = {
-  Duration: "w-[4rem]",
-  Turns: "w-[4rem]",
-  "p50 latency": "w-[5.25rem]",
-  Cost: "w-[6rem]",
+const METRIC_WIDTHS: Record<RunMetric["id"], string> = {
+  duration: "w-[4rem]",
+  turns: "w-[4rem]",
+  latency: "w-[5.25rem]",
+  cost: "w-[6rem]",
 };
 
 type RunsTableProps = {
@@ -34,29 +35,36 @@ type RunsTableProps = {
  * id, and one outcome column for the score, the result and (when it matters) the status.
  */
 export function RunsTable({ runs, onCancel, cancellingId, now, className }: RunsTableProps) {
+  const t = useT();
+  const format = useFormat();
   return (
     // Fits without scrolling from the xl breakpoint where it is shown; the floor keeps the
     // scenario column readable, and the box scrolls instead of crushing it if it ever gets narrower.
     <div className={cn("overflow-x-auto rounded-xl border border-line bg-panel px-3 py-2", className)}>
-      <table aria-label="Runs" className="w-full min-w-[56rem] table-fixed border-collapse text-left text-[13px]">
+      <table aria-label={t("runs.listLabel")} className="w-full min-w-[56rem] table-fixed border-collapse text-left text-[13px]">
         <thead className="text-dim">
           <tr>
             <th scope="col" className={HEAD}>
-              Scenario
+              {t("runs.column.scenario")}
             </th>
             {RUN_METRICS.map((metric) => (
-              <th key={metric.label} scope="col" className={cn(HEAD, METRIC_WIDTHS[metric.label])} title={metric.hint}>
-                {metric.label}
+              <th
+                key={metric.id}
+                scope="col"
+                className={cn(HEAD, METRIC_WIDTHS[metric.id])}
+                title={metric.hint ? t(metric.hint) : undefined}
+              >
+                {t(metric.label)}
               </th>
             ))}
             <th scope="col" className={cn(HEAD, "w-[8.5rem]")}>
-              Outcome
+              {t("runs.column.outcome")}
             </th>
             <th scope="col" className={cn(HEAD, "w-[7rem]")}>
-              Started
+              {t("runs.column.started")}
             </th>
             <th scope="col" className={cn(HEAD, "w-[8.5rem]")}>
-              <span className="sr-only">Actions</span>
+              <span className="sr-only">{t("common.actions")}</span>
             </th>
           </tr>
         </thead>
@@ -69,9 +77,9 @@ export function RunsTable({ runs, onCancel, cancellingId, now, className }: Runs
                   <RunIdentity run={run} />
                 </td>
                 {RUN_METRICS.map((metric) => {
-                  const value = metric.value(run, now);
+                  const value = metric.value(run, now, format);
                   return (
-                    <td key={metric.label} className={cn(CELL, FIGURE, "truncate")} title={value}>
+                    <td key={metric.id} className={cn(CELL, FIGURE, "truncate")} title={value}>
                       {value}
                     </td>
                   );

@@ -4,3 +4,4 @@ export { I18nProvider, T, useFormat, useLocale, useSetLocale, useT } from "./I18
 export type { MessageKey, Messages, PluralKey } from "./messages";
 export { localeFromAcceptLanguage, resolveLocale } from "./resolve";
 export { createTranslator, type MessageVars, type Translator } from "./translate";
+export { localErrorMessage, localizeFormError } from "./errors";

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { PageHeader } from "@/features/shell/PageHeader";
 import { errorMessage } from "@/lib/api";
+import { useT } from "@/lib/i18n";
 import { Alert, Button, Card, CardHeader, Spinner } from "@/ui";
 import { ModelPricesForm } from "./ModelPricesForm";
 import { usePricing, useSavePricing } from "./queries";
@@ -10,6 +11,7 @@ import type { ModelPrice } from "./types";
 
 /** Container for `/settings/pricing`: the price table the evaluation costs are computed with. */
 export function ModelPricesContainer() {
+  const t = useT();
   const pricing = usePricing();
   const save = useSavePricing();
   const [notice, setNotice] = useState("");
@@ -18,7 +20,7 @@ export function ModelPricesContainer() {
     setNotice("");
     try {
       await save.mutateAsync(items);
-      setNotice("Prices saved.");
+      setNotice(t("prices.saved"));
     } catch {
       // shown from the mutation's error
     }
@@ -26,13 +28,13 @@ export function ModelPricesContainer() {
 
   let body;
   if (pricing.isPending) {
-    body = <Spinner label="Loading prices" />;
+    body = <Spinner label={t("prices.loading")} />;
   } else if (pricing.isError) {
     body = (
-      <Alert title="Could not load the prices">
+      <Alert title={t("prices.loadFailed")}>
         <span className="block">{errorMessage(pricing.error)}</span>
         <Button variant="secondary" className="mt-3" onClick={() => pricing.refetch()}>
-          Try again
+          {t("common.tryAgain")}
         </Button>
       </Alert>
     );
@@ -40,15 +42,16 @@ export function ModelPricesContainer() {
     const data = pricing.data;
     body = (
       <Card aria-labelledby="model-prices">
-        <CardHeader id="model-prices" title="Model prices" />
+        <CardHeader id="model-prices" title={t("prices.title")} />
         <div className="flex flex-col gap-1 text-sm text-muted">
           <p>{data.note}</p>
           <p>
-            Seeded from{" "}
+            {`${t("prices.seededFrom")} `}
             <a href={data.source} target="_blank" rel="noopener noreferrer" className="text-fg underline">
-              OpenAI pricing<span className="sr-only"> (opens in a new tab)</span>
+              {t("prices.openaiPricing")}
+              <span className="sr-only">{` ${t("common.newTab")}`}</span>
             </a>{" "}
-            as of {data.asOf}. A run&apos;s cost counts the evaluator&apos;s models and the judge, never the agent.
+            {t("prices.asOf", { date: data.asOf })}
           </p>
         </div>
         <ModelPricesForm
@@ -65,9 +68,9 @@ export function ModelPricesContainer() {
   return (
     <>
       <PageHeader
-        eyebrow="Settings"
-        title="Model prices"
-        description="Per-model token prices used to estimate what each evaluation costs."
+        eyebrow={t("nav.settings")}
+        title={t("prices.title")}
+        description={t("prices.description")}
       />
       <p role="status" className="text-sm text-success-fg empty:hidden">
         {notice}
