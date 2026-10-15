@@ -160,43 +160,29 @@ type RunActionsProps = {
   label: string;
   onCancel: (run: Run) => void;
   cancelling: boolean;
-  /** Whether to offer "Open" (the cards link the scenario name to the report instead). */
-  open?: boolean;
 };
 
-/** Watch live and cancel while the run is active, and open its report. */
-export function RunActions({ run, label, onCancel, cancelling, open = true }: RunActionsProps) {
+/** Watch live and cancel while the run is active (the scenario name opens the report). */
+export function RunActions({ run, label, onCancel, cancelling }: RunActionsProps) {
+  if (!isActive(run.status)) return null;
   return (
     <>
-      {isActive(run.status) ? (
-        <>
-          <Link
-            href={`/runs/${encodeURIComponent(run.id)}/live`}
-            aria-label={`Watch run ${label} live`}
-            className={buttonClasses("secondary", "min-h-9 px-3")}
-          >
-            Live
-          </Link>
-          <Button
-            variant="ghost"
-            className="min-h-9 px-3"
-            loading={cancelling}
-            aria-label={`Cancel run ${label}`}
-            onClick={() => onCancel(run)}
-          >
-            Cancel
-          </Button>
-        </>
-      ) : null}
-      {open ? (
-        <Link
-          href={`/runs/${encodeURIComponent(run.id)}`}
-          aria-label={`Open run ${label}`}
-          className={buttonClasses("secondary", "min-h-9 px-3")}
-        >
-          Open
-        </Link>
-      ) : null}
+      <Link
+        href={`/runs/${encodeURIComponent(run.id)}/live`}
+        aria-label={`Watch run ${label} live`}
+        className={buttonClasses("secondary", "min-h-9 px-3")}
+      >
+        Live
+      </Link>
+      <Button
+        variant="ghost"
+        className="min-h-9 px-3"
+        loading={cancelling}
+        aria-label={`Cancel run ${label}`}
+        onClick={() => onCancel(run)}
+      >
+        Cancel
+      </Button>
     </>
   );
 }

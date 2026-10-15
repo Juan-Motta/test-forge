@@ -86,7 +86,7 @@ function RunCard({ run, now, onCancel, cancelling }: RunCardProps) {
         </span>
         {onCancel ? (
           <div className="flex gap-2">
-            <RunActions run={run} label={label} onCancel={onCancel} cancelling={cancelling} open={false} />
+            <RunActions run={run} label={label} onCancel={onCancel} cancelling={cancelling} />
           </div>
         ) : null}
       </div>

@@ -184,8 +184,9 @@ describe("Runs table actions", () => {
 
     expect(within(live).getByRole("link", { name: "Watch run r-live-001 live" })).toHaveAttribute("href", "/runs/r-live-001/live");
     expect(within(live).getByRole("button", { name: "Cancel run r-live-001" })).toBeInTheDocument();
-    expect(within(live).getByRole("link", { name: "Open run r-live-001" })).toHaveAttribute("href", "/runs/r-live-001");
+    // The scenario name opens the report: there is no separate "Open" action.
+    expect(within(live).queryByRole("link", { name: /^Open run/ })).not.toBeInTheDocument();
     expect(within(done).queryByRole("button", { name: /Cancel/ })).not.toBeInTheDocument();
-    expect(within(done).getByRole("link", { name: "Open run r-done-001" })).toHaveAttribute("href", "/runs/r-done-001");
+    expect(within(done).queryByRole("link")).not.toBeInTheDocument();
   });
 });

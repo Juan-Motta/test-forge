@@ -63,7 +63,8 @@ describe("Runs list", () => {
     expect(within(row).getByText("Speech synthesis failed")).toBeInTheDocument();
     expect(within(row).getByText("0:30")).toBeInTheDocument();
     expect(within(row).getByText("Hotel booking assistant")).toBeInTheDocument();
-    expect(within(row).getByRole("link", { name: "Open run r-2" })).toHaveAttribute("href", "/runs/r-2");
+    expect(within(row).getAllByRole("link").map((link) => link.getAttribute("href"))).toContain("/runs/r-2");
+    expect(within(row).queryByRole("link", { name: /^Open run/ })).not.toBeInTheDocument();
     expect(within(row).queryByRole("button", { name: /Cancel/ })).not.toBeInTheDocument();
     const live = within(table).getByRole("row", { name: /r-3/ });
     expect(within(live).getByText("Running")).toBeInTheDocument();
