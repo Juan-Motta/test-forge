@@ -282,7 +282,7 @@ export function LiveRunPanel({ runId, meter: sharedMeter, onStats, autoListen = 
             )}
           </div>
         </div>
-        <div className="flex min-w-0 flex-[1_1_220px] flex-col gap-4">
+        <div className="flex min-w-0 flex-[1_1_340px] min-[1700px]:flex-[1_1_480px] flex-col gap-4">
           <RailBox
             id={`${headingId}-goals`}
             title={t("live.goals")}
