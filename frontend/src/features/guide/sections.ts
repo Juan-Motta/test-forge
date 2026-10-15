@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import type { Locale } from "@/lib/i18n/config";
+import { fill, guideText } from "./text";
 
 export type GuideSlug =
   | "overview"
@@ -19,71 +21,40 @@ export type GuideSection = {
   summary: string;
 };
 
-/** The guide in reading order; every page links to its neighbours. */
-export const GUIDE_SECTIONS: readonly GuideSection[] = [
-  {
-    slug: "overview",
-    href: "/guide",
-    title: "Overview",
-    summary: "What Duet is, who it is for, and the idea behind it: a simulated user calls or chats with your agent.",
-  },
-  {
-    slug: "getting-started",
-    href: "/guide/getting-started",
-    title: "Getting started",
-    summary: "From an empty workspace to your first judged run, voice or text, step by step.",
-  },
-  {
-    slug: "how-it-works",
-    href: "/guide/how-it-works",
-    title: "How it works",
-    summary: "What happens between pressing Launch and reading the report, and the states a run goes through.",
-  },
-  {
-    slug: "modules",
-    href: "/guide/modules",
-    title: "The modules",
-    summary: "Every screen of the app: what it is for, its key fields and a few tips.",
-  },
-  {
-    slug: "scoring",
-    href: "/guide/scoring",
-    title: "Scoring",
-    summary: "How the judge turns a call or a chat into a score, a verdict and concrete suggestions.",
-  },
-  {
-    slug: "interruptions-and-evaluator",
-    href: "/guide/interruptions-and-evaluator",
-    title: "Interruptions and the evaluator",
-    summary: "Barge-ins, the two ways the evaluator can speak, its models and when it hangs up.",
-  },
-  {
-    slug: "automation",
-    href: "/guide/automation",
-    title: "Automation",
-    summary: "Drive Duet from scripts, CI or an AI agent with API keys, the Swagger reference and the agent skill.",
-  },
-  {
-    slug: "faq",
-    href: "/guide/faq",
-    title: "Troubleshooting & FAQ",
-    summary: "Common problems and their fixes, frequent questions, and a glossary of the terms used in Duet.",
-  },
+/** The guide in reading order; every page links to its neighbours. URLs carry no language. */
+const ORDER: readonly { slug: GuideSlug; href: string }[] = [
+  { slug: "overview", href: "/guide" },
+  { slug: "getting-started", href: "/guide/getting-started" },
+  { slug: "how-it-works", href: "/guide/how-it-works" },
+  { slug: "modules", href: "/guide/modules" },
+  { slug: "scoring", href: "/guide/scoring" },
+  { slug: "interruptions-and-evaluator", href: "/guide/interruptions-and-evaluator" },
+  { slug: "automation", href: "/guide/automation" },
+  { slug: "faq", href: "/guide/faq" },
 ];
 
-export function section(slug: GuideSlug): GuideSection {
-  const found = GUIDE_SECTIONS.find((item) => item.slug === slug);
+export const GUIDE_SLUGS: readonly GuideSlug[] = ORDER.map((item) => item.slug);
+
+/** Every section in reading order, titled in `locale`. */
+export function guideSections(locale: Locale): GuideSection[] {
+  const text = guideText(locale).sections;
+  return ORDER.map((item) => ({ ...item, ...text[item.slug] }));
+}
+
+export function section(slug: GuideSlug, locale: Locale): GuideSection {
+  const found = guideSections(locale).find((item) => item.slug === slug);
   if (!found) throw new Error(`Unknown guide section: ${slug}`);
   return found;
 }
 
-export function neighbours(slug: GuideSlug): { previous?: GuideSection; next?: GuideSection } {
-  const index = GUIDE_SECTIONS.findIndex((item) => item.slug === slug);
-  return { previous: GUIDE_SECTIONS[index - 1], next: GUIDE_SECTIONS[index + 1] };
+export function neighbours(slug: GuideSlug, locale: Locale): { previous?: GuideSection; next?: GuideSection } {
+  const sections = guideSections(locale);
+  const index = sections.findIndex((item) => item.slug === slug);
+  return { previous: sections[index - 1], next: sections[index + 1] };
 }
 
 /** "<Section> · Duet guide", absolute so the app's "· Duet" template does not apply. */
-export function guideMetadata(slug: GuideSlug): Metadata {
-  const { title, summary } = section(slug);
-  return { title: { absolute: `${title} · Duet guide` }, description: summary };
+export function guideMetadata(slug: GuideSlug, locale: Locale): Metadata {
+  const { title, summary } = section(slug, locale);
+  return { title: { absolute: fill(guideText(locale).meta.title, { title }) }, description: summary };
 }

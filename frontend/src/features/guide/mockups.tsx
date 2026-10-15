@@ -1,43 +1,44 @@
-import { Badge, Button, KpiTile, ScoreBar, cn } from "@/ui";
+import { Badge, Button, KpiTile, ScoreBar, cn, type BadgeTone } from "@/ui";
+import type { Locale } from "@/lib/i18n/config";
 import { Figure, Mockup } from "./prose";
+import { fill, guideText } from "./text";
 
 /* Small, static pictures of real screens, built from the app's own primitives with sample data. */
 
 const CARD = "flex flex-col gap-1.5 rounded-xl border border-line bg-panel p-4";
 
 /** The report's verdict row: overall score, goals met and the judge summary. */
-export function VerdictMockup() {
+export function VerdictMockup({ locale }: { locale: Locale }) {
+  const text = guideText(locale).verdictMockup;
   return (
-    <Figure caption="Example verdict row at the top of a report (sample data).">
-      <Mockup label="Example verdict: overall score 69 out of 100, Fair; 3 of 4 goals met; one must criterion failed.">
+    <Figure caption={text.caption}>
+      <Mockup label={text.label}>
         <div className="flex flex-wrap gap-3">
           <div className={cn(CARD, "flex-[1_1_160px]")}>
-            <span className="text-[13px] text-muted">Overall score</span>
+            <span className="text-[13px] text-muted">{text.overallScore}</span>
             <p className="flex items-baseline gap-1.5">
               <span className="text-4xl font-semibold tracking-[-0.03em] text-evaluator tabular-nums">69</span>
               <span className="text-dim">/100</span>
             </p>
-            <ScoreBar score={69} label="Overall score" className="my-1" />
-            <span className="text-xs text-muted">Fair</span>
+            <ScoreBar score={69} label={text.overallScore} className="my-1" />
+            <span className="text-xs text-muted">{text.fair}</span>
             <span>
-              <Badge tone="danger">Must criterion failed</Badge>
+              <Badge tone="danger">{text.mustFailed}</Badge>
             </span>
           </div>
           <div className={cn(CARD, "flex-[1_1_160px]")}>
-            <span className="text-[13px] text-muted">Goals met</span>
+            <span className="text-[13px] text-muted">{text.goalsMet}</span>
             <p className="flex items-baseline gap-1.5">
               <span className="text-4xl font-semibold tracking-[-0.03em] tabular-nums">3</span>
               <span className="text-dim">/ 4</span>
             </p>
-            <span className="text-xs text-muted">Missed: The agent blocks the card</span>
+            <span className="text-xs text-muted">{text.missed}</span>
           </div>
           <div className={cn(CARD, "flex-[999_1_260px] gap-2")}>
-            <span className="text-[13px] text-muted">Judge summary</span>
-            <p className="text-sm leading-6 text-body">
-              The agent verified the caller politely but never confirmed the card was blocked before the call ended.
-            </p>
+            <span className="text-[13px] text-muted">{text.judgeSummary}</span>
+            <p className="text-sm leading-6 text-body">{text.summary}</p>
             <span className="flex flex-wrap gap-1.5">
-              <Badge tone="danger">Incomplete task: 1 criterion</Badge>
+              <Badge tone="danger">{text.incomplete}</Badge>
             </span>
           </div>
         </div>
@@ -46,19 +47,29 @@ export function VerdictMockup() {
   );
 }
 
-const CRITERIA = [
-  { text: "The agent blocks the card or clearly confirms it is blocked.", score: 50, band: 2, verdict: "Fail", tone: "danger", kind: "Must", weight: 50, source: "transcript", tags: ["Incomplete task"] },
-  { text: "The agent verifies identity before acting.", score: 100, band: 5, verdict: "Pass", tone: "success", kind: "Should", weight: 30, source: "transcript", tags: [] },
-  { text: "Every agent reply starts in under 2 seconds.", score: 70, band: 3, verdict: "Partial", tone: "evaluator", kind: "Should", weight: 20, source: "timing", tags: ["Slow response"] },
-] as const;
-
 /** Three scorecard rows: verdict, band, kind, weight, evidence source and failure tags. */
-export function ScorecardMockup() {
+export function ScorecardMockup({ locale }: { locale: Locale }) {
+  const text = guideText(locale).scorecardMockup;
+  const criteria: {
+    text: string;
+    score: number;
+    band: number;
+    verdict: string;
+    tone: BadgeTone;
+    kind: string;
+    weight: number;
+    source: string;
+    tags: string[];
+  }[] = [
+    { text: text.blockCard, score: 50, band: 2, verdict: text.fail, tone: "danger", kind: text.must, weight: 50, source: text.transcript, tags: [text.incompleteTask] },
+    { text: text.verifyIdentity, score: 100, band: 5, verdict: text.pass, tone: "success", kind: text.should, weight: 30, source: text.transcript, tags: [] },
+    { text: text.fastReplies, score: 70, band: 3, verdict: text.partial, tone: "evaluator", kind: text.should, weight: 20, source: text.timing, tags: [text.slowResponse] },
+  ];
   return (
-    <Figure caption="Example scorecard: one row per criterion (sample data).">
-      <Mockup label="Example scorecard with three criteria: a must criterion that failed with 50, a should criterion that passed with 100, and a timing criterion judged partial with 70.">
+    <Figure caption={text.caption}>
+      <Mockup label={text.label}>
         <ol className="flex flex-col gap-3.5">
-          {CRITERIA.map((criterion) => (
+          {criteria.map((criterion) => (
             <li key={criterion.text} className="flex flex-col gap-2 border-b border-line-soft pb-3.5 last:border-b-0 last:pb-0">
               <div className="flex items-start justify-between gap-2.5">
                 <span className="text-[13px] leading-snug font-medium">{criterion.text}</span>
@@ -72,8 +83,8 @@ export function ScorecardMockup() {
                 <Badge tone={criterion.tone}>{criterion.verdict}</Badge>
                 <Badge tone="muted" mono>{`B${criterion.band}/5`}</Badge>
                 <span className="text-dim">{criterion.kind}</span>
-                <span className="text-dim">{`weight ${criterion.weight}`}</span>
-                <span className="text-dim">{`from ${criterion.source}`}</span>
+                <span className="text-dim">{fill(text.weight, { weight: criterion.weight })}</span>
+                <span className="text-dim">{fill(text.from, { source: criterion.source })}</span>
                 {criterion.tags.map((tag) => (
                   <Badge key={tag} tone="outline">
                     {tag}
@@ -89,30 +100,31 @@ export function ScorecardMockup() {
 }
 
 /** The launch panel: runs each, in parallel, label, the call count and the wall-time estimate. */
-export function LaunchPanelMockup() {
+export function LaunchPanelMockup({ locale }: { locale: Locale }) {
+  const text = guideText(locale).launchMockup;
   return (
-    <Figure caption="Example launch panel for one scenario: 3 runs, one at a time.">
-      <Mockup label="Example launch panel: This scenario selected, Runs each 3, In parallel 1, label after prompt fix, judge automatically checked, 3 calls, about 18 minutes, Launch 3 runs button.">
+    <Figure caption={text.caption}>
+      <Mockup label={text.label}>
         <div className="flex max-w-sm flex-col gap-3.5 rounded-xl border border-evaluator-line bg-panel p-4">
           <span className="flex min-h-10 items-center gap-2.5 rounded-lg border border-evaluator bg-selected px-3 text-[13px]">
             <span className="size-3.5 rounded-full border-4 border-evaluator" />
-            This scenario
+            {text.thisScenario}
           </span>
           <div className="grid grid-cols-2 gap-3">
-            <FakeField label="Runs each" value="3" hint="1–10 per scenario." />
-            <FakeField label="In parallel" value="1" hint="1–10 at a time." />
+            <FakeField label={text.runsEach} value="3" hint={text.runsEachHint} />
+            <FakeField label={text.inParallel} value="1" hint={text.inParallelHint} />
           </div>
-          <FakeField label="Label (optional)" value="after prompt fix" />
+          <FakeField label={text.labelField} value={text.labelValue} />
           <span className="flex items-center gap-2.5 text-[13px] text-body">
             <span className="grid size-4 place-items-center rounded-sm bg-evaluator text-[10px] text-on-evaluator">✓</span>
-            Judge automatically when each call ends
+            {text.autoJudge}
           </span>
           <span className="flex justify-between gap-3 border-t border-line pt-3 text-xs text-muted">
-            <span>3 calls</span>
-            <span>≈ 18 min wall time</span>
+            <span>{text.calls}</span>
+            <span>{text.wallTime}</span>
           </span>
           <Button tabIndex={-1} className="min-h-11">
-            Launch 3 runs
+            {text.launch}
           </Button>
         </div>
       </Mockup>
@@ -131,14 +143,15 @@ function FakeField({ label, value, hint }: { label: string; value: string; hint?
 }
 
 /** Three of the Overview's key metrics. */
-export function KpiMockup() {
+export function KpiMockup({ locale }: { locale: Locale }) {
+  const text = guideText(locale).kpiMockup;
   return (
-    <Figure caption="Example key metrics on the Overview page (sample data).">
-      <Mockup label="Example key metrics: average judge score 82, goal completion 75 percent, agent turn latency p50 1.2 seconds.">
+    <Figure caption={text.caption}>
+      <Mockup label={text.label}>
         <div className="grid gap-3 sm:grid-cols-3">
-          <KpiTile label="Average judge score" value="82" sub="Last 7 days" />
-          <KpiTile label="Goal completion" value="75" unit="%" sub="Must criteria passed" />
-          <KpiTile label="Agent turn latency · p50" value="1.2" unit="s" />
+          <KpiTile label={text.averageScore} value="82" sub={text.lastWeek} />
+          <KpiTile label={text.goalCompletion} value="75" unit="%" sub={text.mustPassed} />
+          <KpiTile label={text.latency} value="1.2" unit="s" />
         </div>
       </Mockup>
     </Figure>

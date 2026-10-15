@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { useId, type ReactNode } from "react";
+import type { Locale } from "@/lib/i18n/config";
 import { AlertIcon, CheckIcon, cn } from "@/ui";
+import { fill, guideText } from "./text";
 
 /** Building blocks for guide pages: headings, text, steps, callouts, tables and figures. */
 
@@ -74,19 +76,22 @@ export function Step({ title, children }: { title: string; children?: ReactNode 
 
 type CalloutTone = "tip" | "note" | "warning";
 
-const CALLOUT: Record<CalloutTone, { label: string; className: string; icon: ReactNode }> = {
-  tip: { label: "Tip", className: "border-success/40 bg-success/8 [&_[data-label]]:text-success-fg", icon: <CheckIcon size={16} /> },
-  note: { label: "Note", className: "border-agent/40 bg-agent/8 [&_[data-label]]:text-agent-fg", icon: <InfoIcon /> },
+const CALLOUT: Record<CalloutTone, { className: string; icon: ReactNode }> = {
+  tip: { className: "border-success/40 bg-success/8 [&_[data-label]]:text-success-fg", icon: <CheckIcon size={16} /> },
+  note: { className: "border-agent/40 bg-agent/8 [&_[data-label]]:text-agent-fg", icon: <InfoIcon /> },
   warning: {
-    label: "Warning",
     className: "border-evaluator/45 bg-evaluator/8 [&_[data-label]]:text-evaluator-fg",
     icon: <AlertIcon size={16} />,
   },
 };
 
-/** Tip, note or warning box; the visible label also names it for assistive tech. */
-export function Callout({ tone = "note", title, children }: { tone?: CalloutTone; title?: string; children: ReactNode }) {
+type CalloutProps = { locale: Locale; tone?: CalloutTone; title?: string; children: ReactNode };
+
+/** Tip, note or warning box; the visible label (in the page language) also names it for assistive tech. */
+export function Callout({ locale, tone = "note", title, children }: CalloutProps) {
   const style = CALLOUT[tone];
+  const text = guideText(locale).callout;
+  const label = text[tone];
   const labelId = useId();
   return (
     <aside aria-labelledby={labelId} className={cn("flex gap-3 rounded-lg border px-4 py-3.5", style.className)}>
@@ -95,7 +100,7 @@ export function Callout({ tone = "note", title, children }: { tone?: CalloutTone
       </span>
       <div className="flex min-w-0 flex-col gap-1 text-[14px] leading-6 text-body">
         <p id={labelId} data-label className="font-semibold">
-          {title ? `${style.label}: ${title}` : style.label}
+          {title ? fill(text.titled, { label, title }) : label}
         </p>
         <div className="flex flex-col gap-1.5">{children}</div>
       </div>

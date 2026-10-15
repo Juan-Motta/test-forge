@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { ChevronDownIcon, cn, focusRing } from "@/ui";
-import { GUIDE_SECTIONS, section, type GuideSlug } from "./sections";
+import type { Locale } from "@/lib/i18n/config";
+import { guideSections, section, type GuideSlug } from "./sections";
+import { guideText } from "./text";
 
-function SectionLinks({ current }: { current: GuideSlug }) {
+function SectionLinks({ current, locale }: { current: GuideSlug; locale: Locale }) {
   return (
     <ol className="flex flex-col gap-0.5">
-      {GUIDE_SECTIONS.map((item, index) => {
+      {guideSections(locale).map((item, index) => {
         const active = item.slug === current;
         return (
           <li key={item.slug}>
@@ -34,7 +36,8 @@ function SectionLinks({ current }: { current: GuideSlug }) {
  * The section list: a sticky column on wide screens, a collapsible menu on phones. Only one of
  * the two is displayed at a time, so assistive tech meets a single "Guide sections" landmark.
  */
-export function GuideNav({ current }: { current: GuideSlug }) {
+export function GuideNav({ current, locale }: { current: GuideSlug; locale: Locale }) {
+  const { nav } = guideText(locale);
   return (
     <>
       <details className="group rounded-xl border border-line bg-panel lg:hidden">
@@ -45,19 +48,19 @@ export function GuideNav({ current }: { current: GuideSlug }) {
           )}
         >
           <span>
-            <span className="text-dim">Section · </span>
-            <span className="font-medium text-fg">{section(current).title}</span>
+            <span className="text-dim">{nav.current}</span>
+            <span className="font-medium text-fg">{section(current, locale).title}</span>
           </span>
           <ChevronDownIcon size={16} className="text-muted transition-transform group-open:rotate-180" />
         </summary>
-        <nav aria-label="Guide sections" className="border-t border-line p-2">
-          <SectionLinks current={current} />
+        <nav aria-label={nav.label} className="border-t border-line p-2">
+          <SectionLinks current={current} locale={locale} />
         </nav>
       </details>
       <aside className="hidden w-60 shrink-0 lg:block">
-        <nav aria-label="Guide sections" className="sticky top-24 flex flex-col gap-3">
-          <span className="px-3 text-xs font-medium tracking-[0.06em] text-dim uppercase">User guide</span>
-          <SectionLinks current={current} />
+        <nav aria-label={nav.label} className="sticky top-24 flex flex-col gap-3">
+          <span className="px-3 text-xs font-medium tracking-[0.06em] text-dim uppercase">{nav.heading}</span>
+          <SectionLinks current={current} locale={locale} />
         </nav>
       </aside>
     </>

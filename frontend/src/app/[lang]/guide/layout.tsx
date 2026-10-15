@@ -1,10 +1,15 @@
 import type { Metadata } from "next";
 import { GuideHeader } from "@/features/guide/GuideHeader";
+import { fill, guideText } from "@/features/guide/text";
+import { getLocale } from "@/lib/i18n/server";
 
-export const metadata: Metadata = {
-  title: { default: "Duet guide", template: "%s · Duet guide" },
-  description: "A visual, plain-language guide to Duet, the voice and text agent evaluator.",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const { meta } = guideText(await getLocale());
+  return {
+    title: { default: meta.layoutTitle, template: fill(meta.title, { title: "%s" }) },
+    description: meta.layoutDescription,
+  };
+}
 
 /** The public user guide: no app shell and no session needed (see `features/auth/route-guard`). */
 export default function GuideLayout({ children }: LayoutProps<"/[lang]/guide">) {
