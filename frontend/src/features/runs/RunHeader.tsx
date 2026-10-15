@@ -44,43 +44,44 @@ export function RunHeader({ run, actions }: { run: RunDetail; actions?: ReactNod
   const persona = personaLine(run);
 
   return (
-    <header className="flex flex-wrap items-end justify-between gap-4">
-      <div className="flex min-w-0 flex-col gap-2">
-        <nav aria-label={t("common.breadcrumb")} data-eyebrow className="text-[13px] text-dim">
-          <Link href="/runs" className="text-dim hover:text-fg">
-            {t("runs.breadcrumb")}
-          </Link>
-          <span aria-hidden="true"> / </span>
-          <Link href={`/runs?batchId=${encodeURIComponent(run.batchId)}`} className="text-dim hover:text-fg">
-            {t("runs.batch", { id: shortRunId(run.batchId) })}
-          </Link>
-        </nav>
-        <h1 className="text-[28px] font-semibold tracking-[-0.02em] break-words">
-          <span className="font-mono font-medium text-muted" title={t("runs.runId", { id: run.id })}>
-            {shortRunId(run.id)}
-          </span>{" "}
-          {run.scenarioName}
-        </h1>
-        <ul aria-label={t("runs.details")} className="flex flex-wrap items-center gap-2">
+    <header className="flex flex-col gap-2">
+      <nav aria-label={t("common.breadcrumb")} data-eyebrow className="text-[13px] text-dim">
+        <Link href="/runs" className="text-dim hover:text-fg">
+          {t("runs.breadcrumb")}
+        </Link>
+        <span aria-hidden="true"> / </span>
+        <Link href={`/runs?batchId=${encodeURIComponent(run.batchId)}`} className="text-dim hover:text-fg">
+          {t("runs.batch", { id: shortRunId(run.batchId) })}
+        </Link>
+      </nav>
+      <h1 className="text-[28px] font-semibold tracking-[-0.02em] break-words">
+        <span className="font-mono font-medium text-muted" title={t("runs.runId", { id: run.id })}>
+          {shortRunId(run.id)}
+        </span>{" "}
+        {run.scenarioName}
+      </h1>
+      {/* Chips and actions share one row, centred on each other rather than on a baseline. */}
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+        <ul aria-label={t("runs.details")} className="flex min-w-0 flex-wrap items-center gap-2">
           <li>
-            <RunStatusChip status={run.status} />
+            <RunStatusChip status={run.status} size="md" />
           </li>
           {reason && run.endReason !== "cancelled" ? (
             <li>
-              <Badge tone="muted">{reason}</Badge>
+              <Badge tone="muted" size="md">{reason}</Badge>
             </li>
           ) : null}
           <li>
-            <Badge tone="muted">{run.agentName}</Badge>
+            <Badge tone="muted" size="md">{run.agentName}</Badge>
           </li>
           {persona ? (
             <li>
-              <Badge tone="muted">{persona}</Badge>
+              <Badge tone="muted" size="md">{persona}</Badge>
             </li>
           ) : null}
           {durationMs !== null ? (
             <li>
-              <Badge tone="muted" mono>
+              <Badge tone="muted" size="md" mono>
                 <span className="sr-only">{`${t("report.metric.duration")} `}</span>
                 {clock(durationMs)}
               </Badge>
@@ -88,7 +89,7 @@ export function RunHeader({ run, actions }: { run: RunDetail; actions?: ReactNod
           ) : null}
           <li>
             {/* The copy button fits the chip's own height, so every chip in the row lines up. */}
-            <Badge tone="muted" mono className="max-w-full pr-1">
+            <Badge tone="muted" size="md" mono className="max-w-full pr-1.5">
               <span className="min-w-0 whitespace-normal break-all">{t("runs.thread", { id: run.threadId })}</span>
               <CopyButton
                 text={run.threadId}
@@ -96,18 +97,17 @@ export function RunHeader({ run, actions }: { run: RunDetail; actions?: ReactNod
                 copiedMessage={t("runs.threadIdCopied")}
                 iconSize={12}
                 size="xs"
-                className="-my-0.5"
               />
             </Badge>
           </li>
           {evaluator ? (
             <li>
-              <Badge tone="muted">{evaluator}</Badge>
+              <Badge tone="muted" size="md">{evaluator}</Badge>
             </li>
           ) : null}
         </ul>
+        {actions ? <div className="flex flex-wrap items-center gap-2.5">{actions}</div> : null}
       </div>
-      {actions ? <div className="flex flex-wrap items-center gap-2.5">{actions}</div> : null}
     </header>
   );
 }

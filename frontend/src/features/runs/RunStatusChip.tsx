@@ -4,10 +4,10 @@ import { STATUS_TONES, isActive, statusLabel } from "./format";
 import type { RunStatus } from "./types";
 
 /** Status pill; active runs get a pulsing dot. */
-export function RunStatusChip({ status }: { status: RunStatus }) {
+export function RunStatusChip({ status, size }: { status: RunStatus; size?: "sm" | "md" }) {
   const t = useT();
   return (
-    <Badge tone={STATUS_TONES[status]}>
+    <Badge tone={STATUS_TONES[status]} size={size}>
       {isActive(status) && status !== "queued" ? (
         <span aria-hidden="true" className="size-1.5 rounded-full bg-current motion-safe:animate-pulse" />
       ) : null}

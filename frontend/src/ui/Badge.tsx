@@ -15,15 +15,23 @@ const TONES: Record<BadgeTone, string> = {
   outline: "border border-field-line text-muted",
 };
 
-type BadgeProps = { tone?: BadgeTone; mono?: boolean; className?: string; children: ReactNode };
+type BadgeProps = {
+  tone?: BadgeTone;
+  mono?: boolean;
+  /** "sm" (default) for lists and tables; "md" adds room for header rows next to buttons. */
+  size?: "sm" | "md";
+  className?: string;
+  children: ReactNode;
+};
 
 /** Small status chip (pill). */
-export function Badge({ tone = "neutral", mono = false, className, children }: BadgeProps) {
+export function Badge({ tone = "neutral", mono = false, size = "sm", className, children }: BadgeProps) {
   return (
     <span
       data-tone={tone}
       className={cn(
-        "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium",
+        "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full text-xs font-medium",
+        size === "md" ? "px-3 py-1" : "px-2.5 py-0.5",
         mono && "font-mono",
         TONES[tone],
         className,

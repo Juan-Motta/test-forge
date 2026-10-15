@@ -24,6 +24,8 @@ describe("Run detail", () => {
     expect(screen.getByRole("link", { name: "Runs" })).toHaveAttribute("href", "/runs");
     expect(screen.getByRole("link", { name: "Batch b-1" })).toHaveAttribute("href", "/runs?batchId=b-1");
     const chips = screen.getByRole("list", { name: "Run details" });
+    // The chips and the header actions share one row (centred together, not on the title's baseline).
+    expect(chips.parentElement).toContainElement(await screen.findByRole("button", { name: "Re-run" }));
     expect(within(chips).getByText("Hotel booking assistant")).toBeInTheDocument();
     expect(within(chips).getByText("Duration")).toBeInTheDocument();
     expect(chips).toHaveTextContent("Duration 4:12");
