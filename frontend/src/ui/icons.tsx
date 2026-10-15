@@ -136,6 +136,18 @@ export const CopyIcon = (p: IconProps) => (
   </Icon>
 );
 
+export const PlayIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M7 4.5v15l12-7.5z" />
+  </Icon>
+);
+
+export const TrashIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M4 7h16M9 7V4.5h6V7M6.5 7l1 13h9l1-13M10 11v5M14 11v5" />
+  </Icon>
+);
+
 export const VolumeIcon = (p: IconProps) => (
   <Icon {...p}>
     <path d="M4 9.5h3.5L12 5v14l-4.5-4.5H4z" />

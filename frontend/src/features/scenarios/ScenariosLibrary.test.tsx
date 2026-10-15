@@ -71,10 +71,17 @@ describe("Scenarios library", () => {
     const second = within(hotelGroup).getByRole("listitem", { name: "Cancel within 24h" });
     expect(within(second).getByText("Interrupts 2 replies")).toBeInTheDocument();
     expect(within(second).getByText("Realtime mini")).toBeInTheDocument();
-    expect(within(first).getByRole("link", { name: "Open Booking with date change" })).toHaveAttribute(
+    // The title opens the scenario; launch, duplicate and delete are icon buttons (named, with a tooltip).
+    expect(within(first).getByRole("link", { name: "Booking with date change" })).toHaveAttribute(
       "href",
       "/scenarios/s-booking",
     );
+    expect(within(first).queryByRole("link", { name: /^Open / })).not.toBeInTheDocument();
+    for (const name of [/^Launch /, /^Duplicate /, /^Delete /]) {
+      const action = within(first).getByRole("button", { name });
+      expect(action).toHaveAttribute("title");
+      expect(action.textContent).toBe("");
+    }
 
     const supportGroup = screen.getByRole("region", { name: "Support triage" });
     expect(within(supportGroup).getByRole("listitem", { name: "Refund dispute" })).toBeInTheDocument();

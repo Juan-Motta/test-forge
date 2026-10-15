@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { useFormat, useT } from "@/lib/i18n";
-import { Badge, Button, buttonClasses, cn } from "@/ui";
+import { Badge, CopyIcon, IconButton, PlayIcon, Spinner, TrashIcon, cn, focusRing } from "@/ui";
 import { temperamentLabel } from "./form-schema";
 import type { Scenario } from "./types";
 
@@ -87,7 +87,7 @@ function ScenarioItem({
     <li
       aria-labelledby={nameId}
       className={cn(
-        "flex flex-wrap items-start justify-between gap-4 rounded-xl border bg-panel p-4 transition-colors",
+        "flex flex-wrap items-center justify-between gap-4 rounded-xl border bg-panel p-4 transition-colors",
         selected ? "border-evaluator/60" : "border-line hover:border-line-strong",
       )}
     >
@@ -101,7 +101,13 @@ function ScenarioItem({
         />
         <div className="flex min-w-0 flex-col gap-2">
           <h3 id={nameId} className="text-[15px] font-semibold break-words">
-            {scenario.name}
+            {/* The title opens the scenario, so the card needs no separate "Open" button. */}
+            <Link
+              href={`/scenarios/${encodeURIComponent(scenario.id)}`}
+              className={cn("rounded text-fg no-underline hover:text-evaluator-fg hover:underline", focusRing)}
+            >
+              {scenario.name}
+            </Link>
           </h3>
           <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
             <Badge tone="evaluator">{temperamentLabel(t, scenario.persona.temperament)}</Badge>
@@ -130,28 +136,29 @@ function ScenarioItem({
           ) : null}
         </div>
       </div>
-      <div className="flex flex-wrap gap-2">
-        <Button variant="secondary" aria-label={t("launch.titleOne", { name: scenario.name })} onClick={() => onLaunch(scenario)}>
-          {t("scenarios.launch")}
-        </Button>
-        <Link
-          href={`/scenarios/${encodeURIComponent(scenario.id)}`}
-          aria-label={t("scenarios.openNamed", { name: scenario.name })}
-          className={buttonClasses("secondary")}
-        >
-          {t("scenarios.open")}
-        </Link>
-        <Button
-          variant="secondary"
-          loading={duplicating}
-          aria-label={t("scenarios.duplicateNamed", { name: scenario.name })}
+      <div className="flex items-center gap-1">
+        <IconButton
+          size="sm"
+          label={t("launch.titleOne", { name: scenario.name })}
+          icon={<PlayIcon size={16} />}
+          onClick={() => onLaunch(scenario)}
+          className="hover:text-evaluator-fg"
+        />
+        <IconButton
+          size="sm"
+          label={t("scenarios.duplicateNamed", { name: scenario.name })}
+          icon={duplicating ? <Spinner size={14} /> : <CopyIcon size={16} />}
+          disabled={duplicating}
+          aria-busy={duplicating || undefined}
           onClick={() => onDuplicate(scenario)}
-        >
-          {duplicating ? t("editor.duplicating") : t("editor.duplicate")}
-        </Button>
-        <Button variant="ghost" aria-label={t("scenarios.deleteNamed", { name: scenario.name })} onClick={() => onDelete(scenario)}>
-          {t("common.delete")}
-        </Button>
+        />
+        <IconButton
+          size="sm"
+          label={t("scenarios.deleteNamed", { name: scenario.name })}
+          icon={<TrashIcon size={16} />}
+          onClick={() => onDelete(scenario)}
+          className="hover:text-danger-fg"
+        />
       </div>
     </li>
   );
