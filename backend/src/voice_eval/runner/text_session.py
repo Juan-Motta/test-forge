@@ -42,6 +42,7 @@ from voice_eval.ports.text_target import (
     ToolEnded,
     ToolStarted,
 )
+from voice_eval.ports.usage import collect_usage
 from voice_eval.runner.artifacts import write_json
 from voice_eval.runner.common import rounded
 from voice_eval.runner.events import EventSink, RunEvent
@@ -378,6 +379,7 @@ class TextSessionRunner:
             "latencies_ms": [turn["latency_ms"] for turn in self.turns],
             "interruptions": [],
             "evaluator_mode": "pipeline",
+            "usage": collect_usage(self.policy),  # the evaluator's chat usage, for its cost
             "warnings": self.warnings,
             "event_counts": dict(Counter(e["type"] for e in self.events)),
         }

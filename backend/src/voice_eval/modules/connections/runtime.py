@@ -11,6 +11,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from voice_eval.modules.connections.domain import (
+    AZURE_TTS_MODEL,
+    CHAT_MODEL,
     DEFAULT_REALTIME_MODEL,
     ConnectionKind,
     ConnectionNotFound,
@@ -114,6 +116,7 @@ async def build_synthesizer(
         api_version=config.api_version,
         deployment=config.tts_deployment,
         voice=voice or config.tts_voice,
+        usage_model=AZURE_TTS_MODEL,
     )
 
 
@@ -166,6 +169,7 @@ async def build_realtime_caller(
         endpoint=config.endpoint,
         deployment=deployment,
         voice=chosen,
+        usage_model=str(model),
     )
 
 
@@ -220,6 +224,7 @@ async def build_caller_policy(
         endpoint=config.endpoint,
         api_version=config.api_version,
         deployment=config.chat_deployment,
+        usage_model=CHAT_MODEL,
     )
 
 
@@ -247,6 +252,7 @@ async def build_judge(
         endpoint=config.endpoint,
         api_version=config.api_version,
         deployment=config.chat_deployment,
+        usage_model=CHAT_MODEL,
     )
 
 

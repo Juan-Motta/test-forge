@@ -44,6 +44,7 @@ class JudgementOut(CamelModel):
     created_at: datetime
     updated_at: datetime
     completed_at: datetime | None
+    usage: dict[str, Any] | None  # the judge's token usage summed over every attempt
 
     @classmethod
     def of(cls, judgement: Judgement) -> "JudgementOut":
@@ -58,6 +59,7 @@ class JudgementOut(CamelModel):
             created_at=judgement.created_at,
             updated_at=judgement.updated_at,
             completed_at=judgement.completed_at,
+            usage=judgement.usage,
         )
 
 

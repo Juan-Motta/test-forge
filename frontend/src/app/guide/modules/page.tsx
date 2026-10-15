@@ -14,6 +14,7 @@ const MODULES = [
   ["agents", "Agents"],
   ["connections", "Connections"],
   ["api-keys", "API keys"],
+  ["model-prices", "Model prices"],
   ["api-docs-and-skill", "API docs and agent skill"],
 ] as const;
 
@@ -264,6 +265,26 @@ export default function ModulesPage() {
           <li>
             <Ui>Revoke</Ui> stops a key immediately. This cannot be undone.
           </li>
+        </Bullets>
+      </Region>
+
+      <Region id="model-prices" title="Model prices">
+        <P>
+          Under <Ui>Settings → Model prices</Ui>: the token prices Duet uses to estimate what each evaluation costs. Each run
+          report shows the <Ui>Evaluation cost</Ui> (the evaluator plus the judge, never your agent) and the runs list a
+          compact <Ui>Cost</Ui> column.
+        </P>
+        <Bullets>
+          <li>
+            Prices are USD per 1M tokens, per model and kind of token (text or audio, input, cached input or output). They
+            start as OpenAI&apos;s published list prices; edit them to match your contract. Azure OpenAI may differ, so costs
+            are approximate.
+          </li>
+          <li>
+            The judge counts every sample of every judgement, re-judges included. Pipeline calls do not price the TTS audio
+            (the speech endpoint reports no usage), so their cost ends with a <Code>+</Code>.
+          </li>
+          <li>Runs from before costs were recorded show a dash.</li>
         </Bullets>
       </Region>
 

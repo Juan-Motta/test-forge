@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { JudgementController } from "@/features/judgements/use-judgement-controller";
+import { RunCostCard } from "@/features/pricing/RunCostCard";
 import { ApiError, errorMessage } from "@/lib/api";
 import { Alert, Tabs, type TabItem } from "@/ui";
 import { audioUrl, conversationUrl } from "../api";
@@ -151,6 +152,7 @@ export function FinishedReport({ run, controller }: { run: RunDetail; controller
       ) : (
         <JudgementStatusCard controller={controller} />
       )}
+      <RunCostCard cost={run.cost} />
       <Warnings warnings={run.summary?.warnings ?? []} />
       {text ? (
         <ConversationCard run={run} />

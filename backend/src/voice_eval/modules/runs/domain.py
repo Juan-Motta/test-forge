@@ -66,6 +66,13 @@ class Run:
     judgement_status: str | None = None  # from the run's judgement, when it has one
     score: int | None = None  # the judgement's overall score, once completed
     must_failed: bool | None = None  # whether a must criterion failed, once completed
+    judge_usage: dict[str, Any] | None = None  # the judge's usage over every judgement attempt
+
+    @property
+    def caller_usage(self) -> dict[str, Any] | None:
+        """The evaluator's caller usage of the summary (None for runs before usage capture)."""
+        usage = self.summary.get("usage") if isinstance(self.summary, dict) else None
+        return usage if isinstance(usage, dict) else None
 
     @property
     def scenario_name(self) -> str:

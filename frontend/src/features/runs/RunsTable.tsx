@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { absoluteTime, relativeTime } from "@/features/connections/format";
 import { isJudging } from "@/features/judgements/format";
+import { runCostLabel } from "@/features/pricing/format";
 import { runResult } from "@/features/overview/run-result";
 import { Badge, Button, ScoreBar, buttonClasses, cn } from "@/ui";
 import { STATUS_LABELS, clock, endReasonLabel, isActive, latency, runDurationMs, shortId } from "./format";
@@ -25,7 +26,7 @@ type RunsTableProps = {
 export function RunsTable({ runs, onCancel, cancellingId, now }: RunsTableProps) {
   return (
     <div className="overflow-x-auto rounded-xl border border-line bg-panel px-3 py-2">
-      <table aria-label="Runs" className="w-full min-w-[76rem] border-collapse text-left text-[13px]">
+      <table aria-label="Runs" className="w-full min-w-[80rem] border-collapse text-left text-[13px]">
         <thead className="text-dim">
           <tr>
             <th scope="col" className={HEAD}>Run</th>
@@ -38,6 +39,9 @@ export function RunsTable({ runs, onCancel, cancellingId, now }: RunsTableProps)
             </th>
             <th scope="col" className={HEAD} title="Median agent response latency">
               p50 latency
+            </th>
+            <th scope="col" className={HEAD} title="The evaluator's approximate cost: its caller and its judge (OpenAI list prices)">
+              Cost
             </th>
             <th scope="col" className={HEAD}>Status</th>
             <th scope="col" className={HEAD}>Score</th>
@@ -74,6 +78,7 @@ export function RunsTable({ runs, onCancel, cancellingId, now }: RunsTableProps)
                 <td className={cn(CELL, "font-mono text-xs text-muted")}>{duration === null ? "—" : clock(duration)}</td>
                 <td className={cn(CELL, "font-mono text-xs text-muted")}>{turnsLabel(run)}</td>
                 <td className={cn(CELL, "font-mono text-xs text-muted")}>{latency(run.latencyP50Ms)}</td>
+                <td className={cn(CELL, "whitespace-nowrap font-mono text-xs text-muted")}>{runCostLabel(run.cost)}</td>
                 <td className={CELL}>
                   <div className="flex flex-col items-start gap-1">
                     <RunStatusChip status={run.status} />

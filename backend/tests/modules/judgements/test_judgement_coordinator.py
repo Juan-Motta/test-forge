@@ -15,6 +15,7 @@ from judgements_support import (
     LANGFUSE_ID,
     MALFORMED,
     STARTED,
+    FakeJudgeModel,
     ScriptedReader,
     insert_run,
     judgement_row,
@@ -30,6 +31,7 @@ from voice_eval.modules.judgements import service
 from voice_eval.modules.judgements.coordinator import POLL_INTERVAL_S, RECONCILE_WINDOW
 from voice_eval.modules.judgements.models import RunJudgementRecord
 from voice_eval.modules.runs.models import RunRecord
+from voice_eval.ports.usage import UsageMeter
 from voice_eval.providers.langfuse_traces import TraceFetchError
 
 
@@ -402,3 +404,41 @@ async def test_a_text_run_is_judged_as_a_chat_correlated_by_its_thread(app, harn
     assert "USER: My balance, please." in user["content"]
     assert "(tools used: get_balance)" in user["content"]
     assert row.result["brief"].startswith("# Text agent review: Vivi / Balance\n")
+
+
+class MeteredJudgeModel(FakeJudgeModel):
+    """Each call (failed ones too) uses 100 input and 10 output tokens of gpt-6-luna."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.usage = UsageMeter()
+
+    async def judge(self, messages):
+        self.usage.add("gpt-6-luna", text_in=100, text_out=10)
+        return await super().judge(messages)
+
+
+async def test_judge_usage_is_kept_per_result_and_summed_over_every_attempt(app, harness):
+    coordinator = app.state.judgements
+    run_id = await insert_run(app.state.sessionmaker, data=snapshot(langfuse=None))
+    harness.model = MeteredJudgeModel()
+    harness.model.error = MALFORMED
+    row = await judge(app, run_id)
+    assert row.status == "failed"
+    # every sample was asked (and billed) before the judgement failed
+    assert row.usage == {"by_model": {"gpt-6-luna": {"text_in": 300, "text_out": 30}}}
+
+    harness.model = MeteredJudgeModel()  # a new judge model per judgement, as built for real
+    await coordinator.rejudge(run_id)
+    await settled(coordinator, run_id)
+    row = await judgement_row(app.state.sessionmaker, run_id)
+    assert row.status == "completed"
+    assert row.result["usage"] == {"by_model": {"gpt-6-luna": {"text_in": 300, "text_out": 30}}}
+    assert row.usage == {"by_model": {"gpt-6-luna": {"text_in": 600, "text_out": 60}}}
+
+
+async def test_a_judge_model_without_a_meter_records_no_usage(app, harness):
+    row = await judge(app, await insert_run(app.state.sessionmaker, data=snapshot(langfuse=None)))
+    assert row.status == "completed"
+    assert row.usage is None
+    assert row.result["usage"] is None

@@ -32,6 +32,8 @@ HINT_MASK = "••••"
 HINT_MIN_SECRET_LENGTH = 12
 LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1"})
 CHAT_MODEL = "gpt-6-luna"  # the evaluator's only model (Azure: a deployment of it)
+# The model an Azure TTS deployment is priced as (its config does not say which model it serves).
+AZURE_TTS_MODEL = "gpt-4o-mini-tts"
 LEGACY_CONFIG_KEYS = frozenset({"chat_model", "chatModel"})  # once configurable, now ignored
 
 

@@ -155,3 +155,9 @@ export const ExternalLinkIcon = (p: IconProps) => (
     <path d="M7 17 17 7M8 7h9v9" />
   </Icon>
 );
+
+export const PriceIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M12 3v18M16.5 7.5c-.8-1.2-2.4-2-4.5-2-2.5 0-4 1.3-4 3s1.6 2.6 4 3.2c2.6.6 4.5 1.5 4.5 3.4s-1.9 3.4-4.5 3.4c-2.2 0-3.9-.9-4.7-2.3" />
+  </Icon>
+);

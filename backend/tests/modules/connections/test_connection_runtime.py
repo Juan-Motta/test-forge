@@ -66,6 +66,7 @@ async def test_azure_openai_connection_uses_the_deployment(app, user_client):
     assert isinstance(synth.client, AsyncAzureOpenAI)
     assert (synth.model, synth.voice) == ("my-tts", "verse")
     assert synth.client.api_key == KEY
+    assert synth.usage_model == "gpt-4o-mini-tts"  # priced as the model it deploys
 
 
 @pytest.mark.parametrize(
@@ -145,6 +146,7 @@ async def test_caller_policy_uses_the_azure_chat_deployment(app, user_client):
     policy = await build_policy(app, connection_id)
     assert isinstance(policy.client, AsyncAzureOpenAI)
     assert policy.model == "chat"
+    assert policy.usage_model == "gpt-6-luna"
 
 
 async def test_caller_policy_rejects_kinds_without_chat(app, user_client):
@@ -227,6 +229,7 @@ async def test_realtime_caller_uses_the_azure_realtime_deployment(app, user_clie
     assert caller.url == "wss://res.openai.azure.com/openai/v1/realtime?model=rt-mini"
     assert caller.headers == {"api-key": KEY}
     assert caller.voice == "verse"
+    assert caller.usage_model == "gpt-realtime-2.1-mini"
 
 
 async def test_realtime_caller_needs_an_openai_kind(app, user_client):

@@ -20,6 +20,8 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 from pydantic.alias_generators import to_camel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from voice_eval.modules.pricing import service as pricing
+from voice_eval.modules.pricing.domain import ModelPrice, run_cost
 from voice_eval.modules.runs import service
 from voice_eval.modules.runs.conversation import conversation_file
 from voice_eval.modules.runs.domain import (
@@ -85,6 +87,42 @@ class LaunchIn(CamelModel):
     label: Label | None = None
 
 
+class CostLineOut(CamelModel):
+    part: Literal["caller", "judge"]
+    model: str
+    usd: float | None  # None: some of its tokens have no price
+
+
+class RunCostOut(CamelModel):
+    """The evaluator's approximate cost of a run, in USD, from the price table (`/api/pricing`):
+    its caller (realtime evaluator, or chat + TTS, or chat for text runs) and its judge (every
+    sample of every judgement attempt). `complete` is false when some usage has no price or
+    could not be metered (TTS audio); `notes` say which."""
+
+    caller_usd: float | None  # None: no caller usage recorded
+    judge_usd: float | None  # None: no judge usage recorded (yet)
+    total_usd: float
+    complete: bool
+    notes: list[str]
+    breakdown: list[CostLineOut]
+
+
+def _cost(run: Run, prices: list[ModelPrice] | None) -> RunCostOut | None:
+    if prices is None:
+        return None
+    cost = run_cost(run.caller_usage, run.judge_usage, prices)
+    if cost is None:
+        return None
+    return RunCostOut(
+        caller_usd=cost.caller_usd,
+        judge_usd=cost.judge_usd,
+        total_usd=cost.total_usd,
+        complete=cost.complete,
+        notes=cost.notes,
+        breakdown=[CostLineOut(part=c.part, model=c.model, usd=c.usd) for c in cost.breakdown],
+    )
+
+
 def _snapshot_agent_kind(snapshot: Any) -> Any:
     agent = snapshot.get("agent") if isinstance(snapshot, dict) else None
     return agent.get("kind") if isinstance(agent, dict) else None
@@ -113,9 +151,10 @@ class RunOut(CamelModel):
     agent_turns: int | None
     latency_p50_ms: int | None  # median response latency of the summary
     agent_kind: Literal["voice", "text"]  # from the snapshot; runs of older snapshots are voice
+    cost: RunCostOut | None = None  # None: no usage recorded (runs before usage capture)
 
     @classmethod
-    def fields_of(cls, run: Run) -> dict[str, Any]:
+    def fields_of(cls, run: Run, prices: list[ModelPrice] | None = None) -> dict[str, Any]:
         return {
             "id": run.id,
             "batch_id": run.batch_id,
@@ -139,11 +178,12 @@ class RunOut(CamelModel):
             "agent_turns": run.agent_turns,
             "latency_p50_ms": run.latency_p50_ms,
             "agent_kind": "text" if _snapshot_agent_kind(run.snapshot) == "text" else "voice",
+            "cost": _cost(run, prices),
         }
 
     @classmethod
-    def of(cls, run: Run) -> "RunOut":
-        return cls(**cls.fields_of(run))
+    def of(cls, run: Run, prices: list[ModelPrice] | None = None) -> "RunOut":
+        return cls(**cls.fields_of(run, prices))
 
 
 class RunDetailOut(RunOut):
@@ -187,8 +227,9 @@ class BatchDetailOut(BatchOut):
     runs: list[RunOut]
 
     @classmethod
-    def of(cls, batch: Batch) -> "BatchDetailOut":
-        return cls(**cls.fields_of(batch), runs=[RunOut.of(run) for run in batch.runs or []])
+    def of(cls, batch: Batch, prices: list[ModelPrice] | None = None) -> "BatchDetailOut":
+        runs = [RunOut.of(run, prices) for run in batch.runs or []]
+        return cls(**cls.fields_of(batch), runs=runs)
 
 
 class BatchPage(CamelModel):
@@ -298,7 +339,8 @@ async def list_runs(
         limit=limit,
         offset=offset,
     )
-    return RunPage(items=[RunOut.of(run) for run in items], total=total)
+    prices = await pricing.list_prices(db)
+    return RunPage(items=[RunOut.of(run, prices) for run in items], total=total)
 
 
 @router.get("/batches", response_model=BatchPage)
@@ -310,9 +352,10 @@ async def list_batches(db: Db, limit: Limit = 50, offset: Offset = 0) -> BatchPa
 @router.get("/batches/{batch_id}", response_model=BatchDetailOut)
 async def get_batch(batch_id: uuid.UUID, db: Db) -> BatchDetailOut:
     try:
-        return BatchDetailOut.of(await service.get_batch(db, batch_id, with_runs=True))
+        batch = await service.get_batch(db, batch_id, with_runs=True)
     except BatchNotFound:
         raise _not_found("Batch") from None
+    return BatchDetailOut.of(batch, await pricing.list_prices(db))
 
 
 @router.post(
@@ -330,7 +373,8 @@ async def cancel_batch(batch_id: uuid.UUID, db: Db, runs: Manager) -> BatchDetai
         raise HTTPException(status.HTTP_409_CONFLICT, "Batch already finished")
     for run_id in await service.active_run_ids(db, batch_id):
         await runs.cancel_run(run_id)
-    return BatchDetailOut.of(await service.get_batch(db, batch_id, with_runs=True))
+    batch = await service.get_batch(db, batch_id, with_runs=True)
+    return BatchDetailOut.of(batch, await pricing.list_prices(db))
 
 
 @router.get("/{run_id}", response_model=RunDetailOut)
@@ -343,7 +387,7 @@ async def get_run(run_id: uuid.UUID, db: Db, runs: Manager) -> RunDetailOut:
     if run.finished:
         transcript = read_json(runs.artifacts_dir(run.id) / "transcript.json")
     return RunDetailOut(
-        **RunOut.fields_of(run),
+        **RunOut.fields_of(run, await pricing.list_prices(db)),
         summary=camelize(run.summary),
         transcript=camelize(transcript) if isinstance(transcript, list) else None,
         snapshot=camelize(run.snapshot),
@@ -362,7 +406,7 @@ async def cancel_run(run_id: uuid.UUID, db: Db, runs: Manager) -> RunOut:
     after = await service.get_run(db, run_id)
     if after.finished and after.status not in CANCEL_STATUSES:  # it ended on its own meanwhile
         raise HTTPException(status.HTTP_409_CONFLICT, "Run already finished")
-    return RunOut.of(after)
+    return RunOut.of(after, await pricing.list_prices(db))
 
 
 # Declared before `/{run_id}/audio/{channel}`, which would answer 422 for this channel.

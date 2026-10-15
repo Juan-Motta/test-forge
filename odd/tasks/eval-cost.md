@@ -20,9 +20,9 @@ Three live/report improvements asked by the user (2026-10-15):
 ## Tasks
 - [x] T1 Live header: full thread id + copy button — delegated (with T2)
 - [x] T2 Live evaluator transcript for the realtime evaluator (and pipeline/text if missing) — delegated
-- [ ] T3 Usage capture: realtime `response.done` usage, chat completions usage (caller + judge),
+- [x] T3 Usage capture: realtime `response.done` usage, chat completions usage (caller + judge),
       TTS usage; stored in summary/judgement — delegated
-- [ ] T4 Price table (Settings, editable, seeded) + cost in run report, runs list and live view — delegated
+- [x] T4 Price table (Settings, editable, seeded) + cost in run report, runs list and live view — delegated
 - [ ] T5 Real check on a finished run — inline
 
 ## Progress
@@ -41,3 +41,27 @@ Three live/report improvements asked by the user (2026-10-15):
 - Checks (T1+T2): backend `uv run pytest -q` 1091 passed; ruff check + format clean; frontend
   `npx vitest run` 651 passed (+1 new transcript test), lint, typecheck and build clean.
 
+- T3+T4 (delegated writer, uncommitted). Usage: `ports/usage.py` `UsageMeter` (disjoint buckets
+  `text_in`, `cached_text_in`, `audio_in`, `cached_audio_in`, `text_out`, `audio_out` per model,
+  plus `notes` codes); each adapter keeps one as `usage` under the model it is billed as (Azure
+  deployments map to gpt-6-luna / the scenario's realtime model / gpt-4o-mini-tts in
+  `connections/runtime.py`). Chat Completions (policy + judge): every answered attempt, malformed
+  ones too (`prompt_tokens` minus `cached_tokens`, `completion_tokens` incl. reasoning). Realtime:
+  every `response.done` incl. cancelled responses (details split cached out; missing details fall
+  back to totals as text). TTS: the speech endpoint streams raw PCM with no usage, so input is
+  estimated at 4 chars/token and audio output is flagged `tts_audio_not_metered` (cost incomplete,
+  "TTS audio not priced"). Run usage goes to `summary.json` / `runs.summary.usage`; judge usage per
+  result (`JudgeResult.usage`) and summed over every attempt in `run_judgements.usage` (migration
+  0014, which also creates and seeds `model_prices`).
+- Prices: `modules/pricing` (domain `run_cost`, `GET/PUT /api/pricing`); `RunOut.cost`
+  `{callerUsd, judgeUsd, totalUsd, complete, notes, breakdown}` on list/detail/batch/cancel
+  (null for old runs). Frontend: Settings → Model prices page (editable table, source, as-of,
+  approximate note), `RunCostCard` in the report under the verdict, a `Cost` column in the runs
+  table, guide sections. Live running cost not done (optional).
+- Review fixes from ff9c43b: live reducer updates `turnState` on the realtime decision's spoken
+  path (hang-up); `_caller_text` never breaks the audio turn (warns once per line).
+- Checks (T3+T4): backend `uv run pytest -q` 1127 passed; ruff check + format clean; frontend
+  `npx vitest run` 667 passed with `--maxWorkers=4` (default workers: 1-2 unrelated timeouts that
+  pass alone), lint, typecheck, build clean.
+- Follow-up: `backend/migrations/env.py` does not import `modules.pricing.models` (outside the
+  writer's surface), so alembic autogenerate would not see `model_prices`.

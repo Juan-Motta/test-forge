@@ -54,6 +54,7 @@ async def test_azure_connection_judges_with_its_chat_deployment(app, user_client
     judge = await build(app, connection_id)
     assert isinstance(judge.client, AsyncAzureOpenAI)
     assert judge.model == "chat"
+    assert judge.usage_model == "gpt-6-luna"
 
 
 async def test_kinds_without_chat_cannot_judge(app, user_client):

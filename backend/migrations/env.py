@@ -11,6 +11,7 @@ import voice_eval.modules.agents.models  # noqa: F401 - registers tables on Base
 import voice_eval.modules.api_keys.models  # noqa: F401 - registers tables on Base.metadata
 import voice_eval.modules.connections.models  # noqa: F401 - registers tables on Base.metadata
 import voice_eval.modules.judgements.models  # noqa: F401 - registers tables on Base.metadata
+import voice_eval.modules.pricing.models  # noqa: F401 - registers tables on Base.metadata
 import voice_eval.modules.runs.models  # noqa: F401 - registers tables on Base.metadata
 import voice_eval.modules.scenarios.models  # noqa: F401 - registers tables on Base.metadata
 import voice_eval.modules.users.models  # noqa: F401 - registers tables on Base.metadata

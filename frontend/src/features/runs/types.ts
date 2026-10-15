@@ -6,6 +6,8 @@ export const ACTIVE_RUN_STATUSES: readonly RunStatus[] = ["queued", "connecting"
 export type BatchStatus = "queued" | "running" | "completed" | "cancelled";
 export type AudioChannel = "agent" | "caller";
 
+import type { RunCost } from "@/features/pricing/types";
+
 /** A run as `GET /api/runs` returns it. */
 export type Run = {
   id: string;
@@ -37,6 +39,8 @@ export type Run = {
   latencyP50Ms: number | null;
   /** The agent's kind from the launch snapshot; absent (voice) on older API responses. */
   agentKind?: AgentKind;
+  /** The evaluator's approximate cost (caller + judge); null or absent before usage was recorded. */
+  cost?: RunCost | null;
 };
 
 export type AgentKind = "voice" | "text";

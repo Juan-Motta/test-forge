@@ -132,6 +132,7 @@ describe("Guide content", () => {
     const modules = render(<ModulesPage />);
     expect(screen.getAllByText(/text agent/i).length).toBeGreaterThan(0);
     expect(screen.getByText("Follow and listen automatically")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: "Model prices" })).toBeInTheDocument();
     modules.unmount();
 
     const scoring = render(<ScoringPage />);

@@ -21,6 +21,7 @@ from voice_eval.modules.judgements.domain import (
 from voice_eval.modules.judgements.models import RunJudgementRecord
 from voice_eval.modules.runs.domain import RunStatus, sanitize_error
 from voice_eval.modules.runs.models import RunRecord
+from voice_eval.ports.usage import merge_usage
 
 ACTIVE = [status.value for status in ACTIVE_JUDGEMENT_STATUSES]
 TERMINAL = [status.value for status in TERMINAL_JUDGEMENT_STATUSES]
@@ -174,3 +175,19 @@ async def mark_failed(db: AsyncSession, run_id: uuid.UUID, attempt: int, error: 
         error=sanitize_error(error),
         completed_at=_now(),
     )
+
+
+async def add_usage(db: AsyncSession, run_id: uuid.UUID, usage: dict[str, Any] | None) -> None:
+    """Add one judging attempt's model usage to the run's judge usage (every attempt, re-judges
+    and failed ones included: they were billed). The row lock serializes concurrent writers."""
+    if usage is None:
+        return
+    record = await db.scalar(
+        select(RunJudgementRecord)
+        .where(RunJudgementRecord.run_id == run_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if record is not None:
+        record.usage = merge_usage(record.usage, usage)
+    await db.commit()

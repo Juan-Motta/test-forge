@@ -44,6 +44,7 @@ from voice_eval.modules.runs.domain import Run, RunNotFound
 from voice_eval.modules.runs.manager import is_judgeable, read_json
 from voice_eval.platform.secrets import SecretBox
 from voice_eval.ports.judge import RunJudgeModel
+from voice_eval.ports.usage import collect_usage
 from voice_eval.providers.langfuse_traces import (
     TraceDigest,
     TraceFetchError,
@@ -326,7 +327,10 @@ class JudgementCoordinator:
             async with self._slots:
                 result = await judge_inputs(model, inputs)
         except JudgeError as exc:
+            await self._record_usage(run_id, model)
             raise JudgementFailed(str(exc)) from None
+        usage = await self._record_usage(run_id, model)
+        result = result.model_copy(update={"usage": usage})
         async with self.sessionmaker() as db:
             await service.mark_completed(
                 db,
@@ -335,6 +339,21 @@ class JudgementCoordinator:
                 result=result.model_dump(mode="json", by_alias=True),
                 model=inputs.model_name,
             )
+
+    async def _record_usage(self, run_id: uuid.UUID, model: RunJudgeModel) -> dict | None:
+        """This attempt's judge usage (its model's meter, if it has one), added to the run's.
+
+        A cancelled attempt (shutdown, superseded) records nothing: its usage is lost.
+        """
+        usage = collect_usage(model)
+        try:
+            async with self.sessionmaker() as db:
+                await service.add_usage(db, run_id, usage)
+        except Exception as exc:  # the judgement stands without its usage
+            log.warning(
+                "could not record the judge usage of run %s (%s)", run_id, type(exc).__name__
+            )
+        return usage
 
     # --- judging without storing (voice-eval judge-stability) -----------------------------
 

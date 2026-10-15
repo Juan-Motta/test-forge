@@ -139,7 +139,8 @@ export default function FaqPage() {
           <P>
             Each run uses your agent (a real session), the evaluator&apos;s chat model (and, for calls, its voice or realtime model), and the judge
             (3 model calls per judgement). The cost depends on your providers and the call length; the launch panel shows how
-            many calls you are about to make.
+            many calls you are about to make. Each run report shows the evaluation&apos;s approximate cost (evaluator and judge)
+            from the prices under <Ui>Settings → Model prices</Ui>.
           </P>
         </Item>
         <Item question="Can I stop a call?">

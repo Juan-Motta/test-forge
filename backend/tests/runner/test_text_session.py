@@ -346,3 +346,16 @@ async def test_cancelling_still_writes_the_artifacts(tmp_path):
 
     summary = json.loads((tmp_path / "summary.json").read_text())
     assert (summary["status"], summary["reason"]) == ("cancelled", "cancelled")
+
+
+async def test_the_summary_records_the_evaluator_usage(tmp_path):
+    from voice_eval.ports.usage import UsageMeter
+
+    policy = ScriptedPolicy(by_turn(say("Hi"), HANG_UP))
+    policy.usage = UsageMeter()
+    policy.usage.add("gpt-6-luna", text_in=10, cached_text_in=5, text_out=3)
+    run, _ = runner(tmp_path, policy, FakeTarget())
+    summary = await run.run()
+    assert summary["usage"] == {
+        "by_model": {"gpt-6-luna": {"text_in": 10, "cached_text_in": 5, "text_out": 3}}
+    }

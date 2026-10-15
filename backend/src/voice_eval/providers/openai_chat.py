@@ -6,6 +6,11 @@ room for its reasoning plus the answer; an empty or cut-off answer counts as mal
 answer or a provider error. The caller policy retries once and then hangs up safely with the
 reason, so a run always ends cleanly; the judge retries once and then raises `JudgeError`.
 Logs carry error types only, never the request, the answer or a secret.
+
+Every attempt that got an answer back (a malformed one too: it was billed) adds its Chat
+Completions `usage` to the adapter's `usage` meter, under `usage_model` (the model the call is
+billed as: an Azure deployment of gpt-6-luna counts as gpt-6-luna). Reasoning tokens are part
+of `completion_tokens`, billed as output.
 """
 
 import asyncio
@@ -21,6 +26,7 @@ from voice_eval.evaluator.prompt import DECISION_SCHEMA, build_messages, parse_d
 from voice_eval.judge.domain import JudgeError
 from voice_eval.judge.prompt import JUDGE_SCHEMA
 from voice_eval.ports.policy import CallerDecision, PolicyState
+from voice_eval.ports.usage import UsageMeter
 
 log = logging.getLogger(__name__)
 
@@ -61,6 +67,27 @@ def parse_json_object(text: str) -> dict[str, Any]:
     return data
 
 
+def chat_counts(usage: Any) -> dict[str, int]:
+    """The meter buckets of a Chat Completions `usage` (an SDK object or a dict; None: none)."""
+
+    def field(source: Any, name: str) -> Any:
+        return source.get(name) if isinstance(source, dict) else getattr(source, name, None)
+
+    def number(value: Any) -> int:
+        return value if isinstance(value, int) and not isinstance(value, bool) else 0
+
+    if usage is None:
+        return {}
+    prompt = number(field(usage, "prompt_tokens"))
+    cached = number(field(field(usage, "prompt_tokens_details"), "cached_tokens"))
+    cached = min(cached, prompt)
+    return {
+        "text_in": prompt - cached,
+        "cached_text_in": cached,
+        "text_out": number(field(usage, "completion_tokens")),
+    }
+
+
 async def _ask_once[T](
     client: Any,
     *,
@@ -70,6 +97,8 @@ async def _ask_once[T](
     max_completion_tokens: int,
     timeout_s: float,
     parse: Callable[[str], T],
+    meter: UsageMeter | None = None,
+    usage_model: str = "",
 ) -> T:
     try:
         async with asyncio.timeout(timeout_s):
@@ -84,6 +113,8 @@ async def _ask_once[T](
     except ValueError as exc:
         # Raised before any answer exists; its message may echo request data, so keep only the type.
         raise _ClientCallError(type(exc).__name__) from None
+    if meter is not None:
+        meter.add(usage_model or model, **chat_counts(getattr(completion, "usage", None)))
     if not completion.choices:
         raise MalformedOutput("no answer")
     choice = completion.choices[0]
@@ -108,6 +139,8 @@ async def complete_structured[T](
     attempts: int,
     parse: Callable[[str], T],
     label: str,
+    meter: UsageMeter | None = None,
+    usage_model: str = "",
 ) -> T:
     """One structured-output answer parsed by `parse` (any `ValueError` there is malformed).
 
@@ -124,6 +157,8 @@ async def complete_structured[T](
                 max_completion_tokens=max_completion_tokens,
                 timeout_s=timeout_s,
                 parse=parse,
+                meter=meter,
+                usage_model=usage_model,
             )
         except ValueError as exc:  # MalformedOutput, MalformedDecision, ...
             failure = StructuredCallError(str(exc), malformed=True)
@@ -146,6 +181,8 @@ async def complete_json(
     timeout_s: float,
     attempts: int,
     label: str = "structured call",
+    meter: UsageMeter | None = None,
+    usage_model: str = "",
 ) -> dict[str, Any]:
     """The answer as a JSON object (shape checks are the caller's)."""
     return await complete_structured(
@@ -158,6 +195,8 @@ async def complete_json(
         attempts=attempts,
         parse=parse_json_object,
         label=label,
+        meter=meter,
+        usage_model=usage_model,
     )
 
 
@@ -173,12 +212,21 @@ def azure_client(api_key: str, endpoint: str, api_version: str) -> AsyncAzureOpe
 
 
 class OpenAIChatPolicy:
-    def __init__(self, client: Any, model: str, *, timeout_s: float = TIMEOUT_S) -> None:
+    def __init__(
+        self,
+        client: Any,
+        model: str,
+        *,
+        timeout_s: float = TIMEOUT_S,
+        usage_model: str | None = None,
+    ) -> None:
         if not model.strip():
             raise ValueError("a chat model (or Azure deployment) is required")
         self.client = client
         self.model = model
         self.timeout_s = timeout_s
+        self.usage_model = usage_model or model
+        self.usage = UsageMeter()
 
     def __repr__(self) -> str:
         return f"OpenAIChatPolicy(model={self.model!r})"
@@ -191,10 +239,18 @@ class OpenAIChatPolicy:
 
     @classmethod
     def for_azure(
-        cls, api_key: str, endpoint: str, api_version: str, deployment: str
+        cls,
+        api_key: str,
+        endpoint: str,
+        api_version: str,
+        deployment: str,
+        *,
+        usage_model: str | None = None,
     ) -> "OpenAIChatPolicy":
         # Azure routes by deployment name, which goes in the `model` field.
-        return cls(azure_client(api_key, endpoint, api_version), deployment)
+        return cls(
+            azure_client(api_key, endpoint, api_version), deployment, usage_model=usage_model
+        )
 
     async def next_turn(self, state: PolicyState) -> CallerDecision:
         try:
@@ -208,6 +264,8 @@ class OpenAIChatPolicy:
                 attempts=ATTEMPTS,
                 parse=parse_decision,
                 label="caller policy",
+                meter=self.usage,
+                usage_model=self.usage_model,
             )
         except StructuredCallError as exc:
             if exc.malformed:
@@ -220,12 +278,21 @@ class OpenAIChatPolicy:
 class OpenAIJudge:
     """The run judge: one strict `JUDGE_SCHEMA` answer for the prepared messages."""
 
-    def __init__(self, client: Any, model: str, *, timeout_s: float = JUDGE_TIMEOUT_S) -> None:
+    def __init__(
+        self,
+        client: Any,
+        model: str,
+        *,
+        timeout_s: float = JUDGE_TIMEOUT_S,
+        usage_model: str | None = None,
+    ) -> None:
         if not model.strip():
             raise ValueError("a chat model (or Azure deployment) is required")
         self.client = client
         self.model = model
         self.timeout_s = timeout_s
+        self.usage_model = usage_model or model
+        self.usage = UsageMeter()
 
     def __repr__(self) -> str:
         return f"OpenAIJudge(model={self.model!r})"
@@ -236,9 +303,17 @@ class OpenAIJudge:
 
     @classmethod
     def for_azure(
-        cls, api_key: str, endpoint: str, api_version: str, deployment: str
+        cls,
+        api_key: str,
+        endpoint: str,
+        api_version: str,
+        deployment: str,
+        *,
+        usage_model: str | None = None,
     ) -> "OpenAIJudge":
-        return cls(azure_client(api_key, endpoint, api_version), deployment)
+        return cls(
+            azure_client(api_key, endpoint, api_version), deployment, usage_model=usage_model
+        )
 
     async def judge(self, messages: list[dict[str, Any]]) -> dict[str, Any]:
         try:
@@ -251,6 +326,8 @@ class OpenAIJudge:
                 timeout_s=self.timeout_s,
                 attempts=JUDGE_ATTEMPTS,
                 label="run judge",
+                meter=self.usage,
+                usage_model=self.usage_model,
             )
         except StructuredCallError as exc:
             if exc.malformed:

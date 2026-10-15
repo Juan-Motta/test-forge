@@ -158,6 +158,9 @@ class JudgeResult(_Model):
     trace_note: str | None
     model: str
     samples: int | None = None  # successful judge samples; None before median-of-samples
+    # this judgement's model usage (`ports.usage` shape, every sample and retry); None before
+    # usage capture or when the model reports none
+    usage: dict[str, Any] | None = None
 
 
 class ParsedJudgement(_Model):

@@ -13,5 +13,6 @@ describe("Settings page", () => {
     expect(docs).toHaveAttribute("rel", expect.stringContaining("noopener"));
     expect(screen.getByRole("link", { name: /Connections/ })).toHaveAttribute("href", "/settings/connections");
     expect(screen.getByRole("link", { name: /API keys/ })).toHaveAttribute("href", "/settings/api-keys");
+    expect(screen.getByRole("link", { name: /Model prices/ })).toHaveAttribute("href", "/settings/pricing");
   });
 });

@@ -915,3 +915,30 @@ async def test_the_stream_is_cancelled_when_the_agent_speaks_before_its_first_ch
     assert [e.data["say"] for e in sink.of("caller_speaking")] == ["Hello there"]
     assert summary["caller_turns"] == 1
     assert caller_wav_speech(tmp_path) == SPEECH
+
+
+async def test_the_summary_records_the_evaluator_usage(fake_live_server, tmp_path):
+    from voice_eval.ports.usage import UsageMeter
+
+    policy = ScriptedPolicy(by_turn(say("I need a room"), HANG_UP))
+    policy.usage = UsageMeter()
+    policy.usage.add("gpt-6-luna", text_in=100, text_out=20)
+    tts = FakeTts()
+    tts.usage = UsageMeter()
+    tts.usage.add("gpt-4o-mini-tts", text_in=4)
+    summary, _ = await run(fake_live_server.url, tmp_path, policy, tts=tts)
+
+    assert summary["usage"] == {
+        "by_model": {
+            "gpt-6-luna": {"text_in": 100, "text_out": 20},
+            "gpt-4o-mini-tts": {"text_in": 4},
+        }
+    }
+    stored = json.loads((tmp_path / "run" / "summary.json").read_text())
+    assert stored["usage"] == summary["usage"]
+
+
+async def test_a_summary_without_metered_providers_has_no_usage(fake_live_server, tmp_path):
+    policy = ScriptedPolicy(by_turn(HANG_UP))
+    summary, _ = await run(fake_live_server.url, tmp_path, policy, tts=FakeTts())
+    assert summary["usage"] is None

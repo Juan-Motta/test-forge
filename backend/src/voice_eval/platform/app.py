@@ -17,6 +17,7 @@ from voice_eval.modules.api_keys import api as api_keys_api
 from voice_eval.modules.connections import api as connections_api
 from voice_eval.modules.judgements import api as judgements_api
 from voice_eval.modules.judgements.coordinator import JudgementCoordinator
+from voice_eval.modules.pricing import api as pricing_api
 from voice_eval.modules.runs import api as runs_api
 from voice_eval.modules.runs import live_api as runs_live_api
 from voice_eval.modules.runs.manager import RunManager
@@ -128,6 +129,7 @@ def create_app(
     protected.include_router(runs_api.router)
     protected.include_router(judgements_api.router)
     protected.include_router(stats_api.router)
+    protected.include_router(pricing_api.router)
     for router in extra_routers:
         protected.include_router(router)
 

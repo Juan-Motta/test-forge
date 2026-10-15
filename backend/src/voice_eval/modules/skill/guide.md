@@ -70,6 +70,18 @@ per run), text-to-speech, the evaluator chat model or realtime speech model, and
 (each judgement is 3 judge model calls). A batch costs roughly `scenarios x repetitions` calls.
 Re-judging costs another judgement. Testing a connection makes one request to the provider.
 
+Each run carries `cost` (null for runs recorded before usage capture): the evaluator's
+approximate cost in USD, never the agent's. `callerUsd` is the caller's model usage (realtime
+evaluator, or chat + TTS, or chat for text runs), `judgeUsd` the judge's over every judgement
+attempt (re-judges included), `totalUsd` their sum, `breakdown` one line per `part` (`caller`,
+`judge`) and `model`, and `notes` what is missing. `complete` is false when some tokens have no
+price or could not be metered: the TTS speech endpoint reports no usage, so its input tokens are
+estimated (4 characters a token) and its audio output is not priced. Prices come from the table
+at `GET /api/pricing` (USD per 1M tokens per bucket: `textIn`, `cachedTextIn`, `audioIn`,
+`cachedAudioIn`, `textOut`, `audioOut`; null when the model has no such price), seeded with
+OpenAI list prices (`source`, `asOf`); Azure OpenAI may differ. `PUT /api/pricing` with
+`{"items": [...]}` replaces the table (non-negative numbers; ask your human first).
+
 **Ask your human before** launching runs (`POST /api/runs`), re-running one
 (`POST /api/runs/{runId}/rerun`), re-judging (`POST /api/runs/{runId}/judgement`), testing an
 agent's connection (`POST /api/agents/{agentId}/test`, a short real session with the agent) or
@@ -338,6 +350,7 @@ connections; never a secret).
 | `turns` | One row per agent turn: `index`, `kind` (`reply`, `greeting`, `unprompted`), `callerEndMs`, `firstAudioMs`, `endMs`, `playbackEndMs`, `callerResumedMs`, `latencyMs`, `audioMs`, `responseCount`, `toolActivity`, `endReason` (`audio_gap`, `response_done`, `stalled`, `interrupted`). |
 | `interruptions` | Barge-ins the caller made: `agentTurn`, `audioEndMs`, `heardChars`, `totalChars`, and whether the agent's server confirmed it applied the cut: `confirmation` (`truncated`, `deleted` when no reported item had played, or `null` until every reported item is confirmed), `confirmedAudioEndMs` (where the server truncated, which may differ from what was sent), `confirmedAtMs` (run clock), and `items` (one per item reported: `itemId`, `sentAudioEndMs`, `confirmation`, `confirmedAudioEndMs`). A confirmation counts until the run ends, even after later turns. |
 | `evaluatorMode`, `realtimeModel` | How the caller was played. |
+| `usage` | The evaluator's token usage (null before usage capture): `byModel` maps each model to its tokens per bucket (`textIn`, `cachedTextIn`, `audioIn`, `cachedAudioIn`, `textOut`, `audioOut`; reasoning tokens count as `textOut`), and `notes` flags estimates (`tts_text_estimated`, `tts_audio_not_metered`). The run's `cost` prices it. |
 | `closeCode`, `closeReason`, `usageSeconds`, `finalUsageConfirmed` | How the agent session closed. |
 | `warnings` | Notable problems that did not fail the run (read them). |
 | `eventCounts` | How many events of each type the run produced. |

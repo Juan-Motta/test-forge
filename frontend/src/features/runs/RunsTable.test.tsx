@@ -1,5 +1,6 @@
 import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import { runCostFixture } from "@/features/pricing/testing";
 import { RunsTable } from "./RunsTable";
 import { runFixture } from "./testing";
 
@@ -108,5 +109,26 @@ describe("Runs table agent kind", () => {
       .slice(1)
       .map((row) => within(row).getAllByRole("cell")[agent].textContent);
     expect(cells).toEqual(["Hotel booking assistantVoice", "Chat deskText"]);
+  });
+});
+
+describe("Runs table cost column", () => {
+  it("shows each run's approximate evaluation cost, or a dash before costs", () => {
+    const runs = [
+      runFixture({ id: "r-priced-1", cost: runCostFixture() }),
+      runFixture({ id: "r-partial", cost: runCostFixture({ complete: false }) }),
+      runFixture({ id: "r-older-01", cost: null }),
+      runFixture({ id: "r-older-02" }),
+    ];
+    render(<RunsTable runs={runs} onCancel={() => {}} now={Date.parse("2026-10-05T17:00:00Z")} />);
+
+    const headers = screen.getAllByRole("columnheader").map((cell) => cell.textContent);
+    const column = headers.indexOf("Cost");
+    expect(column).toBeGreaterThan(0);
+    const costs = screen
+      .getAllByRole("row")
+      .slice(1)
+      .map((row) => within(row).getAllByRole("cell")[column].textContent);
+    expect(costs).toEqual(["≈ $0.4435", "≈ $0.4435+", "—", "—"]);
   });
 });

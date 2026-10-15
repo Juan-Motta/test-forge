@@ -407,3 +407,44 @@ async def test_the_asked_for_goodbye_ends_the_call_even_without_the_tool(
     assert len(caller.responses) == 3  # no further turn: goodbyes cannot ping-pong
     caller_rows = [r["text"] for r in transcript(tmp_path) if r["role"] == "caller"]
     assert caller_rows == ["Hello", "Bye"]
+
+
+async def test_a_failing_live_text_update_never_breaks_the_caller_turn(
+    fake_live_server, tmp_path, monkeypatch
+):
+    publish = SessionRunner._publish
+
+    def broken_text(self, kind, data, pcm=None):
+        if kind == "caller_text":
+            raise KeyError("start_ms")
+        return publish(self, kind, data, pcm)
+
+    monkeypatch.setattr(SessionRunner, "_publish", broken_text)
+    words: list[ResponseEvent] = [
+        CallerAudio(CHUNK),
+        CallerAudio(CHUNK),
+        CallerTranscriptDelta("I need "),
+        CallerAudio(CHUNK),
+        CallerTranscriptDelta("a room"),
+        CallerAudio(CHUNK),
+        CallerTranscript("I need a room."),
+    ]
+    caller = FakeRealtimeCaller([words, spoken("Bye", hang_up=True)], chunk_delay_s=0.1)
+    summary, _ = await run(fake_live_server.url, tmp_path, caller)
+
+    assert (summary["status"], summary["reason"]) == ("completed", "caller_hung_up")
+    caller_rows = [r["text"] for r in transcript(tmp_path) if r["role"] == "caller"]
+    assert caller_rows == ["I need a room.", "Bye"]
+    assert summary["warnings"] == ["the live text of the caller's line could not be shown"]
+
+
+async def test_the_summary_records_the_realtime_caller_usage(fake_live_server, tmp_path):
+    from voice_eval.ports.usage import UsageMeter
+
+    caller = FakeRealtimeCaller([spoken("Bye", hang_up=True)])
+    caller.usage = UsageMeter()
+    caller.usage.add("gpt-realtime-2.1-mini", audio_in=300, audio_out=200, text_in=50)
+    summary, _ = await run(fake_live_server.url, tmp_path, caller)
+    assert summary["usage"] == {
+        "by_model": {"gpt-realtime-2.1-mini": {"audio_in": 300, "audio_out": 200, "text_in": 50}}
+    }

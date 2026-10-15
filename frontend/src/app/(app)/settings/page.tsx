@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { KeyIcon } from "@/features/api-keys/KeyIcon";
 import { PageHeader } from "@/features/shell/PageHeader";
-import { ConnectionsIcon, ExternalLinkIcon, cn, focusRing } from "@/ui";
+import { ConnectionsIcon, ExternalLinkIcon, PriceIcon, cn, focusRing } from "@/ui";
 
 export const metadata: Metadata = { title: "Settings" };
 
@@ -45,6 +45,19 @@ export default function Page() {
               <span className="text-sm font-semibold">API keys</span>
               <span className="text-sm leading-relaxed text-muted">
                 Personal keys for CI, scripts and coding agents to use the API.
+              </span>
+            </span>
+          </Link>
+        </li>
+        <li>
+          <Link href="/settings/pricing" className={CARD}>
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-raised text-muted">
+              <PriceIcon size={20} />
+            </span>
+            <span className="flex flex-col gap-1">
+              <span className="text-sm font-semibold">Model prices</span>
+              <span className="text-sm leading-relaxed text-muted">
+                Token prices used to estimate what each evaluation costs (approximate, OpenAI list prices).
               </span>
             </span>
           </Link>

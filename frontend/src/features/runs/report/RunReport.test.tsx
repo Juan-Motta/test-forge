@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { REVOKE_BRIEF_URL_MS } from "@/features/judgements/use-judgement-controller";
 import { judgeResultFixture, judgeResultV2Fixture, judgementFixture, mockJudgementApi } from "@/features/judgements/testing";
 import type { Judgement } from "@/features/judgements/types";
+import { runCostFixture } from "@/features/pricing/testing";
 import { renderWithClient } from "@/test/render";
 import { apiUrl, server } from "@/test/server";
 import { RunDetailContainer } from "../RunDetailContainer";
@@ -455,5 +456,24 @@ describe("Run report · trace, suggestions and handoff", () => {
       expect(queryClient.isFetching()).toBe(0);
     });
     expect(screen.queryByRole("link", { name: /Open trace in Langfuse/ })).not.toBeInTheDocument();
+  });
+});
+
+describe("Run report · evaluation cost", () => {
+  it("shows the run's approximate evaluator and judge cost near the verdict", async () => {
+    mockRunsApi([runFixture({ id: RUN_ID })], {
+      details: { [RUN_ID]: runDetailFixture({ id: RUN_ID, cost: runCostFixture() }) },
+    });
+    mockJudgementApi({ [RUN_ID]: judgementFixture() });
+    renderWithClient(<RunDetailContainer runId={RUN_ID} judgementPollMs={20} />);
+
+    const cost = await screen.findByRole("group", { name: "Evaluation cost" });
+    expect(within(cost).getByText("≈ $0.4435")).toBeInTheDocument();
+  });
+
+  it("shows a dash for a run recorded before costs", async () => {
+    renderReport(judgementFixture());
+    const cost = await screen.findByRole("group", { name: "Evaluation cost" });
+    expect(within(cost).getByText("No usage was recorded for this run.")).toBeInTheDocument();
   });
 });

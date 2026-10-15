@@ -26,6 +26,8 @@ class RunJudgementRecord(Base):
     status: Mapped[str] = mapped_column(String(24))
     result: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     trace_stats: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    # the judge's token usage over every attempt (`ports.usage` shape), kept across re-judges
+    usage: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     trace_note: Mapped[str | None] = mapped_column(Text)
     error: Mapped[str | None] = mapped_column(Text)
     model: Mapped[str | None] = mapped_column(Text)
@@ -47,4 +49,5 @@ class RunJudgementRecord(Base):
             created_at=self.created_at,
             updated_at=self.updated_at,
             completed_at=self.completed_at,
+            usage=self.usage,
         )

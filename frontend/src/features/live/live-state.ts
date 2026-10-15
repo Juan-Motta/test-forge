@@ -273,7 +273,8 @@ export function liveReducer(state: LiveRunState, action: LiveAction): LiveRunSta
       const spoken = callerLineIndex(state.entries, decisionId);
       if (spoken !== -1) {
         const entries = say ? state.entries.map((entry, i) => (i === spoken ? { ...entry, text: say } : entry)) : state.entries;
-        return { ...state, decision, entries };
+        // Its audio already went out: only a hang-up changes what the call is doing now.
+        return { ...state, decision, entries, turnState: decision.hangUp ? "hanging_up" : state.turnState };
       }
       if (say) return { ...state, decision, pending: { decisionId, say, tMs: decision.tMs } };
       return { ...state, decision, pending: null, turnState: decision.hangUp ? "hanging_up" : "waiting" };

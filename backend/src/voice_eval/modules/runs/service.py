@@ -143,10 +143,16 @@ def _must_failed():
 
 
 def _with_judgement() -> Select:
-    """Runs with their judgement's status and, once completed, its overall score and must
-    flag (one join)."""
+    """Runs with their judgement's status, once completed its overall score and must flag, and
+    the judge's usage (one join)."""
     return (
-        select(RunRecord, RunJudgementRecord.status, _overall_score(), _must_failed())
+        select(
+            RunRecord,
+            RunJudgementRecord.status,
+            _overall_score(),
+            _must_failed(),
+            RunJudgementRecord.usage,
+        )
         .outerjoin(RunJudgementRecord, RunJudgementRecord.run_id == RunRecord.id)
         .execution_options(populate_existing=True)
     )
@@ -157,6 +163,7 @@ def _run(
     judgement_status: str | None,
     score: int | None,
     must_failed: bool | None,
+    judge_usage: dict[str, Any] | None = None,
 ) -> Run:
     completed = judgement_status == JudgementStatus.COMPLETED.value
     return replace(
@@ -164,6 +171,7 @@ def _run(
         judgement_status=judgement_status,
         score=score if completed else None,
         must_failed=must_failed if completed else None,
+        judge_usage=judge_usage,
     )
 
 

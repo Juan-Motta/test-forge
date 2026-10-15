@@ -21,11 +21,20 @@ def build_openai_synthesizer(
 
 
 def build_azure_openai_synthesizer(
-    *, api_key: str, endpoint: str, api_version: str, deployment: str, voice: str
+    *,
+    api_key: str,
+    endpoint: str,
+    api_version: str,
+    deployment: str,
+    voice: str,
+    usage_model: str | None = None,
 ) -> SpeechSynthesizer:
+    """`usage_model`: the model the deployment serves, which its usage is priced as."""
     from voice_eval.providers.openai_tts import OpenAISpeechSynthesizer
 
-    return OpenAISpeechSynthesizer.for_azure(api_key, endpoint, api_version, deployment, voice)
+    return OpenAISpeechSynthesizer.for_azure(
+        api_key, endpoint, api_version, deployment, voice, usage_model=usage_model
+    )
 
 
 def build_openai_realtime_caller(
@@ -37,12 +46,12 @@ def build_openai_realtime_caller(
 
 
 def build_azure_openai_realtime_caller(
-    *, api_key: str, endpoint: str, deployment: str, voice: str
+    *, api_key: str, endpoint: str, deployment: str, voice: str, usage_model: str | None = None
 ) -> RealtimeCaller:
     from voice_eval.providers.openai_realtime_caller import OpenAIRealtimeCaller
 
     return OpenAIRealtimeCaller.for_azure(
-        api_key, endpoint=endpoint, deployment=deployment, voice=voice
+        api_key, endpoint=endpoint, deployment=deployment, voice=voice, usage_model=usage_model
     )
 
 
@@ -53,11 +62,18 @@ def build_openai_policy(*, api_key: str, model: str, base_url: str | None = None
 
 
 def build_azure_openai_policy(
-    *, api_key: str, endpoint: str, api_version: str, deployment: str
+    *,
+    api_key: str,
+    endpoint: str,
+    api_version: str,
+    deployment: str,
+    usage_model: str | None = None,
 ) -> CallerPolicy:
     from voice_eval.providers.openai_chat import OpenAIChatPolicy
 
-    return OpenAIChatPolicy.for_azure(api_key, endpoint, api_version, deployment)
+    return OpenAIChatPolicy.for_azure(
+        api_key, endpoint, api_version, deployment, usage_model=usage_model
+    )
 
 
 def build_openai_judge(*, api_key: str, model: str, base_url: str | None = None) -> RunJudgeModel:
@@ -67,11 +83,18 @@ def build_openai_judge(*, api_key: str, model: str, base_url: str | None = None)
 
 
 def build_azure_openai_judge(
-    *, api_key: str, endpoint: str, api_version: str, deployment: str
+    *,
+    api_key: str,
+    endpoint: str,
+    api_version: str,
+    deployment: str,
+    usage_model: str | None = None,
 ) -> RunJudgeModel:
     from voice_eval.providers.openai_chat import OpenAIJudge
 
-    return OpenAIJudge.for_azure(api_key, endpoint, api_version, deployment)
+    return OpenAIJudge.for_azure(
+        api_key, endpoint, api_version, deployment, usage_model=usage_model
+    )
 
 
 def build_langfuse_trace_reader(

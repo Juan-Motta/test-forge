@@ -40,6 +40,7 @@ class Judgement:
     created_at: datetime
     updated_at: datetime
     completed_at: datetime | None
+    usage: dict[str, Any] | None = None  # the judge's usage over every attempt (`ports.usage`)
 
     @property
     def active(self) -> bool:

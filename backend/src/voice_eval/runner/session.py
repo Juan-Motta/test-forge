@@ -75,6 +75,7 @@ from voice_eval.ports.target import (
     TranscriptUpdate,
 )
 from voice_eval.ports.tts import SpeechSynthesizer
+from voice_eval.ports.usage import collect_usage
 from voice_eval.runner.artifacts import write_artifacts
 from voice_eval.runner.barge_in import (
     AudioItem,
@@ -210,6 +211,7 @@ class SessionRunner:
         self._interrupted: dict[int, tuple[dict[str, Any], dict[str, Any] | None]] = {}
         self._feed: AgentAudioFeed | None = None
         self._cuts_noted = 0  # interruptions the realtime caller was told about
+        self._text_failed: set[int] = set()  # decisions whose live text failed
 
     def _now_ms(self) -> float:
         return (time.monotonic() - self._t0) * 1000
@@ -510,10 +512,17 @@ class SessionRunner:
 
     def _caller_text(self, decision_id: int, row: dict[str, Any], text: str) -> None:
         """The next piece of what the realtime caller is saying: it extends its live line (the
-        pieces before its `caller_speaking` go out with it)."""
-        row["text"] += text
-        if row["start_ms"] is not None:
-            self._publish("caller_text", {"decision_id": decision_id, "text": text})
+        pieces before its `caller_speaking` go out with it). Only the live view depends on it:
+        a failure is warned about once per line and never breaks the caller's audio turn."""
+        try:
+            row["text"] += text
+            if row["start_ms"] is not None:
+                self._publish("caller_text", {"decision_id": decision_id, "text": text})
+        except Exception as exc:
+            if decision_id not in self._text_failed:
+                self._text_failed.add(decision_id)
+                log.warning("live caller text failed (%s)", type(exc).__name__)
+                self._warn("the live text of the caller's line could not be shown")
 
     def _realtime_decided(self, speech: RealtimeSpeech, row: dict[str, Any] | None) -> None:
         """The response is done: its words (the whole output transcript) go to the transcript
@@ -1073,6 +1082,8 @@ class SessionRunner:
             "interruptions": self.interruptions,
             "evaluator_mode": "pipeline" if self.realtime is None else "realtime",
             "realtime_model": None if self.realtime is None else self.realtime_model,
+            # the evaluator's own model usage (policy + TTS, or the realtime caller), for its cost
+            "usage": collect_usage(self.policy, self.synthesizer, self.realtime),
             "warnings": self.warnings,
             "event_counts": dict(Counter(e["type"] for e in self.events)),
         }

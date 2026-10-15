@@ -21,6 +21,7 @@ FIELDS = {
     "createdAt",
     "updatedAt",
     "completedAt",
+    "usage",
 }
 
 
@@ -145,3 +146,13 @@ async def test_a_malformed_stored_score_never_breaks_the_run_list(app, user_clie
     assert {label: scores[str(run_id)] for label, run_id in ids.items()} == expected
     detail = await user_client.get(f"/api/runs/{ids['text']}")
     assert detail.status_code == 200 and detail.json()["score"] is None
+
+
+async def test_the_judgement_carries_the_judge_usage_of_every_attempt(app, user_client):
+    run_id = await insert_run(app.state.sessionmaker)
+    usage = {"by_model": {"gpt-6-luna": {"text_in": 10, "text_out": 2}}}
+    async with app.state.sessionmaker() as db:
+        db.add(RunJudgementRecord(run_id=run_id, status="failed", usage=usage))
+        await db.commit()
+    body = (await user_client.get(f"/api/runs/{run_id}/judgement")).json()
+    assert body["usage"] == usage

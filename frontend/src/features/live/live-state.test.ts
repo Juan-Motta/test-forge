@@ -109,3 +109,19 @@ describe("liveReducer: interruption confirmations", () => {
     expect(state.entries[0].interruption).toMatchObject({ confirmed: true });
   });
 });
+
+describe("liveReducer: the realtime evaluator's decision after its line", () => {
+  const speaking = send(started, { type: "callerSpeaking", tMs: 3000, decisionId: 1, say: "", reason: "realtime" });
+
+  it("moves to hanging up when a spoken line without a transcript hangs up", () => {
+    const state = send(speaking, { type: "callerDecision", tMs: 4000, decisionId: 1, say: null, hangUp: true, reason: "realtime" });
+    expect(state.turnState).toBe("hanging_up");
+    expect(state.entries[1].text).toBe("");
+  });
+
+  it("keeps the line's turn state when it ends without hanging up", () => {
+    const state = send(speaking, { type: "callerDecision", tMs: 4000, decisionId: 1, say: null, hangUp: false, reason: "realtime" });
+    expect(state.turnState).toBe("evaluator");
+    expect(state.pending).toBeNull();
+  });
+});

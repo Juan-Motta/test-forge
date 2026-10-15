@@ -18,6 +18,11 @@ The SDK's Azure client still dials the preview `/openai/realtime?deployment=` pa
 frames are sent with `websockets` here.
 
 Errors never carry the provider's message (it may quote the key): only its code or type.
+
+Every `response.done` (a cancelled response's too: it was billed) adds its `response.usage` to
+the `usage` meter under `usage_model` (the realtime model; an Azure deployment counts as the
+model it deploys). See `realtime_counts` for the buckets and the fallback when details are
+missing.
 """
 
 import asyncio
@@ -39,6 +44,7 @@ from voice_eval.ports.realtime_caller import (
     RealtimeCallerError,
     ResponseEvent,
 )
+from voice_eval.ports.usage import UsageMeter
 
 # the model's own speech transcript, under its GA and its older (beta) event names
 TRANSCRIPT_DELTA = ("response.output_audio_transcript.delta", "response.audio_transcript.delta")
@@ -90,6 +96,45 @@ def _ws_url(base: str, path: str, model: str) -> str:
     return urlunsplit((scheme, parts.netloc, parts.path + path, f"model={quote(model)}", ""))
 
 
+def _tokens(source: Any, name: str) -> int:
+    value = source.get(name) if isinstance(source, dict) else None
+    return value if isinstance(value, int) and not isinstance(value, bool) and value > 0 else 0
+
+
+def realtime_counts(usage: Any) -> dict[str, int]:
+    """The meter buckets of a Realtime `response.usage`.
+
+    `input_token_details.{text,audio}_tokens` include their cached part
+    (`cached_tokens_details.{text,audio}_tokens`), which goes to its own bucket. Missing
+    details fall back to the totals, conservatively as text (`input_tokens`/`output_tokens`
+    minus what the details account for), and a cached total without its split counts as
+    cached text.
+    """
+    if not isinstance(usage, dict):
+        return {}
+    details = usage.get("input_token_details") or {}
+    out_details = usage.get("output_token_details") or {}
+    cached_details = details.get("cached_tokens_details") if isinstance(details, dict) else None
+    cached_text = _tokens(cached_details, "text_tokens")
+    cached_audio = _tokens(cached_details, "audio_tokens")
+    if not cached_details:
+        cached_text = _tokens(details, "cached_tokens")
+    audio_in = _tokens(details, "audio_tokens")
+    text_in = _tokens(details, "text_tokens") or max(0, _tokens(usage, "input_tokens") - audio_in)
+    audio_out = _tokens(out_details, "audio_tokens")
+    text_out = _tokens(out_details, "text_tokens") or max(
+        0, _tokens(usage, "output_tokens") - audio_out
+    )
+    return {
+        "text_in": max(0, text_in - cached_text),
+        "cached_text_in": cached_text,
+        "audio_in": max(0, audio_in - cached_audio),
+        "cached_audio_in": cached_audio,
+        "text_out": text_out,
+        "audio_out": audio_out,
+    }
+
+
 def _error_code(error: Any) -> str:
     if isinstance(error, dict):
         for key in ("code", "type"):
@@ -107,10 +152,13 @@ class OpenAIRealtimeCaller:
         *,
         open_timeout_s: float = 15,
         idle_timeout_s: float = 15,
+        usage_model: str = "",
     ) -> None:
         self.url = url
         self.headers = headers
         self.voice = voice
+        self.usage_model = usage_model or "realtime"
+        self.usage = UsageMeter()
         self.open_timeout_s = open_timeout_s
         self.idle_timeout_s = idle_timeout_s  # waiting for a cancelled response to end
         self._ws: ClientConnection | None = None
@@ -134,14 +182,20 @@ class OpenAIRealtimeCaller:
         cls, api_key: str, *, model: str, voice: str, base_url: str = "https://api.openai.com/v1"
     ) -> "OpenAIRealtimeCaller":
         url = _ws_url(base_url, "/realtime", model)
-        return cls(url, {"Authorization": f"Bearer {api_key}"}, voice)
+        return cls(url, {"Authorization": f"Bearer {api_key}"}, voice, usage_model=model)
 
     @classmethod
     def for_azure(
-        cls, api_key: str, *, endpoint: str, deployment: str, voice: str
+        cls,
+        api_key: str,
+        *,
+        endpoint: str,
+        deployment: str,
+        voice: str,
+        usage_model: str | None = None,
     ) -> "OpenAIRealtimeCaller":
         url = _ws_url(endpoint, "/openai/v1/realtime", deployment)
-        return cls(url, {"api-key": api_key}, voice)
+        return cls(url, {"api-key": api_key}, voice, usage_model=usage_model or deployment)
 
     # --- connection -----------------------------------------------------------------------
 
@@ -247,6 +301,8 @@ class OpenAIRealtimeCaller:
                 return
         rid = event.get("response_id") or (event.get("response") or {}).get("id")
         if kind == "response.done":
+            usage = (event.get("response") or {}).get("usage")
+            self.usage.add(self.usage_model, **realtime_counts(usage))
             items = self._items.pop(rid, []) if rid is not None else []
             if rid in self._stale:
                 self._forget(items, (event.get("response") or {}).get("output") or [])
