@@ -103,11 +103,20 @@ describe("Guide content", () => {
     expect(screen.getByRole("figure", { name: /barge-in/i })).toBeInTheDocument();
   });
 
-  it("explains the light and dark themes", () => {
+  it("explains the light and dark themes and where to switch them", () => {
     render(<FaqPage />);
 
     expect(screen.getByRole("heading", { level: 3, name: /light theme/i })).toBeInTheDocument();
-    expect(screen.getByText(/System, Light or Dark/)).toBeInTheDocument();
+    const answer = screen.getByText(/System, Light or Dark/).closest("p");
+    expect(answer).toHaveTextContent(/Settings → Preferences/);
+    expect(answer).not.toHaveTextContent(/sidebar/);
+  });
+
+  it("says where to switch the app to Spanish", () => {
+    render(<FaqPage />);
+
+    expect(screen.getByRole("heading", { level: 3, name: /Spanish/ })).toBeInTheDocument();
+    expect(screen.getByText(/EN or ES/).closest("p")).toHaveTextContent(/Settings → Preferences/);
   });
 
   it("defines the key terms in a glossary", () => {
@@ -140,6 +149,7 @@ describe("Guide content", () => {
     expect(screen.getAllByText(/text agent/i).length).toBeGreaterThan(0);
     expect(screen.getByText("Follow and listen automatically")).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 2, name: "Model prices" })).toBeInTheDocument();
+    expect(screen.getByText(/The sidebar of the app lists the main modules/)).toHaveTextContent(/Settings/);
     modules.unmount();
 
     const scoring = render(<ScoringPage />);

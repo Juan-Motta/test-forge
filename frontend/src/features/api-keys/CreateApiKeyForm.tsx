@@ -21,7 +21,7 @@ type CreateApiKeyFormProps = {
 };
 
 function validateName(t: Translator, name: string): string | undefined {
-  if (!name) return t("scenarios.error.name");
+  if (!name) return t("apiKeys.error.name");
   if (name.length > NAME_MAX) return t("common.maxChars", { max: NAME_MAX });
   return undefined;
 }
@@ -46,7 +46,7 @@ export function CreateApiKeyForm({ onSubmit, onCancel, pending, error, nameError
   return (
     <form noValidate onSubmit={submit} className="flex flex-col gap-5">
       {error ? <Alert>{error}</Alert> : null}
-      <Field label={t("scenarios.field.name")} hint={t("apiKeys.nameHint")} error={localNameError ?? nameError}>
+      <Field label={t("apiKeys.field.name")} hint={t("apiKeys.nameHint")} error={localNameError ?? nameError}>
         {(control) => (
           <Input
             {...control}

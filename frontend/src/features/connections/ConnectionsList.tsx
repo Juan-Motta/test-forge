@@ -71,7 +71,7 @@ function ConnectionCard({ connection, testing, onEdit, onTest, onDelete }: Conne
       <dl className="grid grid-cols-2 gap-3 text-xs">
         <div className="flex flex-col gap-1">
           <dt className="text-dim">{t("connections.field.key")}</dt>
-          <dd className="font-mono text-muted">{connection.hasSecret ? connection.secretHint : t("scenarios.none")}</dd>
+          <dd className="font-mono text-muted">{connection.hasSecret ? connection.secretHint : t("connections.noSecret")}</dd>
         </div>
         <div className="flex flex-col gap-1">
           <dt className="text-dim">{t("connections.updated")}</dt>
@@ -98,7 +98,7 @@ function ConnectionCard({ connection, testing, onEdit, onTest, onDelete }: Conne
         >
           {testing ? t("check.testing") : t("connections.testShort")}
         </Button>
-        <Button variant="ghost" aria-label={t("scenarios.deleteNamed", { name: connection.name })} onClick={() => onDelete(connection)}>
+        <Button variant="ghost" aria-label={t("connections.deleteNamed", { name: connection.name })} onClick={() => onDelete(connection)}>
           {t("common.delete")}
         </Button>
       </div>

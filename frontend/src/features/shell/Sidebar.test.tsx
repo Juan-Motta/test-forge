@@ -1,5 +1,6 @@
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import { renderWithClient } from "@/test/render";
 import { activeHref, NAV_PRIMARY, NAV_SECONDARY } from "./navigation";
 import { Sidebar } from "./Sidebar";
 
@@ -27,9 +28,10 @@ describe("activeHref", () => {
     ["/runs", "/runs"],
     ["/runs/R-2291", "/runs"],
     ["/settings", "/settings"],
-    ["/settings/connections", "/settings/connections"],
-    ["/settings/connections/abc", "/settings/connections"],
-    ["/settings/api-keys", "/settings/api-keys"],
+    ["/settings/connections", "/settings"],
+    ["/settings/connections/abc", "/settings"],
+    ["/settings/api-keys", "/settings"],
+    ["/settings/pricing", "/settings"],
     ["/unknown", null],
   ])("%s -> %s", (pathname, expected) => {
     expect(activeHref(pathname, ALL)).toBe(expected);
@@ -37,35 +39,49 @@ describe("activeHref", () => {
 });
 
 describe("Sidebar", () => {
-  it("offers the theme switch next to the account", () => {
+  it("leaves the theme and language switches to Settings", () => {
     renderSidebar("/");
-    expect(screen.getByRole("radiogroup", { name: "Theme" })).toBeInTheDocument();
+    expect(screen.queryByRole("radiogroup", { name: "Theme" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("radiogroup", { name: "Language" })).not.toBeInTheDocument();
+  });
+
+  it("lists the main sections and Settings, but not Connections or API keys", () => {
+    const nav = renderSidebar("/");
+    const names = nav.getAllByRole("link").map((link) => link.textContent);
+
+    expect(names.slice(0, 6)).toEqual(["Overview", "Live sessions", "Runs & reports", "Scenarios", "Agents", "Settings"]);
+    expect(nav.queryByRole("link", { name: "Connections" })).not.toBeInTheDocument();
+    expect(nav.queryByRole("link", { name: "API keys" })).not.toBeInTheDocument();
   });
 
   it("marks only the current section with aria-current=page", () => {
     const nav = renderSidebar("/runs");
 
     expect(nav.getByRole("link", { name: "Runs & reports" })).toHaveAttribute("aria-current", "page");
-    for (const name of ["Overview", "Live sessions", "Scenarios", "Agents", "Settings", "Connections", "API keys"]) {
+    for (const name of ["Overview", "Live sessions", "Scenarios", "Agents", "Settings"]) {
       expect(nav.getByRole("link", { name })).not.toHaveAttribute("aria-current");
     }
   });
 
-  it("marks the settings child, not its parent, on the connections page", () => {
-    const nav = renderSidebar("/settings/connections");
+  it.each(["/settings", "/settings/connections", "/settings/api-keys", "/settings/pricing"])(
+    "keeps Settings marked on %s",
+    (pathname) => {
+      const nav = renderSidebar(pathname);
 
-    expect(nav.getByRole("link", { name: "Connections" })).toHaveAttribute("aria-current", "page");
-    expect(nav.getByRole("link", { name: "Settings" })).not.toHaveAttribute("aria-current");
-  });
+      expect(nav.getByRole("link", { name: "Settings" })).toHaveAttribute("aria-current", "page");
+      expect(nav.getByRole("link", { name: "Overview" })).not.toHaveAttribute("aria-current");
+    },
+  );
 
-  it("lists API keys under Settings, next to Connections, and marks it on its page", () => {
-    const nav = renderSidebar("/settings/api-keys");
-    const links = nav.getAllByRole("link").map((link) => link.textContent);
+  it("renders in Spanish when that is the page language", () => {
+    renderWithClient(<Sidebar pathname="/settings/connections" environmentLabel="dev" user={ADA} onSignOut={vi.fn()} signingOut={false} />, {
+      locale: "es",
+    });
+    const nav = within(screen.getByRole("navigation", { name: "Principal" }));
 
-    expect(links.indexOf("API keys")).toBe(links.indexOf("Connections") + 1);
-    expect(nav.getByRole("link", { name: "API keys" })).toHaveAttribute("href", "/settings/api-keys");
-    expect(nav.getByRole("link", { name: "API keys" })).toHaveAttribute("aria-current", "page");
-    expect(nav.getByRole("link", { name: "Settings" })).not.toHaveAttribute("aria-current");
+    expect(nav.getByRole("link", { name: "Configuración" })).toHaveAttribute("aria-current", "page");
+    expect(nav.queryByRole("link", { name: "Conexiones" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("radiogroup", { name: "Idioma" })).not.toBeInTheDocument();
   });
 
   it("shows the environment and the signed-in user", () => {

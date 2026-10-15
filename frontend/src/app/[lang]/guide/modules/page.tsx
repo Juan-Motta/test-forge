@@ -30,8 +30,9 @@ export default function ModulesPage() {
   return (
     <GuidePage slug="modules">
       <P>
-        The sidebar of the app lists every module. This page explains each one: what it is for, what you will find there, and
-        a few tips. Jump to one:
+        The sidebar of the app lists the main modules; Connections, API keys and Model prices are reached from{" "}
+        <Ui>Settings</Ui>, which also holds your theme and language. This page explains each one: what it is for, what you will
+        find there, and a few tips. Jump to one:
       </P>
       <nav aria-label="Modules on this page">
         <ul className="flex flex-wrap gap-2">

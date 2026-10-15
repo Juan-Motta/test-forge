@@ -166,8 +166,15 @@ export default function FaqPage() {
         </Item>
         <Item question="Is there a light theme?">
           <P>
-            Yes. Pick <Ui>System, Light or Dark</Ui> at the bottom of the app&apos;s sidebar, on the sign-in page or in this
-            guide&apos;s header. System follows your device. The choice is remembered in this browser only.
+            Yes. Pick <Ui>System, Light or Dark</Ui> in the app under <Ui>Settings → Preferences</Ui>, on the sign-in page or
+            in this guide&apos;s header. System follows your device. The choice is remembered in this browser only.
+          </P>
+        </Item>
+        <Item question="Can I use the app in Spanish?">
+          <P>
+            Yes. Pick <Ui>EN or ES</Ui> in the app under <Ui>Settings → Preferences</Ui>, on the sign-in page or in this
+            guide&apos;s header. The app&apos;s screens change language; your data, like scenario names and transcripts, stays
+            as written.
           </P>
         </Item>
         <Item question="Who can read this guide?">

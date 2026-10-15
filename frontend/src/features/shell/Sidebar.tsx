@@ -2,10 +2,8 @@ import Link from "next/link";
 import { useT } from "@/lib/i18n";
 import { confirmLeave } from "@/lib/navigation/unsaved-changes";
 import { cn, ExternalLinkIcon, focusRing } from "@/ui";
-import { ThemeControl } from "@/features/theme/ThemeControl";
 import { Brand } from "./Brand";
 import { EnvironmentBadge } from "./EnvironmentBadge";
-import { LanguageControl } from "./LanguageControl";
 import { activeHref, NAV_PRIMARY, NAV_SECONDARY, type NavItem } from "./navigation";
 import { UserMenu, type ShellUser } from "./UserMenu";
 
@@ -97,10 +95,6 @@ export function Sidebar({
           </li>
         </ul>
       </nav>
-      <div className="flex flex-wrap items-center gap-2">
-        <ThemeControl />
-        <LanguageControl />
-      </div>
       <UserMenu
         user={user}
         onSignOut={onSignOut}
@@ -133,11 +127,10 @@ function NavLink({ item, current, badge, onNavigate }: NavLinkProps) {
         className={cn(
           "flex min-h-11 items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm font-medium no-underline transition-colors",
           focusRing,
-          item.nested && "ml-5",
           current ? "bg-active text-fg hover:text-fg" : "text-muted hover:bg-active/60 hover:text-fg",
         )}
       >
-        <Icon size={item.nested ? 16 : 18} />
+        <Icon size={18} />
         <span className="flex-1">{label}</span>
         {badge ? (
           <span

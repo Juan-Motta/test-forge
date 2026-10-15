@@ -150,7 +150,7 @@ export function ConnectionForm({
         </Field>
       )}
 
-      <Field label={t("scenarios.field.name")} hint={t("connections.nameHint")} error={fieldError("name")}>
+      <Field label={t("connections.field.name")} hint={t("connections.nameHint")} error={fieldError("name")}>
         {(controlProps) => <Input autoComplete="off" {...controlProps} {...registerField("name")} />}
       </Field>
 

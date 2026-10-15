@@ -1,9 +1,7 @@
 import type { ComponentType } from "react";
 import type { MessageKey } from "@/lib/i18n";
-import { KeyIcon } from "@/features/api-keys/KeyIcon";
 import {
   AgentsIcon,
-  ConnectionsIcon,
   LiveIcon,
   OverviewIcon,
   RunsIcon,
@@ -16,8 +14,6 @@ export type NavItem = {
   /** Dictionary key of the visible name. */
   label: MessageKey;
   icon: ComponentType<{ size?: number }>;
-  /** Rendered indented under its parent (e.g. Connections under Settings). */
-  nested?: boolean;
 };
 
 export const NAV_PRIMARY: NavItem[] = [
@@ -28,11 +24,8 @@ export const NAV_PRIMARY: NavItem[] = [
   { href: "/agents", label: "nav.agents", icon: AgentsIcon },
 ];
 
-export const NAV_SECONDARY: NavItem[] = [
-  { href: "/settings", label: "nav.settings", icon: SettingsIcon },
-  { href: "/settings/connections", label: "nav.connections", icon: ConnectionsIcon, nested: true },
-  { href: "/settings/api-keys", label: "nav.apiKeys", icon: KeyIcon, nested: true },
-];
+/** Connections, API keys and model prices are reached from the Settings page, which stays marked on them. */
+export const NAV_SECONDARY: NavItem[] = [{ href: "/settings", label: "nav.settings", icon: SettingsIcon }];
 
 /** The most specific item matching the path (exact or ancestor), or null. */
 export function activeHref(pathname: string, items: NavItem[]): string | null {

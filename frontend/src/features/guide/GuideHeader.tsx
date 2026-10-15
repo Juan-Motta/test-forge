@@ -28,7 +28,7 @@ export function GuideHeader() {
             {t("guideHeader.badge")}
           </span>
         </Link>
-        {/* Room for them from tablet width up; on phones the app sidebar and the sign-in page offer them. */}
+        {/* Room for them from tablet width up; on phones the app's Settings and the sign-in page offer them. */}
         <div className="ml-auto hidden items-center gap-2 md:flex">
           <ThemeControl />
           <LanguageControl />

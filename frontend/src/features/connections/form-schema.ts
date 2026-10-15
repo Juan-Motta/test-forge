@@ -66,7 +66,7 @@ export function urlProblem(t: Translator, value: string): string | undefined {
 
 const FORMAT_CHECKS: Record<FieldFormat, (t: Translator, value: string) => string | undefined> = {
   url: urlProblem,
-  identifier: (t, value) => (IDENTIFIER.test(value) ? undefined : t("scenarios.error.identifier")),
+  identifier: (t, value) => (IDENTIFIER.test(value) ? undefined : t("connections.error.identifier")),
   region: (t, value) => (REGION.test(value) ? undefined : t("connections.error.region")),
 };
 
@@ -124,7 +124,7 @@ export function connectionFormSchema(t: Translator, options: { secretRequired: b
       name: z
         .string()
         .trim()
-        .min(1, t("scenarios.error.name"))
+        .min(1, t("connections.error.name"))
         .max(MAX_NAME, t("common.maxChars", { max: MAX_NAME })),
       config: z.record(z.string(), z.string()),
       secrets: z.record(z.string(), z.string()),
