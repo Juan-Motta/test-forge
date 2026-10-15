@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { createFormat } from "@/lib/i18n";
 import { formatUsd, runCostLabel } from "./format";
+import { runCostFixture } from "./testing";
 
 const format = createFormat("en");
-import { runCostFixture } from "./testing";
 
 describe("formatUsd", () => {
   it("shows cents for a dollar or more and four decimals below", () => {

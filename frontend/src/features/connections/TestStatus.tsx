@@ -13,7 +13,7 @@ export function TestStatus({ lastTest }: { lastTest: LastTest | null }) {
       <div className="flex flex-wrap items-center gap-2">
         <Badge tone={ok ? "success" : "danger"}>
           {ok ? <CheckIcon size={12} /> : <AlertIcon size={12} />}
-          {ok ? t("connections.passed") : t("runs.status.failed")}
+          {ok ? t("connections.passed") : t("connections.failed")}
         </Badge>
         <time dateTime={at} title={absoluteTime(at)} className="text-xs text-dim">
           {relativeTime(at)}

@@ -50,6 +50,14 @@ export function endReasonLabel(
   return (END_REASONS as readonly string[]).includes(reason) ? t(`runs.end.${reason as EndReason}`) : reason.replaceAll("_", " ");
 }
 
+/** End reasons that only say what the status already does (a cancelled run ended because it was cancelled). */
+const STATUS_REPEATING_REASONS: Partial<Record<RunStatus, readonly EndReason[]>> = { cancelled: ["cancelled"] };
+
+/** Whether `reason` adds nothing to `status`, compared by code (never by translated text). */
+export function endReasonRepeatsStatus(status: RunStatus, reason: string | null | undefined): boolean {
+  return !!reason && (STATUS_REPEATING_REASONS[status] as readonly string[] | undefined)?.includes(reason) === true;
+}
+
 export function isActive(status: RunStatus): boolean {
   return ACTIVE_RUN_STATUSES.includes(status);
 }

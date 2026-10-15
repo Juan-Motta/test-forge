@@ -51,7 +51,11 @@ export function ScenarioLibraryRail({ scenarios, failed, currentId }: ScenarioLi
     body = groups.map((group, index) => {
       const headingId = `rail-group-${index}`;
       return (
-        <section key={group.name || "untagged"} aria-labelledby={headingId} className="flex flex-col gap-1">
+        <section
+          key={group.name === UNTAGGED ? "untagged" : `tag:${group.name}`}
+          aria-labelledby={headingId}
+          className="flex flex-col gap-1"
+        >
           <h3
             id={headingId}
             className="flex items-center justify-between px-1 py-1.5 text-xs font-semibold tracking-[0.06em] text-muted uppercase"

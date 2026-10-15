@@ -1,6 +1,7 @@
 import {
   VERDICT_TONES,
   cappedExplanation,
+  evidenceSourceLabel,
   failureTagLabel,
   unobservableReasonLabel,
   verdictLabel,
@@ -59,7 +60,7 @@ function CriterionRow({ criterion, onGoToTurn }: { criterion: CriterionResult; o
         {criterion.capped ? <Badge tone="danger">{t("report.capped")}</Badge> : null}
         <span className="text-dim">{criterion.kind === "must" ? t("report.must") : t("report.should")}</span>
         <span className="text-dim">{t("report.weight", { weight: criterion.weight })}</span>
-        <span className="text-dim">{t("report.from", { source: t(`report.source.${criterion.source}`) })}</span>
+        <span className="text-dim">{t("report.from", { source: evidenceSourceLabel(t, criterion.source) })}</span>
       </div>
       {criterion.capped ? <p className="text-xs text-danger-fg">{cappedExplanation(t, tags)}</p> : null}
       {reason ? <p className="text-xs text-dim italic">{unobservableReasonLabel(t, reason)}</p> : null}
@@ -88,7 +89,7 @@ function CriterionRow({ criterion, onGoToTurn }: { criterion: CriterionResult; o
           <ul className="mt-2 flex flex-col gap-2">
             {criterion.evidence.map((item, index) => (
               <li key={index} className="flex flex-col gap-1 text-xs">
-                <span className="text-dim">{`${t(`report.source.${item.source}`)} · ${item.ref}`}</span>
+                <span className="text-dim">{`${evidenceSourceLabel(t, item.source)} · ${item.ref}`}</span>
                 <blockquote className="border-l-2 border-line pl-2 text-sm text-body">{item.quote}</blockquote>
               </li>
             ))}

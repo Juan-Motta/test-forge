@@ -1,7 +1,7 @@
 import { clock, endReasonLabel, isActive, latency, median, runDurationMs, statusLabel } from "@/features/runs/format";
 import { runKind } from "@/features/runs/kind";
 import type { Batch, Run, RunSnapshot } from "@/features/runs/types";
-import type { Translator } from "@/lib/i18n";
+import { createTranslator, type Translator } from "@/lib/i18n";
 import { CLOSE_FORBIDDEN_ORIGIN, CLOSE_NOT_FOUND, CLOSE_UNAUTHENTICATED } from "@/lib/live/connection";
 import type { BadgeTone, ProgressSegment } from "@/ui";
 import type { LiveRunState } from "./live-state";
@@ -124,12 +124,24 @@ export function batchEyebrow(t: Translator, batch: Pick<Batch, "id" | "label" | 
     .join(" · ");
 }
 
-/** Why the live stream stopped, in words (the close code says which); `subject` names what streams. */
-export function liveConnectionError(t: Translator, code: number, subject: "run" | "batch"): string {
+/** The connection layer words its give-up in English; this is that line, to translate it. */
+const ENGLISH_GAVE_UP = createTranslator("en")("live.conn.gaveUp");
+
+/**
+ * Why the live stream stopped, in words: the close codes it knows in the page language, else the
+ * connection's own message (its give-up line translated), else the give-up line. `subject` names
+ * what streams.
+ */
+export function liveConnectionError(
+  t: Translator,
+  error: { code: number; message?: string | null },
+  subject: "run" | "batch",
+): string {
+  const { code, message } = error;
   if (code === CLOSE_UNAUTHENTICATED) return t("live.conn.expired");
   if (code === CLOSE_FORBIDDEN_ORIGIN) return t("live.conn.origin");
   if (code === CLOSE_NOT_FOUND) return subject === "batch" ? t("live.conn.batchGone") : t("live.conn.runGone");
-  return t("live.conn.gaveUp");
+  return message && message !== ENGLISH_GAVE_UP ? message : t("live.conn.gaveUp");
 }
 
 /** Four time labels under the audio lanes: the window's start, two steps, then "now". */

@@ -135,7 +135,7 @@ function BatchLive({ batchId }: { batchId: string }) {
           extra={batch.data ? `${t("live.concurrency", { count: batch.data.concurrency })} · ${runsTotal}` : runsTotal}
         />
       </section>
-      {live.connection.kind === "error" ? <Alert>{liveConnectionError(t, live.connection.code, "batch")}</Alert> : null}
+      {live.connection.kind === "error" ? <Alert>{liveConnectionError(t, live.connection, "batch")}</Alert> : null}
       {stop.isError ? <Alert>{t("live.stopFailed", { error: errorMessage(stop.error) })}</Alert> : null}
       {batch.isPending && !live.state.batch ? <Spinner label={t("live.loadingBatch")} /> : <Sessions sessions={sessions} />}
       <Dialog

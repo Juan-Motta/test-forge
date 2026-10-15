@@ -313,6 +313,7 @@ describe("Scenarios library in Spanish", () => {
     expect(screen.getByRole("heading", { level: 1, name: "Escenarios" })).toBeInTheDocument();
     const first = within(hotelGroup).getByRole("listitem", { name: "Booking with date change" });
     expect(within(first).getByRole("button", { name: "Lanzar Booking with date change" })).toBeInTheDocument();
-    expect(within(first).getByText(/criterios?$/)).toBeInTheDocument();
+    expect(within(first).getByText("2 criterios")).toBeInTheDocument();
+    expect(within(item("Cancel within 24h")).getByText("1 criterio")).toBeInTheDocument();
   });
 });

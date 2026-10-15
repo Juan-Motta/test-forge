@@ -401,7 +401,7 @@ function RailBox({ id, title, note, children }: { id: string; title: string; not
 
 function ConnectionNotice({ state }: { state: LiveConnectionState }) {
   const t = useT();
-  if (state.kind === "error") return <Alert>{liveConnectionError(t, state.code, "run")}</Alert>;
+  if (state.kind === "error") return <Alert>{liveConnectionError(t, state, "run")}</Alert>;
   if (state.kind === "reconnecting") {
     return (
       <p role="status" className="text-sm text-muted">

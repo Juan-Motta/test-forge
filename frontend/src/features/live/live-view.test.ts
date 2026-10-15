@@ -8,12 +8,14 @@ import {
   evaluatorChip,
   evaluatorGoals,
   laneAxis,
+  liveConnectionError,
   liveMetrics,
   sessionChip,
   sessionMeta,
 } from "./live-view";
 
 const t = createTranslator("en");
+const es = createTranslator("es");
 
 const state = (changes: Partial<LiveRunState>): LiveRunState => ({ ...INITIAL_LIVE_STATE, ...changes });
 const entry = (role: "agent" | "caller", index: number) => ({ key: `k${index}`, role, text: "…", tMs: index * 1000 });
@@ -150,5 +152,32 @@ describe("lane axis", () => {
   it("labels the window from its start to now", () => {
     expect(laneAxis(t, 131_000 + 24_000, 24_000)).toEqual(["2:11", "2:19", "2:27", "now"]);
     expect(laneAxis(t, 5000, 24_000)).toEqual(["0:00", "0:00", "0:00", "now"]);
+  });
+});
+
+describe("live connection error", () => {
+  it("words the refusals the close code names, in the page language", () => {
+    expect(liveConnectionError(t, { code: 4401, message: "x" }, "run")).toBe("Your session expired. Taking you to sign in…");
+    expect(liveConnectionError(es, { code: 4404, message: "x" }, "batch")).toBe("Este lote no existe.");
+    expect(liveConnectionError(t, { code: 4404, message: "x" }, "run")).toBe("This run no longer exists.");
+    expect(liveConnectionError(t, { code: 4403, message: "x" }, "run")).toMatch(/origin refused/);
+  });
+
+  it("translates the connection's own give-up line", () => {
+    const gaveUp = { code: 1006, message: "Lost the live connection. Reload the page to try again." };
+    expect(liveConnectionError(es, gaveUp, "run")).toBe("Se perdió la conexión en vivo. Recarga la página para reintentar.");
+  });
+
+  it("shows the connection's own message for a close code it has no words for", () => {
+    expect(liveConnectionError(t, { code: 4999, message: "The server is draining connections." }, "run")).toBe(
+      "The server is draining connections.",
+    );
+  });
+
+  it("falls back to the give-up line when the connection gave no message", () => {
+    expect(liveConnectionError(t, { code: 1011, message: "" }, "run")).toBe(t("live.conn.gaveUp"));
+    expect(liveConnectionError(es, { code: 1011 }, "batch")).toBe(
+      "Se perdió la conexión en vivo. Recarga la página para reintentar.",
+    );
   });
 });

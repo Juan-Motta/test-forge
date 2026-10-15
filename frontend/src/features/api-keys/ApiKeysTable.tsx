@@ -49,12 +49,12 @@ export function ApiKeysTable({ apiKeys, onRevoke, now }: ApiKeysTableProps) {
         <caption className="sr-only">{t("nav.apiKeys")}</caption>
         <thead role="rowgroup" className="border-b border-line max-md:sr-only">
           <tr role="row">
-            <th scope="col" role="columnheader" className={HEAD}>{t("scenarios.field.name")}</th>
-            <th scope="col" role="columnheader" className={HEAD}>{t("connections.field.key")}</th>
+            <th scope="col" role="columnheader" className={HEAD}>{t("apiKeys.column.name")}</th>
+            <th scope="col" role="columnheader" className={HEAD}>{t("apiKeys.column.key")}</th>
             <th scope="col" role="columnheader" className={HEAD}>{t("apiKeys.created")}</th>
             <th scope="col" role="columnheader" className={HEAD}>{t("apiKeys.lastUsed")}</th>
             <th scope="col" role="columnheader" className={HEAD}>{t("apiKeys.expires")}</th>
-            <th scope="col" role="columnheader" className={HEAD}>{t("runs.filter.status")}</th>
+            <th scope="col" role="columnheader" className={HEAD}>{t("apiKeys.column.status")}</th>
             <th scope="col" role="columnheader" className={HEAD}>
               <span className="sr-only">{t("common.actions")}</span>
             </th>
@@ -73,7 +73,7 @@ export function ApiKeysTable({ apiKeys, onRevoke, now }: ApiKeysTableProps) {
                   {apiKey.name}
                 </th>
                 <td role="cell" className={CELL}>
-                  <CellLabel>{t("connections.field.key")}</CellLabel>
+                  <CellLabel>{t("apiKeys.column.key")}</CellLabel>
                   <span className="font-mono text-xs text-muted">{maskedPrefix(apiKey.prefix)}</span>
                 </td>
                 <td role="cell" className={CELL}>
@@ -89,7 +89,7 @@ export function ApiKeysTable({ apiKeys, onRevoke, now }: ApiKeysTableProps) {
                   <When iso={apiKey.expiresAt} />
                 </td>
                 <td role="cell" className={CELL}>
-                  <CellLabel>{t("runs.filter.status")}</CellLabel>
+                  <CellLabel>{t("apiKeys.column.status")}</CellLabel>
                   <Badge tone={STATUS_TONES[status]}>{statusLabel(t, status)}</Badge>
                 </td>
                 <td role="cell" className={`${CELL} max-md:col-span-2`}>

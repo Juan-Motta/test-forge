@@ -1,6 +1,6 @@
 import { useFormat, useT } from "@/lib/i18n";
 import { cn } from "@/ui";
-import { PART_LABELS, formatUsd, runCostLabel } from "./format";
+import { PART_LABEL_KEYS, formatUsd, runCostLabel } from "./format";
 import type { RunCost } from "./types";
 
 const CARD = "flex flex-col gap-2 rounded-xl border border-line bg-panel p-5";
@@ -22,8 +22,8 @@ export function RunCostCard({ cost, className }: { cost: RunCost | null | undefi
         <>
           <div className="flex flex-wrap items-baseline gap-x-8 gap-y-2">
             <span className="font-mono text-2xl font-semibold tabular-nums">{runCostLabel(format, cost)}</span>
-            <Amount label={t(PART_LABELS.caller)} usd={cost.callerUsd} />
-            <Amount label={t(PART_LABELS.judge)} usd={cost.judgeUsd} />
+            <Amount label={t(PART_LABEL_KEYS.caller)} usd={cost.callerUsd} />
+            <Amount label={t(PART_LABEL_KEYS.judge)} usd={cost.judgeUsd} />
           </div>
           {cost.breakdown.length > 0 ? (
             <details className="text-xs text-muted">
@@ -31,7 +31,7 @@ export function RunCostCard({ cost, className }: { cost: RunCost | null | undefi
               <ul aria-label={t("cost.byModelLabel")} className="mt-2 flex flex-col gap-1">
                 {cost.breakdown.map((line) => (
                   <li key={`${line.part}-${line.model}`} className="flex max-w-md justify-between gap-4">
-                    <span>{`${t(PART_LABELS[line.part])} · ${line.model}`}</span>
+                    <span>{`${t(PART_LABEL_KEYS[line.part])} · ${line.model}`}</span>
                     <span className="font-mono tabular-nums">{line.usd === null ? t("cost.notPriced") : formatUsd(format, line.usd)}</span>
                   </li>
                 ))}

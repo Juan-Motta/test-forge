@@ -1,4 +1,4 @@
-import { PRIORITY_TONES } from "@/features/judgements/format";
+import { PRIORITY_TONES, suggestionAreaLabel, suggestionPriorityLabel } from "@/features/judgements/format";
 import type { Suggestion, SuggestionPriority } from "@/features/judgements/types";
 import { useT } from "@/lib/i18n";
 import { Badge, Pin, type PinTone } from "@/ui";
@@ -21,12 +21,14 @@ export function SuggestionsGrid({
       {suggestions.map((suggestion, index) => (
         <li key={index} className="flex flex-col gap-3 rounded-xl border border-line bg-panel p-[18px]">
           <div className="flex items-start gap-2.5">
-            <Pin n={index + 1} tone={PIN_TONES[suggestion.priority]} size="md" className="size-6 text-xs" />
+            <Pin n={index + 1} tone={PIN_TONES[suggestion.priority] ?? "muted"} size="md" className="size-6 text-xs" />
             <div className="flex min-w-0 flex-1 flex-col gap-1">
               <h3 className="text-[15px] leading-snug font-semibold">{suggestion.title}</h3>
-              <span className="text-xs text-dim">{t(`report.area.${suggestion.area}`)}</span>
+              <span className="text-xs text-dim">{suggestionAreaLabel(t, suggestion.area)}</span>
             </div>
-            <Badge tone={PRIORITY_TONES[suggestion.priority]}>{t(`report.priority.${suggestion.priority}`)}</Badge>
+            <Badge tone={PRIORITY_TONES[suggestion.priority] ?? "neutral"}>
+              {suggestionPriorityLabel(t, suggestion.priority)}
+            </Badge>
           </div>
           <p className="text-[13px] leading-relaxed whitespace-pre-line text-body-soft">{suggestion.detail}</p>
           {suggestion.evidenceRefs.length > 0 ? (

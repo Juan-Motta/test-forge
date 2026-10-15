@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { createTranslator } from "@/lib/i18n";
 import { apiKeyStatus, curlExample, maskedPrefix, statusLabel } from "./format";
+import { apiKeyFixture } from "./testing";
 
 const t = createTranslator("en");
-import { apiKeyFixture } from "./testing";
 
 const NOW = Date.parse("2026-10-11T12:00:00Z");
 

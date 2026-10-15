@@ -5,7 +5,8 @@ import { RUN_STATUSES, type RunStatus, type TranscriptRow } from "@/features/run
 import type { Translator } from "@/lib/i18n";
 
 /** What the conversation is doing right now, from the latest events. */
-export type TurnState = "waiting" | "agent" | "playback" | "evaluator" | "hanging_up" | "ended";
+export const TURN_STATES = ["waiting", "agent", "playback", "evaluator", "hanging_up", "ended"] as const;
+export type TurnState = (typeof TURN_STATES)[number];
 
 /** What the conversation is doing, in words; text runs word the same states for a chat. */
 export function turnStateLabel(t: Translator, state: TurnState, kind: "voice" | "text" = "voice"): string {

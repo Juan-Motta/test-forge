@@ -4,7 +4,9 @@ import {
   ACTIVE_JUDGEMENT_STATUSES,
   CAPPING_FAILURE_TAGS,
   type ActiveJudgementStatus,
+  type EvidenceSource,
   type FailureTag,
+  type SuggestionArea,
   type SuggestionPriority,
   type TraceStats,
   type UnobservableReason,
@@ -43,11 +45,47 @@ const FAILURE_TAGS: readonly FailureTag[] = [
   "tool_or_trace_error",
 ];
 
+/** `some_new_value` -> "some new value": a judge value the app has no words for, still readable. */
+function words(value: string): string {
+  return value.replace(/[_-]+/g, " ").trim().toLowerCase();
+}
+
+/** `some_new_value` -> "Some new value". */
+function humanize(value: string): string {
+  const text = words(value);
+  return text ? `${text[0].toUpperCase()}${text.slice(1)}` : value;
+}
+
 /** Human label of a failure tag; an unknown tag is humanized (`some_new_tag` -> "Some new tag"). */
 export function failureTagLabel(t: Translator, tag: string): string {
   if ((FAILURE_TAGS as readonly string[]).includes(tag)) return t(`judgement.tag.${tag as FailureTag}`);
-  const words = tag.replace(/[_-]+/g, " ").trim().toLowerCase();
-  return words ? `${words[0].toUpperCase()}${words.slice(1)}` : tag;
+  return humanize(tag);
+}
+
+const SUGGESTION_AREAS: readonly SuggestionArea[] = ["prompt", "tools", "flow", "latency", "voice", "other"];
+const SUGGESTION_PRIORITIES: readonly SuggestionPriority[] = ["high", "medium", "low"];
+const EVIDENCE_SOURCES: readonly EvidenceSource[] = ["transcript", "trace", "timing"];
+
+/*
+ * The judge (an LLM) writes these values; one the app does not know is shown humanized rather
+ * than looked up as a message key that does not exist.
+ */
+
+/** "Prompt", "Latency", …; an unknown area is humanized. */
+export function suggestionAreaLabel(t: Translator, area: string): string {
+  return (SUGGESTION_AREAS as readonly string[]).includes(area) ? t(`report.area.${area as SuggestionArea}`) : humanize(area);
+}
+
+/** "High priority", …; an unknown priority is humanized. */
+export function suggestionPriorityLabel(t: Translator, priority: string): string {
+  return (SUGGESTION_PRIORITIES as readonly string[]).includes(priority)
+    ? t(`report.priority.${priority as SuggestionPriority}`)
+    : humanize(priority);
+}
+
+/** "transcript", "trace", "timing" (lowercase, read inside a sentence); an unknown source in plain words. */
+export function evidenceSourceLabel(t: Translator, source: string): string {
+  return (EVIDENCE_SOURCES as readonly string[]).includes(source) ? t(`report.source.${source as EvidenceSource}`) : words(source);
 }
 
 /** The band a capping failure tag limits a criterion to (judge/domain.py `CAP_BAND`). */

@@ -5,7 +5,7 @@ import { runCostLabel } from "@/features/pricing/format";
 import { runResult } from "@/features/overview/run-result";
 import { useFormat, useT, type Format, type MessageKey } from "@/lib/i18n";
 import { Badge, Button, CopyButton, ScoreBar, buttonClasses, cn, focusRing } from "@/ui";
-import { clock, endReasonLabel, isActive, latency, runDurationMs, shortId, statusLabel } from "./format";
+import { clock, endReasonLabel, endReasonRepeatsStatus, isActive, latency, runDurationMs, shortId } from "./format";
 import { KindBadge } from "./KindBadge";
 import { runKind } from "./kind";
 import { RunStatusChip } from "./RunStatusChip";
@@ -133,7 +133,7 @@ export function RunOutcome({ run, label }: { run: Run; label: string }) {
 export function RunStatus({ run }: { run: Run }) {
   const t = useT();
   const reason = endReasonLabel(t, run.endReason, runKind(run));
-  const showReason = reason && !isActive(run.status) && reason !== statusLabel(t, run.status);
+  const showReason = reason && !isActive(run.status) && !endReasonRepeatsStatus(run.status, run.endReason);
   return (
     <div className="flex flex-col items-start gap-1">
       <RunStatusChip status={run.status} />

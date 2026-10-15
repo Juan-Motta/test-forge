@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { INITIAL_LIVE_STATE, liveReducer, type LiveRunState } from "./live-state";
+import { LOCALES, createTranslator } from "@/lib/i18n";
+import { MESSAGES } from "@/lib/i18n/messages";
+import { INITIAL_LIVE_STATE, TURN_STATES, liveReducer, turnStateLabel, type LiveRunState } from "./live-state";
 
 const send = (state: LiveRunState, message: Record<string, unknown>) =>
   liveReducer(state, { type: "message", message, now: 0 });
@@ -123,5 +125,21 @@ describe("liveReducer: the realtime evaluator's decision after its line", () => 
     const state = send(speaking, { type: "callerDecision", tMs: 4000, decisionId: 1, say: null, hangUp: false, reason: "realtime" });
     expect(state.turnState).toBe("evaluator");
     expect(state.pending).toBeNull();
+  });
+});
+
+describe("turn state labels", () => {
+  it("has a catalog entry for every turn state, voice and text, in every language", () => {
+    for (const state of TURN_STATES) {
+      expect(MESSAGES.en).toHaveProperty([`live.turn.${state}`]);
+      expect(MESSAGES.en).toHaveProperty([`live.textTurn.${state}`]);
+    }
+    for (const locale of LOCALES) {
+      const t = createTranslator(locale);
+      for (const state of TURN_STATES) {
+        expect(turnStateLabel(t, state, "voice")).toEqual(expect.any(String));
+        expect(turnStateLabel(t, state, "text")).toEqual(expect.any(String));
+      }
+    }
   });
 });

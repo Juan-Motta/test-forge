@@ -1,5 +1,5 @@
-import type { Format } from "@/lib/i18n";
-import type { RunCost } from "./types";
+import type { Format, MessageKey } from "@/lib/i18n";
+import type { CostLine, RunCost } from "./types";
 
 /** Dollars: cents from a dollar up, four decimals below (evaluations often cost cents). */
 export function formatUsd(format: Format, value: number | null | undefined): string {
@@ -16,4 +16,8 @@ export function runCostLabel(format: Format, cost: RunCost | null | undefined): 
   return `≈ ${formatUsd(format, cost.totalUsd)}${cost.complete ? "" : "+"}`;
 }
 
-export const PART_LABELS = { caller: "common.evaluator", judge: "common.judge" } as const;
+/** The message key naming each costed part of a run. */
+export const PART_LABEL_KEYS = {
+  caller: "common.evaluator",
+  judge: "common.judge",
+} as const satisfies Record<CostLine["part"], MessageKey>;
