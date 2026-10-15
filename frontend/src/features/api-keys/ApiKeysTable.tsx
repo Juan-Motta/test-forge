@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { useFormat, useT } from "@/lib/i18n";
-import { Badge, type BadgeTone, Button } from "@/ui";
+import { Badge, type BadgeTone, IconButton, TrashIcon } from "@/ui";
 import { apiKeyStatus, maskedPrefix, statusLabel } from "./format";
 import type { ApiKey, ApiKeyStatus } from "./types";
 
@@ -35,7 +35,7 @@ function When({ iso, now }: { iso: string | null; now?: number }) {
 }
 
 const HEAD = "px-4 py-3 text-left text-xs font-medium text-dim";
-const CELL = "align-top md:px-4 md:py-3.5";
+const CELL = "align-middle md:px-4 md:py-3.5";
 
 /**
  * A table on wide screens; on phones every row restyles into a card. Changing `display` makes
@@ -94,14 +94,14 @@ export function ApiKeysTable({ apiKeys, onRevoke, now }: ApiKeysTableProps) {
                 </td>
                 <td role="cell" className={`${CELL} max-md:col-span-2`}>
                   {status === "revoked" ? null : (
-                    <div className="flex flex-wrap gap-2 md:justify-end">
-                      <Button
-                        variant="ghost"
-                        aria-label={t("apiKeys.revokeNamed", { name: apiKey.name })}
+                    <div className="flex md:justify-end">
+                      <IconButton
+                        size="sm"
+                        label={t("apiKeys.revokeNamed", { name: apiKey.name })}
+                        icon={<TrashIcon size={16} />}
                         onClick={() => onRevoke(apiKey)}
-                      >
-                        {t("apiKeys.revoke")}
-                      </Button>
+                        className="hover:text-danger-fg"
+                      />
                     </div>
                   )}
                 </td>

@@ -42,7 +42,10 @@ describe("API keys list", () => {
     expect(within(ci).getByText("2 hours ago")).toBeInTheDocument();
     expect(within(ci).getByText("Never")).toBeInTheDocument(); // no expiry
     expect(within(ci).getByText("Active")).toBeInTheDocument();
-    expect(within(ci).getByRole("button", { name: "Revoke CI pipeline" })).toBeInTheDocument();
+    const revoke = within(ci).getByRole("button", { name: "Revoke CI pipeline" });
+    // An icon button (trash) with its name as a tooltip, not a text button.
+    expect(revoke).toHaveAttribute("title", "Revoke CI pipeline");
+    expect(revoke.textContent).toBe("");
 
     const old = await findRow("Old script");
     expect(within(old).getByText("Expired")).toBeInTheDocument();
