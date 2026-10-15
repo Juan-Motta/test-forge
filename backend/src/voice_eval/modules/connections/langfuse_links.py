@@ -1,12 +1,12 @@
 """Links into Langfuse's UI for a Langfuse connection: a run's traces (by thread id) and one trace.
 
-The thread's trace list (`{host}/project/{projectId}/traces?filter=…thread_id…`) needs
-the project id, which only Langfuse knows: `LangfuseLinks.resolve` looks it up with the
-connection's keys (`providers.langfuse_projects`) the first time it is needed and keeps it in memory, keyed by
-the connection id and its `updated_at`, so an edited connection (another host or key) is looked
-up again. A failed lookup is remembered for `failure_ttl_s` so an unreachable Langfuse does not
-slow every request down; it never raises, the project id is just unknown. Only the host and
-the project id are cached, never a key.
+The thread's trace list (`{host}/project/{projectId}/traces?filter=…thread_id…`) needs the
+project id, which only Langfuse knows: `LangfuseLinks.resolve` looks it up with the connection's
+keys (`providers.langfuse_projects`) the first time it is needed and keeps it in memory, keyed
+by the connection id and its `updated_at`, so an edited connection (another host or key) is
+looked up again. A failed lookup is remembered for `failure_ttl_s` so an unreachable Langfuse
+does not slow every request down; it never raises, the project id is just unknown. Only the host
+and the project id are cached, never a key.
 """
 
 import logging
