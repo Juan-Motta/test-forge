@@ -56,3 +56,14 @@ describe("SegmentedControl", () => {
     expect(screen.getByRole("radio", { name: "Agent only" })).toHaveAttribute("tabindex", "-1");
   });
 });
+
+describe("SegmentedControl size", () => {
+  it("matches the 44px form fields in the md size", () => {
+    render(
+      <SegmentedControl label="Order" size="md" options={[{ value: "a", label: "A" }]} value="a" onChange={() => {}} />,
+    );
+    // 3px track padding on each side + 38px segments = the 44px height of Input/Select.
+    expect(screen.getByRole("radio", { name: "A" }).className).toMatch(/min-h-\[38px\]/);
+    expect(screen.getByRole("radio", { name: "A" }).className).toMatch(/text-sm/);
+  });
+});

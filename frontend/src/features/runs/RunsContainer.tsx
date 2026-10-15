@@ -250,6 +250,7 @@ export function RunsContainer() {
           </Field>
         </div>
         <SegmentedControl
+          size="md"
           label={t("runs.filter.order")}
           options={ORDERS.map((order) => ({ value: order.value, label: t(order.label) }))}
           value={filters.order}
