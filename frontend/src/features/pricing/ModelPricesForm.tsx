@@ -20,7 +20,7 @@ const HEADERS: Record<PriceBucket, string> = {
   textOut: "Text out",
   audioOut: "Audio out",
 };
-const NEGATIVE = "Prices must be zero or more.";
+const NEGATIVE = "Prices must be zero or more, as plain numbers with at most 4 decimals.";
 
 type Draft = Record<string, Record<PriceBucket, string>>;
 
@@ -36,11 +36,14 @@ function draftOf(items: ModelPrice[]): Draft {
   );
 }
 
-/** A cell's price: empty means no price; anything else must be a number of zero or more. */
+/** A plain decimal of zero or more with at most 4 decimals (the server stores 4). */
+const PRICE_PATTERN = /^\d+(\.\d{1,4})?$/;
+
+/** A cell's price: empty means no price; anything else must match PRICE_PATTERN. */
 function parsePrice(value: string): number | null | "invalid" {
-  if (value.trim() === "") return null;
-  const number = Number(value);
-  return Number.isFinite(number) && number >= 0 ? number : "invalid";
+  const text = value.trim();
+  if (text === "") return null;
+  return PRICE_PATTERN.test(text) ? Number(text) : "invalid";
 }
 
 type ModelPricesFormProps = {
@@ -101,7 +104,7 @@ export function ModelPricesForm({ items, saving, error, onSave }: ModelPricesFor
                   <td key={bucket} className="border-b border-line-soft px-2 py-2">
                     <Input
                       mono
-                      type="number"
+                      type="text"
                       inputMode="decimal"
                       min={0}
                       step="any"

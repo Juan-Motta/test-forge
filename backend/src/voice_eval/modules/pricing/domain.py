@@ -15,7 +15,14 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    model_validator,
+)
 from pydantic.alias_generators import to_camel
 
 from voice_eval.ports.usage import BUCKETS, TTS_AUDIO_NOT_METERED, TTS_TEXT_ESTIMATED
@@ -42,7 +49,23 @@ ModelName = Annotated[
         strip_whitespace=True, min_length=1, max_length=100, pattern=r"^[A-Za-z0-9._:-]+$"
     ),
 ]
-Price = Annotated[float, Field(ge=0, le=MAX_PRICE, allow_inf_nan=False)] | None
+PRICE_DECIMALS = 4  # the column is Numeric(12, 4): more decimals would be rounded silently
+
+
+def _check_decimals(value: float) -> float:
+    if round(value, PRICE_DECIMALS) != value:
+        raise ValueError(f"use at most {PRICE_DECIMALS} decimals")
+    return value
+
+
+Price = (
+    Annotated[
+        float,
+        Field(ge=0, le=MAX_PRICE, allow_inf_nan=False),
+        AfterValidator(_check_decimals),
+    ]
+    | None
+)
 
 
 class PricingModel(BaseModel):

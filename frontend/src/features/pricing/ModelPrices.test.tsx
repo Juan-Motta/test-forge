@@ -14,8 +14,8 @@ describe("Model prices settings", () => {
 
     const table = await screen.findByRole("table", { name: "Model prices" });
     const luna = within(table).getByRole("row", { name: /gpt-6-luna/ });
-    expect(within(luna).getByRole("spinbutton", { name: "gpt-6-luna text input" })).toHaveValue(0.1);
-    expect(within(luna).getByRole("spinbutton", { name: "gpt-6-luna audio output" })).toHaveValue(null);
+    expect(within(luna).getByRole("textbox", { name: "gpt-6-luna text input" })).toHaveValue("0.1");
+    expect(within(luna).getByRole("textbox", { name: "gpt-6-luna audio output" })).toHaveValue("");
     const source = screen.getByRole("link", { name: /OpenAI pricing/ });
     expect(source).toHaveAttribute("href", "https://developers.openai.com/api/docs/pricing");
     expect(source).toHaveAttribute("target", "_blank");
@@ -28,10 +28,10 @@ describe("Model prices settings", () => {
     renderWithClient(<ModelPricesContainer />);
     const user = userEvent.setup();
 
-    const textIn = await screen.findByRole("spinbutton", { name: "gpt-6-luna text input" });
+    const textIn = await screen.findByRole("textbox", { name: "gpt-6-luna text input" });
     await user.clear(textIn);
     await user.type(textIn, "0.25");
-    await user.clear(screen.getByRole("spinbutton", { name: "gpt-6-luna cached text input" }));
+    await user.clear(screen.getByRole("textbox", { name: "gpt-6-luna cached text input" }));
     await user.click(screen.getByRole("button", { name: "Save prices" }));
 
     await waitFor(() => expect(api.saved).toHaveLength(1));
@@ -54,13 +54,42 @@ describe("Model prices settings", () => {
     renderWithClient(<ModelPricesContainer />);
     const user = userEvent.setup();
 
-    const textOut = await screen.findByRole("spinbutton", { name: "gpt-6-luna text output" });
+    const textOut = await screen.findByRole("textbox", { name: "gpt-6-luna text output" });
     await user.clear(textOut);
     await user.type(textOut, "-1");
     await user.click(screen.getByRole("button", { name: "Save prices" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("Prices must be zero or more.");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Prices must be zero or more");
     expect(textOut).toHaveAttribute("aria-invalid", "true");
+    expect(api.saved).toHaveLength(0);
+  });
+
+  it("refuses a price that is not a number instead of dropping it", async () => {
+    const api = mockPricingApi();
+    renderWithClient(<ModelPricesContainer />);
+    const user = userEvent.setup();
+
+    const textOut = await screen.findByRole("textbox", { name: "gpt-6-luna text output" });
+    await user.clear(textOut);
+    await user.type(textOut, "1e");
+    await user.click(screen.getByRole("button", { name: "Save prices" }));
+
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    expect(textOut).toHaveAttribute("aria-invalid", "true");
+    expect(api.saved).toHaveLength(0);
+  });
+
+  it("refuses more than 4 decimals", async () => {
+    const api = mockPricingApi();
+    renderWithClient(<ModelPricesContainer />);
+    const user = userEvent.setup();
+
+    const textOut = await screen.findByRole("textbox", { name: "gpt-6-luna text output" });
+    await user.clear(textOut);
+    await user.type(textOut, "0.00005");
+    await user.click(screen.getByRole("button", { name: "Save prices" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("at most 4 decimals");
     expect(api.saved).toHaveLength(0);
   });
 

@@ -43,6 +43,7 @@ async def test_prices_can_be_replaced_and_are_validated(user_client):
             [{"model": "a"}, {"model": "a"}],
             [{"model": "bad model"}],
             [{"model": "gpt-6-luna", "videoIn": 1}],
+            [{"model": "gpt-6-luna", "textIn": 0.00005}],  # stored with 4 decimals: would be 0
         ):
             refused = await user_client.put("/api/pricing", json={"items": bad})
             assert refused.status_code == 422, bad
