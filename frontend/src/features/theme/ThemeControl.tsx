@@ -1,16 +1,15 @@
 "use client";
 
 import { useTheme, type ThemeChoice } from "@/lib/browser/theme";
-import { SegmentedControl, type SegmentOption } from "@/ui";
+import { useT } from "@/lib/i18n";
+import { SegmentedControl } from "@/ui";
 
-const OPTIONS: readonly SegmentOption<ThemeChoice>[] = [
-  { value: "system", label: "System" },
-  { value: "light", label: "Light" },
-  { value: "dark", label: "Dark" },
-];
+const CHOICES: readonly ThemeChoice[] = ["system", "light", "dark"];
 
 /** System / Light / Dark switch, remembered in this browser. */
 export function ThemeControl({ className }: { className?: string }) {
+  const t = useT();
   const [theme, setTheme] = useTheme();
-  return <SegmentedControl label="Theme" options={OPTIONS} value={theme} onChange={setTheme} className={className} />;
+  const options = CHOICES.map((value) => ({ value, label: t(`theme.${value}`) }));
+  return <SegmentedControl label={t("theme.label")} options={options} value={theme} onChange={setTheme} className={className} />;
 }

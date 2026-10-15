@@ -6,7 +6,7 @@ import { Spinner } from "@/ui";
 export const metadata: Metadata = { title: "Scenario" };
 
 // With Cache Components the id is runtime data: read it inside a Suspense boundary.
-export default function Page({ params }: PageProps<"/scenarios/[id]">) {
+export default function Page({ params }: PageProps<"/[lang]/scenarios/[id]">) {
   return (
     <Suspense fallback={<Spinner label="Loading scenario" />}>
       {params.then(({ id }) => (

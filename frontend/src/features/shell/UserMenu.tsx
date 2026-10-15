@@ -1,3 +1,6 @@
+"use client";
+
+import { useT } from "@/lib/i18n";
 import { Alert, IconButton, SignOutIcon, Spinner } from "@/ui";
 
 export type ShellUser = { displayName: string; email: string };
@@ -12,6 +15,7 @@ type UserMenuProps = {
 };
 
 export function UserMenu({ user, onSignOut, signingOut, signOutError, accountUnavailable }: UserMenuProps) {
+  const t = useT();
   return (
     <div className="flex flex-col gap-2 border-t border-line-soft pt-4">
       {signOutError ? <Alert className="text-xs">{signOutError}</Alert> : null}
@@ -29,13 +33,13 @@ export function UserMenu({ user, onSignOut, signingOut, signOutError, accountUna
               <span className="truncate text-xs text-dim">{user.email}</span>
             </>
           ) : accountUnavailable ? (
-            <span className="text-xs text-dim">Account details unavailable</span>
+            <span className="text-xs text-dim">{t("account.unavailable")}</span>
           ) : (
-            <Spinner label="Loading account" size={14} />
+            <Spinner label={t("account.loading")} size={14} />
           )}
         </div>
         <IconButton
-          label={signingOut ? "Signing out…" : "Sign out"}
+          label={signingOut ? t("account.signingOut") : t("account.signOut")}
           icon={signingOut ? <Spinner /> : <SignOutIcon />}
           onClick={onSignOut}
           disabled={signingOut}

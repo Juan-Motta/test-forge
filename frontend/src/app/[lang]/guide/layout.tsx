@@ -7,7 +7,7 @@ export const metadata: Metadata = {
 };
 
 /** The public user guide: no app shell and no session needed (see `features/auth/route-guard`). */
-export default function GuideLayout({ children }: LayoutProps<"/guide">) {
+export default function GuideLayout({ children }: LayoutProps<"/[lang]/guide">) {
   return (
     <div className="min-h-screen">
       <GuideHeader />

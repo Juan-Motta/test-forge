@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useT } from "@/lib/i18n";
 import { cn } from "./cn";
 import { IconButton } from "./IconButton";
 import { CheckIcon, CopyIcon } from "./icons";
@@ -39,7 +40,7 @@ type CopyButtonProps = {
   text: string;
   /** Accessible name, e.g. "Copy thread id". */
   label: string;
-  /** Announced (politely) once copied. */
+  /** Announced (politely) once copied (default "Copied", translated). */
   copiedMessage?: string;
   iconSize?: number;
   /** The button's size; "sm" for dense places such as table cells. */
@@ -48,7 +49,8 @@ type CopyButtonProps = {
 };
 
 /** An icon button that copies `text`, with a screen-reader confirmation. */
-export function CopyButton({ text, label, copiedMessage = "Copied", iconSize = 16, size, className }: CopyButtonProps) {
+export function CopyButton({ text, label, copiedMessage, iconSize = 16, size, className }: CopyButtonProps) {
+  const t = useT();
   const [state, copy] = useClipboard();
   return (
     <>
@@ -60,7 +62,7 @@ export function CopyButton({ text, label, copiedMessage = "Copied", iconSize = 1
         onClick={() => void copy(text)}
       />
       <span role="status" className="sr-only">
-        {state === "copied" ? copiedMessage : state === "failed" ? "Copy failed" : ""}
+        {state === "copied" ? (copiedMessage ?? t("ui.copied")) : state === "failed" ? t("ui.copyFailed") : ""}
       </span>
     </>
   );

@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import { Suspense, useState, type ReactNode } from "react";
 import { useSession, type SessionUser } from "@/features/auth/session";
 import { useSignOut } from "@/features/auth/useSignOut";
+import { useT } from "@/lib/i18n";
 import { CloseIcon, IconButton, MenuIcon, cn } from "@/ui";
 import { Brand } from "./Brand";
 import { Sidebar } from "./Sidebar";
@@ -22,6 +23,7 @@ const SIDEBAR_ID = "app-sidebar";
  * dropped (an in-flight `auth/me` cancelled, a stale one refetched) whenever the boundary swaps.
  */
 export function AppShell({ children }: { children: ReactNode }) {
+  const t = useT();
   const session = useSession();
   const signOut = useSignOut();
   const activeRuns = useActiveRunCount();
@@ -30,7 +32,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     accountUnavailable: session.isError,
     onSignOut: () => signOut.mutate(),
     signingOut: signOut.isPending || signOut.isSuccess,
-    signOutError: signOut.isError ? "Could not sign out. Try again." : undefined,
+    signOutError: signOut.isError ? t("shell.signOutFailed") : undefined,
     activeRuns,
   };
   return (
@@ -66,6 +68,7 @@ function Navigation({
   signingOut,
   signOutError,
 }: SharedNavigation & { pathname: string }) {
+  const t = useT();
   // The drawer stays open only on the route it was opened on, so any navigation closes it
   // (a link outside the drawer, browser back/forward, a redirect), not just its own links.
   const [menuOpenOn, setMenuOpenOn] = useState<string | null>(null);
@@ -76,7 +79,7 @@ function Navigation({
       <header className="sticky top-0 z-20 flex items-center justify-between border-b border-line-soft bg-sidebar px-4 py-2 md:hidden">
         <Brand />
         <IconButton
-          label={menuOpen ? "Close navigation" : "Open navigation"}
+          label={menuOpen ? t("shell.closeNavigation") : t("shell.openNavigation")}
           aria-expanded={menuOpen}
           aria-controls={SIDEBAR_ID}
           icon={menuOpen ? <CloseIcon /> : <MenuIcon />}

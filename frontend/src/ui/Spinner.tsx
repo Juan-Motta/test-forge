@@ -1,6 +1,8 @@
+import type { ReactNode } from "react";
 import { cn } from "./cn";
 
-type SpinnerProps = { size?: number; className?: string; label?: string };
+/** `label` may be a node so server components can pass a translated `<T>`. */
+type SpinnerProps = { size?: number; className?: string; label?: ReactNode };
 
 /** Decorative unless `label` is given, in which case it is announced as a status. */
 export function Spinner({ size = 16, className, label }: SpinnerProps) {

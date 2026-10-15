@@ -1,3 +1,4 @@
+import { T } from "@/lib/i18n";
 import { ChevronDownIcon } from "@/ui";
 
 /** The environment the console points at, drawn as the design's selector pill (no menu yet). */
@@ -9,7 +10,9 @@ export function EnvironmentBadge({ label }: { label: string }) {
     >
       <span className="flex items-center gap-2">
         <span aria-hidden="true" className="size-2 rounded-full bg-success" />
-        <span>Environment · {label}</span>
+        <span>
+          <T k="shell.environment" vars={{ label }} />
+        </span>
       </span>
       <ChevronDownIcon size={14} strokeWidth={2} className="text-dim" />
     </p>

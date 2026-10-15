@@ -1,3 +1,5 @@
+import { T } from "@/lib/i18n";
+
 /** Two-circle mark (blue agent, amber evaluator) and the Duet wordmark. */
 export function Brand() {
   return (
@@ -8,7 +10,9 @@ export function Brand() {
       </svg>
       <div className="flex flex-col leading-tight">
         <span className="text-[17px] font-bold tracking-[-0.01em]">Duet</span>
-        <span className="text-xs text-dim">Agent evals</span>
+        <span className="text-xs text-dim">
+          <T k="shell.tagline" />
+        </span>
       </div>
     </div>
   );

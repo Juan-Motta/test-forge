@@ -1,4 +1,5 @@
 import type { ComponentType } from "react";
+import type { MessageKey } from "@/lib/i18n";
 import { KeyIcon } from "@/features/api-keys/KeyIcon";
 import {
   AgentsIcon,
@@ -12,24 +13,25 @@ import {
 
 export type NavItem = {
   href: string;
-  label: string;
+  /** Dictionary key of the visible name. */
+  label: MessageKey;
   icon: ComponentType<{ size?: number }>;
   /** Rendered indented under its parent (e.g. Connections under Settings). */
   nested?: boolean;
 };
 
 export const NAV_PRIMARY: NavItem[] = [
-  { href: "/", label: "Overview", icon: OverviewIcon },
-  { href: "/live", label: "Live sessions", icon: LiveIcon },
-  { href: "/runs", label: "Runs & reports", icon: RunsIcon },
-  { href: "/scenarios", label: "Scenarios", icon: ScenariosIcon },
-  { href: "/agents", label: "Agents", icon: AgentsIcon },
+  { href: "/", label: "nav.overview", icon: OverviewIcon },
+  { href: "/live", label: "nav.live", icon: LiveIcon },
+  { href: "/runs", label: "nav.runs", icon: RunsIcon },
+  { href: "/scenarios", label: "nav.scenarios", icon: ScenariosIcon },
+  { href: "/agents", label: "nav.agents", icon: AgentsIcon },
 ];
 
 export const NAV_SECONDARY: NavItem[] = [
-  { href: "/settings", label: "Settings", icon: SettingsIcon },
-  { href: "/settings/connections", label: "Connections", icon: ConnectionsIcon, nested: true },
-  { href: "/settings/api-keys", label: "API keys", icon: KeyIcon, nested: true },
+  { href: "/settings", label: "nav.settings", icon: SettingsIcon },
+  { href: "/settings/connections", label: "nav.connections", icon: ConnectionsIcon, nested: true },
+  { href: "/settings/api-keys", label: "nav.apiKeys", icon: KeyIcon, nested: true },
 ];
 
 /** The most specific item matching the path (exact or ancestor), or null. */

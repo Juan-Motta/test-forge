@@ -26,7 +26,7 @@ const PAGES: Record<GuideSlug, ComponentType> = {
 describe("Guide layout", () => {
   it("has the Duet brand, a link into the app and the Swagger reference", () => {
     render(
-      <Layout params={Promise.resolve({})}>
+      <Layout params={Promise.resolve({ lang: "en" })}>
         <p>content</p>
       </Layout>,
     );

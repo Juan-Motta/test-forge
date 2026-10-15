@@ -3,10 +3,16 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { LoginContainer } from "@/features/auth/LoginContainer";
 import { Brand } from "@/features/shell/Brand";
+import { LanguageControl } from "@/features/shell/LanguageControl";
 import { ThemeControl } from "@/features/theme/ThemeControl";
+import { T } from "@/lib/i18n";
+import { getTranslator } from "@/lib/i18n/server";
 import { Spinner } from "@/ui";
 
-export const metadata: Metadata = { title: "Sign in" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslator();
+  return { title: t("login.metaTitle") };
+}
 
 export default function LoginPage() {
   return (
@@ -19,21 +25,26 @@ export default function LoginPage() {
         >
           <div className="flex flex-col gap-1.5">
             <h1 id="login-heading" className="text-xl font-semibold tracking-[-0.01em]">
-              Sign in to Duet
+              <T k="login.title" />
             </h1>
-            <p className="text-sm text-muted">Use the account your administrator created for you.</p>
+            <p className="text-sm text-muted">
+              <T k="login.subtitle" />
+            </p>
           </div>
           {/* The form reads `?next=`, which is only known at request time. */}
-          <Suspense fallback={<Spinner label="Loading" />}>
+          <Suspense fallback={<Spinner label={<T k="ui.loading" />} />}>
             <LoginContainer />
           </Suspense>
         </section>
         <p className="text-center text-sm text-muted">
           <Link href="/guide" className="underline-offset-4 hover:underline">
-            New here? Read the guide
+            <T k="login.guideLink" />
           </Link>
         </p>
-        <ThemeControl className="self-center" />
+        <div className="flex flex-wrap items-center justify-center gap-2">
+          <ThemeControl />
+          <LanguageControl />
+        </div>
       </div>
     </main>
   );

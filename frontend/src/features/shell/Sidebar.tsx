@@ -1,9 +1,11 @@
 import Link from "next/link";
+import { useT } from "@/lib/i18n";
 import { confirmLeave } from "@/lib/navigation/unsaved-changes";
 import { cn, ExternalLinkIcon, focusRing } from "@/ui";
 import { ThemeControl } from "@/features/theme/ThemeControl";
 import { Brand } from "./Brand";
 import { EnvironmentBadge } from "./EnvironmentBadge";
+import { LanguageControl } from "./LanguageControl";
 import { activeHref, NAV_PRIMARY, NAV_SECONDARY, type NavItem } from "./navigation";
 import { UserMenu, type ShellUser } from "./UserMenu";
 
@@ -36,6 +38,7 @@ export function Sidebar({
   id,
   className,
 }: SidebarProps) {
+  const t = useT();
   const current = activeHref(pathname, [...NAV_PRIMARY, ...NAV_SECONDARY]);
   const link = (item: NavItem) => (
     <NavLink
@@ -53,7 +56,7 @@ export function Sidebar({
         <Brand />
       </div>
       <EnvironmentBadge label={environmentLabel} />
-      <nav aria-label="Primary" className="flex flex-1 flex-col gap-6">
+      <nav aria-label={t("nav.primary")} className="flex flex-1 flex-col gap-6">
         <ul className="flex flex-col gap-0.5">{NAV_PRIMARY.map(link)}</ul>
         <ul className="mt-auto flex flex-col gap-0.5">
           {NAV_SECONDARY.map(link)}
@@ -62,7 +65,7 @@ export function Sidebar({
             <a
               href="/api/docs"
               target="_blank"
-              aria-label="API docs (opens in a new tab)"
+              aria-label={t("nav.apiDocsNewTab")}
               rel="noopener noreferrer"
               className={cn(
                 "flex min-h-11 items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm font-medium text-muted no-underline transition-colors",
@@ -71,7 +74,7 @@ export function Sidebar({
               )}
             >
               <ExternalLinkIcon size={18} />
-              API docs <span aria-hidden="true">↗</span>
+              {t("nav.apiDocs")} <span aria-hidden="true">↗</span>
             </a>
           </li>
           <li>
@@ -89,12 +92,15 @@ export function Sidebar({
               )}
             >
               <GuideIcon />
-              User guide
+              {t("nav.guide")}
             </Link>
           </li>
         </ul>
       </nav>
-      <ThemeControl className="self-start" />
+      <div className="flex flex-wrap items-center gap-2">
+        <ThemeControl />
+        <LanguageControl />
+      </div>
       <UserMenu
         user={user}
         onSignOut={onSignOut}
@@ -109,6 +115,8 @@ export function Sidebar({
 type NavLinkProps = { item: NavItem; current: boolean; badge?: number; onNavigate?: () => void };
 
 function NavLink({ item, current, badge, onNavigate }: NavLinkProps) {
+  const t = useT();
+  const label = t(item.label);
   const Icon = item.icon;
   return (
     <li>
@@ -116,7 +124,7 @@ function NavLink({ item, current, badge, onNavigate }: NavLinkProps) {
         href={item.href}
         aria-current={current ? "page" : undefined}
         // The pill is only a number; the name says what it counts.
-        aria-label={badge ? `${item.label} (${badge} active)` : undefined}
+        aria-label={badge ? t.plural("nav.activeRuns", badge, { label }) : undefined}
         onClick={onNavigate}
         // Asks before discarding an editor's unsaved changes (client-side navigations only).
         onNavigate={(event) => {
@@ -130,7 +138,7 @@ function NavLink({ item, current, badge, onNavigate }: NavLinkProps) {
         )}
       >
         <Icon size={item.nested ? 16 : 18} />
-        <span className="flex-1">{item.label}</span>
+        <span className="flex-1">{label}</span>
         {badge ? (
           <span
               aria-hidden="true"

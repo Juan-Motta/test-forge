@@ -1,3 +1,6 @@
+"use client";
+
+import { useT } from "@/lib/i18n";
 import { cn } from "./cn";
 import { Pin, type PinTone } from "./Pin";
 import { Waveform } from "./Waveform";
@@ -19,12 +22,13 @@ type AudioLaneProps = {
   values: number[];
   progress?: number;
   height?: number;
-  /** Text alternative for the waveform; defaults to "{label} audio levels". */
+  /** Text alternative for the waveform; defaults to "{label} audio levels" (translated). */
   description?: string;
   /** Evenly spaced time labels under the lane (first at the start, last at the end). */
   axis?: string[];
   /** Issue pins on a row under the lane. */
   pins?: LanePin[];
+  /** Label of the pins row; defaults to "Issues" (translated). */
   pinsLabel?: string;
   className?: string;
 };
@@ -41,9 +45,10 @@ export function AudioLane({
   description,
   axis,
   pins,
-  pinsLabel = "Issues",
+  pinsLabel,
   className,
 }: AudioLaneProps) {
+  const t = useT();
   return (
     <div className={cn("flex flex-col gap-1.5", className)}>
       <div className="flex items-center gap-3">
@@ -55,12 +60,12 @@ export function AudioLane({
           progress={progress}
           height={height}
           gap={1}
-          label={description ?? `${label} audio levels`}
+          label={description ?? t("ui.audioLevels", { label })}
         />
       </div>
       {pins ? (
         <div className="flex items-center gap-3">
-          <span className={cn(LABEL_COL, "text-dim")}>{pinsLabel}</span>
+          <span className={cn(LABEL_COL, "text-dim")}>{pinsLabel ?? t("ui.issues")}</span>
           <div className="relative h-[26px] flex-1 border-t border-field-border">
             {pins.map((pin) => (
               <span

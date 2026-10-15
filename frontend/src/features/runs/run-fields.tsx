@@ -1,9 +1,9 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { absoluteTime, relativeTime } from "@/features/connections/format";
 import { isJudging } from "@/features/judgements/format";
 import { runCostLabel } from "@/features/pricing/format";
 import { runResult } from "@/features/overview/run-result";
+import { useFormat, useT } from "@/lib/i18n";
 import { Badge, Button, CopyButton, ScoreBar, buttonClasses, cn, focusRing } from "@/ui";
 import { STATUS_LABELS, clock, endReasonLabel, isActive, latency, runDurationMs, shortId } from "./format";
 import { KindBadge } from "./KindBadge";
@@ -48,6 +48,8 @@ function turnsLabel(run: Run): string {
 /** When the run started; a run that never started (queued, or cancelled or failed while queued)
  * says so and shows when it was queued instead. */
 export function RunStarted({ run, now }: { run: Run; now: number }) {
+  const t = useT();
+  const { absoluteTime, relativeTime } = useFormat();
   if (run.startedAt) {
     return (
       <time dateTime={run.startedAt} title={absoluteTime(run.startedAt)}>
@@ -57,7 +59,7 @@ export function RunStarted({ run, now }: { run: Run; now: number }) {
   }
   return (
     <span className="text-muted">
-      Not started ·{" queued "}
+      {`${t("runs.notStarted")} · ${t("runs.queued")} `}
       <time dateTime={run.createdAt} title={absoluteTime(run.createdAt)}>
         {relativeTime(run.createdAt, now)}
       </time>

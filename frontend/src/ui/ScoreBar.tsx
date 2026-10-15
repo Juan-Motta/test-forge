@@ -1,3 +1,6 @@
+"use client";
+
+import { useT } from "@/lib/i18n";
 import { cn } from "./cn";
 import { SCORE_FILL, SCORE_TEXT, scoreTone } from "./score";
 
@@ -17,6 +20,7 @@ type ScoreBarProps = {
 
 /** A 0-100 score as a 6px track filled in its band colour, exposed as a meter. */
 export function ScoreBar({ score, label, showValue = false, toneValue = false, trackClassName, className }: ScoreBarProps) {
+  const t = useT();
   const value = score === null ? null : Math.round(Math.min(100, Math.max(0, score)));
   const tone = value === null ? undefined : scoreTone(value);
 
@@ -36,7 +40,7 @@ export function ScoreBar({ score, label, showValue = false, toneValue = false, t
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={value ?? undefined}
-        aria-valuetext={value === null ? "Not scored" : undefined}
+        aria-valuetext={value === null ? t("ui.notScored") : undefined}
         data-tone={tone}
         className={cn("block h-1.5 overflow-hidden rounded-[3px] bg-field-border", trackClassName ?? "flex-1")}
       >

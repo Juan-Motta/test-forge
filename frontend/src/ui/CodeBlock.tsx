@@ -1,5 +1,6 @@
 "use client";
 
+import { useT } from "@/lib/i18n";
 import { cn } from "./cn";
 import { useClipboard } from "./CopyButton";
 import { IconButton } from "./IconButton";
@@ -20,6 +21,7 @@ type CodeBlockProps = {
 
 /** Preformatted code on the code surface, optionally with a copy-to-clipboard button. */
 export function CodeBlock({ code, label, copyable = false, tone = "default", maxHeightClassName, className }: CodeBlockProps) {
+  const t = useT();
   const [copy, copyText] = useClipboard();
 
   return (
@@ -41,10 +43,10 @@ export function CodeBlock({ code, label, copyable = false, tone = "default", max
       {copyable ? (
         <div className="absolute top-1.5 right-1.5 flex items-center gap-2">
           <span role="status" className="text-xs text-dim">
-            {copy === "copied" ? "Copied" : copy === "failed" ? "Copy failed" : ""}
+            {copy === "copied" ? t("ui.copied") : copy === "failed" ? t("ui.copyFailed") : ""}
           </span>
           <IconButton
-            label="Copy"
+            label={t("ui.copy")}
             icon={copy === "copied" ? <CheckIcon size={16} /> : <CopyIcon size={16} />}
             onClick={() => void copyText(code)}
           />
