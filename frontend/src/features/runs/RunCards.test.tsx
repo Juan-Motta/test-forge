@@ -30,7 +30,7 @@ describe("Run cards", () => {
         endReason: "agent_error",
       }),
     ];
-    render(<RunCards runs={runs} onCancel={() => {}} now={NOW} />);
+    render(<RunCards runs={runs} now={NOW} />);
 
     const list = screen.getByRole("list", { name: "Runs" });
     const [first, second] = within(list).getAllByRole("listitem");
@@ -59,7 +59,7 @@ describe("Run cards", () => {
       runFixture({ id: "r-started-1", startedAt: "2026-10-05T16:55:00Z" }),
       runFixture({ id: "r-queued-01", status: "queued", startedAt: null, endedAt: null, createdAt: "2026-10-05T16:58:00Z" }),
     ];
-    render(<RunCards runs={runs} onCancel={() => {}} now={NOW} />);
+    render(<RunCards runs={runs} now={NOW} />);
 
     const [started, queued] = screen.getAllByRole("listitem");
     const startedTime = within(started).getByText("5 minutes ago");
@@ -68,15 +68,13 @@ describe("Run cards", () => {
     expect(within(queued).getByText("2 minutes ago")).toHaveAttribute("dateTime", "2026-10-05T16:58:00Z");
   });
 
-  it("offers live and cancel on an active run", () => {
+  it("offers no live or cancel action: the scenario name opens the run, where both are", () => {
     const runs = [runFixture({ id: "r-live-001", status: "running", endReason: null, endedAt: null })];
-    render(<RunCards runs={runs} onCancel={() => {}} now={NOW} />);
+    render(<RunCards runs={runs} now={NOW} />);
 
     const card = screen.getByRole("listitem");
-    expect(within(card).getByRole("link", { name: "Watch run r-live-001 live" })).toHaveAttribute(
-      "href",
-      "/runs/r-live-001/live",
-    );
-    expect(within(card).getByRole("button", { name: "Cancel run r-live-001" })).toBeInTheDocument();
+    expect(within(card).queryByRole("link", { name: /live$/ })).not.toBeInTheDocument();
+    expect(within(card).queryByRole("button", { name: /^Cancel run/ })).not.toBeInTheDocument();
+    expect(within(card).getAllByRole("link")[0]).toHaveAttribute("href", "/runs/r-live-001");
   });
 });

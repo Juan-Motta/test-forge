@@ -4,7 +4,7 @@ import { isJudging } from "@/features/judgements/format";
 import { runCostLabel } from "@/features/pricing/format";
 import { runResult } from "@/features/overview/run-result";
 import { useFormat, useT, type Format, type MessageKey } from "@/lib/i18n";
-import { Badge, Button, ScoreBar, buttonClasses, cn, focusRing } from "@/ui";
+import { Badge, ScoreBar, cn, focusRing } from "@/ui";
 import { clock, endReasonLabel, endReasonRepeatsStatus, isActive, latency, runDurationMs } from "./format";
 import { KindBadge } from "./KindBadge";
 import { runKind } from "./kind";
@@ -158,37 +158,4 @@ export function RunResult({ run, fallback = null }: { run: Run; fallback?: React
   const result = runResult(t, run);
   if (result.kind === "passed" || result.kind === "review") return <Badge tone={result.tone}>{result.label}</Badge>;
   return <>{fallback}</>;
-}
-
-type RunActionsProps = {
-  run: Run;
-  label: string;
-  onCancel: (run: Run) => void;
-  cancelling: boolean;
-};
-
-/** Watch live and cancel while the run is active (the scenario name opens the report). */
-export function RunActions({ run, label, onCancel, cancelling }: RunActionsProps) {
-  const t = useT();
-  if (!isActive(run.status)) return null;
-  return (
-    <>
-      <Link
-        href={`/runs/${encodeURIComponent(run.id)}/live`}
-        aria-label={t("runs.watchLive", { id: label })}
-        className={buttonClasses("secondary", "min-h-9 px-3")}
-      >
-        {t("runs.live")}
-      </Link>
-      <Button
-        variant="ghost"
-        className="min-h-9 px-3"
-        loading={cancelling}
-        aria-label={t("runs.cancelRun", { id: label })}
-        onClick={() => onCancel(run)}
-      >
-        {t("common.cancel")}
-      </Button>
-    </>
-  );
 }

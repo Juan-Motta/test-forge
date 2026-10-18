@@ -8,7 +8,7 @@ import type { Run } from "./types";
 const NOW = Date.parse("2026-10-05T17:00:00Z");
 
 function renderTable(runs: Run[]) {
-  render(<RunsTable runs={runs} onCancel={() => {}} now={NOW} />);
+  render(<RunsTable runs={runs} now={NOW} />);
   const headers = screen.getAllByRole("columnheader").map((cell) => cell.textContent);
   const rows = screen.getAllByRole("row").slice(1);
   /** The body cells of the column with this header, one per row. */
@@ -24,7 +24,7 @@ describe("Runs table columns", () => {
   it("fits the runs in eight compact columns, without a fixed minimum width", () => {
     const { headers } = renderTable([runFixture()]);
 
-    expect(headers).toEqual(["Scenario", "Duration", "Turns", "p50 latency", "Cost", "Outcome", "Started", "Actions"]);
+    expect(headers).toEqual(["Scenario", "Duration", "Turns", "p50 latency", "Cost", "Outcome", "Started"]);
     // A floor (not the old 80rem) that still fits the ~942 px the table gets at a 1280 px screen.
     expect(screen.getByRole("table", { name: "Runs" }).className).toMatch(/min-w-\[56rem\]/);
   });
@@ -174,19 +174,11 @@ describe("Runs table started column", () => {
 });
 
 describe("Runs table actions", () => {
-  it("offers live and cancel on an active run and opens every run's report", () => {
-    const runs = [
-      runFixture({ id: "r-live-001", status: "running", endReason: null, endedAt: null }),
-      runFixture({ id: "r-done-001" }),
-    ];
-    const { column } = renderTable(runs);
-    const [live, done] = column("Actions");
-
-    expect(within(live).getByRole("link", { name: "Watch run r-live-001 live" })).toHaveAttribute("href", "/runs/r-live-001/live");
-    expect(within(live).getByRole("button", { name: "Cancel run r-live-001" })).toBeInTheDocument();
-    // The scenario name opens the report: there is no separate "Open" action.
-    expect(within(live).queryByRole("link", { name: /^Open run/ })).not.toBeInTheDocument();
-    expect(within(done).queryByRole("button", { name: /Cancel/ })).not.toBeInTheDocument();
-    expect(within(done).queryByRole("link")).not.toBeInTheDocument();
+  it("has no row actions: the scenario name opens the run, where it can be watched live or cancelled", () => {
+    renderTable([runFixture({ id: "r-live-001", status: "running", endReason: null, endedAt: null })]);
+    const table = screen.getByRole("table", { name: "Runs" });
+    expect(within(table).queryByRole("button")).not.toBeInTheDocument();
+    expect(within(table).queryByRole("link", { name: /live$/ })).not.toBeInTheDocument();
+    expect(within(table).getByRole("link", { name: "Booking with date change" })).toHaveAttribute("href", "/runs/r-live-001");
   });
 });

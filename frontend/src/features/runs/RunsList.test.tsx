@@ -77,7 +77,7 @@ describe("Runs list", () => {
     expect(within(row).queryByRole("button", { name: /Cancel/ })).not.toBeInTheDocument();
     const live = rowOf(table, "r-3");
     expect(within(live).getByText("Running")).toBeInTheDocument();
-    expect(within(live).getByRole("link", { name: "Watch run r-3 live" })).toHaveAttribute("href", "/runs/r-3/live");
+    expect(within(live).getAllByRole("link").map((link) => link.getAttribute("href"))).toEqual(["/runs/r-3"]);
   });
 
   it("filters by status and scenario, and keeps the filters in the URL", async () => {
@@ -221,18 +221,12 @@ describe("Runs list", () => {
     expect(nav.replace).toHaveBeenCalledWith("/runs?page=2", { scroll: false });
   });
 
-  it("cancels an active run", async () => {
+  it("offers no cancel button in the list: a run is cancelled from its own page", async () => {
     scenarios();
-    const api = mockRunsApi([done, running]);
+    mockRunsApi([done, running]);
     renderWithClient(<RunsContainer />);
-    const user = userEvent.setup();
     await screen.findByRole("table", { name: "Runs" });
-
-    await user.click(within(screen.getByRole("table", { name: "Runs" })).getByRole("button", { name: "Cancel run r-3" }));
-
-    await waitFor(() => expect(api.requests).toEqual([{ method: "POST", path: "/runs/r-3/cancel", body: undefined }]));
-    const row = rowOf(await screen.findByRole("table", { name: "Runs" }), "r-3");
-    await waitFor(() => expect(within(row).getByText("Cancelled")).toBeInTheDocument());
+    expect(screen.queryByRole("button", { name: /^Cancel run/ })).not.toBeInTheDocument();
   });
 
   it("shows recent batches with their progress", async () => {

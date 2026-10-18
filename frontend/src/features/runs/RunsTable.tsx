@@ -1,7 +1,7 @@
 import { useFormat, useT } from "@/lib/i18n";
 import { cn } from "@/ui";
 import { shortId } from "./format";
-import { RUN_METRICS, RunActions, RunIdentity, RunOutcome, RunStarted, type RunMetric } from "./run-fields";
+import { RUN_METRICS, RunIdentity, RunOutcome, RunStarted, type RunMetric } from "./run-fields";
 import type { Run } from "./types";
 
 const HEAD = "border-b border-line px-2 py-2 align-bottom font-medium";
@@ -22,9 +22,6 @@ const METRIC_WIDTHS: Record<RunMetric["id"], string> = {
 
 type RunsTableProps = {
   runs: Run[];
-  onCancel: (run: Run) => void;
-  /** Id of the run being cancelled, if any. */
-  cancellingId?: string;
   now: number;
   /** Classes of the table's box, e.g. to show the table on wide screens only. */
   className?: string;
@@ -32,9 +29,10 @@ type RunsTableProps = {
 
 /**
  * Runs as a compact table: one row per run, its scenario cell carrying the agent, persona and run
- * id, and one outcome column for the score, the result and (when it matters) the status.
+ * id, and one outcome column for the score, the result and (when it matters) the status. Rows have
+ * no actions: the scenario name opens the run, where it can be watched live or cancelled.
  */
-export function RunsTable({ runs, onCancel, cancellingId, now, className }: RunsTableProps) {
+export function RunsTable({ runs, now, className }: RunsTableProps) {
   const t = useT();
   const format = useFormat();
   return (
@@ -63,9 +61,6 @@ export function RunsTable({ runs, onCancel, cancellingId, now, className }: Runs
             <th scope="col" className={cn(HEAD, "w-[7rem]")}>
               {t("runs.column.started")}
             </th>
-            <th scope="col" className={cn(HEAD, "w-[8.5rem]")}>
-              <span className="sr-only">{t("common.actions")}</span>
-            </th>
           </tr>
         </thead>
         <tbody>
@@ -89,11 +84,6 @@ export function RunsTable({ runs, onCancel, cancellingId, now, className }: Runs
                 </td>
                 <td className={cn(CELL, "text-xs text-dim")}>
                   <RunStarted run={run} now={now} />
-                </td>
-                <td className={CELL}>
-                  <div className="flex flex-wrap justify-end gap-2">
-                    <RunActions run={run} label={label} onCancel={onCancel} cancelling={cancellingId === run.id} />
-                  </div>
                 </td>
               </tr>
             );

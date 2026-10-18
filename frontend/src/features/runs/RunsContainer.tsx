@@ -24,10 +24,10 @@ import {
 } from "@/ui";
 import { BatchesPanel, batchName } from "./BatchesPanel";
 import { statusLabel } from "./format";
-import { useBatch, useBatches, useCancelRun, useRuns } from "./queries";
+import { useBatch, useBatches, useRuns } from "./queries";
 import { RunCards } from "./RunCards";
 import { RunsTable } from "./RunsTable";
-import { RUN_STATUSES, type Run, type RunOrder, type RunStatus } from "./types";
+import { RUN_STATUSES, type RunOrder, type RunStatus } from "./types";
 
 export const PAGE_SIZE = 20;
 const POLL_MS = 4000;
@@ -83,7 +83,6 @@ export function RunsContainer() {
   const scenarios = useScenarios();
   const batches = useBatches({ limit: 5 }, { refetchInterval: POLL_MS });
   const batch = useBatch(filters.batchId || undefined);
-  const cancel = useCancelRun();
   const runs = useRuns(
     {
       status: filters.status || undefined,
@@ -109,10 +108,6 @@ export function RunsContainer() {
     router.replace(hrefOf(next), { scroll: false });
   }
 
-  function onCancel(run: Run) {
-    if (cancel.isPending) return;
-    cancel.mutate(run.id);
-  }
 
   const total = runs.data?.total ?? 0;
   // A `?page=` past the end (a stale link, or runs deleted since) moves to the last page.
@@ -166,15 +161,11 @@ export function RunsContainer() {
         <RunsTable
           runs={items}
           now={now}
-          onCancel={onCancel}
-          cancellingId={cancel.isPending ? cancel.variables : undefined}
           className="hidden xl:block"
         />
         <RunCards
           runs={items}
           now={now}
-          onCancel={onCancel}
-          cancellingId={cancel.isPending ? cancel.variables : undefined}
           className="xl:hidden"
         />
         <nav aria-label={t("common.pagination")} className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted">
@@ -270,7 +261,6 @@ export function RunsContainer() {
           </span>
         ) : null}
       </div>
-      {cancel.isError ? <Alert>{t("runs.cancelFailed", { error: errorMessage(cancel.error) })}</Alert> : null}
       {body}
     </>
   );

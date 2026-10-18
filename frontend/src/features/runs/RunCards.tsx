@@ -4,16 +4,12 @@ import { useFormat, useT } from "@/lib/i18n";
 import { CopyButton, cn, focusRing } from "@/ui";
 import { shortId } from "./format";
 import { KindBadge } from "./KindBadge";
-import { RUN_METRICS, RunActions, RunResult, RunScore, RunStarted, RunStatus } from "./run-fields";
+import { RUN_METRICS, RunResult, RunScore, RunStarted, RunStatus } from "./run-fields";
 import { TruncatedText } from "./TruncatedText";
 import type { Run } from "./types";
 
 type RunCardsProps = {
   runs: Run[];
-  /** Without it the cards offer no live or cancel actions (a read-only list). */
-  onCancel?: (run: Run) => void;
-  /** Id of the run being cancelled, if any. */
-  cancellingId?: string;
   now: number;
   /** Accessible name of the list; defaults to "Runs" (translated). */
   label?: string;
@@ -25,26 +21,20 @@ type RunCardsProps = {
  * Runs as a list of cards, for screens too narrow for the runs table: the same runs and the same
  * figures (`RUN_METRICS`), stacked so nothing scrolls sideways.
  */
-export function RunCards({ runs, onCancel, cancellingId, now, label, className }: RunCardsProps) {
+export function RunCards({ runs, now, label, className }: RunCardsProps) {
   const t = useT();
   return (
     <ul aria-label={label ?? t("runs.listLabel")} className={cn("grid gap-3 sm:grid-cols-2", className)}>
       {runs.map((run) => (
-        <RunCard
-          key={run.id}
-          run={run}
-          now={now}
-          onCancel={onCancel}
-          cancelling={cancellingId !== undefined && cancellingId === run.id}
-        />
+        <RunCard key={run.id} run={run} now={now} />
       ))}
     </ul>
   );
 }
 
-type RunCardProps = { run: Run; now: number; onCancel?: (run: Run) => void; cancelling: boolean };
+type RunCardProps = { run: Run; now: number };
 
-function RunCard({ run, now, onCancel, cancelling }: RunCardProps) {
+function RunCard({ run, now }: RunCardProps) {
   const t = useT();
   const format = useFormat();
   const label = shortId(run.id);
@@ -93,11 +83,6 @@ function RunCard({ run, now, onCancel, cancelling }: RunCardProps) {
             iconSize={14}
           />
         </span>
-        {onCancel ? (
-          <div className="flex gap-2">
-            <RunActions run={run} label={label} onCancel={onCancel} cancelling={cancelling} />
-          </div>
-        ) : null}
       </div>
     </li>
   );
