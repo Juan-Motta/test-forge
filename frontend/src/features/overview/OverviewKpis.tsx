@@ -52,7 +52,12 @@ export function OverviewKpis({ stats, loading = false }: { stats: OverviewStats 
         icon={<PriceIcon {...icon} />}
         label={t("overview.spendLastDays", { count: days })}
         value={spend !== null ? `${format.usd(spend, 2)}${stats?.spend.complete === false ? "+" : ""}` : "—"}
-        delta={stats && spend !== null ? spendDelta(t, format, spend, stats.spend.previousTotalUsd, days) : undefined}
+        delta={
+          // No comparison against a window that recorded no usage (it would read as all new spend).
+          stats && spend !== null && stats.spend.previousTotalUsd !== null
+            ? spendDelta(t, format, spend, stats.spend.previousTotalUsd, days)
+            : undefined
+        }
         sub={spend !== null ? t("overview.spendNote") : stats ? t("overview.noSpend") : undefined}
       />
     </section>

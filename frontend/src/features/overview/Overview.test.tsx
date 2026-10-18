@@ -39,6 +39,7 @@ describe("Overview KPIs", () => {
     expect(kpi("Spend · last 7 days")).toHaveTextContent("$1.23");
     expect(kpi("Spend · last 7 days")).toHaveTextContent("+$0.73 vs previous week");
     // Every metric carries an icon that identifies it.
+    // (A previous window without recorded usage gets no comparison: see the test below.)
     for (const name of ["Runs · last 7 days", "Average judge score", "Goal completion", "Agent turn latency · p50", "Spend · last 7 days"]) {
       expect(kpi(name).querySelector("svg[data-kpi-icon]")).not.toBeNull();
     }
@@ -349,3 +350,15 @@ describe("Overview in Spanish", () => {
     expect(kpi("Objetivos cumplidos")).toHaveTextContent("81 %");
   });
 });
+
+describe("Overview spend", () => {
+  it("shows no comparison when the previous window recorded no usage", async () => {
+    mockRunsApi([runFixture()]);
+    mockStatsApi(statsFixture({ spend: { totalUsd: 0.43, previousTotalUsd: null, complete: true } }));
+    renderWithClient(<OverviewContainer />);
+    const tile = await screen.findByRole("group", { name: "Spend · last 7 days" });
+    expect(tile).toHaveTextContent("$0.43");
+    expect(tile).not.toHaveTextContent(/vs previous/);
+  });
+});
+

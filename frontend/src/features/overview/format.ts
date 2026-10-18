@@ -15,9 +15,9 @@ export function countDelta(t: Translator, current: number, previous: number, day
 }
 
 /** "+$0.73 vs previous week" style delta between two amounts; spending more is not an improvement. */
-export function spendDelta(t: Translator, format: Format, current: number, previous: number | null, days: number) {
+export function spendDelta(t: Translator, format: Format, current: number, previous: number, days: number) {
   const period = days === 7 ? t("overview.week") : t("overview.days", { count: days });
-  const diff = current - (previous ?? 0);
+  const diff = current - previous;
   if (Math.abs(diff) < 0.005) {
     return { text: t("overview.sameAsPrevious", { period }), trend: "flat" as const, goodWhen: "down" as const };
   }
