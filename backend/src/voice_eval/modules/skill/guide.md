@@ -292,8 +292,10 @@ created in the window: `runs` (`count`, and `previousCount` for the window just 
 `averageScore` (0-100, completed judgements), `goalCompletion` (0-1, share of completed
 judgements whose must criteria passed), `latency` (`p50Ms`, `p95Ms` over every response
 latency), `live.active` (runs queued, connecting or running now), `weakestCriteria` (up to 5,
-lowest `averageScore` first, with `text`, `scenarioName`, `judged`) and `suggestions` (`open`,
-`highPriority`). Aggregates without data are `null`.
+lowest `averageScore` first, with `text`, `scenarioName`, `judged`), `suggestions` (`open`,
+`highPriority`) and `spend` (`totalUsd` and `previousTotalUsd`: the evaluator and judge cost of
+the window's runs at the list prices in Settings → Model prices, approximate; `complete` is false
+when some usage had no price or TTS audio was not metered). Aggregates without data are `null`.
 
 ### Run statuses and end reasons
 

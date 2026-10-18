@@ -44,6 +44,12 @@ class SuggestionCountsOut(CamelModel):
     high_priority: int
 
 
+class SpendOut(CamelModel):
+    total_usd: float | None  # evaluator + judge cost of the window's runs; null without usage
+    previous_total_usd: float | None  # the same for the previous window
+    complete: bool  # false when some usage had no price, or TTS audio was not metered
+
+
 class OverviewOut(CamelModel):
     period_days: int
     runs: RunCountsOut
@@ -53,6 +59,7 @@ class OverviewOut(CamelModel):
     live: LiveOut
     weakest_criteria: list[WeakCriterionOut]  # lowest average first, at most 5
     suggestions: SuggestionCountsOut
+    spend: SpendOut  # approximate, at the list prices in Settings → Model prices
 
 
 router = APIRouter(prefix="/stats", tags=["stats"])
@@ -80,5 +87,10 @@ async def get_overview(db: Db, days: Annotated[int, Query(ge=1, le=MAX_DAYS)] = 
         ],
         suggestions=SuggestionCountsOut(
             open=stats.suggestions, high_priority=stats.high_priority_suggestions
+        ),
+        spend=SpendOut(
+            total_usd=stats.spend.total_usd if stats.spend else None,
+            previous_total_usd=stats.spend.previous_total_usd if stats.spend else None,
+            complete=stats.spend.complete if stats.spend else True,
         ),
     )

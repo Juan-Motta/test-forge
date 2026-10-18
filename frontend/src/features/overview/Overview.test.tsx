@@ -36,6 +36,12 @@ describe("Overview KPIs", () => {
     expect(kpi("Goal completion")).toHaveTextContent("81%");
     expect(kpi("Agent turn latency · p50")).toHaveTextContent("1.2s");
     expect(kpi("Agent turn latency · p50")).toHaveTextContent("p95 2.9 s");
+    expect(kpi("Spend · last 7 days")).toHaveTextContent("$1.23");
+    expect(kpi("Spend · last 7 days")).toHaveTextContent("+$0.73 vs previous week");
+    // Every metric carries an icon that identifies it.
+    for (const name of ["Runs · last 7 days", "Average judge score", "Goal completion", "Agent turn latency · p50", "Spend · last 7 days"]) {
+      expect(kpi(name).querySelector("svg[data-kpi-icon]")).not.toBeNull();
+    }
   });
 
   it("shows a dash, never 0, for metrics without data", async () => {

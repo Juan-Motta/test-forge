@@ -16,6 +16,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from voice_eval.modules.judgements.domain import JudgementStatus
 from voice_eval.modules.judgements.models import RunJudgementRecord
+from voice_eval.modules.pricing.domain import ModelPrice, run_cost
+from voice_eval.modules.pricing.service import list_prices
 from voice_eval.modules.runs.domain import ACTIVE_RUN_STATUSES
 from voice_eval.modules.runs.models import RunRecord
 
@@ -31,6 +33,16 @@ class WeakCriterion:
 
 
 @dataclass(frozen=True)
+class Spend:
+    """The evaluator's approximate spend (caller + judge) at the stored list prices; a window
+    whose runs recorded no usage has no total."""
+
+    total_usd: float | None
+    previous_total_usd: float | None
+    complete: bool  # False when some usage had no price (or TTS audio is not metered)
+
+
+@dataclass(frozen=True)
 class Overview:
     period_days: int
     runs: int
@@ -43,6 +55,7 @@ class Overview:
     weakest_criteria: list[WeakCriterion] = field(default_factory=list)
     suggestions: int = 0
     high_priority_suggestions: int = 0
+    spend: Spend | None = None
 
 
 def _number(value: Any) -> float | None:
@@ -118,6 +131,15 @@ async def overview(db: AsyncSession, *, days: int, now: datetime | None = None) 
             if (value := _number(row.get("score"))) is not None:
                 criteria[key].append(value)
 
+    prices = await list_prices(db)
+    total, complete = await _spend(db, prices, *in_window)
+    previous_total, previous_complete = await _spend(
+        db,
+        prices,
+        RunRecord.created_at >= start - timedelta(days=days),
+        RunRecord.created_at < start,
+    )
+
     weakest = sorted(
         (
             WeakCriterion(
@@ -143,4 +165,26 @@ async def overview(db: AsyncSession, *, days: int, now: datetime | None = None) 
         weakest_criteria=weakest,
         suggestions=suggestions,
         high_priority_suggestions=high,
+        spend=Spend(total_usd=total, previous_total_usd=previous_total, complete=complete),
     )
+
+
+async def _spend(
+    db: AsyncSession, prices: list[ModelPrice], *conditions: Any
+) -> tuple[float | None, bool]:
+    """Sum of the runs' cost (caller usage in the summary + the judgement's usage) and whether
+    every part was priced; None when no run of the window recorded usage."""
+    rows = await db.execute(
+        select(RunRecord.summary["usage"], RunJudgementRecord.usage)
+        .outerjoin(RunJudgementRecord, RunJudgementRecord.run_id == RunRecord.id)
+        .where(*conditions)
+    )
+    total: float | None = None
+    complete = True
+    for caller_usage, judge_usage in rows:
+        cost = run_cost(caller_usage, judge_usage, prices)
+        if cost is None:
+            continue
+        total = (total or 0.0) + cost.total_usd
+        complete = complete and cost.complete
+    return (round(total, 6) if total is not None else None), complete

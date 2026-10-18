@@ -12,6 +12,7 @@ export function statsFixture(overrides: Partial<OverviewStats> = {}): OverviewSt
     live: { active: 0 },
     weakestCriteria: [],
     suggestions: { open: 0, highPriority: 0 },
+    spend: { totalUsd: 1.2345, previousTotalUsd: 0.5, complete: true },
     ...overrides,
   };
 }

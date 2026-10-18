@@ -13,7 +13,7 @@ from voice_eval.modules.runs.models import RunBatchRecord, RunRecord
 NOW = datetime.now(UTC)
 FIELDS = {
     "periodDays", "runs", "averageScore", "goalCompletion", "latency", "live",
-    "weakestCriteria", "suggestions",
+    "weakestCriteria", "suggestions", "spend",
 }  # fmt: skip
 
 
@@ -46,6 +46,8 @@ async def add_run(
     latencies: list[Any] | None = None,
     judgement: dict[str, Any] | None = None,
     judgement_status: str = "completed",
+    caller_usage: dict[str, Any] | None = None,
+    judge_usage: dict[str, Any] | None = None,
 ) -> uuid.UUID:
     run_id, batch_id = uuid.uuid4(), uuid.uuid4()
     scenario = scenario_id or uuid.uuid4()
@@ -60,17 +62,22 @@ async def add_run(
                 thread_id="thread",
                 status=status,
                 snapshot={"scenario": {"id": str(scenario), "name": scenario_name}},
-                summary={"latencies_ms": latencies} if latencies is not None else None,
+                summary={
+                    **({"latencies_ms": latencies} if latencies is not None else {}),
+                    **({"usage": caller_usage} if caller_usage is not None else {}),
+                }
+                or None,
                 created_at=NOW - age,
             )
         )
-        if judgement is not None or judgement_status != "completed":
+        if judgement is not None or judgement_status != "completed" or judge_usage is not None:
             await db.flush()
             db.add(
                 RunJudgementRecord(
                     run_id=run_id,
                     status=judgement_status,
                     result=judgement if judgement_status == "completed" else None,
+                    usage=judge_usage,
                 )
             )
         await db.commit()
@@ -98,6 +105,7 @@ async def test_an_empty_window_has_null_aggregates(user_client):
         "live": {"active": 0},
         "weakestCriteria": [],
         "suggestions": {"open": 0, "highPriority": 0},
+        "spend": {"totalUsd": None, "previousTotalUsd": None, "complete": True},
     }
 
 
@@ -172,3 +180,23 @@ async def test_weakest_criteria_are_the_lowest_five(app, user_client):
     body = (await user_client.get("/api/stats/overview?days=1")).json()
     assert [row["text"] for row in body["weakestCriteria"]] == ["C0", "C1", "C2", "C3", "C4"]
     assert body["periodDays"] == 1
+
+
+def usage(**buckets: int) -> dict[str, Any]:
+    return {"by_model": {"gpt-6-luna": buckets}}
+
+
+async def test_spend_sums_the_evaluator_and_judge_cost_of_each_window(app, user_client):
+    # Seeded list prices for gpt-6-luna: $0.10 per 1M input tokens, $0.50 per 1M output tokens.
+    await add_run(app, caller_usage=usage(text_in=1_000_000), judge_usage=usage(text_out=1_000_000))
+    await add_run(app, caller_usage=usage(text_in=2_000_000))
+    await add_run(app)  # recorded before usage existed: no cost, not counted
+    await add_run(app, age=timedelta(days=8), caller_usage=usage(text_out=1_000_000))
+    body = (await user_client.get("/api/stats/overview")).json()
+    assert body["spend"] == {"totalUsd": 0.8, "previousTotalUsd": 0.5, "complete": True}
+
+
+async def test_spend_is_incomplete_when_some_usage_has_no_price(app, user_client):
+    await add_run(app, caller_usage={"by_model": {"unpriced-model": {"text_in": 1000}}})
+    body = (await user_client.get("/api/stats/overview")).json()
+    assert body["spend"]["complete"] is False

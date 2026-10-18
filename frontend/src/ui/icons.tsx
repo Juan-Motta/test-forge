@@ -136,6 +136,27 @@ export const CopyIcon = (p: IconProps) => (
   </Icon>
 );
 
+export const StarIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="m12 3.5 2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 16.8l-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z" />
+  </Icon>
+);
+
+export const TargetIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <circle cx="12" cy="12" r="8.5" />
+    <circle cx="12" cy="12" r="4.5" />
+    <circle cx="12" cy="12" r="1" />
+  </Icon>
+);
+
+export const ClockIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <circle cx="12" cy="12" r="8.5" />
+    <path d="M12 7.5V12l3 2" />
+  </Icon>
+);
+
 export const PlayIcon = (p: IconProps) => (
   <Icon {...p}>
     <path d="M7 4.5v15l12-7.5z" />

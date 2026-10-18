@@ -21,4 +21,6 @@ export type OverviewStats = {
   /** Lowest average first, at most 5. */
   weakestCriteria: WeakCriterion[];
   suggestions: { open: number; highPriority: number };
+  /** Evaluator + judge cost of the window (and the previous one) at the stored list prices. */
+  spend: { totalUsd: number | null; previousTotalUsd: number | null; complete: boolean };
 };
