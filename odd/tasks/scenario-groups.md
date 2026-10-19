@@ -28,7 +28,7 @@ Branch: `feat/scenario-groups` (from `main` at d008bc7). Delivery: work-unit com
 | T2 | S2 | inline | done | 3ff47c4 |
 | T3 | S3, S5 | inline | done | 17acc6a |
 | T4 | all | inline | done | b2de159 |
-| T6 | S13, S14 | inline | pending | |
+| T6 | S13, S14 | inline | done | 95543b3 |
 | T5 | S10–S12 | inline | done | 0514af4 |
 
 - T1 Backend: `scenario_groups` table and migration 0016 (create, backfill one group per agent, `scenarios.group_id` NOT NULL FK RESTRICT); `/api/scenario-groups` CRUD with scenario counts and agents; scenarios carry `groupId`/`group`, filter `?groupId=`, move between groups; tests; skill guide.
@@ -52,3 +52,4 @@ Route evidence: no Writer trigger (units are sequential: T2–T3 depend on T1), 
 - L9 (user, 2026-10-19, verbatim): "ahora en la vista de scenarios el nuevo scenario deberia crear un nuevo grupo de scenarios en blanco en donde el titulo deberia pdoer ser editable por ejemplo correo ara reprogramar... deberia ser new scenario y la barra lateral izq deberia estar con un placeholder mientras se guarda, cuando entreo a un scenario en el titulo deberia mostrarse el nombre del grupo de scenarios y un icono al final del titulo para editar el nombre como un lapiz o algo," (S10, S11; T5 added).
 - L10: T5 0514af4: Scenarios offers New scenario (no New group dialog); editor title is the group name with a pencil (EditableTitle; PATCH name, 409 inline); a new scenario outside a group shows a placeholder rail and an editable title, creates the group on first save (title or scenario name) and deletes it if the scenario fails; breadcrumb is just Scenarios. Frontend suite 854 passed (ScenarioEditor 422-mapping test flaky under 4 workers, passes alone).
 - L11 (user, 2026-10-19, verbatim): see S13 (T6 added).
+- L12: T6 95543b3: sidebar group card and group details form removed; group page and editor headed by title (pencil), description (pencil, Ctrl/Cmd+Enter) and tags (Add tag, remove ×), each saved in place (drafts for a new group, sent on creation); group page main area is a "Select a scenario" placeholder with Run all and New scenario; empty group deleted from the header. Frontend suite 854 passed.
