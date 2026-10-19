@@ -310,7 +310,10 @@ export function ModulesEs() {
             365 días).
           </li>
           <li>La clave completa se muestra solo una vez, justo después de crearla. Cópiala en los secretos de tu CI.</li>
-          <li>La tabla muestra cuándo se creó cada clave, cuándo se usó por última vez y cuándo vence.</li>
+          <li>
+            La tabla muestra cuándo se creó cada clave, cuándo se usó por última vez y cuándo vence. Lista las claves activas;
+            cambia arriba a <Ui>Revocadas</Ui> o <Ui>Todas</Ui> (que también muestra las vencidas).
+          </li>
           <li>
             El ícono de papelera en la fila de una clave la revoca: después de confirmar con <Ui>Revocar clave</Ui>, la clave
             deja de funcionar de inmediato. No se puede deshacer.

@@ -6,15 +6,19 @@ import { errorMessage, formErrorView } from "@/lib/api";
 import { localizeFormError, useT } from "@/lib/i18n";
 import { useOrigin } from "@/lib/browser/use-origin";
 import { useNow } from "@/lib/time/use-now";
-import { Alert, Button, Card, CardHeader, Dialog, EmptyState, PlusIcon, Spinner, buttonClasses } from "@/ui";
+import { Alert, Button, Card, CardHeader, Dialog, EmptyState, PlusIcon, SegmentedControl, Spinner, buttonClasses } from "@/ui";
 import { AgentSkillContainer } from "./AgentSkillContainer";
 import { ApiKeysTable } from "./ApiKeysTable";
+import { apiKeyStatus } from "./format";
 import { CreateApiKeyForm } from "./CreateApiKeyForm";
 import { CreatedApiKeyView } from "./CreatedApiKeyView";
 import { KeyIcon } from "./KeyIcon";
 import { useApiKeys, useCreateApiKey, useRefreshApiKeys, useRevokeApiKey } from "./queries";
 import { RevokeApiKeyDialog } from "./RevokeApiKeyDialog";
 import type { ApiKey, NewApiKey } from "./types";
+
+const KEY_VIEWS = ["active", "revoked", "all"] as const;
+type KeyView = (typeof KEY_VIEWS)[number];
 
 /** Container for `/settings/api-keys`: list, create-once dialog and revocation. */
 export function ApiKeysContainer() {
@@ -101,7 +105,10 @@ export function ApiKeysContainer() {
   const createError = create.isError
     ? localizeFormError(t, create.error, formErrorView(create.error, t("apiKeys.duplicateName")))
     : undefined;
+  const [view, setView] = useState<KeyView>("active");
   const list = apiKeys.data ?? [];
+  // Active by default: revoked keys are history. Expired keys show under All only.
+  const shownKeys = view === "all" ? list : list.filter((key) => apiKeyStatus(key, now) === view);
   let body;
   if (apiKeys.isPending) {
     body = <Spinner label={t("apiKeys.loading")} />;
@@ -133,16 +140,30 @@ export function ApiKeysContainer() {
         <CardHeader
           id={keysHeadingId}
           title={t("apiKeys.yourKeys")}
-          actions={<span className="text-xs text-dim">{t.plural("apiKeys.count", list.length)}</span>}
+          actions={
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="text-xs text-dim">{t.plural("apiKeys.count", shownKeys.length)}</span>
+              <SegmentedControl
+                label={t("apiKeys.view.label")}
+                options={KEY_VIEWS.map((value) => ({ value, label: t(`apiKeys.view.${value}`) }))}
+                value={view}
+                onChange={setView}
+              />
+            </div>
+          }
         />
-        <ApiKeysTable
-          apiKeys={list}
-          now={now}
-          onRevoke={(key) => {
-            revoke.reset();
-            showRevoke(key);
-          }}
-        />
+        {shownKeys.length === 0 ? (
+          <p className="px-1 py-4 text-sm text-muted">{t(`apiKeys.view.empty.${view}`)}</p>
+        ) : (
+          <ApiKeysTable
+            apiKeys={shownKeys}
+            now={now}
+            onRevoke={(key) => {
+              revoke.reset();
+              showRevoke(key);
+            }}
+          />
+        )}
       </Card>
     );
   }

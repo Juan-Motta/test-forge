@@ -1177,4 +1177,11 @@ export const es: Messages = {
   "groups.allTags": "Todas las etiquetas",
   "groups.noMatch": "Ningún grupo coincide con estos filtros.",
   "groups.searchLabel": "Buscar",
+  "apiKeys.view.label": "Mostrar claves",
+  "apiKeys.view.active": "Activas",
+  "apiKeys.view.revoked": "Revocadas",
+  "apiKeys.view.all": "Todas",
+  "apiKeys.view.empty.active": "No hay claves activas. Crea una, o muestra las revocadas o todas.",
+  "apiKeys.view.empty.revoked": "No hay claves revocadas.",
+  "apiKeys.view.empty.all": "No hay claves.",
 };

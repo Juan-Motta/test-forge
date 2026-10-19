@@ -297,7 +297,10 @@ export function ModulesEn() {
             30, 90 or 365 days).
           </li>
           <li>The full key is shown only once, right after you create it. Copy it into your CI secrets.</li>
-          <li>The table shows when each key was created, last used and when it expires.</li>
+          <li>
+            The table shows when each key was created, last used and when it expires. It lists the active keys; switch to{" "}
+            <Ui>Revoked</Ui> or <Ui>All</Ui> (which also shows expired keys) above it.
+          </li>
           <li>
             The trash icon on a key&apos;s row revokes it: after you confirm with <Ui>Revoke key</Ui>, the key stops working
             immediately. This cannot be undone.

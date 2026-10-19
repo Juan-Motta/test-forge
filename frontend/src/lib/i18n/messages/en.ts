@@ -1203,4 +1203,11 @@ export const en = {
   "groups.allTags": "All tags",
   "groups.noMatch": "No groups match these filters.",
   "groups.searchLabel": "Search",
+  "apiKeys.view.label": "Show keys",
+  "apiKeys.view.active": "Active",
+  "apiKeys.view.revoked": "Revoked",
+  "apiKeys.view.all": "All",
+  "apiKeys.view.empty.active": "No active keys. Create one, or show the revoked or all keys.",
+  "apiKeys.view.empty.revoked": "No revoked keys.",
+  "apiKeys.view.empty.all": "No keys.",
 } as const;

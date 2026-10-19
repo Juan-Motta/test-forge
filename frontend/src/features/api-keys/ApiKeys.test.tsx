@@ -26,6 +26,41 @@ describe("API keys list", () => {
     expect(within(breadcrumb).getByRole("link", { name: "Settings" })).toHaveAttribute("href", "/settings");
   });
 
+  it("shows only the active keys by default, and the revoked or all of them on demand", async () => {
+    mockApiKeysApi([
+      apiKeyFixture(),
+      apiKeyFixture({ id: "k-old", name: "Old script", prefix: "ve_old00000", expiresAt: "2026-01-01T00:00:00Z" }),
+      apiKeyFixture({ id: "k-gone", name: "Agent", prefix: "ve_gone0000", revokedAt: "2026-10-05T00:00:00Z" }),
+    ]);
+    renderWithClient(<ApiKeysContainer />);
+    const user = userEvent.setup();
+    const names = () =>
+      within(screen.getByRole("table", { name: "API keys" }))
+        .getAllByRole("row")
+        .slice(1)
+        .map((row) => row.textContent);
+
+    await findRow("CI pipeline");
+    const filter = screen.getByRole("radiogroup", { name: "Show keys" });
+    expect(within(filter).getByRole("radio", { name: "Active" })).toBeChecked();
+    expect(names()).toEqual([expect.stringContaining("CI pipeline")]);
+
+    await user.click(within(filter).getByRole("radio", { name: "Revoked" }));
+    expect(names()).toEqual([expect.stringContaining("Agent")]);
+
+    // Expired keys are neither: only All lists them.
+    await user.click(within(filter).getByRole("radio", { name: "All" }));
+    expect(names()).toHaveLength(3);
+  });
+
+  it("says when no key is in the chosen view", async () => {
+    mockApiKeysApi([apiKeyFixture({ revokedAt: "2026-10-05T00:00:00Z" })]);
+    renderWithClient(<ApiKeysContainer />);
+
+    expect(await screen.findByText("No active keys. Create one, or show the revoked or all keys.")).toBeInTheDocument();
+    expect(screen.queryByRole("table", { name: "API keys" })).not.toBeInTheDocument();
+  });
+
   it("shows each key with its prefix, dates and status", async () => {
     mockApiKeysApi([
       apiKeyFixture({ lastUsedAt: new Date(Date.now() - 2.5 * 3_600_000).toISOString() }),
@@ -38,6 +73,9 @@ describe("API keys list", () => {
       apiKeyFixture({ id: "k-gone", name: "Agent", prefix: "ve_gone0000", revokedAt: "2026-10-05T00:00:00Z" }),
     ]);
     renderWithClient(<ApiKeysContainer />);
+    const user = userEvent.setup();
+    await findRow("CI pipeline");
+    await user.click(screen.getByRole("radio", { name: "All" }));
 
     const ci = await findRow("CI pipeline");
     expect(within(ci).getByText("ve_abcd1234…")).toBeInTheDocument();
@@ -198,9 +236,11 @@ describe("Revoking an API key", () => {
 
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(api.requests).toEqual([{ method: "DELETE", path: "/api-keys/k-ci", body: undefined }]);
-    const row = screen.getByRole("row", { name: /CI pipeline/ });
-    expect(within(row).getByText("Revoked")).toBeInTheDocument();
+    // Leaves the Active view, which keeps the other key.
+    await waitFor(() => expect(screen.queryByRole("row", { name: /CI pipeline/ })).not.toBeInTheDocument());
     expect(within(screen.getByRole("row", { name: /Backup/ })).getByText("Active")).toBeInTheDocument();
+    await user.click(screen.getByRole("radio", { name: "Revoked" }));
+    expect(within(screen.getByRole("row", { name: /CI pipeline/ })).getByText("Revoked")).toBeInTheDocument();
   });
 
   it("sends a single request when the confirm button is clicked twice", async () => {
