@@ -92,9 +92,9 @@ services:
     labels:
       # The edge is on two networks; Traefik must use the one it shares with it.
       - traefik.docker.network=dokploy-network
-    configs:
-      - source: trusted-proxy
-        target: /etc/nginx/edge.d/trusted-proxy.conf
+    environment:
+      # The dokploy-network subnet; the edge trusts X-Forwarded-For from it only.
+      TRUSTED_PROXY_CIDR: ${TRUSTED_PROXY_CIDR:?set TRUSTED_PROXY_CIDR to the dokploy-network subnet}
     depends_on:
       backend:
         condition: service_healthy
@@ -112,14 +112,6 @@ services:
         # Fixed so the backend can trust exactly this address (FORWARDED_ALLOW_IPS).
         ipv4_address: ${EDGE_IPV4:-172.29.53.10}
       dokploy-network: {}
-
-configs:
-  trusted-proxy:
-    # Included in the edge's http block: $remote_addr becomes the client Traefik saw.
-    content: |
-      set_real_ip_from ${TRUSTED_PROXY_CIDR:?set TRUSTED_PROXY_CIDR to the dokploy-network subnet};
-      real_ip_header   X-Forwarded-For;
-      real_ip_recursive on;
 
 networks:
   dokploy-network:

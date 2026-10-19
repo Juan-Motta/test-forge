@@ -155,8 +155,8 @@ host, the edge joins `dokploy-network`, and Traefik terminates TLS.
 
 5. Back up the `db-data` and `runs-data` volumes (Dokploy's Volume Backups).
 
-The edge trusts `X-Forwarded-For` only from `TRUSTED_PROXY_CIDR` (mounted into
-`/etc/nginx/edge.d/`), so login throttling still counts real client addresses. Agents configured
+The edge trusts `X-Forwarded-For` only from `TRUSTED_PROXY_CIDR` (written to
+`/tmp/edge.d/trusted-proxy.conf` at startup by `edge/40-trusted-proxy.sh`), so login throttling still counts real client addresses. Agents configured
 on `localhost` resolve to the VPS itself. If `dokploy-network` is ever recreated, check that its
 subnet still matches `TRUSTED_PROXY_CIDR`.
 

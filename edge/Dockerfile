@@ -12,7 +12,9 @@ FROM ${NGINX_IMAGE}
 # The stock server block is not used: nginx.conf includes no conf.d. Removing it also keeps the
 # entrypoint's IPv6 helper from trying to edit it on a read-only root filesystem.
 USER root
-RUN rm -f /etc/nginx/conf.d/default.conf && mkdir -p /etc/nginx/edge.d
+RUN rm -f /etc/nginx/conf.d/default.conf
+# Runs before nginx starts (see nginx.conf, "Deployment-specific settings").
+COPY --chown=root:root --chmod=0755 40-trusted-proxy.sh /docker-entrypoint.d/40-trusted-proxy.sh
 # Owned by root and read-only for the nginx user.
 COPY --chown=root:root --chmod=0644 nginx.conf /etc/nginx/nginx.conf
 USER 101
