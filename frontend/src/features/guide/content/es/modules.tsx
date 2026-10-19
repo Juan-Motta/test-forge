@@ -191,17 +191,20 @@ export function ModulesEs() {
       <Region id="scenarios" title="Escenarios">
         <P>
           Tu biblioteca de conversaciones. Un escenario describe al usuario que interpreta el evaluador, qué sabe y qué quiere,
-          y cómo califica el juez la llamada. La página lista tus agentes, uno por fila, con cuántos escenarios tienen, sus
-          etiquetas y el último cambio. Haz clic en un agente para abrir su escenario más reciente: el editor muestra a un lado
-          todos los escenarios de ese agente, agrupados por etiqueta. Cada fila también lanza todos los escenarios del agente
-          (reproducir) o empieza uno nuevo para él (más). En el editor, <Ui>Duplicar</Ui> y <Ui>Eliminar</Ui> (tras una
-          confirmación) actúan sobre el escenario abierto.
+          y cómo califica el juez la llamada. Los escenarios viven en grupos: carpetas con título, descripción y etiquetas,
+          que pueden tener escenarios de agentes distintos. La página lista los grupos con cuántos escenarios tiene cada uno,
+          sus agentes y el último cambio; <Ui>Nuevo grupo</Ui> crea uno y lo abre. La página de un grupo muestra sus escenarios
+          en una barra lateral junto a sus detalles (edítalos, o elimina el grupo cuando esté vacío). Haz clic en un escenario
+          para abrirlo en el editor, que mantiene la barra lateral del grupo; su campo <Ui>Grupo</Ui> lo mueve a otro grupo.
+          Cada grupo también lanza todos sus escenarios (reproducir) o empieza uno nuevo en él (más). En el editor,{" "}
+          <Ui>Duplicar</Ui> y <Ui>Eliminar</Ui> (tras una confirmación) actúan sobre el escenario abierto. Un escenario creado
+          sin grupo va al grupo con el nombre de su agente.
         </P>
         <Table
           caption="El editor de escenarios, sección por sección"
           head={["Sección", "Campos clave"]}
           rows={[
-            ["1 · Agente evaluado y contexto", "Nombre, etiquetas, el agente evaluado y el contexto que se suma al contexto compartido del agente."],
+            ["1 · Agente evaluado y contexto", "Nombre, etiquetas, el agente evaluado, su grupo y el contexto que se suma al contexto compartido del agente."],
             ["2 · Persona que interpreta el evaluador", "Nombre de la persona, idioma y región (quien llama habla ese idioma), voz personalizada, temperamento, notas."],
             ["3 · Objetivo e instrucciones", "Objetivo (el juez lo revisa), cómo comportarse y los datos que conoce quien llama (solo los revela si se los piden)."],
             ["4 · Criterios de éxito para el juez", "Hasta 30 criterios: texto, Obligatorio o Deseable, fuente de evidencia (transcripción, tiempos o traza) y peso. Los pesos suman 100."],

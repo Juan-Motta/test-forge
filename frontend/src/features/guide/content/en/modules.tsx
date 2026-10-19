@@ -180,16 +180,19 @@ export function ModulesEn() {
       <Region id="scenarios" title="Scenarios">
         <P>
           Your library of conversations. A scenario describes the user the evaluator plays, what it knows and wants, and how the
-          judge scores the call. The page lists your agents, one row each, with how many scenarios they have, their tags and
-          the latest change. Click an agent to open its newest scenario: the editor lists all of that agent&apos;s scenarios
-          beside it, grouped by tag. Each row also launches all of the agent&apos;s scenarios (play) or starts a new one for it
-          (plus). In the editor, <Ui>Duplicate</Ui> and <Ui>Delete</Ui> (after a confirmation) act on the open scenario.
+          judge scores the call. Scenarios live in groups: folders with a title, a description and tags, which may hold
+          scenarios of different agents. The page lists the groups with how many scenarios each holds, their agents and the
+          latest change; <Ui>New group</Ui> creates one and opens it. A group&apos;s page shows its scenarios in a sidebar beside
+          its details (edit them, or delete the group once it is empty). Click a scenario to open it in the editor, which
+          keeps the group&apos;s sidebar; its <Ui>Group</Ui> field moves it to another group. Each group also launches all of
+          its scenarios (play) or starts a new one in it (plus). In the editor, <Ui>Duplicate</Ui> and <Ui>Delete</Ui> (after a
+          confirmation) act on the open scenario. A scenario created without a group goes to the group named after its agent.
         </P>
         <Table
           caption="The scenario editor, section by section"
           head={["Section", "Key fields"]}
           rows={[
-            ["1 · Target agent and context", "Name, tags, the agent under test, and context added on top of the agent's shared context."],
+            ["1 · Target agent and context", "Name, tags, the agent under test, its group, and context added on top of the agent's shared context."],
             ["2 · Persona the evaluator plays", "Persona name, language (picked from a list; the caller speaks it), voice override (the voices of the chosen voice connection), temperament, notes."],
             ["3 · Goal and instructions", "Goal (the judge checks it), how to behave, and facts the caller knows (only revealed when asked)."],
             ["4 · Success criteria for the judge", "Up to 30 criteria: text, Must or Should, evidence source (transcript, timing or trace) and weight. Weights total 100."],
