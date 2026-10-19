@@ -15,7 +15,8 @@ import { localizeFormError, useT } from "@/lib/i18n";
 import { confirmLeave, useUnsavedChangesGuard } from "@/lib/navigation/unsaved-changes";
 import { Alert, Button, Card, EmptyState, ScenariosIcon, Spinner, buttonClasses } from "@/ui";
 import { toChanges, toNewScenario, type ScenarioFormValues } from "./form-schema";
-import { useCreateScenario, useDuplicateScenario, useScenario, useScenarios, useUpdateScenario } from "./queries";
+import { DeleteScenarioDialog } from "./DeleteScenarioDialog";
+import { useCreateScenario, useDeleteScenario, useDuplicateScenario, useScenario, useScenarios, useUpdateScenario } from "./queries";
 import { ScenarioEditor, type ConnectionOption } from "./ScenarioEditor";
 import { ScenarioLibraryRail } from "./ScenarioLibraryRail";
 import { scenarioFromText, scenarioToText } from "./transfer";
@@ -46,6 +47,8 @@ export function ScenarioEditorContainer({ scenarioId }: ScenarioEditorContainerP
   const update = useUpdateScenario();
   const library = useScenarios();
   const duplicate = useDuplicateScenario();
+  const remove = useDeleteScenario();
+  const [deleting, setDeleting] = useState<Scenario | undefined>(undefined);
   const duplicatingNow = useRef(false);
   // A ref, not mutation state: two clicks can land before React re-renders the disabled button.
   const saving = useRef(false);
@@ -86,6 +89,18 @@ export function ScenarioEditorContainer({ scenarioId }: ScenarioEditorContainerP
 
   function onCancel() {
     if (confirmLeave()) router.push("/scenarios");
+  }
+
+  // Deleting the open scenario moves to the agent's next one (its library stays in view), or
+  // back to Scenarios after its last one.
+  function confirmDelete(current: Scenario) {
+    remove.mutate(current, {
+      onSuccess: () => {
+        setDeleting(undefined);
+        const next = library.data?.find((item) => item.agentId === current.agentId && item.id !== current.id);
+        router.push(next ? `/scenarios/${encodeURIComponent(next.id)}` : "/scenarios");
+      },
+    });
   }
 
   function onDuplicate() {
@@ -179,6 +194,15 @@ export function ScenarioEditorContainer({ scenarioId }: ScenarioEditorContainerP
         title={title}
         breadcrumbs={breadcrumbs}
         onDuplicate={scenario.data ? onDuplicate : undefined}
+        onDelete={
+          scenario.data
+            ? () => {
+                remove.reset();
+                setDeleting(scenario.data);
+              }
+            : undefined
+        }
+        defaultAgentId={scenarioId ? undefined : requestedAgentId(agents.data ?? [])}
         duplicating={duplicate.isPending}
         // Only once the connections are known, so their names are never silently left out.
         exportText={scenario.data && connections.isSuccess ? scenarioToText(scenario.data, connections.data) : undefined}
@@ -207,7 +231,18 @@ export function ScenarioEditorContainer({ scenarioId }: ScenarioEditorContainerP
         }
       />
     );
-    return body;
+    return (
+      <>
+        {body}
+        <DeleteScenarioDialog
+          scenario={deleting}
+          onCancel={() => setDeleting(undefined)}
+          onConfirm={confirmDelete}
+          pending={remove.isPending}
+          error={remove.isError ? errorMessage(remove.error) : undefined}
+        />
+      </>
+    );
   }
 
   return (
@@ -216,6 +251,16 @@ export function ScenarioEditorContainer({ scenarioId }: ScenarioEditorContainerP
       {body}
     </>
   );
+}
+
+/**
+ * The agent a new scenario was opened for (`?agent=<id>`, from the Scenarios table), when it
+ * exists. The editor mounts only after its data loaded in the browser, so `window` is there.
+ */
+function requestedAgentId(agents: { id: string }[]): string | undefined {
+  if (typeof window === "undefined") return undefined;
+  const id = new URLSearchParams(window.location.search).get("agent");
+  return agents.some((agent) => agent.id === id) ? (id ?? undefined) : undefined;
 }
 
 /** Right rail: launches the saved scenario; a new one has to be saved first. */

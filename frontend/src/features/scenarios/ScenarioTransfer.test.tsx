@@ -155,3 +155,37 @@ describe("Scenario export and import", () => {
     );
   });
 });
+
+describe("Scenario editor: delete and agent preselection", () => {
+  it("deletes the open scenario after a confirmation and opens the agent's next one", async () => {
+    const other = scenarioFixture({ id: "s-other", name: "Late check-out" });
+    const api = setup([stored, other]);
+    const user = await renderEditor("s-booking");
+
+    await user.click(screen.getByRole("button", { name: "Delete Booking with date change" }));
+    const dialog = screen.getByRole("dialog", { name: "Delete “Booking with date change”?" });
+    expect(api.requests).toEqual([]);
+    await user.click(within(dialog).getByRole("button", { name: "Delete scenario" }));
+
+    await waitFor(() => expect(api.requests).toEqual([{ method: "DELETE", path: "/scenarios/s-booking", body: undefined }]));
+    await waitFor(() => expect(nav.push).toHaveBeenCalledWith("/scenarios/s-other"));
+  });
+
+  it("goes back to Scenarios after deleting an agent's last scenario", async () => {
+    setup([stored]);
+    const user = await renderEditor("s-booking");
+
+    await user.click(screen.getByRole("button", { name: "Delete Booking with date change" }));
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Delete scenario" }));
+    await waitFor(() => expect(nav.push).toHaveBeenCalledWith("/scenarios"));
+  });
+
+  it("preselects the agent a new scenario was opened for", async () => {
+    window.history.replaceState(null, "", "/scenarios/new?agent=a-support");
+    setup([]);
+    await renderEditor();
+
+    expect(screen.getByLabelText("Agent under test")).toHaveValue("a-support");
+    expect(screen.queryByRole("button", { name: /^Delete / })).not.toBeInTheDocument();
+  });
+});

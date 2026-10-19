@@ -78,6 +78,10 @@ type ScenarioEditorProps = {
   breadcrumbs?: readonly Crumb[];
   /** Duplicates the saved scenario; absent while creating. */
   onDuplicate?: () => void;
+  /** Asks to delete the saved scenario; absent while creating. */
+  onDelete?: () => void;
+  /** The agent a new scenario starts with; the first agent when absent. */
+  defaultAgentId?: string;
   /** The saved scenario as text (Export); absent while creating. */
   exportText?: string;
   /** Prefills a new scenario from an exported one (Import); absent while editing. */
@@ -109,6 +113,8 @@ export function ScenarioEditor({
   onDuplicate,
   exportText,
   importConfig,
+  onDelete,
+  defaultAgentId,
   duplicating = false,
   banner,
   library,
@@ -124,7 +130,7 @@ export function ScenarioEditor({
       const voiceConnection = connection?.voices ? { name: connection.name, voices: connection.voices.pipeline } : undefined;
       return zodResolver(scenarioFormSchemaFor(t, kind, voiceConnection))(values, context, options);
     },
-    defaultValues: initialValues(scenario, agents[0]?.id),
+    defaultValues: initialValues(scenario, defaultAgentId ?? agents[0]?.id),
     shouldFocusError: false,
   });
   const {
@@ -288,6 +294,11 @@ export function ScenarioEditor({
             {exportText ? (
               <Button variant="secondary" onClick={() => setExportOpen(true)}>
                 {t("transfer.export")}
+              </Button>
+            ) : null}
+            {onDelete && scenario ? (
+              <Button variant="ghost" aria-label={t("scenarios.deleteNamed", { name: scenario.name })} onClick={onDelete}>
+                {t("common.delete")}
               </Button>
             ) : null}
             {onDuplicate ? (
