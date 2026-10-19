@@ -19,8 +19,8 @@ Branch: `feat/scenario-groups` (from `main` at d008bc7). Delivery: work-unit com
 
 | ID | Specs | Route | Status | Commit |
 | --- | --- | --- | --- | --- |
-| T1 | S1, S4–S9 | inline | done (verifier pending) | e1a5d99 |
-| T2 | S2 | inline | pending | |
+| T1 | S1, S4–S9 | inline | done, verified | e1a5d99, c3f3014 |
+| T2 | S2 | inline | done | 3ff47c4 |
 | T3 | S3, S5 | inline | pending | |
 | T4 | all | inline | pending | |
 
@@ -36,3 +36,5 @@ Route evidence: no Writer trigger (units are sequential: T2–T3 depend on T1), 
 - L1 (user, 2026-10-19, verbatim): "quiero ajustar cosas, los scenarios no se entienden bien, por ello quiero hacer un revamp, un scenario es individual como hoy sucede, pero quiero poder agrupar scenarios, entonces la tabla de scenarios deberia poderse ver como los grupos de scenarios y el boton deberia ser nuevo grupo, una ves se crea el grupo se deberia mostrar la vista ya existente con el sidebar de scenarios y los datos del detalle, el grupo de scenario deberia tener titulo, detalle y tags"
 - L2: Decisions S5, S6 taken by the user through two questions. Backend map: migrations 0001–0015 never backfilled data with SQL; 0016 is the first. Tests TRUNCATE an explicit table list (`tests/conftest.py:607`).
 - L3: T1 e1a5d99: migration 0016 (first SQL backfill), `/api/scenario-groups` CRUD, scenarios `groupId`/`group`, `?groupId=`. Backend suite 1187 passed; migration test checks the backfill on real rows and the round trip to 0015; models match migrations.
+- L4: Verifier on T1: S1, S4–S6, S8, S9 pass; blocker B1: concurrent first scenarios of an agent without a group raced to create its group (5 of 6 parallel POSTs returned 500). Fixed in c3f3014 with INSERT … ON CONFLICT DO NOTHING; regression test RED before, GREEN after. Advisories: default group matched by name (document it); `groupId` typed nullable in OpenAPI.
+- L5: T2 3ff47c4: groups table (title, description, tags, count, agents, latest change, launch, new scenario in group), New group dialog (GroupForm) opening `/scenarios/groups/{id}`. Frontend suite 843 passed.
