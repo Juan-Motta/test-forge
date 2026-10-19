@@ -22,6 +22,7 @@ from voice_eval.modules.runs import api as runs_api
 from voice_eval.modules.runs import live_api as runs_live_api
 from voice_eval.modules.runs.manager import RunManager
 from voice_eval.modules.scenarios import api as scenarios_api
+from voice_eval.modules.scenarios import groups_api as scenario_groups_api
 from voice_eval.modules.skill import api as skill_api
 from voice_eval.modules.stats import api as stats_api
 from voice_eval.modules.users import api as users_api
@@ -126,6 +127,7 @@ def create_app(
     protected.include_router(connections_api.router)
     protected.include_router(agents_api.router)
     protected.include_router(scenarios_api.router)
+    protected.include_router(scenario_groups_api.router)
     protected.include_router(runs_api.router)
     protected.include_router(judgements_api.router)
     protected.include_router(stats_api.router)

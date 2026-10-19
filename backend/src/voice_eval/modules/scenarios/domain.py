@@ -219,6 +219,29 @@ class AgentSummary:
 
 
 @dataclass(frozen=True)
+class GroupSummary:
+    id: uuid.UUID
+    name: str
+
+
+@dataclass(frozen=True)
+class ScenarioGroup:
+    """A folder of scenarios; its scenarios may belong to different agents."""
+
+    id: uuid.UUID
+    name: str
+    description: str
+    tags: list[str]
+    created_at: datetime
+    updated_at: datetime
+    scenario_count: int = 0
+    # The agents its scenarios are written against, by name.
+    agents: list[AgentSummary] = field(default_factory=list)
+    # When one of its scenarios last changed; `None` while it is empty.
+    latest_scenario_at: datetime | None = None
+
+
+@dataclass(frozen=True)
 class Scenario:
     id: uuid.UUID
     agent: AgentSummary
@@ -240,6 +263,8 @@ class Scenario:
     evaluator_mode: EvaluatorMode = EvaluatorMode.PIPELINE
     # Used only by the realtime evaluator.
     realtime_model: RealtimeModel = DEFAULT_REALTIME_MODEL
+    # Every stored scenario has one; `None` only for scenarios built outside the database.
+    group: GroupSummary | None = None
 
 
 class ScenarioNotFound(Exception):
@@ -252,6 +277,22 @@ class ScenarioNameTaken(Exception):
 
 class ScenarioConflict(Exception):
     """The write conflicts with a concurrent change (e.g. a referenced row was deleted)."""
+
+
+class GroupNotFound(Exception):
+    pass
+
+
+class GroupNameTaken(Exception):
+    pass
+
+
+class GroupNotEmpty(Exception):
+    """A group is deleted only once it holds no scenarios."""
+
+    def __init__(self, scenario_count: int) -> None:
+        super().__init__(f"group holds {scenario_count} scenario(s)")
+        self.scenario_count = scenario_count
 
 
 class InvalidScenarioInput(ValueError):

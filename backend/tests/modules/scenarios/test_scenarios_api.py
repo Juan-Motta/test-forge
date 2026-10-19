@@ -29,6 +29,8 @@ FIELDS = {
     "id",
     "agentId",
     "agent",
+    "groupId",
+    "group",
     "name",
     "tags",
     "context",
@@ -121,6 +123,8 @@ async def test_create_returns_the_scenario(user_client, agent_id):
     assert set(body) == FIELDS
     assert body["agentId"] == agent_id
     assert body["agent"] == {"id": agent_id, "name": "Vivi dev"}
+    # Created without a group: it lands in the group named after its agent.
+    assert body["group"] == {"id": body["groupId"], "name": "Vivi dev"}
     assert body["tags"] == ["billing", "smoke"]
     assert body["persona"] == {
         "name": "Lucía",

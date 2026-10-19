@@ -28,13 +28,18 @@ from voice_eval.modules.scenarios.domain import (
     resolve_evaluator,
     voice_error,
 )
-from voice_eval.modules.scenarios.models import NAME_UNIQUE_CONSTRAINT, ScenarioRecord
+from voice_eval.modules.scenarios.models import (
+    NAME_UNIQUE_CONSTRAINT,
+    ScenarioGroupRecord,
+    ScenarioRecord,
+)
 
 FOREIGN_KEY_VIOLATION = "23503"
 TTS_KINDS = frozenset({ConnectionKind.OPENAI, ConnectionKind.AZURE_OPENAI})
 WRITABLE = frozenset(
     {
         "agent_id",
+        "group_id",
         "name",
         "tags",
         "context",
@@ -127,6 +132,11 @@ async def _validate(db: AsyncSession, fields: dict[str, Any]) -> None:
         select(AgentRecord.id).where(AgentRecord.id == agent_id)
     ):
         errors.append({"type": "value_error", "loc": ["agentId"], "msg": "agent not found"})
+    group_id = fields.get("group_id")
+    if group_id is not None and not await db.scalar(
+        select(ScenarioGroupRecord.id).where(ScenarioGroupRecord.id == group_id)
+    ):
+        errors.append({"type": "value_error", "loc": ["groupId"], "msg": "group not found"})
     for field, loc, needs_chat in [
         ("tts_connection_id", "ttsConnectionId", False),
         ("evaluator_connection_id", "evaluatorConnectionId", True),
@@ -158,16 +168,36 @@ async def _ensure_name_free(
         raise _name_taken(name)
 
 
+async def _agent_group(db: AsyncSession, agent_id: uuid.UUID) -> uuid.UUID:
+    """The group named after the agent, created (in this transaction) when there is none: where
+    a scenario created without a group goes, as the migration put every earlier scenario."""
+    agent_name = await db.scalar(select(AgentRecord.name).where(AgentRecord.id == agent_id))
+    group_id = await db.scalar(
+        select(ScenarioGroupRecord.id).where(ScenarioGroupRecord.name == agent_name)
+    )
+    if group_id is None:
+        group_id = uuid.uuid4()
+        db.add(ScenarioGroupRecord(id=group_id, name=agent_name))
+        await db.flush()
+    return group_id
+
+
 async def list_scenarios(
-    db: AsyncSession, *, agent_id: uuid.UUID | None = None, tag: str | None = None
+    db: AsyncSession,
+    *,
+    agent_id: uuid.UUID | None = None,
+    tag: str | None = None,
+    group_id: uuid.UUID | None = None,
 ) -> list[Scenario]:
-    """Most recently updated first; optionally only one agent's, or only those with `tag`
-    (trimmed like stored tags; a blank one filters nothing)."""
+    """Most recently updated first; optionally only one agent's, one group's, or only those
+    with `tag` (trimmed like stored tags; a blank one filters nothing)."""
     query = select(ScenarioRecord).order_by(
         ScenarioRecord.updated_at.desc(), ScenarioRecord.name, ScenarioRecord.id
     )
     if agent_id is not None:
         query = query.where(ScenarioRecord.agent_id == agent_id)
+    if group_id is not None:
+        query = query.where(ScenarioRecord.group_id == group_id)
     tag = tag.strip() if tag is not None else None
     if tag:
         query = query.where(ScenarioRecord.tags.contains([tag]))
@@ -186,6 +216,8 @@ async def create_scenario(
     _check_voice(fields["evaluator_mode"], fields.get("voice_override"))
     await _validate(db, fields)
     await _ensure_name_free(db, fields["agent_id"], fields["name"])
+    if fields.get("group_id") is None:
+        fields["group_id"] = await _agent_group(db, fields["agent_id"])
     record = ScenarioRecord(id=uuid.uuid4(), created_by=created_by, **fields)
     db.add(record)
     await _commit(db, record.name)
@@ -239,6 +271,12 @@ async def duplicate_scenario(
     db.add(record)
     await _commit(db, record.name)
     return (await _fetch(db, record.id)).to_domain()
+
+
+async def count_for_group(db: AsyncSession, group_id: uuid.UUID) -> int:
+    return await db.scalar(
+        select(func.count()).select_from(ScenarioRecord).where(ScenarioRecord.group_id == group_id)
+    )
 
 
 async def count_for_agent(db: AsyncSession, agent_id: uuid.UUID) -> int:

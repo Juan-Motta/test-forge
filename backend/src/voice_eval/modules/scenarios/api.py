@@ -68,10 +68,17 @@ class AgentSummaryOut(CamelModel):
     name: str
 
 
+class GroupSummaryOut(CamelModel):
+    id: uuid.UUID
+    name: str
+
+
 class ScenarioOut(CamelModel):
     id: uuid.UUID
     agent_id: uuid.UUID
     agent: AgentSummaryOut
+    group_id: uuid.UUID | None
+    group: GroupSummaryOut | None
     name: str
     tags: list[str]
     context: str
@@ -96,6 +103,10 @@ class ScenarioOut(CamelModel):
             id=scenario.id,
             agent_id=scenario.agent.id,
             agent=AgentSummaryOut(id=scenario.agent.id, name=scenario.agent.name),
+            group_id=scenario.group.id if scenario.group else None,
+            group=GroupSummaryOut(id=scenario.group.id, name=scenario.group.name)
+            if scenario.group
+            else None,
             name=scenario.name,
             tags=scenario.tags,
             context=scenario.context,
@@ -118,6 +129,8 @@ class ScenarioOut(CamelModel):
 
 class CreateIn(StrictCamelModel, ScenarioRules):
     agent_id: uuid.UUID
+    # Omitted: the group named after the agent (created when missing).
+    group_id: uuid.UUID | None = None
     name: Name
     tags: Tags = []
     context: Context = ""
@@ -143,6 +156,7 @@ class UpdateIn(StrictCamelModel, ScenarioRules):
     """
 
     agent_id: uuid.UUID | None = None
+    group_id: uuid.UUID | None = None
     name: Name | None = None
     tags: Tags | None = None
     context: Context | None = None
@@ -161,6 +175,7 @@ class UpdateIn(StrictCamelModel, ScenarioRules):
 
     @field_validator(
         "agent_id",
+        "group_id",
         "name",
         "tags",
         "context",
@@ -216,9 +231,10 @@ router = APIRouter(prefix="/scenarios", tags=["scenarios"])
 async def list_scenarios(
     db: Db,
     agent_id: Annotated[uuid.UUID | None, Query(alias="agentId")] = None,
+    group_id: Annotated[uuid.UUID | None, Query(alias="groupId")] = None,
     tag: Annotated[str | None, Query(max_length=MAX_TAG_LENGTH)] = None,
 ) -> list[ScenarioOut]:
-    scenarios = await service.list_scenarios(db, agent_id=agent_id, tag=tag)
+    scenarios = await service.list_scenarios(db, agent_id=agent_id, group_id=group_id, tag=tag)
     return [ScenarioOut.of(scenario) for scenario in scenarios]
 
 

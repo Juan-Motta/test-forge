@@ -17,6 +17,7 @@ TABLES = {
     "provider_connections",
     "agents",
     "scenarios",
+    "scenario_groups",
     "run_batches",
     "runs",
     "run_judgements",
@@ -82,3 +83,76 @@ def test_upgrade_downgrade_round_trip(postgres_url, scratch_database_url):
 
 def test_models_match_migrations(postgres_url):
     assert asyncio.run(_schema_diff(postgres_url)) == []
+
+
+async def _execute(url: str, *statements: str) -> list:
+    """Run statements in one transaction; the rows of the last one."""
+    engine = create_async_engine(url)
+    async with engine.begin() as conn:
+        result = None
+        for statement in statements:
+            result = await conn.execute(text(statement))
+        rows = list(result) if result is not None and result.returns_rows else []
+    await engine.dispose()
+    return rows
+
+
+def _agent(agent_id: str, name: str) -> str:
+    return (
+        "INSERT INTO agents (id, name, context, protocol, base_url, channel_id, user_id)"
+        f" VALUES ('{agent_id}', '{name}', '', 'auto', 'wss://agent.example.com/ws', 'c', 'u')"
+    )
+
+
+def _scenario(scenario_id: str, agent_id: str, name: str) -> str:
+    return (
+        "INSERT INTO scenarios (id, agent_id, name, tags, context, persona, goal, instructions,"
+        " facts, criteria, end_conditions)"
+        f" VALUES ('{scenario_id}', '{agent_id}', '{name}', '{{}}', '', '{{}}'::jsonb, 'goal', '',"
+        " '[]'::jsonb, '[]'::jsonb, '{}'::jsonb)"
+    )
+
+
+def test_scenario_groups_migration_puts_every_scenario_in_its_agents_group(scratch_database_url):
+    url = scratch_database_url
+    upgrade(url, "0015")
+    hotel, support, idle = (str(uuid.uuid4()) for _ in range(3))
+    s1, s2, s3 = (str(uuid.uuid4()) for _ in range(3))
+    asyncio.run(
+        _execute(
+            url,
+            _agent(hotel, "Hotel desk"),
+            _agent(support, "Support triage"),
+            _agent(idle, "Idle agent"),
+            _scenario(s1, hotel, "Booking"),
+            _scenario(s2, hotel, "Cancel"),
+            _scenario(s3, support, "Refund"),
+        )
+    )
+
+    upgrade(url)
+
+    groups = asyncio.run(
+        _execute(url, "SELECT name, description, tags FROM scenario_groups ORDER BY name")
+    )
+    # One group per agent that has scenarios, named after it; the idle agent gets none.
+    assert [tuple(row) for row in groups] == [("Hotel desk", "", []), ("Support triage", "", [])]
+    placed = asyncio.run(
+        _execute(
+            url,
+            "SELECT scenarios.name, scenario_groups.name FROM scenarios"
+            " JOIN scenario_groups ON scenario_groups.id = scenarios.group_id"
+            " ORDER BY scenarios.name",
+        )
+    )
+    assert [tuple(row) for row in placed] == [
+        ("Booking", "Hotel desk"),
+        ("Cancel", "Hotel desk"),
+        ("Refund", "Support triage"),
+    ]
+
+    # Back to 0015 the scenarios are untouched (only the group column and table go).
+    downgrade(url, "0015")
+    names = asyncio.run(_execute(url, "SELECT name FROM scenarios ORDER BY name"))
+    assert [row[0] for row in names] == ["Booking", "Cancel", "Refund"]
+    assert "scenario_groups" not in asyncio.run(_tables(url))

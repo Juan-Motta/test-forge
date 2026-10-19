@@ -25,6 +25,13 @@ flows and how to read the results.
 - **Scenario**: one kind of call to an agent: persona, goal, facts the caller knows, criteria the
   judge scores, end conditions, optional interruptions, and the evaluator setup (voice
   connection, evaluator chat connection, `evaluatorMode`, `realtimeModel`, `voiceOverride`).
+- **Scenario group**: a folder of scenarios with a `name` (unique), `description` and `tags`.
+  Every scenario lives in exactly one group (`groupId`), and a group may hold scenarios of
+  different agents. `GET /api/scenario-groups` lists them with `scenarioCount`, their `agents`
+  and `latestScenarioAt`; `POST`, `PATCH` and `DELETE /api/scenario-groups/{groupId}` manage them
+  (a group is deleted only once empty: `409` otherwise). A scenario created without `groupId`
+  goes to the group named after its agent (created when missing); `PATCH` a scenario's
+  `groupId` to move it.
 - **Batch** and **run**: launching scenarios creates a batch with one run per scenario and
   repetition. A run is one call. It stores a snapshot of everything it was launched with, so
   editing a scenario later never changes past runs. Each run gets a fresh `threadId`, which is
@@ -236,7 +243,8 @@ Usually a human has already configured connections, agents and scenarios: list t
 
 ## Flow: launch a batch and follow it
 
-1. Pick scenarios: `GET /api/scenarios?agentId={agentId}` (optional `tag=` filter).
+1. Pick scenarios: `GET /api/scenarios?groupId={groupId}` or `?agentId={agentId}` (optional
+   `tag=` filter).
 2. With the human's approval, launch: `POST /api/runs`
 
    ```json
