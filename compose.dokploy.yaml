@@ -1,0 +1,135 @@
+# voice-eval on Dokploy (Compose service, compose path `./compose.dokploy.yaml`). Same stack as
+# compose.yaml, with these differences:
+#
+# - Nothing is published on the host. The edge joins Dokploy's `dokploy-network`, and Traefik
+#   reaches it through the domain set in Dokploy (service `edge`, port 8080, HTTPS).
+# - The edge recovers the client address from Traefik only: TRUSTED_PROXY_CIDR is the subnet of
+#   `dokploy-network` (`docker network inspect dokploy-network`), and the edge overwrites
+#   X-Forwarded-For with that address before passing requests to the backend.
+# - TLS is terminated by Traefik, so session cookies are Secure and WEB_ORIGINS must be the
+#   public https:// origin.
+#
+# Set the variables in Dokploy's Environment tab (see "Deploy on Dokploy" in the root README).
+
+name: voice-eval
+
+services:
+  db:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-voice_eval}
+      POSTGRES_DB: ${POSTGRES_DB:-voice_eval}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in Dokploy's Environment tab}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks: [platform]
+
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    environment:
+      # POSTGRES_PASSWORD is embedded in a URL: keep it URL-safe (see .env.example).
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-voice_eval}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in Dokploy's Environment tab}@db:5432/${POSTGRES_DB:-voice_eval}
+      VOICE_EVAL_MASTER_KEY: ${VOICE_EVAL_MASTER_KEY:?set VOICE_EVAL_MASTER_KEY in Dokploy's Environment tab}
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      # The public origin, e.g. https://duet.example.com.
+      WEB_ORIGINS: ${WEB_ORIGINS:?set WEB_ORIGINS to the public https:// origin}
+      # Traefik terminates TLS.
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-true}
+      # Peers whose X-Forwarded-For uvicorn trusts: exactly the edge (see "Client IPs" in the
+      # root README). Never widen it to the subnet: the frontend would become trusted too.
+      FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-${EDGE_IPV4:-172.29.53.10}}
+      # Live evaluator conversations at once, across every batch (each is a paid agent session).
+      RUNS_MAX_CONCURRENCY: ${RUNS_MAX_CONCURRENCY:-3}
+      RUNS_DATA_DIR: /data/runs
+      # Agents configured on localhost/127.0.0.1 run on the VPS itself: dial them through it.
+      LOCAL_TARGET_HOST: ${LOCAL_TARGET_HOST:-host.docker.internal}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      db:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp
+    volumes:
+      # Run artifacts survive restarts and rebuilds; the root filesystem stays read-only.
+      - runs-data:/data/runs
+    security_opt:
+      - no-new-privileges:true
+    networks: [platform]
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # Target of the frontend's own `/api/*` rewrite. In this stack the edge routes `/api/`
+        # to the backend first, so browsers never use it.
+        BACKEND_URL: http://backend:8000
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+    networks: [platform]
+
+  edge:
+    build:
+      context: ./edge
+    restart: unless-stopped
+    # Not published: Traefik reaches it on dokploy-network.
+    expose:
+      - "8080"
+    configs:
+      - source: trusted-proxy
+        target: /etc/nginx/edge.d/trusted-proxy.conf
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      platform:
+        # Fixed so the backend can trust exactly this address (FORWARDED_ALLOW_IPS).
+        ipv4_address: ${EDGE_IPV4:-172.29.53.10}
+      dokploy-network: {}
+
+configs:
+  trusted-proxy:
+    # Included in the edge's http block: $remote_addr becomes the client Traefik saw.
+    content: |
+      set_real_ip_from ${TRUSTED_PROXY_CIDR:?set TRUSTED_PROXY_CIDR to the dokploy-network subnet};
+      real_ip_header   X-Forwarded-For;
+      real_ip_recursive on;
+
+networks:
+  dokploy-network:
+    external: true
+  platform:
+    ipam:
+      config:
+        # If this range collides with another network on the host, change PLATFORM_SUBNET,
+        # PLATFORM_IP_RANGE and EDGE_IPV4 together. Containers other than the edge get addresses
+        # only from PLATFORM_IP_RANGE, so none of them can take the edge's address first.
+        - subnet: ${PLATFORM_SUBNET:-172.29.53.0/24}
+          ip_range: ${PLATFORM_IP_RANGE:-172.29.53.128/25}
+
+volumes:
+  db-data:
+  runs-data:
