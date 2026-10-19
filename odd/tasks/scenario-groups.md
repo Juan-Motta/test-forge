@@ -22,7 +22,7 @@ Branch: `feat/scenario-groups` (from `main` at d008bc7). Delivery: work-unit com
 | T1 | S1, S4–S9 | inline | done, verified | e1a5d99, c3f3014 |
 | T2 | S2 | inline | done | 3ff47c4 |
 | T3 | S3, S5 | inline | done | 17acc6a |
-| T4 | all | inline | pending | |
+| T4 | all | inline | done | b2de159 |
 
 - T1 Backend: `scenario_groups` table and migration 0016 (create, backfill one group per agent, `scenarios.group_id` NOT NULL FK RESTRICT); `/api/scenario-groups` CRUD with scenario counts and agents; scenarios carry `groupId`/`group`, filter `?groupId=`, move between groups; tests; skill guide.
 - T2 Frontend: Scenarios lists groups (title, description, tags, scenario count, agents, last updated, quick actions); "New group" dialog (title, description, tags) that opens the new group.
@@ -39,3 +39,4 @@ Route evidence: no Writer trigger (units are sequential: T2–T3 depend on T1), 
 - L4: Verifier on T1: S1, S4–S6, S8, S9 pass; blocker B1: concurrent first scenarios of an agent without a group raced to create its group (5 of 6 parallel POSTs returned 500). Fixed in c3f3014 with INSERT … ON CONFLICT DO NOTHING; regression test RED before, GREEN after. Advisories: default group matched by name (document it); `groupId` typed nullable in OpenAPI.
 - L5: T2 3ff47c4: groups table (title, description, tags, count, agents, latest change, launch, new scenario in group), New group dialog (GroupForm) opening `/scenarios/groups/{id}`. Frontend suite 843 passed.
 - L6: T3 17acc6a: `/scenarios/groups/[id]` (sidebar of the group's scenarios, details form, delete only when empty, launch all); editor Group field, rail and breadcrumb follow the scenario's group, `?group=` preselects, editor waits for groups; transfer carries the group by name. Frontend suite 850 passed.
+- L7: T4 b2de159: user guide (EN/ES) and its test describe groups; skill guide updated in T1. Backend 1188 passed (incl. race test), frontend 850 passed. Pending: native review of the branch, local stack rebuild (runs migration 0016 on local data) on the user's word, merge into main on the user's word.
