@@ -1176,7 +1176,7 @@ export const en = {
   "groups.deleteNamed": "Delete {name}",
   "groups.deleteDescription": "The group is empty. Deleting it can't be undone.",
   "groups.delete": "Delete group",
-  "transfer.note.missingGroup": "No group is named “{name}” here: the scenario goes to its agent's group unless you pick one.",
+  "transfer.note.missingGroup": "No group is named “{name}” here: the scenario starts a new group unless you pick one.",
   "groups.scenariosFailed": "The scenarios could not be loaded, so groups cannot be launched from here.",
   "groups.untitled": "Untitled group",
   "groups.rename": "Rename the group {name}",

@@ -848,6 +848,27 @@ describe("Scenario editor: layout", () => {
     expect(api.requests[0].body).toMatchObject({ groupId: "g-new-1" });
   });
 
+  it("removes the new group again when the scenario cannot be created", async () => {
+    const api = setup([]);
+    const groups = mockGroupsApi([groupFixture()], { scenarios: api });
+    server.use(
+      http.post(apiUrl("/scenarios"), () =>
+        HttpResponse.json({ detail: "Scenario name already in use for this agent" }, { status: 409 }),
+      ),
+    );
+    const user = await renderEditor();
+
+    await fillMinimum(user);
+    await user.click(screen.getByRole("button", { name: "Create scenario" }));
+    await waitFor(() =>
+      expect(groups.requests.map((request) => `${request.method} ${request.path}`)).toEqual([
+        "POST /scenario-groups",
+        "DELETE /scenario-groups/g-new-1",
+      ]),
+    );
+    expect(nav.replace).not.toHaveBeenCalled();
+  });
+
   it("says when the new group's title is taken and creates nothing", async () => {
     const api = setup([]);
     const groups = mockGroupsApi([groupFixture({ id: "g-late", name: "Late check-out" })], { scenarios: api });

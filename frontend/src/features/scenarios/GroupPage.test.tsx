@@ -114,6 +114,34 @@ describe("Scenario group page", () => {
     ]);
   });
 
+  it("saves the description once and keeps both of two quick tag removals", async () => {
+    const { groupApi } = setup([groupFixture({ ...regression, tags: ["nightly", "core", "smoke"] }), ideas]);
+    const user = await renderGroup();
+
+    await user.click(screen.getByRole("button", { name: "Edit the description" }));
+    const description = screen.getByRole("textbox", { name: "Edit the description" });
+    await user.clear(description);
+    await user.type(description, "Once.");
+    await user.keyboard("{Control>}{Enter}{/Control}");
+    await user.tab();
+    await waitFor(() => expect(screen.queryByRole("textbox", { name: "Edit the description" })).not.toBeInTheDocument());
+
+    await user.click(screen.getByRole("button", { name: "Remove the tag nightly" }));
+    await user.click(screen.getByRole("button", { name: "Remove the tag core" }));
+    await waitFor(() => expect(groupApi.requests).toHaveLength(3));
+    expect(groupApi.requests.map((request) => request.body)).toEqual([
+      { description: "Once." },
+      { tags: ["core", "smoke"] },
+      { tags: ["smoke"] },
+    ]);
+    await waitFor(() =>
+      expect(within(screen.getByRole("list", { name: "Group tags" })).getAllByRole("listitem").map((li) => li.textContent)).toEqual([
+        "smoke",
+        "Add tag",
+      ]),
+    );
+  });
+
   it("launches every scenario of the group", async () => {
     setup();
     const runs = mockRunsApi();

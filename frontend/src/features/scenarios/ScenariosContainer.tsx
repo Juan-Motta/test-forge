@@ -16,8 +16,9 @@ import type { Scenario } from "./types";
 const NO_AGENT_HINT_ID = "new-scenario-needs-agent";
 
 /**
- * `/scenarios`: the scenario groups, one row each. A group's title opens it: its scenarios in a
- * sidebar beside its details. "New scenario" opens the editor on a new group, created on save.
+ * `/scenarios`: the scenario groups, one row each. A group's title opens it: its header (edited
+ * in place) over its scenarios in the sidebar. "New scenario" opens the editor on a new group,
+ * created on save.
  */
 export function ScenariosContainer() {
   const t = useT();

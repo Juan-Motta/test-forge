@@ -121,7 +121,8 @@ export function ScenarioEditorContainer({ scenarioId }: ScenarioEditorContainerP
         router.replace(`/scenarios/${encodeURIComponent(created.id)}`);
         return created;
       } catch (error) {
-        if (newGroup) deleteGroup.mutate(newGroup);
+        // Never leave the new, empty group behind: its title would then read as taken.
+        if (newGroup) await deleteGroup.mutateAsync(newGroup).catch(() => undefined);
         throw error;
       }
     } catch {

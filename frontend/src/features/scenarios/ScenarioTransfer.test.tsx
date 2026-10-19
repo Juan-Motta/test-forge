@@ -132,7 +132,7 @@ describe("Scenario export and import", () => {
     expect(screen.getByText("No agent is named “Lola personal shopper” here: pick the agent under test.")).toBeInTheDocument();
     expect(screen.getByText("No connection is named “Staging voice” here: pick one.")).toBeInTheDocument();
     expect(
-      screen.getByText("No group is named “Staging smoke” here: the scenario goes to its agent's group unless you pick one."),
+      screen.getByText("No group is named “Staging smoke” here: the scenario starts a new group unless you pick one."),
     ).toBeInTheDocument();
     expect(screen.getByLabelText("Group")).toHaveValue("");
     // Names match case-insensitively: "openai prod" is found.

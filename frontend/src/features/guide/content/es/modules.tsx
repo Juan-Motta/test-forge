@@ -200,8 +200,8 @@ export function ModulesEs() {
           página del grupo ofrece <Ui>Correr todos</Ui>; un grupo vacío se puede eliminar desde ahí. El campo{" "}
           <Ui>Grupo</Ui> del escenario lo mueve a otro grupo.
           Cada grupo también lanza todos sus escenarios (reproducir) o empieza uno nuevo en él (más). En el editor,{" "}
-          <Ui>Duplicar</Ui> y <Ui>Eliminar</Ui> (tras una confirmación) actúan sobre el escenario abierto. Un escenario creado
-          sin grupo va al grupo con el nombre de su agente.
+          <Ui>Duplicar</Ui> y <Ui>Eliminar</Ui> (tras una confirmación) actúan sobre el escenario abierto. Por la API, un
+          escenario creado sin grupo va al grupo con el nombre de su agente.
         </P>
         <Table
           caption="El editor de escenarios, sección por sección"

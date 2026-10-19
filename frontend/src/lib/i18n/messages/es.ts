@@ -1150,7 +1150,7 @@ export const es: Messages = {
   "groups.deleteNamed": "Eliminar {name}",
   "groups.deleteDescription": "El grupo está vacío. Eliminarlo no se puede deshacer.",
   "groups.delete": "Eliminar grupo",
-  "transfer.note.missingGroup": "Aquí no hay ningún grupo llamado “{name}”: el escenario irá al grupo de su agente si no eliges otro.",
+  "transfer.note.missingGroup": "Aquí no hay ningún grupo llamado “{name}”: el escenario empezará un grupo nuevo si no eliges otro.",
   "groups.scenariosFailed": "No se pudieron cargar los escenarios, así que los grupos no se pueden lanzar desde aquí.",
   "groups.untitled": "Grupo sin título",
   "groups.rename": "Renombrar el grupo {name}",

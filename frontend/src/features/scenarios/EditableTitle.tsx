@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { IconButton, PencilIcon, cn } from "@/ui";
 
 type EditableTitleProps = {
@@ -24,6 +24,7 @@ export function EditableTitle({ value, placeholder, label, onCommit, maxLength =
   const [error, setError] = useState<string>();
   const [saving, setSaving] = useState(false);
   const input = useRef<HTMLInputElement>(null);
+  const errorId = useId();
 
   useEffect(() => {
     if (editing) input.current?.select();
@@ -72,7 +73,7 @@ export function EditableTitle({ value, placeholder, label, onCommit, maxLength =
           ref={input}
           aria-label={label}
           aria-invalid={error ? true : undefined}
-          aria-describedby={error ? "editable-title-error" : undefined}
+          aria-describedby={error ? errorId : undefined}
           value={draft}
           placeholder={placeholder}
           maxLength={maxLength}
@@ -86,7 +87,7 @@ export function EditableTitle({ value, placeholder, label, onCommit, maxLength =
           className="w-full min-w-0 rounded-lg border border-field-border bg-field px-2 text-[28px] font-semibold tracking-[-0.02em] focus:outline-none focus-visible:ring-2 focus-visible:ring-evaluator/40"
         />
         {error ? (
-          <span id="editable-title-error" className="text-sm font-normal tracking-normal text-danger-fg">
+          <span id={errorId} className="text-sm font-normal tracking-normal text-danger-fg">
             {error}
           </span>
         ) : null}

@@ -189,7 +189,8 @@ export function ModulesEn() {
           <Ui>Run all</Ui>; an empty group can be deleted from it. The scenario&apos;s <Ui>Group</Ui> field moves it to
           another group. Each group also launches all of
           its scenarios (play) or starts a new one in it (plus). In the editor, <Ui>Duplicate</Ui> and <Ui>Delete</Ui> (after a
-          confirmation) act on the open scenario. A scenario created without a group goes to the group named after its agent.
+          confirmation) act on the open scenario. Through the API, a scenario created without a group goes to the group named
+          after its agent.
         </P>
         <Table
           caption="The scenario editor, section by section"

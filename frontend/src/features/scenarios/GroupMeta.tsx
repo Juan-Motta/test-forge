@@ -39,16 +39,21 @@ function EditableDescription({ value, onCommit }: { value: string; onCommit: Com
   const [draft, setDraft] = useState(value);
   const [error, setError] = useState<string>();
   const field = useRef<HTMLTextAreaElement>(null);
+  // Ctrl/Cmd+Enter then leaving the field would save twice: one save at a time.
+  const saving = useRef(false);
 
   useEffect(() => {
     if (editing) field.current?.focus();
   }, [editing]);
 
   async function commit() {
+    if (saving.current) return;
     const next = draft.trim();
     if (next === value.trim()) return setEditing(false);
     if (next.length > MAX_DESCRIPTION) return setError(t("common.maxChars", { max: MAX_DESCRIPTION }));
+    saving.current = true;
     const problem = await onCommit(next);
+    saving.current = false;
     if (problem) return setError(problem);
     setEditing(false);
   }
@@ -106,21 +111,40 @@ function EditableDescription({ value, onCommit }: { value: string; onCommit: Com
   );
 }
 
-function TagEditor({ tags, onCommit }: { tags: string[]; onCommit: Commit<string[]> }) {
+function TagEditor({ tags: saved, onCommit }: { tags: string[]; onCommit: Commit<string[]> }) {
   const t = useT();
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string>();
   const field = useRef<HTMLInputElement>(null);
+  // The list as edited here, ahead of the server: quick edits build on each other (never on a
+  // stale `saved`), and their saves run one after another in order.
+  const [tags, setTags] = useState(saved);
+  const pending = useRef(0);
+  const queue = useRef<Promise<unknown>>(Promise.resolve());
+
+  useEffect(() => {
+    if (pending.current === 0) setTags(saved);
+  }, [saved]);
 
   useEffect(() => {
     if (adding) field.current?.focus();
   }, [adding]);
 
-  async function save(next: string[]) {
-    const problem = await onCommit(next);
-    if (problem) setError(problem);
-    return problem;
+  function save(next: string[]): Promise<string | undefined> {
+    setTags(next);
+    pending.current += 1;
+    const done = queue.current.then(async () => {
+      const problem = await onCommit(next);
+      pending.current -= 1;
+      if (problem) {
+        setError(problem);
+        if (pending.current === 0) setTags(saved);
+      }
+      return problem;
+    });
+    queue.current = done;
+    return done;
   }
 
   async function add() {
@@ -129,6 +153,7 @@ function TagEditor({ tags, onCommit }: { tags: string[]; onCommit: Commit<string
     if (tag.length > MAX_TAG) return setError(t("common.maxChars", { max: MAX_TAG }));
     if (tags.length >= MAX_TAGS) return setError(t("scenarios.error.maxTags", { max: MAX_TAGS }));
     if (!tags.includes(tag) && (await save([...tags, tag]))) return;
+    // (the field stays open for the next tag)
     setDraft("");
     setError(undefined);
     field.current?.focus();
