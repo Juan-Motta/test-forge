@@ -32,9 +32,10 @@ Branch: `feat/scenario-groups` (from `main` at d008bc7). Delivery: work-unit com
 | T5 | S10–S12 | inline | done | 0514af4 |
 
 - T1 Backend: `scenario_groups` table and migration 0016 (create, backfill one group per agent, `scenarios.group_id` NOT NULL FK RESTRICT); `/api/scenario-groups` CRUD with scenario counts and agents; scenarios carry `groupId`/`group`, filter `?groupId=`, move between groups; tests; skill guide.
-- T2 Frontend: Scenarios lists groups (title, description, tags, scenario count, agents, last updated, quick actions); "New group" dialog (title, description, tags) that opens the new group.
+- T2 Frontend: Scenarios lists groups (title, description, tags, scenario count, agents, last updated, quick actions). Its "New group" dialog was replaced in T5 by New scenario starting a blank group.
 - T3 Frontend: group page with the scenarios sidebar (the group's scenarios) and the group's details (edit, delete when empty); scenario editor gets a Group field, rail follows the scenario's group; new scenario preselects `?group=`; export/import carry the group by name.
 - T4 Docs: user guide (EN/ES), agent skill; full suites.
+- T6 Frontend: no sidebar group card and no group details form; title, description and tags edited in place under the title (group page and editor); the group page opens on a "Select a scenario" placeholder with Run all.
 - T5 Frontend: Scenarios' main button is New scenario again; the editor's title is the group's name with a pencil to rename it inline; a new scenario outside a group starts a blank group (editable title, sidebar placeholder) created on save.
 
 Route evidence: no Writer trigger (units are sequential: T2–T3 depend on T1), so the parent works inline. T1 touches high-risk item 1 (migration with backfill of stored data): independent verifier after its checks.
@@ -53,3 +54,4 @@ Route evidence: no Writer trigger (units are sequential: T2–T3 depend on T1), 
 - L10: T5 0514af4: Scenarios offers New scenario (no New group dialog); editor title is the group name with a pencil (EditableTitle; PATCH name, 409 inline); a new scenario outside a group shows a placeholder rail and an editable title, creates the group on first save (title or scenario name) and deletes it if the scenario fails; breadcrumb is just Scenarios. Frontend suite 854 passed (ScenarioEditor 422-mapping test flaky under 4 workers, passes alone).
 - L11 (user, 2026-10-19, verbatim): see S13 (T6 added).
 - L12: T6 95543b3: sidebar group card and group details form removed; group page and editor headed by title (pencil), description (pencil, Ctrl/Cmd+Enter) and tags (Add tag, remove ×), each saved in place (drafts for a new group, sent on creation); group page main area is a "Select a scenario" placeholder with Run all and New scenario; empty group deleted from the header. Frontend suite 854 passed.
+- L13: Native review of T5+T6 (the whole unpushed range exceeds the review budget, so the unreviewed slice since 2ae69c1 was reviewed alone): APPROVED. Fixed in 29c9c2f: description saved once (in-flight guard), tag edits built on the local list and saved in order, rollback of an unused new group awaited, useId for the title error, stale import note and guide wording. Frontend suite 856 passed.
