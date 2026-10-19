@@ -232,6 +232,19 @@ describe("Runs list", () => {
     expect(screen.queryByRole("button", { name: /^Cancel run/ })).not.toBeInTheDocument();
   });
 
+  it("keeps an older batch from the URL selectable even when it cannot be loaded", async () => {
+    scenarios();
+    nav.search = "batchId=b-old";
+    // Not among the recent batches and unknown to the API (its lookup fails).
+    mockRunsApi([done], { batches: [batchFixture({ id: "b-new", label: "Recent one" })] });
+    renderWithClient(<RunsContainer />);
+
+    const batch = await screen.findByRole("combobox", { name: "Batch" });
+    await waitFor(() => expect(within(batch).getByRole("option", { name: "Recent one" })).toBeInTheDocument());
+    expect(batch).toHaveValue("b-old");
+    expect(within(batch).getByRole("option", { name: "Batch b-old" })).toBeInTheDocument();
+  });
+
   it("filters by one of the recent batches from the Batch filter, with no batches card", async () => {
     scenarios();
     const api = mockRunsApi([], {
