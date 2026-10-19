@@ -573,6 +573,19 @@ describe("Scenario editor: edit", () => {
     expect(api.requests[0].body).toEqual({ evaluatorMode: "pipeline" });
   });
 
+  it("moves the scenario to another group and sends only the new group", async () => {
+    const api = setup([scenarioFixture()]);
+    mockGroupsApi([groupFixture(), groupFixture({ id: "g-smoke", name: "Smoke" })], { scenarios: api });
+    const user = await renderEditor("s-booking");
+
+    expect(field("Group")).toHaveValue("g-hotel");
+    await user.selectOptions(field("Group"), "Smoke");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(api.requests).toHaveLength(1));
+    expect(api.requests[0].body).toEqual({ groupId: "g-smoke" });
+  });
+
   it("clears the evaluator voice with null", async () => {
     const api = setup([scenarioFixture({ ttsConnectionId: "c-openai", voiceOverride: "coral" })]);
     const user = await renderEditor("s-booking");

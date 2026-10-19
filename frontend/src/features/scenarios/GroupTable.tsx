@@ -10,7 +10,8 @@ export const groupHref = (group: Pick<ScenarioGroup, "id">) => `/scenarios/group
 
 type GroupTableProps = {
   groups: ScenarioGroup[];
-  onLaunch: (group: ScenarioGroup) => void;
+  /** Absent while the scenarios are unknown (loading or failed): no launch is offered. */
+  onLaunch?: (group: ScenarioGroup) => void;
 };
 
 /**
@@ -90,7 +91,7 @@ export function GroupTable({ groups, onLaunch }: GroupTableProps) {
                 </td>
                 <td className={CELL}>
                   <div className="flex items-center justify-end gap-1">
-                    {group.scenarioCount > 0 ? (
+                    {onLaunch && group.scenarioCount > 0 ? (
                       <IconButton
                         size="sm"
                         label={t("groups.launch", { name: group.name })}

@@ -177,6 +177,10 @@ async def _agent_group(db: AsyncSession, agent_id: uuid.UUID) -> uuid.UUID:
     create the group; the losers wait for the winner and then use its group.
     """
     agent_name = await db.scalar(select(AgentRecord.name).where(AgentRecord.id == agent_id))
+    if agent_name is None:  # deleted since `_validate` looked
+        raise InvalidScenarioInput(
+            [{"type": "value_error", "loc": ["agentId"], "msg": "agent not found"}]
+        )
     await db.execute(
         insert(ScenarioGroupRecord)
         .values(id=uuid.uuid4(), name=agent_name)

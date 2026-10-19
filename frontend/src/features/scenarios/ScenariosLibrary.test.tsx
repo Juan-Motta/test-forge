@@ -3,7 +3,9 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { agentFixture, mockAgentsApi } from "@/features/agents/testing";
 import { mockRunsApi } from "@/features/runs/testing";
+import { http, HttpResponse } from "msw/http";
 import { renderWithClient } from "@/test/render";
+import { apiUrl, server } from "@/test/server";
 import { ScenariosContainer } from "./ScenariosContainer";
 import { groupFixture, mockGroupsApi, mockScenariosApi, scenarioFixture } from "./testing";
 
@@ -104,6 +106,17 @@ describe("Scenario groups", () => {
 
     await waitFor(() => expect(runs.requests).toHaveLength(1));
     expect(runs.requests[0].body).toMatchObject({ scenarioIds: ["s-cancel", "s-booking", "s-refund"] });
+  });
+
+  it("offers no launch until the scenarios loaded, and says when they could not be", async () => {
+    setup();
+    server.use(http.get(apiUrl("/scenarios"), () => HttpResponse.json({ detail: "boom" }, { status: 500 })));
+    renderWithClient(<ScenariosContainer />);
+
+    await screen.findByRole("table", { name: "Scenario groups" });
+    expect(await screen.findByText("The scenarios could not be loaded, so groups cannot be launched from here.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
+    expect(within(rowOf("Regression")).queryByRole("button", { name: /^Launch / })).not.toBeInTheDocument();
   });
 
   it("creates a group with a title, description and tags, then opens it", async () => {

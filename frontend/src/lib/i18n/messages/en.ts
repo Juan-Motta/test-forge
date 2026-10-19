@@ -1192,4 +1192,5 @@ export const en = {
   "groups.delete": "Delete group",
   "groups.launchShort": "Launch all",
   "transfer.note.missingGroup": "No group is named “{name}” here: the scenario goes to its agent's group unless you pick one.",
+  "groups.scenariosFailed": "The scenarios could not be loaded, so groups cannot be launched from here.",
 } as const;

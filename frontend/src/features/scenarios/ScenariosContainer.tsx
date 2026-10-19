@@ -67,12 +67,26 @@ export function ScenariosContainer() {
       />
     );
   } else {
+    const loaded = scenarios.data;
     body = (
-      <GroupTable
-        groups={groups.data}
-        // The scenarios the group holds now, newest first like the API lists them.
-        onLaunch={(group) => setLaunching((scenarios.data ?? []).filter((scenario) => scenario.groupId === group.id))}
-      />
+      <>
+        {scenarios.isError && !loaded ? (
+          <Alert title={t("groups.scenariosFailed")}>
+            <span className="block">{errorMessage(scenarios.error)}</span>
+            <Button variant="secondary" className="mt-3" onClick={() => scenarios.refetch()}>
+              {t("common.tryAgain")}
+            </Button>
+          </Alert>
+        ) : null}
+        <GroupTable
+          groups={groups.data}
+          // Only once the scenarios are known: a launch must never open with an empty batch.
+          // They are the ones the group holds now, newest first like the API lists them.
+          onLaunch={
+            loaded ? (group) => setLaunching(loaded.filter((scenario) => scenario.groupId === group.id)) : undefined
+          }
+        />
+      </>
     );
   }
 
