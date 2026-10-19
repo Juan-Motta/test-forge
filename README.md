@@ -142,8 +142,10 @@ host, the edge joins `dokploy-network`, and Traefik terminates TLS.
    `SESSION_COOKIE_SECURE` defaults to `true` here. If `172.29.53.0/24` collides with a network
    on the VPS, change `PLATFORM_SUBNET`, `PLATFORM_IP_RANGE` and `EDGE_IPV4` together.
 3. In **Domains**, add the domain with service `edge`, port `8080` and HTTPS (Let's Encrypt).
-   If it goes through Cloudflare, keep the record DNS only or disable caching: the UI language
-   comes from a cookie, so shared caches would mix languages.
+   If it goes through Cloudflare, keep the record **DNS only**. The UI language comes from a
+   cookie, so shared caches would mix languages. Behind Cloudflare's proxy, the edge would also
+   see Cloudflare's addresses instead of the clients', and login throttling would group
+   unrelated users together.
 4. Deploy, then create the first user from the backend container (Dokploy's terminal, or
    `docker exec` on the VPS):
 
@@ -155,7 +157,8 @@ host, the edge joins `dokploy-network`, and Traefik terminates TLS.
 
 The edge trusts `X-Forwarded-For` only from `TRUSTED_PROXY_CIDR` (mounted into
 `/etc/nginx/edge.d/`), so login throttling still counts real client addresses. Agents configured
-on `localhost` resolve to the VPS itself.
+on `localhost` resolve to the VPS itself. If `dokploy-network` is ever recreated, check that its
+subnet still matches `TRUSTED_PROXY_CIDR`.
 
 ## Local development without Docker
 

@@ -89,6 +89,9 @@ services:
     # Not published: Traefik reaches it on dokploy-network.
     expose:
       - "8080"
+    labels:
+      # The edge is on two networks; Traefik must use the one it shares with it.
+      - traefik.docker.network=dokploy-network
     configs:
       - source: trusted-proxy
         target: /etc/nginx/edge.d/trusted-proxy.conf
