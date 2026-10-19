@@ -93,14 +93,18 @@ export function ScenarioEditorContainer({ scenarioId }: ScenarioEditorContainerP
 
   // Deleting the open scenario moves to the agent's next one (its library stays in view), or
   // back to Scenarios after its last one.
-  function confirmDelete(current: Scenario) {
-    remove.mutate(current, {
-      onSuccess: () => {
-        setDeleting(undefined);
-        const next = library.data?.find((item) => item.agentId === current.agentId && item.id !== current.id);
-        router.push(next ? `/scenarios/${encodeURIComponent(next.id)}` : "/scenarios");
-      },
-    });
+  // mutateAsync, not mutate's onSuccess: reopening the dialog calls `remove.reset()`, which
+  // drops pending mutate callbacks, and the page must still move on once the delete lands.
+  async function confirmDelete(current: Scenario) {
+    if (remove.isPending) return;
+    try {
+      await remove.mutateAsync(current);
+    } catch {
+      return; // shown through the mutation's error state while the dialog is open
+    }
+    setDeleting(undefined);
+    const next = library.data?.find((item) => item.agentId === current.agentId && item.id !== current.id);
+    router.push(next ? `/scenarios/${encodeURIComponent(next.id)}` : "/scenarios");
   }
 
   function onDuplicate() {
@@ -197,7 +201,8 @@ export function ScenarioEditorContainer({ scenarioId }: ScenarioEditorContainerP
         onDelete={
           scenario.data
             ? () => {
-                remove.reset();
+                // A delete in flight keeps its state (and its pending label) when the dialog reopens.
+                if (!remove.isPending) remove.reset();
                 setDeleting(scenario.data);
               }
             : undefined

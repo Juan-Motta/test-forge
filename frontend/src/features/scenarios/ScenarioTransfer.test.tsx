@@ -4,7 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { agentFixture, mockAgentsApi } from "@/features/agents/testing";
 import { connectionFixture, mockConnectionsApi } from "@/features/connections/testing";
 import { mockRunsApi } from "@/features/runs/testing";
+import { http, HttpResponse } from "msw/http";
 import { renderWithClient } from "@/test/render";
+import { apiUrl, server } from "@/test/server";
 import { ScenarioEditorContainer } from "./ScenarioEditorContainer";
 import { mockScenariosApi, scenarioFixture } from "./testing";
 
@@ -169,6 +171,28 @@ describe("Scenario editor: delete and agent preselection", () => {
 
     await waitFor(() => expect(api.requests).toEqual([{ method: "DELETE", path: "/scenarios/s-booking", body: undefined }]));
     await waitFor(() => expect(nav.push).toHaveBeenCalledWith("/scenarios/s-other"));
+  });
+
+  it("still moves on after a delete that was in flight when its dialog was cancelled and reopened", async () => {
+    let release: () => void = () => {};
+    const api = setup([stored]);
+    server.use(
+      http.delete(apiUrl("/scenarios/s-booking"), async () => {
+        await new Promise<void>((resolve) => (release = resolve));
+        api.items = api.items.filter((scenario) => scenario.id !== "s-booking");
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+    const user = await renderEditor("s-booking");
+
+    await user.click(screen.getByRole("button", { name: "Delete Booking with date change" }));
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Delete scenario" }));
+    await within(screen.getByRole("dialog")).findByRole("button", { name: "Deleting…" });
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Cancel" }));
+    await user.click(screen.getByRole("button", { name: "Delete Booking with date change" }));
+    release();
+
+    await waitFor(() => expect(nav.push).toHaveBeenCalledWith("/scenarios"));
   });
 
   it("goes back to Scenarios after deleting an agent's last scenario", async () => {
