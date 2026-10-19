@@ -15,6 +15,7 @@ import {
   type ConnectionFormValues,
 } from "./form-schema";
 import { KINDS } from "./kinds";
+import { withCurrent } from "./voices";
 import { CONNECTION_KINDS, type Connection, type ConnectionKind, type LastTest } from "./types";
 
 export type TestTarget = "draft" | "stored";
@@ -68,6 +69,7 @@ export function ConnectionForm({
     defaultValues: initialValues(connection),
   });
   const kind = useWatch({ control, name: "kind" });
+  const config = useWatch({ control, name: "config" });
   const definition = KINDS[kind];
   const secretPath = `secrets.${definition.secret.key}` as const;
 
@@ -163,18 +165,28 @@ export function ConnectionForm({
             hint={field.hint ? t(field.hint) : undefined}
             error={fieldError(path)}
           >
-            {(controlProps) => (
-              <Input
-                mono
-                type={field.format === "url" ? "url" : "text"}
-                inputMode={field.format === "url" ? "url" : undefined}
-                autoComplete="off"
-                spellCheck={false}
-                placeholder={field.placeholder}
-                {...controlProps}
-                {...registerField(path)}
-              />
-            )}
+            {(controlProps) =>
+              field.choices ? (
+                <Select className="font-mono" {...controlProps} {...registerField(path)}>
+                  {withCurrent(field.choices(config ?? {}), config?.[field.key]).map((value) => (
+                    <option key={value} value={value}>
+                      {value}
+                    </option>
+                  ))}
+                </Select>
+              ) : (
+                <Input
+                  mono
+                  type={field.format === "url" ? "url" : "text"}
+                  inputMode={field.format === "url" ? "url" : undefined}
+                  autoComplete="off"
+                  spellCheck={false}
+                  placeholder={field.placeholder}
+                  {...controlProps}
+                  {...registerField(path)}
+                />
+              )
+            }
           </Field>
         );
       })}

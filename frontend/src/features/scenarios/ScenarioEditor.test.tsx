@@ -175,6 +175,23 @@ describe("Scenario editor: create", () => {
     ]);
   });
 
+  it("offers only the voices of the chosen voice connection's TTS model", async () => {
+    setup([]);
+    const legacy = connectionFixture({
+      id: "c-legacy",
+      name: "Legacy TTS",
+      config: { baseUrl: "https://api.openai.com/v1", ttsModel: "tts-1", ttsVoice: "alloy" },
+    });
+    mockConnectionsApi([...connections, legacy]);
+    const user = await renderEditor();
+    const voices = () => Array.from((field("Voice override (optional)") as HTMLSelectElement).options).map((o) => o.value);
+
+    await user.selectOptions(field("Evaluator voice (TTS connection)"), "OpenAI prod");
+    expect(voices()).toContain("marin");
+    await user.selectOptions(field("Evaluator voice (TTS connection)"), "Legacy TTS");
+    expect(voices()).toEqual(["", "alloy", "ash", "coral", "echo", "fable", "nova", "onyx", "sage", "shimmer"]);
+  });
+
   it("keeps a stored language or voice that the lists do not offer", async () => {
     const api = setup([
       scenarioFixture({ persona: { name: "Lucía", locale: "es-VE", temperament: "hurried", notes: "" }, voiceOverride: "nova", evaluatorMode: "realtime" }),

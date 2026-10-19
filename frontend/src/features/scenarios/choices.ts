@@ -1,3 +1,5 @@
+import { withCurrent } from "@/features/connections/voices";
+
 
 /** Languages the evaluator is most often asked to speak, as BCP 47 tags. */
 export const SCENARIO_LOCALES = [
@@ -43,8 +45,5 @@ export function localeChoices(current: string | null | undefined, uiLocale: stri
  * validation) until it is changed.
  */
 export function voiceChoices(offered: readonly string[], current: string | null | undefined): string[] {
-  const voices = [...offered];
-  const value = (current ?? "").trim();
-  if (value && !voices.includes(value)) voices.push(value);
-  return voices;
+  return withCurrent(offered, current);
 }

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAgents } from "@/features/agents/queries";
 import type { AgentKind } from "@/features/agents/types";
-import { canChat, canVoice } from "@/features/connections/kinds";
+import { canChat, canVoice, connectionVoices } from "@/features/connections/kinds";
 import { LaunchPanel } from "@/features/runs/LaunchPanel";
 import { useConnections } from "@/features/connections/queries";
 import type { Crumb } from "@/features/shell/Breadcrumbs";
@@ -160,10 +160,10 @@ export function ScenarioEditorContainer({ scenarioId }: ScenarioEditorContainerP
   } else {
     const ttsOptions: ConnectionOption[] = (connections.data ?? [])
       .filter(canVoice)
-      .map(({ id, name, kind }) => ({ id, name, kind }));
+      .map((connection) => ({ id: connection.id, name: connection.name, voices: connectionVoices(connection) }));
     const evaluatorOptions: ConnectionOption[] = (connections.data ?? [])
       .filter(canChat)
-      .map(({ id, name, kind }) => ({ id, name, kind }));
+      .map(({ id, name }) => ({ id, name }));
     body = (
       <ScenarioEditor
         scenario={scenario.data}

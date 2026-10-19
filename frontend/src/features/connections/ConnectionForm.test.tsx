@@ -31,8 +31,7 @@ describe("Create connection", () => {
 
     expect(within(dialog).getByLabelText("Provider")).toHaveValue("openai");
     await user.type(within(dialog).getByLabelText("Name"), "Main OpenAI");
-    await user.clear(within(dialog).getByLabelText("TTS voice"));
-    await user.type(within(dialog).getByLabelText("TTS voice"), "coral");
+    await user.selectOptions(within(dialog).getByLabelText("TTS voice"), "coral");
     await user.type(within(dialog).getByLabelText("API key"), CANARY);
     await user.click(within(dialog).getByRole("button", { name: "Create connection" }));
 
@@ -260,6 +259,60 @@ describe("Create connection", () => {
   });
 });
 
+const optionValues = (select: HTMLElement) => Array.from((select as HTMLSelectElement).options).map((option) => option.value);
+
+describe("TTS model and voice", () => {
+  it("offers OpenAI's TTS models and only the voices of the chosen model", async () => {
+    const api = mockConnectionsApi([]);
+    const { user, dialog } = await openCreate();
+    const model = within(dialog).getByLabelText("TTS model");
+    const voice = within(dialog).getByLabelText("TTS voice");
+
+    expect(model).toHaveValue("gpt-4o-mini-tts");
+    expect(optionValues(model)).toEqual(["gpt-4o-mini-tts", "tts-1", "tts-1-hd"]);
+    expect(voice).toHaveValue("alloy");
+    expect(optionValues(voice)).toEqual([
+      "alloy", "ash", "ballad", "coral", "echo", "fable", "nova", "onyx", "sage", "shimmer", "verse", "marin", "cedar",
+    ]);
+    await user.selectOptions(model, "tts-1");
+    expect(optionValues(voice)).toEqual(["alloy", "ash", "coral", "echo", "fable", "nova", "onyx", "sage", "shimmer"]);
+
+    await user.selectOptions(voice, "onyx");
+    await user.type(within(dialog).getByLabelText("Name"), "Legacy TTS");
+    await user.type(within(dialog).getByLabelText("API key"), CANARY);
+    await user.click(within(dialog).getByRole("button", { name: "Create connection" }));
+
+    await waitFor(() => expect(api.requests).toHaveLength(1));
+    expect(api.requests[0].body).toMatchObject({ config: { ttsModel: "tts-1", ttsVoice: "onyx" } });
+  });
+
+  it("offers Azure OpenAI the TTS voices and keeps its deployment typed", async () => {
+    mockConnectionsApi([]);
+    const { user, dialog } = await openCreate();
+
+    await user.selectOptions(within(dialog).getByLabelText("Provider"), "azure_openai");
+    expect(optionValues(within(dialog).getByLabelText("TTS voice"))).toContain("marin");
+    expect(within(dialog).getByLabelText("TTS deployment").tagName).toBe("INPUT");
+  });
+
+  it("keeps a stored model or voice that the lists do not offer", async () => {
+    const api = mockConnectionsApi([
+      connectionFixture({ config: { baseUrl: "https://api.openai.com/v1", ttsModel: "gpt-tts-next", ttsVoice: "aurora" } }),
+    ]);
+    const { user, dialog } = await openEdit();
+
+    expect(within(dialog).getByLabelText("TTS model")).toHaveValue("gpt-tts-next");
+    expect(within(dialog).getByLabelText("TTS voice")).toHaveValue("aurora");
+    await user.selectOptions(within(dialog).getByLabelText("TTS voice"), "marin");
+    await user.click(within(dialog).getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() => expect(api.requests).toHaveLength(1));
+    expect(api.requests[0].body).toEqual({
+      config: { baseUrl: "https://api.openai.com/v1", ttsModel: "gpt-tts-next", ttsVoice: "marin" },
+    });
+  });
+});
+
 describe("Edit connection", () => {
   it("never pre-fills the secret, keeps the kind fixed and omits secrets when none was typed", async () => {
     const api = mockConnectionsApi([connectionFixture()]);
@@ -285,8 +338,7 @@ describe("Edit connection", () => {
     const api = mockConnectionsApi([connectionFixture()]);
     const { user, dialog } = await openEdit();
 
-    await user.clear(within(dialog).getByLabelText("TTS voice"));
-    await user.type(within(dialog).getByLabelText("TTS voice"), "verse");
+    await user.selectOptions(within(dialog).getByLabelText("TTS voice"), "verse");
     await user.type(within(dialog).getByLabelText("API key"), CANARY);
     await user.click(within(dialog).getByRole("button", { name: "Save changes" }));
 

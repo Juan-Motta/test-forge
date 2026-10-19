@@ -1,6 +1,6 @@
 import type { MessageKey } from "@/lib/i18n";
 import type { Connection, ConnectionKind } from "./types";
-import { OPENAI_VOICES, type KindVoices } from "./voices";
+import { OPENAI_REALTIME_VOICES, OPENAI_TTS_MODELS, OPENAI_TTS_VOICES, OPENAI_VOICES, ttsVoicesFor, type KindVoices } from "./voices";
 
 /** How a config value is checked (mirrors the backend's field types). */
 export type FieldFormat = "url" | "identifier" | "region";
@@ -17,6 +17,8 @@ export type ConfigField = {
   placeholder?: string;
   /** Message key of the field's hint. */
   hint?: MessageKey;
+  /** Picked from a list instead of typed: the values offered, given the form's other config values. */
+  choices?: (config: Record<string, unknown>) => readonly string[];
 };
 
 export type KindDefinition = {
@@ -45,8 +47,22 @@ export const KINDS: Record<ConnectionKind, KindDefinition> = {
         defaultValue: "https://api.openai.com/v1",
         placeholder: "https://api.openai.com/v1",
       },
-      { key: "ttsModel", label: "connections.field.ttsModel", format: "identifier", required: false, defaultValue: "gpt-4o-mini-tts" },
-      { key: "ttsVoice", label: "connections.field.ttsVoice", format: "identifier", required: false, defaultValue: "alloy" },
+      {
+        key: "ttsModel",
+        label: "connections.field.ttsModel",
+        format: "identifier",
+        required: false,
+        defaultValue: "gpt-4o-mini-tts",
+        choices: () => OPENAI_TTS_MODELS,
+      },
+      {
+        key: "ttsVoice",
+        label: "connections.field.ttsVoice",
+        format: "identifier",
+        required: false,
+        defaultValue: "alloy",
+        choices: (config) => ttsVoicesFor(config.ttsModel),
+      },
     ],
     secret: { key: "apiKey", label: "connections.field.apiKey" },
     voices: OPENAI_VOICES,
@@ -64,7 +80,14 @@ export const KINDS: Record<ConnectionKind, KindDefinition> = {
       },
       { key: "apiVersion", label: "connections.field.apiVersion", format: "identifier", required: true, placeholder: "2025-03-01-preview" },
       { key: "ttsDeployment", label: "connections.field.ttsDeployment", format: "identifier", required: true },
-      { key: "ttsVoice", label: "connections.field.ttsVoice", format: "identifier", required: false, defaultValue: "alloy" },
+      {
+        key: "ttsVoice",
+        label: "connections.field.ttsVoice",
+        format: "identifier",
+        required: false,
+        defaultValue: "alloy",
+        choices: () => OPENAI_TTS_VOICES,
+      },
       {
         key: "chatDeployment",
         label: "connections.field.chatDeployment",
@@ -143,4 +166,16 @@ export function canChat(connection: Pick<Connection, "kind" | "config">): boolea
 /** Whether a connection of this kind can voice the evaluator (it declares its voices). */
 export function canVoice(connection: Pick<Connection, "kind">): boolean {
   return KINDS[connection.kind]?.voices !== undefined;
+}
+
+/**
+ * The voices a connection can give the evaluator, per evaluator mode: its kind's, narrowed to its
+ * TTS model's for OpenAI. `undefined` when it cannot voice the evaluator.
+ */
+export function connectionVoices(connection: Pick<Connection, "kind" | "config">): KindVoices | undefined {
+  if (!canVoice(connection)) return undefined;
+  if (connection.kind === "openai") {
+    return { pipeline: ttsVoicesFor(connection.config.ttsModel), realtime: OPENAI_REALTIME_VOICES };
+  }
+  return KINDS[connection.kind].voices;
 }

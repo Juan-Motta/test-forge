@@ -104,7 +104,7 @@ Usually a human has already configured connections, agents and scenarios: list t
 
 | Kind | `config` | `secrets` | Used for |
 | --- | --- | --- | --- |
-| `openai` | `baseUrl` (default `https://api.openai.com/v1`), `ttsModel` (default `gpt-4o-mini-tts`), `ttsVoice` (default `alloy`) | `apiKey` | caller voice (TTS), evaluator chat model (`gpt-6-luna`), realtime evaluator |
+| `openai` | `baseUrl` (default `https://api.openai.com/v1`), `ttsModel` (default `gpt-4o-mini-tts`; also `tts-1`, `tts-1-hd`, which lack `ballad`, `verse`, `marin`, `cedar`), `ttsVoice` (default `alloy`) | `apiKey` | caller voice (TTS), evaluator chat model (`gpt-6-luna`), realtime evaluator |
 | `azure_openai` | `endpoint`, `apiVersion`, `ttsDeployment`, `ttsVoice`, optional `chatDeployment` (a `gpt-6-luna` deployment), `realtimeDeployment` (`gpt-realtime-2.1-mini`), `realtimeFullDeployment` (`gpt-realtime-2.1`) | `apiKey` | same as `openai`, through deployments |
 | `azure_speech` | exactly one of `region` or `endpoint`, `voice` | `key` | not usable for runs yet |
 | `langfuse` | `host`, `publicKey` | `secretKey` | the judge reads the agent's traces |

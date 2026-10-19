@@ -10,9 +10,7 @@ import { useT } from "@/lib/i18n";
 import { useUnsavedChangesGuard } from "@/lib/navigation/unsaved-changes";
 import type { Crumb } from "@/features/shell/Breadcrumbs";
 import { PageHeader } from "@/features/shell/PageHeader";
-import { KINDS } from "@/features/connections/kinds";
-import type { ConnectionKind } from "@/features/connections/types";
-import { OPENAI_VOICES } from "@/features/connections/voices";
+import { OPENAI_VOICES, type KindVoices } from "@/features/connections/voices";
 import {
   Alert,
   Badge,
@@ -51,8 +49,8 @@ const REALTIME_MODEL_HINTS = {
   "gpt-realtime-2.1": "scenarios.realtimeFullHint",
 } as const satisfies Record<RealtimeModel, string>;
 
-/** `kind` is unknown for a linked connection the list no longer has. */
-export type ConnectionOption = { id: string; name: string; kind?: ConnectionKind };
+/** `voices`: what the connection can voice the evaluator with; unknown for a linked connection the list no longer has. */
+export type ConnectionOption = { id: string; name: string; voices?: KindVoices };
 
 type ScenarioEditorProps = {
   /** Present when editing. */
@@ -148,9 +146,8 @@ export function ScenarioEditor({
   const locale = useWatch({ control, name: "persona.locale" });
   const voice = useWatch({ control, name: "voiceOverride" });
   const ttsConnectionId = useWatch({ control, name: "ttsConnectionId" });
-  // The voices of the chosen voice connection's kind; OpenAI's when none is chosen.
-  const ttsKind = ttsOptions.find((option) => option.id === ttsConnectionId)?.kind;
-  const kindVoices = (ttsKind && KINDS[ttsKind].voices) || OPENAI_VOICES;
+  // The voices of the chosen voice connection (its kind and TTS model); OpenAI's when none is chosen.
+  const kindVoices = ttsOptions.find((option) => option.id === ttsConnectionId)?.voices ?? OPENAI_VOICES;
   const agent = agents.find((item) => item.id === agentId);
   // A text agent chats: no voice, no barge-ins, and the evaluator model writes every message.
   const text = agent?.kind === "text";
