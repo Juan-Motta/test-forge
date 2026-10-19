@@ -28,11 +28,32 @@ export const DEFAULT_MAX_TURNS = 20;
 /** The caller cuts agent reply #`agentTurn` (1-based) once `afterMs` of it has played. */
 export type Interruption = { agentTurn: number; afterMs: number };
 
+/** A folder of scenarios (`GET /api/scenario-groups`); its scenarios may belong to different agents. */
+export type ScenarioGroup = {
+  id: string;
+  name: string;
+  description: string;
+  tags: string[];
+  scenarioCount: number;
+  /** The agents its scenarios are written against, by name. */
+  agents: { id: string; name: string }[];
+  /** When one of its scenarios last changed; `null` while it is empty. */
+  latestScenarioAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type NewGroup = { name: string; description: string; tags: string[] };
+export type GroupChanges = Partial<NewGroup>;
+
 /** A scenario as `GET /api/scenarios` returns it. */
 export type Scenario = {
   id: string;
   agentId: string;
   agent: { id: string; name: string };
+  /** Every stored scenario lives in exactly one group. */
+  groupId: string;
+  group: { id: string; name: string };
   name: string;
   tags: string[];
   context: string;
@@ -62,6 +83,8 @@ export type CriterionInput = Omit<Criterion, "id"> & { id?: string };
 /** The voice-only settings are left out for text agents (the backend keeps its defaults or the stored values). */
 export type NewScenario = {
   agentId: string;
+  /** Omitted, the API puts the scenario in the group named after its agent. */
+  groupId?: string;
   name: string;
   tags: string[];
   context: string;

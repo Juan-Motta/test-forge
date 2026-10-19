@@ -1,7 +1,7 @@
 import { http, HttpResponse } from "msw/http";
 import type { Agent } from "@/features/agents/types";
 import { apiUrl, server } from "@/test/server";
-import type { Criterion, Scenario } from "./types";
+import type { Criterion, Scenario, ScenarioGroup } from "./types";
 
 /** A stored scenario as the API returns it. */
 export function scenarioFixture(overrides: Partial<Scenario> = {}): Scenario {
@@ -9,6 +9,8 @@ export function scenarioFixture(overrides: Partial<Scenario> = {}): Scenario {
     id: "s-booking",
     agentId: "a-hotel",
     agent: { id: "a-hotel", name: "Hotel booking assistant" },
+    groupId: "g-hotel",
+    group: { id: "g-hotel", name: "Hotel booking assistant" },
     name: "Booking with date change",
     tags: ["booking", "regression"],
     context: "The caller already has a reservation number.",
@@ -70,8 +72,17 @@ function issues(body: Body, agents: Agent[]): Issue[] {
  * In-memory backend for `/api/scenarios`: filters, 404/409/422 and duplicate naming like the
  * backend, and records every request but reads so tests can assert exact payloads.
  */
-export function mockScenariosApi(initial: Scenario[] = [], options: { agents?: Agent[] } = {}) {
+export function mockScenariosApi(
+  initial: Scenario[] = [],
+  options: { agents?: Agent[]; groups?: Pick<ScenarioGroup, "id" | "name">[] } = {},
+) {
   const agents = options.agents ?? [];
+  // Like the backend: without `groupId` a scenario joins the group named after its agent.
+  const groupOf = (groupId: unknown, agentId: string) => {
+    const id = typeof groupId === "string" ? groupId : `g-${agentId}`;
+    const name = options.groups?.find((group) => group.id === id)?.name ?? agentSummary(agentId).name;
+    return { groupId: id, group: { id, name } };
+  };
   const state = { items: [...initial], requests: [] as RecordedRequest[] };
   let created = 0;
   let criterionIds = 0;
@@ -95,9 +106,15 @@ export function mockScenariosApi(initial: Scenario[] = [], options: { agents?: A
     http.get(apiUrl("/scenarios"), ({ request }) => {
       const params = new URL(request.url).searchParams;
       const agentId = params.get("agentId");
+      const groupId = params.get("groupId");
       const tag = params.get("tag");
       const list = state.items
-        .filter((item) => (agentId ? item.agentId === agentId : true) && (tag ? item.tags.includes(tag) : true))
+        .filter(
+          (item) =>
+            (agentId ? item.agentId === agentId : true) &&
+            (groupId ? item.groupId === groupId : true) &&
+            (tag ? item.tags.includes(tag) : true),
+        )
         .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
       return HttpResponse.json(list);
     }),
@@ -115,6 +132,7 @@ export function mockScenariosApi(initial: Scenario[] = [], options: { agents?: A
         ...(body as unknown as Scenario),
         id: newId(),
         agent: agentSummary(String(body.agentId)),
+        ...groupOf(body.groupId, String(body.agentId)),
         criteria: withIds(body.criteria),
         createdAt: now,
         updatedAt: now,
@@ -133,6 +151,7 @@ export function mockScenariosApi(initial: Scenario[] = [], options: { agents?: A
       if (taken(next.agentId, next.name, id)) return nameTaken();
       if (body.criteria) next.criteria = withIds(body.criteria);
       next.agent = agentSummary(next.agentId);
+      if (body.groupId !== undefined) Object.assign(next, groupOf(body.groupId, next.agentId));
       next.updatedAt = new Date().toISOString();
       state.items[index] = next;
       return HttpResponse.json(next);
@@ -156,6 +175,102 @@ export function mockScenariosApi(initial: Scenario[] = [], options: { agents?: A
       const copy: Scenario = { ...source, id: newId(), name: copyName(), createdAt: now, updatedAt: now };
       state.items.push(copy);
       return HttpResponse.json(copy, { status: 201 });
+    }),
+  );
+  return state;
+}
+
+/** A stored group as the API returns it (counts are recomputed by `mockGroupsApi`). */
+export function groupFixture(overrides: Partial<ScenarioGroup> = {}): ScenarioGroup {
+  return {
+    id: "g-hotel",
+    name: "Hotel booking assistant",
+    description: "",
+    tags: [],
+    scenarioCount: 0,
+    agents: [],
+    latestScenarioAt: null,
+    createdAt: "2026-10-01T10:00:00Z",
+    updatedAt: "2026-10-01T10:00:00Z",
+    ...overrides,
+  };
+}
+
+/**
+ * In-memory backend for `/api/scenario-groups`. With `scenarios` (a `mockScenariosApi` state),
+ * counts, agents and latest change follow its scenarios, and a delete is refused while any is
+ * in the group, like the backend.
+ */
+export function mockGroupsApi(initial: ScenarioGroup[] = [], options: { scenarios?: { items: Scenario[] } } = {}) {
+  const state = { items: [...initial], requests: [] as RecordedRequest[] };
+  let created = 0;
+  const record = async (request: Request, path: string) => {
+    const text = await request.text();
+    const body = text ? (JSON.parse(text) as unknown) : undefined;
+    state.requests.push({ method: request.method, path, body });
+    return (body ?? {}) as Body;
+  };
+  const view = (group: ScenarioGroup): ScenarioGroup => {
+    const scenarios = options.scenarios?.items.filter((scenario) => scenario.groupId === group.id);
+    if (!scenarios) return group;
+    const agents = [...new Map(scenarios.map((scenario) => [scenario.agent.id, scenario.agent])).values()].sort((a, b) =>
+      a.name.localeCompare(b.name),
+    );
+    const latest = scenarios.map((scenario) => scenario.updatedAt).sort().at(-1) ?? null;
+    return { ...group, scenarioCount: scenarios.length, agents, latestScenarioAt: latest };
+  };
+  const groupNotFound = () => HttpResponse.json({ detail: "Group not found" }, { status: 404 });
+  const groupNameTaken = (name: unknown, except?: string) =>
+    state.items.some((group) => group.name === name && group.id !== except);
+
+  server.use(
+    http.get(apiUrl("/scenario-groups"), () =>
+      HttpResponse.json([...state.items].sort((a, b) => a.name.localeCompare(b.name)).map(view)),
+    ),
+    http.get(apiUrl("/scenario-groups/:id"), ({ params }) => {
+      const found = state.items.find((group) => group.id === params.id);
+      return found ? HttpResponse.json(view(found)) : groupNotFound();
+    }),
+    http.post(apiUrl("/scenario-groups"), async ({ request }) => {
+      const body = await record(request, "/scenario-groups");
+      if (groupNameTaken(body.name)) return HttpResponse.json({ detail: "Group name already in use" }, { status: 409 });
+      const now = new Date().toISOString();
+      const group = groupFixture({
+        id: `g-new-${(created += 1)}`,
+        name: String(body.name),
+        description: String(body.description ?? ""),
+        tags: (body.tags as string[] | undefined) ?? [],
+        createdAt: now,
+        updatedAt: now,
+      });
+      state.items.push(group);
+      return HttpResponse.json(view(group), { status: 201 });
+    }),
+    http.patch(apiUrl("/scenario-groups/:id"), async ({ request, params }) => {
+      const id = String(params.id);
+      const body = await record(request, `/scenario-groups/${id}`);
+      const index = state.items.findIndex((group) => group.id === id);
+      if (index < 0) return groupNotFound();
+      if (body.name !== undefined && groupNameTaken(body.name, id)) {
+        return HttpResponse.json({ detail: "Group name already in use" }, { status: 409 });
+      }
+      state.items[index] = { ...state.items[index], ...(body as Partial<ScenarioGroup>), updatedAt: new Date().toISOString() };
+      return HttpResponse.json(view(state.items[index]));
+    }),
+    http.delete(apiUrl("/scenario-groups/:id"), async ({ request, params }) => {
+      const id = String(params.id);
+      await record(request, `/scenario-groups/${id}`);
+      const found = state.items.find((group) => group.id === id);
+      if (!found) return groupNotFound();
+      const count = view(found).scenarioCount;
+      if (count > 0) {
+        return HttpResponse.json(
+          { detail: `Group holds ${count} scenario(s); move or delete them first` },
+          { status: 409 },
+        );
+      }
+      state.items = state.items.filter((group) => group.id !== id);
+      return new HttpResponse(null, { status: 204 });
     }),
   );
   return state;

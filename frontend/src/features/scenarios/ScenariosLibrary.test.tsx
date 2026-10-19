@@ -5,7 +5,7 @@ import { agentFixture, mockAgentsApi } from "@/features/agents/testing";
 import { mockRunsApi } from "@/features/runs/testing";
 import { renderWithClient } from "@/test/render";
 import { ScenariosContainer } from "./ScenariosContainer";
-import { mockScenariosApi, scenarioFixture } from "./testing";
+import { groupFixture, mockGroupsApi, mockScenariosApi, scenarioFixture } from "./testing";
 
 const nav = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn() }));
 vi.mock("next/navigation", () => ({
@@ -16,18 +16,21 @@ const hotel = agentFixture();
 const support = agentFixture({ id: "a-support", name: "Support triage" });
 const agents = [hotel, support];
 
-const booking = scenarioFixture();
+const regression = groupFixture({
+  id: "g-regression",
+  name: "Regression",
+  description: "Everything that broke once and must not break again.",
+  tags: ["nightly", "core"],
+});
+const smoke = groupFixture({ id: "g-smoke", name: "Smoke", description: "", tags: [] });
+const empty = groupFixture({ id: "g-empty", name: "Ideas" });
+
+const booking = scenarioFixture({ groupId: "g-regression", group: { id: "g-regression", name: "Regression" } });
 const cancel = scenarioFixture({
   id: "s-cancel",
   name: "Cancel within 24h",
-  tags: ["cancellation"],
-  persona: { name: "Ana", locale: "es-MX", temperament: "polite", notes: "" },
-  criteria: [{ id: "k-9", text: "Confirms the cancellation", kind: "must", source: "transcript", weight: 100 }],
-  interruptions: [
-    { agentTurn: 1, afterMs: 2000 },
-    { agentTurn: 3, afterMs: 4500 },
-  ],
-  evaluatorMode: "realtime",
+  groupId: "g-regression",
+  group: { id: "g-regression", name: "Regression" },
   updatedAt: "2026-10-03T10:00:00Z",
 });
 const refund = scenarioFixture({
@@ -35,116 +38,134 @@ const refund = scenarioFixture({
   agentId: "a-support",
   agent: { id: "a-support", name: "Support triage" },
   name: "Refund dispute",
-  tags: ["regression"],
-  persona: { name: "Raúl", locale: "es-MX", temperament: "angry", notes: "" },
-  evaluatorMode: "realtime",
-  realtimeModel: "gpt-realtime-2.1",
+  groupId: "g-regression",
+  group: { id: "g-regression", name: "Regression" },
 });
+const ping = scenarioFixture({ id: "s-ping", name: "Ping", groupId: "g-smoke", group: { id: "g-smoke", name: "Smoke" } });
 
-const quiet = agentFixture({ id: "a-quiet", name: "Quiet desk", kind: "text", textMode: "stream", auth: "none", userId: null });
-
-function rowOf(name: string) {
-  const link = screen.getByRole("link", { name });
-  return link.closest("tr") as HTMLElement;
+function setup(groups = [regression, smoke, empty], scenarios = [booking, cancel, refund, ping]) {
+  mockAgentsApi(agents);
+  const scenarioApi = mockScenariosApi(scenarios, { agents, groups });
+  const groupApi = mockGroupsApi(groups, { scenarios: scenarioApi });
+  return { scenarioApi, groupApi };
 }
 
-describe("Scenarios by agent", () => {
+function rowOf(name: string) {
+  return screen.getByRole("link", { name }).closest("tr") as HTMLElement;
+}
+
+describe("Scenario groups", () => {
   beforeEach(() => {
     nav.push.mockReset();
     nav.replace.mockReset();
   });
 
-  it("lists every agent with its kind, scenario count, tags and latest change", async () => {
-    mockAgentsApi([...agents, quiet]);
-    mockScenariosApi([booking, cancel, refund], { agents });
+  it("lists every group with its description, tags, scenario count, agents and latest change", async () => {
+    setup();
     renderWithClient(<ScenariosContainer />);
 
-    const table = await screen.findByRole("table", { name: "Scenarios by agent" });
+    const table = await screen.findByRole("table", { name: "Scenario groups" });
     expect(within(table).getAllByRole("row")).toHaveLength(4);
-    const hotelRow = rowOf("Hotel booking assistant");
-    expect(within(hotelRow).getByText("Voice")).toBeInTheDocument();
-    expect(within(hotelRow).getByText("2 scenarios")).toBeInTheDocument();
-    expect(within(within(hotelRow).getByRole("list", { name: "Tags" })).getAllByRole("listitem").map((li) => li.textContent)).toEqual([
-      "booking",
-      "cancellation",
-      "regression",
+    const row = rowOf("Regression");
+    expect(within(row).getByText("Everything that broke once and must not break again.")).toBeInTheDocument();
+    expect(within(within(row).getByRole("list", { name: "Tags" })).getAllByRole("listitem").map((li) => li.textContent)).toEqual([
+      "nightly",
+      "core",
     ]);
-    expect(within(hotelRow).getByRole("time")).toHaveAttribute("dateTime", cancel.updatedAt);
-    expect(within(rowOf("Support triage")).getByText("1 scenario")).toBeInTheDocument();
-    const quietRow = rowOf("Quiet desk");
-    expect(within(quietRow).getByText("Text")).toBeInTheDocument();
-    expect(within(quietRow).getByText("0 scenarios")).toBeInTheDocument();
-    // No scenario names on this page: they live in each agent's library.
+    expect(within(row).getByText("3 scenarios")).toBeInTheDocument();
+    // A group mixes agents: each is named.
+    expect(within(within(row).getByRole("list", { name: "Agents" })).getAllByRole("listitem").map((li) => li.textContent)).toEqual([
+      "Hotel booking assistant",
+      "Support triage",
+    ]);
+    expect(within(row).getByRole("time")).toHaveAttribute("dateTime", cancel.updatedAt);
+    expect(within(rowOf("Ideas")).getByText("0 scenarios")).toBeInTheDocument();
+    // The group's name opens it; scenarios themselves are listed there, not here.
+    expect(screen.getByRole("link", { name: "Regression" })).toHaveAttribute("href", "/scenarios/groups/g-regression");
     expect(screen.queryByText("Booking with date change")).not.toBeInTheDocument();
   });
 
-  it("opens an agent's newest scenario (Cancel within 24h, updated last) from its name, or a new one when it has none", async () => {
-    mockAgentsApi([...agents, quiet]);
-    mockScenariosApi([booking, cancel, refund], { agents });
-    renderWithClient(<ScenariosContainer />);
-
-    await screen.findByRole("table", { name: "Scenarios by agent" });
-    expect(screen.getByRole("link", { name: "Hotel booking assistant" })).toHaveAttribute("href", "/scenarios/s-cancel");
-    expect(screen.getByRole("link", { name: "Support triage" })).toHaveAttribute("href", "/scenarios/s-refund");
-    expect(screen.getByRole("link", { name: "Quiet desk" })).toHaveAttribute("href", "/scenarios/new?agent=a-quiet");
-    expect(within(rowOf("Hotel booking assistant")).getByRole("link", { name: "New scenario for Hotel booking assistant" })).toHaveAttribute(
-      "href",
-      "/scenarios/new?agent=a-hotel",
-    );
-    expect(within(rowOf("Quiet desk")).queryByRole("button", { name: /^Launch all/ })).not.toBeInTheDocument();
-  });
-
-  it("launches every scenario of an agent with its quick action", async () => {
-    mockAgentsApi(agents);
-    mockScenariosApi([booking, cancel, refund], { agents });
+  it("offers quick actions: launch the group's scenarios and add a scenario to it", async () => {
+    setup();
     const runs = mockRunsApi();
     renderWithClient(<ScenariosContainer />);
     const user = userEvent.setup();
 
-    await screen.findByRole("table", { name: "Scenarios by agent" });
-    await user.click(screen.getByRole("button", { name: "Launch all Hotel booking assistant scenarios" }));
-    const dialog = screen.getByRole("dialog", { name: "Launch 2 scenarios" });
+    await screen.findByRole("table", { name: "Scenario groups" });
+    expect(within(rowOf("Regression")).getByRole("link", { name: "New scenario in Regression" })).toHaveAttribute(
+      "href",
+      "/scenarios/new?group=g-regression",
+    );
+    expect(within(rowOf("Ideas")).queryByRole("button", { name: /^Launch / })).not.toBeInTheDocument();
+
+    await user.click(within(rowOf("Regression")).getByRole("button", { name: "Launch every scenario of Regression" }));
+    const dialog = screen.getByRole("dialog", { name: "Launch 3 scenarios" });
     await user.click(within(dialog).getByRole("button", { name: /^Launch \d+ runs?$/ }));
 
     await waitFor(() => expect(runs.requests).toHaveLength(1));
-    expect(runs.requests[0].body).toMatchObject({ scenarioIds: ["s-cancel", "s-booking"] });
-    await waitFor(() => expect(nav.push).toHaveBeenCalledWith("/live?batchId=b-new-1"));
+    expect(runs.requests[0].body).toMatchObject({ scenarioIds: ["s-cancel", "s-booking", "s-refund"] });
   });
 
-  it("offers New scenario in the empty state when agents exist", async () => {
-    mockAgentsApi(agents);
-    mockScenariosApi([], { agents });
+  it("creates a group with a title, description and tags, then opens it", async () => {
+    const { groupApi } = setup();
     renderWithClient(<ScenariosContainer />);
+    const user = userEvent.setup();
 
-    const empty = await screen.findByRole("heading", { name: "No scenarios yet" });
-    const state = empty.closest("div")?.parentElement as HTMLElement;
-    expect(within(state).getByRole("link", { name: "New scenario" })).toHaveAttribute("href", "/scenarios/new");
+    await screen.findByRole("table", { name: "Scenario groups" });
+    await user.click(screen.getByRole("button", { name: "New group" }));
+    const dialog = screen.getByRole("dialog", { name: "New group" });
+    await user.click(within(dialog).getByRole("button", { name: "Create group" }));
+    expect(within(dialog).getByLabelText("Title")).toHaveAccessibleDescription(expect.stringContaining("Enter a title"));
+    expect(groupApi.requests).toEqual([]);
+
+    await user.type(within(dialog).getByLabelText("Title"), "Payments");
+    await user.type(within(dialog).getByLabelText("Description"), "Card and refund flows.");
+    await user.type(within(dialog).getByLabelText("Tags"), "billing, smoke, billing");
+    await user.click(within(dialog).getByRole("button", { name: "Create group" }));
+
+    await waitFor(() => expect(groupApi.requests).toHaveLength(1));
+    expect(groupApi.requests[0].body).toEqual({
+      name: "Payments",
+      description: "Card and refund flows.",
+      tags: ["billing", "smoke"],
+    });
+    await waitFor(() => expect(nav.push).toHaveBeenCalledWith("/scenarios/groups/g-new-1"));
   });
 
-  it("disables New scenario until an agent exists and links to Agents", async () => {
-    mockAgentsApi([]);
-    mockScenariosApi([], { agents: [] });
+  it("puts a taken title on the field", async () => {
+    setup();
+    renderWithClient(<ScenariosContainer />);
+    const user = userEvent.setup();
+
+    await screen.findByRole("table", { name: "Scenario groups" });
+    await user.click(screen.getByRole("button", { name: "New group" }));
+    const dialog = screen.getByRole("dialog", { name: "New group" });
+    await user.type(within(dialog).getByLabelText("Title"), "Smoke");
+    await user.click(within(dialog).getByRole("button", { name: "Create group" }));
+
+    await waitFor(() =>
+      expect(within(dialog).getByLabelText("Title")).toHaveAccessibleDescription(expect.stringContaining("already")),
+    );
+    expect(nav.push).not.toHaveBeenCalled();
+  });
+
+  it("invites to create the first group when there is none", async () => {
+    setup([], []);
     renderWithClient(<ScenariosContainer />);
 
-    await screen.findByRole("heading", { name: "No scenarios yet" });
-    const buttons = screen.getAllByRole("button", { name: "New scenario" });
-    for (const button of buttons) {
-      expect(button).toBeDisabled();
-      expect(button).toHaveAccessibleDescription("Add an agent first: scenarios are written against an agent.");
-    }
-    expect(screen.getByRole("link", { name: "Add an agent" })).toHaveAttribute("href", "/agents");
+    expect(await screen.findByRole("heading", { name: "No groups yet" })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "New group" }).length).toBeGreaterThan(0);
   });
 });
 
-describe("Scenarios by agent in Spanish", () => {
-  it("shows the table chrome in Spanish and the agent names untouched", async () => {
-    mockAgentsApi(agents);
-    mockScenariosApi([booking, cancel, refund], { agents });
+describe("Scenario groups in Spanish", () => {
+  it("shows the table chrome in Spanish and the group names untouched", async () => {
+    setup();
     renderWithClient(<ScenariosContainer />, { locale: "es" });
 
-    await screen.findByRole("table", { name: "Escenarios por agente" });
+    await screen.findByRole("table", { name: "Grupos de escenarios" });
     expect(screen.getByRole("heading", { level: 1, name: "Escenarios" })).toBeInTheDocument();
-    expect(within(rowOf("Hotel booking assistant")).getByText("2 escenarios")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Lanzar todos los escenarios de Hotel booking assistant" })).toBeInTheDocument();
+    expect(within(rowOf("Regression")).getByText("3 escenarios")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Nuevo grupo" })).toBeInTheDocument();
   });
 });

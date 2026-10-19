@@ -69,6 +69,8 @@ export function scenarioFromText(
     id: "",
     agentId,
     agent: { id: agentId, name: "" },
+    groupId: "",
+    group: { id: "", name: "" },
     name: read.string(data.name) ?? "",
     tags: read.array(data.tags).filter((tag): tag is string => typeof tag === "string"),
     context: read.string(data.context) ?? "",
