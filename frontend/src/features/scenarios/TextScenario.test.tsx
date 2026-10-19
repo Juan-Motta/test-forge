@@ -139,12 +139,11 @@ describe("Scenario editor: text agents", () => {
 
   it("saves a voice scenario moved to a text agent without its hidden voice settings", async () => {
     const api = setup([
-      scenarioFixture({ voiceOverride: "alloy", evaluatorMode: "realtime", interruptions: [{ agentTurn: 1, afterMs: 2500 }] }),
+      // `nova` is no realtime voice: a stored, now hidden, invalid value must not block saving.
+      scenarioFixture({ voiceOverride: "nova", evaluatorMode: "realtime", interruptions: [{ agentTurn: 1, afterMs: 2500 }] }),
     ]);
     const user = await renderEditor("s-booking");
 
-    await user.clear(field("Voice override (optional)"));
-    await user.type(field("Voice override (optional)"), "not a voice!");
     await user.selectOptions(field("Agent under test"), "Chat desk");
     await user.selectOptions(field("Evaluator model connection"), "OpenAI prod");
     await user.click(screen.getByRole("button", { name: "Save" }));

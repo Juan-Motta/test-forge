@@ -10,6 +10,9 @@ import { useT } from "@/lib/i18n";
 import { useUnsavedChangesGuard } from "@/lib/navigation/unsaved-changes";
 import type { Crumb } from "@/features/shell/Breadcrumbs";
 import { PageHeader } from "@/features/shell/PageHeader";
+import { KINDS } from "@/features/connections/kinds";
+import type { ConnectionKind } from "@/features/connections/types";
+import { OPENAI_VOICES } from "@/features/connections/voices";
 import {
   Alert,
   Badge,
@@ -25,6 +28,7 @@ import {
   cn,
   focusRing,
 } from "@/ui";
+import { localeChoices, voiceChoices } from "./choices";
 import { CriteriaEditor, WeightsStatus } from "./CriteriaEditor";
 import { errorAt, formPath } from "./editor-form";
 import { FactsEditor } from "./FactsEditor";
@@ -47,7 +51,8 @@ const REALTIME_MODEL_HINTS = {
   "gpt-realtime-2.1": "scenarios.realtimeFullHint",
 } as const satisfies Record<RealtimeModel, string>;
 
-export type ConnectionOption = { id: string; name: string };
+/** `kind` is unknown for a linked connection the list no longer has. */
+export type ConnectionOption = { id: string; name: string; kind?: ConnectionKind };
 
 type ScenarioEditorProps = {
   /** Present when editing. */
@@ -140,6 +145,12 @@ export function ScenarioEditor({
 
   const agentId = useWatch({ control, name: "agentId" });
   const evaluatorMode = useWatch({ control, name: "evaluatorMode" });
+  const locale = useWatch({ control, name: "persona.locale" });
+  const voice = useWatch({ control, name: "voiceOverride" });
+  const ttsConnectionId = useWatch({ control, name: "ttsConnectionId" });
+  // The voices of the chosen voice connection's kind; OpenAI's when none is chosen.
+  const ttsKind = ttsOptions.find((option) => option.id === ttsConnectionId)?.kind;
+  const kindVoices = (ttsKind && KINDS[ttsKind].voices) || OPENAI_VOICES;
   const agent = agents.find((item) => item.id === agentId);
   // A text agent chats: no voice, no barge-ins, and the evaluator model writes every message.
   const text = agent?.kind === "text";
@@ -300,19 +311,32 @@ export function ScenarioEditor({
                 {(props) => <Input autoComplete="off" {...props} {...registerField("persona.name")} />}
               </Field>
               <Field label={t("scenarios.field.locale")} hint={t("scenarios.field.localeHint")} error={fieldError("persona.locale")}>
-                {(props) => <Input mono autoComplete="off" spellCheck={false} {...props} {...registerField("persona.locale")} />}
+                {(props) => (
+                  <Select {...props} {...registerField("persona.locale")}>
+                    {localeChoices(locale, t.locale).map((choice) => (
+                      <option key={choice.value} value={choice.value}>
+                        {choice.label}
+                      </option>
+                    ))}
+                  </Select>
+                )}
               </Field>
               {text ? null : (
                 <Field
                   label={t("scenarios.field.voice")}
-                  hint={
-                    evaluatorMode === "realtime"
-                      ? t("scenarios.field.voiceRealtimeHint", { voices: REALTIME_VOICES.join(", ") })
-                      : t("scenarios.field.voiceHint")
-                  }
+                  hint={evaluatorMode === "realtime" ? t("scenarios.field.voiceRealtimeHint") : t("scenarios.field.voiceHint")}
                   error={fieldError("voiceOverride")}
                 >
-                  {(props) => <Input mono autoComplete="off" spellCheck={false} {...props} {...registerField("voiceOverride")} />}
+                  {(props) => (
+                    <Select {...props} {...registerField("voiceOverride")}>
+                      <option value="">{t("scenarios.field.voiceDefault")}</option>
+                      {voiceChoices(kindVoices[evaluatorMode], voice).map((name) => (
+                        <option key={name} value={name}>
+                          {name}
+                        </option>
+                      ))}
+                    </Select>
+                  )}
                 </Field>
               )}
             </div>

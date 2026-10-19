@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAgents } from "@/features/agents/queries";
 import type { AgentKind } from "@/features/agents/types";
-import { canChat } from "@/features/connections/kinds";
+import { canChat, canVoice } from "@/features/connections/kinds";
 import { LaunchPanel } from "@/features/runs/LaunchPanel";
 import { useConnections } from "@/features/connections/queries";
 import type { Crumb } from "@/features/shell/Breadcrumbs";
@@ -20,7 +20,6 @@ import { ScenarioEditor, type ConnectionOption } from "./ScenarioEditor";
 import { ScenarioLibraryRail } from "./ScenarioLibraryRail";
 import type { Scenario } from "./types";
 
-const TTS_KINDS = new Set(["openai", "azure_openai"]);
 
 /** A load failed before any data arrived; a failed background refetch keeps the editor (and its edits). */
 function loadFailed(query: { isError: boolean; data: unknown }): boolean {
@@ -160,11 +159,11 @@ export function ScenarioEditorContainer({ scenarioId }: ScenarioEditorContainerP
     );
   } else {
     const ttsOptions: ConnectionOption[] = (connections.data ?? [])
-      .filter((connection) => TTS_KINDS.has(connection.kind))
-      .map(({ id, name }) => ({ id, name }));
+      .filter(canVoice)
+      .map(({ id, name, kind }) => ({ id, name, kind }));
     const evaluatorOptions: ConnectionOption[] = (connections.data ?? [])
       .filter(canChat)
-      .map(({ id, name }) => ({ id, name }));
+      .map(({ id, name, kind }) => ({ id, name, kind }));
     body = (
       <ScenarioEditor
         scenario={scenario.data}

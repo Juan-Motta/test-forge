@@ -1,5 +1,6 @@
 import type { MessageKey } from "@/lib/i18n";
 import type { Connection, ConnectionKind } from "./types";
+import { OPENAI_VOICES, type KindVoices } from "./voices";
 
 /** How a config value is checked (mirrors the backend's field types). */
 export type FieldFormat = "url" | "identifier" | "region";
@@ -27,6 +28,8 @@ export type KindDefinition = {
   secret: { key: string; label: MessageKey };
   /** Azure AI Speech: exactly one of these two keys must be set. */
   exactlyOneOf?: [string, string];
+  /** Present when the kind can voice the evaluator: the voices a scenario can pick from. */
+  voices?: KindVoices;
 };
 
 export const KINDS: Record<ConnectionKind, KindDefinition> = {
@@ -46,6 +49,7 @@ export const KINDS: Record<ConnectionKind, KindDefinition> = {
       { key: "ttsVoice", label: "connections.field.ttsVoice", format: "identifier", required: false, defaultValue: "alloy" },
     ],
     secret: { key: "apiKey", label: "connections.field.apiKey" },
+    voices: OPENAI_VOICES,
   },
   azure_openai: {
     label: "Azure OpenAI",
@@ -84,6 +88,7 @@ export const KINDS: Record<ConnectionKind, KindDefinition> = {
       },
     ],
     secret: { key: "apiKey", label: "connections.field.apiKey" },
+    voices: OPENAI_VOICES,
   },
   azure_speech: {
     label: "Azure AI Speech",
@@ -133,4 +138,9 @@ export function canChat(connection: Pick<Connection, "kind" | "config">): boolea
   if (connection.kind === "openai") return true;
   if (connection.kind === "azure_openai") return Boolean(connection.config.chatDeployment);
   return false;
+}
+
+/** Whether a connection of this kind can voice the evaluator (it declares its voices). */
+export function canVoice(connection: Pick<Connection, "kind">): boolean {
+  return KINDS[connection.kind]?.voices !== undefined;
 }

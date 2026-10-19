@@ -15,7 +15,7 @@ export const REALTIME_MODELS = ["gpt-realtime-2.1-mini", "gpt-realtime-2.1"] as 
 export type RealtimeModel = (typeof REALTIME_MODELS)[number];
 export const DEFAULT_REALTIME_MODEL: RealtimeModel = "gpt-realtime-2.1-mini";
 /** Voices the realtime evaluator models (gpt-realtime-2.1-mini and gpt-realtime-2.1) can speak with. */
-export const REALTIME_VOICES = ["alloy", "ash", "ballad", "coral", "echo", "sage", "shimmer", "verse", "marin", "cedar"] as const;
+export { OPENAI_REALTIME_VOICES as REALTIME_VOICES } from "@/features/connections/voices";
 
 export type Persona = { name: string; locale: string; temperament: Temperament; notes: string };
 /** Something the caller knows and reveals only when asked. */
