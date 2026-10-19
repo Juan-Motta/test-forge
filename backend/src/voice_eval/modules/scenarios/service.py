@@ -11,6 +11,7 @@ from typing import Any
 
 from pydantic import BaseModel
 from sqlalchemy import func, select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -169,17 +170,21 @@ async def _ensure_name_free(
 
 
 async def _agent_group(db: AsyncSession, agent_id: uuid.UUID) -> uuid.UUID:
-    """The group named after the agent, created (in this transaction) when there is none: where
-    a scenario created without a group goes, as the migration put every earlier scenario."""
+    """The group named after the agent, created when there is none: where a scenario created
+    without a group goes, as the migration put every earlier scenario.
+
+    `ON CONFLICT DO NOTHING`: requests creating the agent's first scenarios at once race to
+    create the group; the losers wait for the winner and then use its group.
+    """
     agent_name = await db.scalar(select(AgentRecord.name).where(AgentRecord.id == agent_id))
-    group_id = await db.scalar(
+    await db.execute(
+        insert(ScenarioGroupRecord)
+        .values(id=uuid.uuid4(), name=agent_name)
+        .on_conflict_do_nothing(index_elements=[ScenarioGroupRecord.name])
+    )
+    return await db.scalar(
         select(ScenarioGroupRecord.id).where(ScenarioGroupRecord.name == agent_name)
     )
-    if group_id is None:
-        group_id = uuid.uuid4()
-        db.add(ScenarioGroupRecord(id=group_id, name=agent_name))
-        await db.flush()
-    return group_id
 
 
 async def list_scenarios(

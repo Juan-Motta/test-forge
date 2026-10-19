@@ -1,4 +1,5 @@
 # ruff: noqa: F811 - the tests take the imported `agent_id` fixture as an argument
+import asyncio
 import uuid
 
 # Helpers and the `agent_id` fixture of the scenarios API tests (same directory, on sys.path).
@@ -163,3 +164,19 @@ async def test_deletes_only_an_empty_group(user_client, agent_id):
     assert (await user_client.delete(f"/api/scenario-groups/{group['id']}")).status_code == 204
     assert (await user_client.get(f"/api/scenario-groups/{group['id']}")).status_code == 404
     assert (await user_client.delete(f"/api/scenario-groups/{group['id']}")).status_code == 404
+
+
+async def test_scenarios_created_at_once_without_a_group_share_one_agent_group(
+    user_client, agent_id
+):
+    # Every request races to create the agent's group; none may fail, and only one group exists.
+    responses = await asyncio.gather(
+        *(
+            user_client.post("/api/scenarios", json=scenario(agent_id, name=f"Parallel {n}"))
+            for n in range(6)
+        )
+    )
+    assert [response.status_code for response in responses] == [201] * 6
+    assert len({response.json()["groupId"] for response in responses}) == 1
+    groups = (await user_client.get("/api/scenario-groups")).json()
+    assert [(group["name"], group["scenarioCount"]) for group in groups] == [("Vivi dev", 6)]
