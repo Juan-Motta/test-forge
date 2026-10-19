@@ -4,6 +4,20 @@ import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useReplyFormat } from "@/lib/browser/reply-format";
 
+type MarkdownNode = { type: string; children?: MarkdownNode[] };
+
+/**
+ * Remark plugin: HTML in a reply becomes plain text, so it is shown as typed (`<div>`, a
+ * tag-like placeholder) and never parsed or run.
+ */
+function htmlAsText() {
+  const walk = (node: MarkdownNode) => {
+    if (node.type === "html") node.type = "text";
+    node.children?.forEach(walk);
+  };
+  return walk;
+}
+
 /** Markdown elements styled for a chat bubble (compact spacing, the bubble's own text size). */
 const COMPONENTS: Components = {
   p: ({ children }) => <p className="[&:not(:first-child)]:mt-2">{children}</p>,
@@ -31,7 +45,7 @@ const COMPONENTS: Components = {
 };
 
 /**
- * A text agent's reply: rendered as Markdown (GitHub flavour; raw HTML is shown as text, never
+ * A text agent's reply: rendered as Markdown (GitHub flavour; HTML in it is shown as text, never
  * run) or, when the Settings preference says Raw, exactly as the agent sent it.
  */
 export function AgentText({ text }: { text: string }) {
@@ -41,7 +55,7 @@ export function AgentText({ text }: { text: string }) {
   }
   return (
     <div className="text-sm leading-normal break-words text-body">
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={COMPONENTS} skipHtml>
+      <ReactMarkdown remarkPlugins={[remarkGfm, htmlAsText]} components={COMPONENTS}>
         {text}
       </ReactMarkdown>
     </div>

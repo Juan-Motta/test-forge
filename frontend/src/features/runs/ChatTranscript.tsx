@@ -71,10 +71,10 @@ export function ChatTranscript({ entries, live = false, emptyText, anchors = fal
                     {entry.incomplete ? <Badge tone="danger">{t("transcript.brokeOff")}</Badge> : null}
                   </div>
                   {/* The agent's replies follow the Markdown preference; the evaluator's text stays as typed. */}
-                  {user ? (
-                    <p className="text-sm leading-normal break-words whitespace-pre-wrap text-body">{entry.text}</p>
-                  ) : (
+                  {entry.role === "agent" ? (
                     <AgentText text={entry.text} />
+                  ) : (
+                    <p className="text-sm leading-normal break-words whitespace-pre-wrap text-body">{entry.text}</p>
                   )}
                   {entry.role === "agent" ? <ReplyTiming entry={entry} /> : null}
                   {entry.tools && entry.tools.length > 0 ? (

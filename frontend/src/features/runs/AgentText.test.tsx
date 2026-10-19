@@ -1,6 +1,6 @@
 import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { ReplyFormatControl } from "@/features/shell/ReplyFormatControl";
 import { AgentText } from "./AgentText";
 
@@ -18,6 +18,8 @@ describe("AgentText", () => {
     expect(screen.getAllByRole("listitem")).toHaveLength(2);
     expect(container.querySelector("script")).toBeNull();
     expect(container.textContent).not.toContain("**");
+    // Tag-shaped text is kept, as text.
+    expect(container.textContent).toContain("<script>alert(1)</script>");
   });
 
   it("opens links in a new tab", () => {
@@ -43,6 +45,29 @@ describe("AgentText", () => {
     expect(screen.getByText(/Necesito tu \*\*talla de brasier\*\* primero\./)).toBeInTheDocument();
     expect(screen.queryByRole("listitem")).not.toBeInTheDocument();
     expect(window.localStorage.getItem("voice-eval:reply-format")).toBe("raw");
+  });
+
+  it("keeps Raw for this visit when the browser blocks storage", async () => {
+    const user = userEvent.setup();
+    const blocked = () => {
+      throw new Error("blocked");
+    };
+    const get = vi.spyOn(Storage.prototype, "getItem").mockImplementation(blocked);
+    const set = vi.spyOn(Storage.prototype, "setItem").mockImplementation(blocked);
+    try {
+      render(
+        <>
+          <ReplyFormatControl />
+          <AgentText text="**kept as typed**" />
+        </>,
+      );
+      await user.click(screen.getByRole("radio", { name: "Raw" }));
+      expect(screen.getByRole("radio", { name: "Raw" })).toBeChecked();
+      expect(screen.getByText("**kept as typed**")).toBeInTheDocument();
+    } finally {
+      get.mockRestore();
+      set.mockRestore();
+    }
   });
 
   it("remembers Raw in this browser", () => {
