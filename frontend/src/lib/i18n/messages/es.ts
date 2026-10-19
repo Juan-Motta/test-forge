@@ -1170,4 +1170,10 @@ export const es: Messages = {
   "groups.pickEmpty": "Este grupo aún no tiene escenarios: crea el primero.",
   "groups.runAll": "Correr todos ({count})",
   "groups.tagsLabel": "Etiquetas del grupo",
+  "groups.search": "Buscar grupos",
+  "groups.searchPlaceholder": "Título, descripción o etiqueta",
+  "groups.allAgents": "Todos los agentes",
+  "groups.filterTag": "Etiqueta",
+  "groups.allTags": "Todas las etiquetas",
+  "groups.noMatch": "Ningún grupo coincide con estos filtros.",
 };

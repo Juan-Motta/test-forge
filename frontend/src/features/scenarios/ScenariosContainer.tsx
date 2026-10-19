@@ -8,12 +8,42 @@ import { LaunchRunsDialog } from "@/features/runs/LaunchRunsDialog";
 import { PageHeader } from "@/features/shell/PageHeader";
 import { errorMessage } from "@/lib/api";
 import { useT } from "@/lib/i18n";
-import { Alert, Button, EmptyState, PlusIcon, ScenariosIcon, Spinner, buttonClasses, cn, focusRing } from "@/ui";
+import {
+  Alert,
+  Button,
+  EmptyState,
+  Field,
+  PlusIcon,
+  ScenariosIcon,
+  SearchField,
+  Select,
+  Spinner,
+  buttonClasses,
+  cn,
+  focusRing,
+} from "@/ui";
 import { GroupTable } from "./GroupTable";
 import { useGroups, useScenarios } from "./queries";
-import type { Scenario } from "./types";
+import type { Scenario, ScenarioGroup } from "./types";
 
 const NO_AGENT_HINT_ID = "new-scenario-needs-agent";
+
+type GroupFilters = { search: string; agentId: string; tag: string };
+const NO_FILTERS: GroupFilters = { search: "", agentId: "", tag: "" };
+
+/** The groups matching every filter: search in title, description or tags; one agent; one tag. */
+function filterGroups(groups: ScenarioGroup[], { search, agentId, tag }: GroupFilters): ScenarioGroup[] {
+  const wanted = search.trim().toLowerCase();
+  return groups.filter(
+    (group) =>
+      (!wanted ||
+        group.name.toLowerCase().includes(wanted) ||
+        group.description.toLowerCase().includes(wanted) ||
+        group.tags.some((item) => item.toLowerCase().includes(wanted))) &&
+      (!agentId || group.agents.some((agent) => agent.id === agentId)) &&
+      (!tag || group.tags.includes(tag)),
+  );
+}
 
 /**
  * `/scenarios`: the scenario groups, one row each. A group's title opens it: its header (edited
@@ -27,6 +57,7 @@ export function ScenariosContainer() {
   const scenarios = useScenarios();
   const agents = useAgents();
   const [launching, setLaunching] = useState<Scenario[] | undefined>(undefined);
+  const [filters, setFilters] = useState(NO_FILTERS);
 
   const agentList = agents.data ?? [];
   const noAgents = agents.isSuccess && agentList.length === 0;
@@ -72,8 +103,55 @@ export function ScenariosContainer() {
     );
   } else {
     const loaded = scenarios.data;
+    const tags = [...new Set(groups.data.flatMap((group) => group.tags))].sort((a, b) => a.localeCompare(b));
+    const shown = filterGroups(groups.data, filters);
     body = (
       <>
+        <div className="flex flex-wrap items-end gap-4">
+          <SearchField
+            label={t("groups.search")}
+            placeholder={t("groups.searchPlaceholder")}
+            value={filters.search}
+            onChange={(event) => setFilters((current) => ({ ...current, search: event.target.value }))}
+            className="w-full sm:w-72"
+          />
+          <div className="w-full sm:w-60">
+            <Field label={t("common.agent")}>
+              {(props) => (
+                <Select
+                  {...props}
+                  value={filters.agentId}
+                  onChange={(event) => setFilters((current) => ({ ...current, agentId: event.target.value }))}
+                >
+                  <option value="">{t("groups.allAgents")}</option>
+                  {agentList.map((agent) => (
+                    <option key={agent.id} value={agent.id}>
+                      {agent.name}
+                    </option>
+                  ))}
+                </Select>
+              )}
+            </Field>
+          </div>
+          <div className="w-full sm:w-48">
+            <Field label={t("groups.filterTag")}>
+              {(props) => (
+                <Select
+                  {...props}
+                  value={filters.tag}
+                  onChange={(event) => setFilters((current) => ({ ...current, tag: event.target.value }))}
+                >
+                  <option value="">{t("groups.allTags")}</option>
+                  {tags.map((tag) => (
+                    <option key={tag} value={tag}>
+                      {tag}
+                    </option>
+                  ))}
+                </Select>
+              )}
+            </Field>
+          </div>
+        </div>
         {scenarios.isError && !loaded ? (
           <Alert title={t("groups.scenariosFailed")}>
             <span className="block">{errorMessage(scenarios.error)}</span>
@@ -82,14 +160,23 @@ export function ScenariosContainer() {
             </Button>
           </Alert>
         ) : null}
-        <GroupTable
-          groups={groups.data}
-          // Only once the scenarios are known: a launch must never open with an empty batch.
-          // They are the ones the group holds now, newest first like the API lists them.
-          onLaunch={
-            loaded ? (group) => setLaunching(loaded.filter((scenario) => scenario.groupId === group.id)) : undefined
-          }
-        />
+        {shown.length === 0 ? (
+          <div className="flex flex-wrap items-center gap-3 rounded-xl border border-dashed border-line-strong bg-panel p-5">
+            <p className="text-sm text-muted">{t("groups.noMatch")}</p>
+            <Button variant="secondary" onClick={() => setFilters(NO_FILTERS)}>
+              {t("common.clearFilters")}
+            </Button>
+          </div>
+        ) : (
+          <GroupTable
+            groups={shown}
+            // Only once the scenarios are known: a launch must never open with an empty batch.
+            // They are the ones the group holds now, newest first like the API lists them.
+            onLaunch={
+              loaded ? (group) => setLaunching(loaded.filter((scenario) => scenario.groupId === group.id)) : undefined
+            }
+          />
+        )}
       </>
     );
   }

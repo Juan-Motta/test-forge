@@ -1196,4 +1196,10 @@ export const en = {
   "groups.pickEmpty": "This group has no scenarios yet: create its first one.",
   "groups.runAll": "Run all ({count})",
   "groups.tagsLabel": "Group tags",
+  "groups.search": "Search groups",
+  "groups.searchPlaceholder": "Title, description or tag",
+  "groups.allAgents": "All agents",
+  "groups.filterTag": "Tag",
+  "groups.allTags": "All tags",
+  "groups.noMatch": "No groups match these filters.",
 } as const;

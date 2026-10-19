@@ -119,6 +119,43 @@ describe("Scenario groups", () => {
     expect(within(rowOf("Regression")).queryByRole("button", { name: /^Launch / })).not.toBeInTheDocument();
   });
 
+  it("filters the groups by search, agent and tag, and clears the filters", async () => {
+    setup();
+    renderWithClient(<ScenariosContainer />);
+    const user = userEvent.setup();
+    const names = () =>
+      within(screen.getByRole("table", { name: "Scenario groups" }))
+        .getAllByRole("row")
+        .slice(1)
+        .map((row) => within(row).getAllByRole("link")[0].textContent);
+
+    await screen.findByRole("table", { name: "Scenario groups" });
+    expect(names()).toEqual(["Ideas", "Regression", "Smoke"]);
+
+    // Search matches a title, a description or a tag.
+    await user.type(screen.getByRole("searchbox", { name: "Search groups" }), "broke");
+    expect(names()).toEqual(["Regression"]);
+    await user.clear(screen.getByRole("searchbox", { name: "Search groups" }));
+
+    await user.selectOptions(screen.getByRole("combobox", { name: "Agent" }), "Support triage");
+    expect(names()).toEqual(["Regression"]);
+    await user.selectOptions(screen.getByRole("combobox", { name: "Agent" }), "");
+
+    expect(Array.from((screen.getByRole("combobox", { name: "Tag" }) as HTMLSelectElement).options).map((o) => o.value)).toEqual([
+      "",
+      "core",
+      "nightly",
+    ]);
+    await user.selectOptions(screen.getByRole("combobox", { name: "Tag" }), "nightly");
+    expect(names()).toEqual(["Regression"]);
+
+    await user.type(screen.getByRole("searchbox", { name: "Search groups" }), "zzz");
+    expect(screen.getByText("No groups match these filters.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Clear filters" }));
+    expect(names()).toEqual(["Ideas", "Regression", "Smoke"]);
+    expect(screen.getByRole("searchbox", { name: "Search groups" })).toHaveValue("");
+  });
+
   it("offers New scenario, which opens the editor on a new group", async () => {
     setup();
     renderWithClient(<ScenariosContainer />);
