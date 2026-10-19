@@ -105,6 +105,8 @@ describe("Scenario editor: create", () => {
         path: "/scenarios",
         body: {
           agentId: "a-hotel",
+          // Outside any group: the new group created first (titled after the scenario).
+          groupId: "g-new-1",
           name: "Late check-out",
           tags: ["checkout", "vip"],
           context: "The guest is a loyalty member.",
@@ -781,12 +783,11 @@ describe("Scenario editor: layout", () => {
     await renderEditor("s-booking");
 
     const breadcrumb = screen.getByRole("navigation", { name: "Breadcrumb" });
-    expect(breadcrumb).toHaveTextContent(/^Scenarios \/ Hotel booking assistant$/);
+    expect(breadcrumb).toHaveTextContent(/^Scenarios$/);
     expect(within(breadcrumb).getByRole("link", { name: "Scenarios" })).toHaveAttribute("href", "/scenarios");
-    expect(within(breadcrumb).getByRole("link", { name: "Hotel booking assistant" })).toHaveAttribute(
-      "href",
-      "/scenarios/groups/g-hotel",
-    );
+    // The page is titled by the scenario's group, with a pencil to rename it.
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Hotel booking assistant");
+    expect(screen.getByRole("button", { name: "Rename the group Hotel booking assistant" })).toBeInTheDocument();
 
     const library = screen.getByRole("complementary", { name: "Scenario library" });
     const current = await within(library).findByRole("link", { name: /Booking with date change/ });
@@ -800,6 +801,66 @@ describe("Scenario editor: layout", () => {
     expect(within(library).getByRole("heading", { name: "cancellation 1" })).toBeInTheDocument();
     expect(within(library).getByRole("link", { name: /^Group/ })).toHaveAttribute("href", "/scenarios/groups/g-hotel");
     expect(within(library).getByRole("link", { name: "New scenario" })).toHaveAttribute("href", "/scenarios/new?group=g-hotel");
+  });
+
+  it("renames the scenario's group from the title's pencil", async () => {
+    const api = setup([scenarioFixture()]);
+    const groups = mockGroupsApi([groupFixture(), groupFixture({ id: "g-smoke", name: "Smoke" })], { scenarios: api });
+    const user = await renderEditor("s-booking");
+
+    await user.click(screen.getByRole("button", { name: "Rename the group Hotel booking assistant" }));
+    const title = screen.getByRole("textbox", { name: "Rename the group Hotel booking assistant" });
+    await user.clear(title);
+    await user.type(title, "Smoke{Enter}");
+    expect(await screen.findByText("A group with this title already exists. Try another.")).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Hotel booking assistant");
+
+    await user.click(screen.getByRole("button", { name: "Rename the group Hotel booking assistant" }));
+    await user.clear(screen.getByRole("textbox", { name: "Rename the group Hotel booking assistant" }));
+    await user.type(screen.getByRole("textbox", { name: "Rename the group Hotel booking assistant" }), "Hotel desk{Enter}");
+    await waitFor(() => expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Hotel desk"));
+    expect(groups.requests.at(-1)).toEqual({ method: "PATCH", path: "/scenario-groups/g-hotel", body: { name: "Hotel desk" } });
+    // Renaming the group never touches the scenario.
+    expect(api.requests).toEqual([]);
+  });
+
+  it("starts a blank group for a new scenario: its title is typed above and the sidebar waits for the save", async () => {
+    const api = setup([]);
+    const groups = mockGroupsApi([groupFixture()], { scenarios: api });
+    const user = await renderEditor();
+
+    const library = screen.getByRole("complementary", { name: "Scenario library" });
+    expect(within(library).getByText("A new group")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("New scenario");
+    await user.click(screen.getByRole("button", { name: "Name the new group" }));
+    await user.type(screen.getByRole("textbox", { name: "Name the new group" }), "Correo para reprogramar una reunión{Enter}");
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Correo para reprogramar una reunión");
+    expect(groups.requests).toEqual([]);
+
+    await fillMinimum(user);
+    await user.click(screen.getByRole("button", { name: "Create scenario" }));
+    await waitFor(() => expect(api.requests).toHaveLength(1));
+    expect(groups.requests[0]).toEqual({
+      method: "POST",
+      path: "/scenario-groups",
+      body: { name: "Correo para reprogramar una reunión", description: "", tags: [] },
+    });
+    expect(api.requests[0].body).toMatchObject({ groupId: "g-new-1" });
+  });
+
+  it("says when the new group's title is taken and creates nothing", async () => {
+    const api = setup([]);
+    const groups = mockGroupsApi([groupFixture({ id: "g-late", name: "Late check-out" })], { scenarios: api });
+    const user = await renderEditor();
+
+    await fillMinimum(user);
+    await user.click(screen.getByRole("button", { name: "Create scenario" }));
+    expect(
+      await screen.findByText("A group with this title already exists. Rename it with the pencil, or pick that group in Group."),
+    ).toBeInTheDocument();
+    expect(api.requests).toEqual([]);
+    expect(groups.requests).toHaveLength(1);
   });
 
   it("renders the form while the library rail is still loading, with the rail's own placeholder", async () => {

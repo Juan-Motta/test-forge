@@ -220,11 +220,7 @@ describe("Scenario editor: delete and agent preselection", () => {
     const user = await renderEditor();
 
     await waitFor(() => expect(screen.getByLabelText("Group")).toHaveValue("g-hotel"));
-    const breadcrumb = screen.getByRole("navigation", { name: "Breadcrumb" });
-    expect(within(breadcrumb).getByRole("link", { name: "Hotel booking assistant" })).toHaveAttribute(
-      "href",
-      "/scenarios/groups/g-hotel",
-    );
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Hotel booking assistant");
     await user.type(screen.getByLabelText("Name"), "Late check-out");
     await user.type(screen.getByLabelText("Persona name"), "Marta");
     await user.type(screen.getByLabelText("Goal"), "Get a late check-out.");

@@ -74,7 +74,7 @@ type ScenarioEditorProps = {
   /** Per-field errors from the server, keyed by API location (`facts.2.key`); a new object per failure. */
   serverFieldErrors?: FieldErrors;
   /** Page title and its breadcrumbs; the header also carries the save state and actions. */
-  title: string;
+  title: ReactNode;
   breadcrumbs?: readonly Crumb[];
   /** Duplicates the saved scenario; absent while creating. */
   onDuplicate?: () => void;
@@ -389,7 +389,7 @@ export function ScenarioEditor({
             <Field label={t("scenarios.field.group")} hint={t("scenarios.field.groupHint")} error={fieldError("groupId")}>
               {(props) => (
                 <Select {...props} {...registerField("groupId")}>
-                  {editing ? null : <option value="">{t("scenarios.field.groupDefault")}</option>}
+                  {editing ? null : <option value="">{t("scenarios.field.groupNew")}</option>}
                   {groupOptions.map((item) => (
                     <option key={item.id} value={item.id}>
                       {item.name}

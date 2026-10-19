@@ -119,47 +119,13 @@ describe("Scenario groups", () => {
     expect(within(rowOf("Regression")).queryByRole("button", { name: /^Launch / })).not.toBeInTheDocument();
   });
 
-  it("creates a group with a title, description and tags, then opens it", async () => {
-    const { groupApi } = setup();
-    renderWithClient(<ScenariosContainer />);
-    const user = userEvent.setup();
-
-    await screen.findByRole("table", { name: "Scenario groups" });
-    await user.click(screen.getByRole("button", { name: "New group" }));
-    const dialog = screen.getByRole("dialog", { name: "New group" });
-    await user.click(within(dialog).getByRole("button", { name: "Create group" }));
-    expect(within(dialog).getByLabelText("Title")).toHaveAccessibleDescription(expect.stringContaining("Enter a title"));
-    expect(groupApi.requests).toEqual([]);
-
-    await user.type(within(dialog).getByLabelText("Title"), "Payments");
-    await user.type(within(dialog).getByLabelText("Description"), "Card and refund flows.");
-    await user.type(within(dialog).getByLabelText("Tags"), "billing, smoke, billing");
-    await user.click(within(dialog).getByRole("button", { name: "Create group" }));
-
-    await waitFor(() => expect(groupApi.requests).toHaveLength(1));
-    expect(groupApi.requests[0].body).toEqual({
-      name: "Payments",
-      description: "Card and refund flows.",
-      tags: ["billing", "smoke"],
-    });
-    await waitFor(() => expect(nav.push).toHaveBeenCalledWith("/scenarios/groups/g-new-1"));
-  });
-
-  it("puts a taken title on the field", async () => {
+  it("offers New scenario, which opens the editor on a new group", async () => {
     setup();
     renderWithClient(<ScenariosContainer />);
-    const user = userEvent.setup();
 
     await screen.findByRole("table", { name: "Scenario groups" });
-    await user.click(screen.getByRole("button", { name: "New group" }));
-    const dialog = screen.getByRole("dialog", { name: "New group" });
-    await user.type(within(dialog).getByLabelText("Title"), "Smoke");
-    await user.click(within(dialog).getByRole("button", { name: "Create group" }));
-
-    await waitFor(() =>
-      expect(within(dialog).getByLabelText("Title")).toHaveAccessibleDescription(expect.stringContaining("already")),
-    );
-    expect(nav.push).not.toHaveBeenCalled();
+    expect(screen.getByRole("link", { name: "New scenario" })).toHaveAttribute("href", "/scenarios/new");
+    expect(screen.queryByRole("button", { name: "New group" })).not.toBeInTheDocument();
   });
 
   it("invites to create the first group when there is none", async () => {
@@ -167,7 +133,7 @@ describe("Scenario groups", () => {
     renderWithClient(<ScenariosContainer />);
 
     expect(await screen.findByRole("heading", { name: "No groups yet" })).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "New group" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("link", { name: "New scenario" }).length).toBeGreaterThan(0);
   });
 });
 
@@ -179,6 +145,6 @@ describe("Scenario groups in Spanish", () => {
     await screen.findByRole("table", { name: "Grupos de escenarios" });
     expect(screen.getByRole("heading", { level: 1, name: "Escenarios" })).toBeInTheDocument();
     expect(within(rowOf("Regression")).getByText("3 escenarios")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Nuevo grupo" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Nuevo escenario" })).toBeInTheDocument();
   });
 });

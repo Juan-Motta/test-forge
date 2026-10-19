@@ -8,17 +8,16 @@ import { LaunchRunsDialog } from "@/features/runs/LaunchRunsDialog";
 import { PageHeader } from "@/features/shell/PageHeader";
 import { errorMessage } from "@/lib/api";
 import { useT } from "@/lib/i18n";
-import { Alert, Button, Dialog, EmptyState, PlusIcon, ScenariosIcon, Spinner, buttonClasses, cn, focusRing } from "@/ui";
-import { GroupForm } from "./GroupForm";
-import { GroupTable, groupHref } from "./GroupTable";
-import { useCreateGroup, useGroups, useScenarios } from "./queries";
+import { Alert, Button, EmptyState, PlusIcon, ScenariosIcon, Spinner, buttonClasses, cn, focusRing } from "@/ui";
+import { GroupTable } from "./GroupTable";
+import { useGroups, useScenarios } from "./queries";
 import type { Scenario } from "./types";
 
-const NEW_GROUP_FORM = "new-group-form";
+const NO_AGENT_HINT_ID = "new-scenario-needs-agent";
 
 /**
  * `/scenarios`: the scenario groups, one row each. A group's title opens it: its scenarios in a
- * sidebar beside its details. "New group" creates one and opens it.
+ * sidebar beside its details. "New scenario" opens the editor on a new group, created on save.
  */
 export function ScenariosContainer() {
   const t = useT();
@@ -26,17 +25,21 @@ export function ScenariosContainer() {
   const groups = useGroups();
   const scenarios = useScenarios();
   const agents = useAgents();
-  const createGroup = useCreateGroup();
-  const [creating, setCreating] = useState(false);
   const [launching, setLaunching] = useState<Scenario[] | undefined>(undefined);
 
   const agentList = agents.data ?? [];
   const noAgents = agents.isSuccess && agentList.length === 0;
 
-  const newGroup = (
-    <Button icon={<PlusIcon size={16} />} onClick={() => setCreating(true)}>
-      {t("groups.new")}
+  // A new scenario outside any group starts a new group (titled in the editor).
+  const newScenario = noAgents ? (
+    <Button icon={<PlusIcon size={16} />} disabled aria-describedby={NO_AGENT_HINT_ID}>
+      {t("scenarios.new")}
     </Button>
+  ) : (
+    <Link href="/scenarios/new" className={buttonClasses("primary")}>
+      <PlusIcon size={16} />
+      {t("scenarios.new")}
+    </Link>
   );
   // Opens a new scenario with the import panel (see ScenarioEditor); hidden until an agent exists.
   const importScenario = noAgents ? null : (
@@ -63,7 +66,7 @@ export function ScenariosContainer() {
         icon={<ScenariosIcon size={22} />}
         title={t("groups.emptyTitle")}
         description={t("groups.emptyDescription")}
-        action={newGroup}
+        action={newScenario}
       />
     );
   } else {
@@ -98,13 +101,13 @@ export function ScenariosContainer() {
         actions={
           <>
             {importScenario}
-            {newGroup}
+            {newScenario}
           </>
         }
       />
       {noAgents ? (
         <div className="flex flex-wrap items-center gap-2 text-sm text-muted">
-          <p>{t("scenarios.noAgentHint")}</p>
+          <p id={NO_AGENT_HINT_ID}>{t("scenarios.noAgentHint")}</p>
           <Link href="/agents" className={cn("rounded", focusRing)}>
             {t("scenarios.addAgent")}
           </Link>
@@ -112,33 +115,6 @@ export function ScenariosContainer() {
       ) : null}
       {body}
 
-      <Dialog
-        open={creating}
-        title={t("groups.new")}
-        description={t("groups.newDescription")}
-        onClose={() => setCreating(false)}
-      >
-        {creating ? (
-          <GroupForm
-            id={NEW_GROUP_FORM}
-            onSubmit={async (group) => {
-              const created = await createGroup.mutateAsync(group);
-              setCreating(false);
-              router.push(groupHref(created));
-            }}
-            actions={
-              <>
-                <Button variant="ghost" onClick={() => setCreating(false)}>
-                  {t("common.cancel")}
-                </Button>
-                <Button type="submit" form={NEW_GROUP_FORM} loading={createGroup.isPending}>
-                  {t("groups.create")}
-                </Button>
-              </>
-            }
-          />
-        ) : null}
-      </Dialog>
       <LaunchRunsDialog
         open={launching !== undefined}
         scenarios={(launching ?? []).map(({ id, name, agentId, endConditions }) => ({

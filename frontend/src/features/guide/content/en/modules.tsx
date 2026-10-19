@@ -182,9 +182,11 @@ export function ModulesEn() {
           Your library of conversations. A scenario describes the user the evaluator plays, what it knows and wants, and how the
           judge scores the call. Scenarios live in groups: folders with a title, a description and tags, which may hold
           scenarios of different agents. The page lists the groups with how many scenarios each holds, their agents and the
-          latest change; <Ui>New group</Ui> creates one and opens it. A group&apos;s page shows its scenarios in a sidebar beside
-          its details (edit them, or delete the group once it is empty). Click a scenario to open it in the editor, which
-          keeps the group&apos;s sidebar; its <Ui>Group</Ui> field moves it to another group. Each group also launches all of
+          latest change. <Ui>New scenario</Ui> opens the editor on a new, blank group: name it with the pencil at the end of
+          the title (or it takes the scenario&apos;s name), and it is created when you save. A group&apos;s page shows its
+          scenarios in a sidebar beside its details (edit them, or delete the group once it is empty). Click a scenario to open
+          it in the editor, which keeps the group&apos;s sidebar and shows the group&apos;s name as its title, with a pencil to
+          rename it; the <Ui>Group</Ui> field moves the scenario to another group. Each group also launches all of
           its scenarios (play) or starts a new one in it (plus). In the editor, <Ui>Duplicate</Ui> and <Ui>Delete</Ui> (after a
           confirmation) act on the open scenario. A scenario created without a group goes to the group named after its agent.
         </P>

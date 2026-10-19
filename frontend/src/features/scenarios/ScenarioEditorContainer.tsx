@@ -16,12 +16,15 @@ import { confirmLeave, useUnsavedChangesGuard } from "@/lib/navigation/unsaved-c
 import { Alert, Button, Card, EmptyState, ScenariosIcon, Spinner, buttonClasses } from "@/ui";
 import { toChanges, toNewScenario, type ScenarioFormValues } from "./form-schema";
 import { DeleteScenarioDialog } from "./DeleteScenarioDialog";
-import { groupHref } from "./GroupTable";
+import { EditableTitle } from "./EditableTitle";
 import {
+  useCreateGroup,
   useCreateScenario,
+  useDeleteGroup,
   useDeleteScenario,
   useDuplicateScenario,
   useGroups,
+  useUpdateGroup,
   useScenario,
   useScenarios,
   useUpdateScenario,
@@ -29,7 +32,7 @@ import {
 import { ScenarioEditor, type ConnectionOption } from "./ScenarioEditor";
 import { ScenarioLibraryRail } from "./ScenarioLibraryRail";
 import { scenarioFromText, scenarioToText } from "./transfer";
-import type { Scenario } from "./types";
+import type { Scenario, ScenarioGroup } from "./types";
 
 
 /** A load failed before any data arrived; a failed background refetch keeps the editor (and its edits). */
@@ -58,6 +61,11 @@ export function ScenarioEditorContainer({ scenarioId }: ScenarioEditorContainerP
   const groups = useGroups();
   const duplicate = useDuplicateScenario();
   const remove = useDeleteScenario();
+  const createGroup = useCreateGroup();
+  const updateGroup = useUpdateGroup();
+  const deleteGroup = useDeleteGroup();
+  const [newGroupTitle, setNewGroupTitle] = useState("");
+  const [groupError, setGroupError] = useState<string>();
   const [deleting, setDeleting] = useState<Scenario | undefined>(undefined);
   const duplicatingNow = useRef(false);
   // A ref, not mutation state: two clicks can land before React re-renders the disabled button.
@@ -87,9 +95,33 @@ export function ScenarioEditorContainer({ scenarioId }: ScenarioEditorContainerP
         const changes = toChanges(current, values, kind);
         return Object.keys(changes).length === 0 ? current : await update.mutateAsync({ id: current.id, changes });
       }
-      const created = await create.mutateAsync(toNewScenario(values, kind));
-      router.replace(`/scenarios/${encodeURIComponent(created.id)}`);
-      return created;
+      // Outside any group, the scenario starts a new one: titled as typed above, or after the
+      // scenario. Created first so the scenario can join it; removed again if the scenario fails.
+      let newGroup: ScenarioGroup | undefined;
+      if (!values.groupId) {
+        setGroupError(undefined);
+        try {
+          newGroup = await createGroup.mutateAsync({
+            name: newGroupTitle.trim() || values.name.trim(),
+            description: "",
+            tags: [],
+          });
+        } catch (error) {
+          setGroupError(
+            error instanceof ApiError && error.status === 409 ? t("groups.error.takenNew") : errorMessage(error),
+          );
+          return undefined;
+        }
+      }
+      try {
+        const payload = toNewScenario(newGroup ? { ...values, groupId: newGroup.id } : values, kind);
+        const created = await create.mutateAsync(payload);
+        router.replace(`/scenarios/${encodeURIComponent(created.id)}`);
+        return created;
+      } catch (error) {
+        if (newGroup) deleteGroup.mutate(newGroup);
+        throw error;
+      }
     } catch {
       return undefined; // shown through the mutation's error state
     } finally {
@@ -128,15 +160,44 @@ export function ScenarioEditorContainer({ scenarioId }: ScenarioEditorContainerP
     });
   }
 
-  const title = scenarioId ? (scenario.data?.name ?? t("scenarios.one")) : t("scenarios.new");
   const leave: Crumb["onNavigate"] = (event) => (confirmLeave() ? undefined : event.preventDefault());
-  // The group in view: the scenario's, or the one a new scenario was opened in (`?group=`).
+  // The group in view: the scenario's, or the one a new scenario was opened in (`?group=`); its
+  // name from the groups list, which a rename refreshes first.
   const requestedGroup = scenarioId ? undefined : requestedId("group", groups.data ?? []);
-  const groupInView = scenario.data?.group ?? groups.data?.find((group) => group.id === requestedGroup);
-  const breadcrumbs: Crumb[] = [
-    { label: t("nav.scenarios"), href: "/scenarios", onNavigate: leave },
-    ...(groupInView ? [{ label: groupInView.name, href: groupHref(groupInView), onNavigate: leave }] : []),
-  ];
+  const groupId = scenario.data?.groupId ?? requestedGroup;
+  const groupInView = groups.data?.find((group) => group.id === groupId) ?? scenario.data?.group;
+  const breadcrumbs: Crumb[] = [{ label: t("nav.scenarios"), href: "/scenarios", onNavigate: leave }];
+  // The page is titled by the group (renamed in place with the pencil); a new scenario outside
+  // any group starts a blank one, whose title is kept here until the first save creates it.
+  const title = groupInView ? (
+    <EditableTitle
+      value={groupInView.name}
+      placeholder={t("groups.untitled")}
+      label={t("groups.rename", { name: groupInView.name })}
+      onCommit={async (next) => {
+        if (!next) return t("groups.error.title");
+        try {
+          await updateGroup.mutateAsync({ id: groupInView.id, changes: { name: next } });
+          return undefined;
+        } catch (error) {
+          return error instanceof ApiError && error.status === 409 ? t("groups.error.taken") : errorMessage(error);
+        }
+      }}
+    />
+  ) : scenarioId ? (
+    t("scenarios.one")
+  ) : (
+    <EditableTitle
+      value={newGroupTitle}
+      placeholder={t("scenarios.new")}
+      label={t("groups.nameNew")}
+      onCommit={(next) => {
+        setNewGroupTitle(next);
+        setGroupError(undefined);
+        return undefined;
+      }}
+    />
+  );
   const header = <PageHeader title={title} breadcrumbs={breadcrumbs} />;
 
   let body;
@@ -231,15 +292,24 @@ export function ScenarioEditorContainer({ scenarioId }: ScenarioEditorContainerP
                 scenarioFromText(t, text, agents.data ?? [], connections.data ?? [], agents.data?.[0]?.id, groups.data ?? [])
         }
         banner={
-          duplicate.isError ? <Alert>{t("scenarios.duplicateFailed", { error: errorMessage(duplicate.error) })}</Alert> : null
+          <>
+            {duplicate.isError ? (
+              <Alert>{t("scenarios.duplicateFailed", { error: errorMessage(duplicate.error) })}</Alert>
+            ) : null}
+            {groupError ? <Alert>{groupError}</Alert> : null}
+          </>
         }
         library={
-          <ScenarioLibraryRail
-            scenarios={library.data?.filter((item) => !groupInView || item.groupId === groupInView.id)}
-            failed={loadFailed(library)}
-            currentId={scenario.data?.id}
-            group={groupInView}
-          />
+          groupInView || scenarioId ? (
+            <ScenarioLibraryRail
+              scenarios={library.data?.filter((item) => !groupInView || item.groupId === groupInView.id)}
+              failed={loadFailed(library)}
+              currentId={scenario.data?.id}
+              group={groupInView}
+            />
+          ) : (
+            <NewGroupRail />
+          )
         }
         launch={
           <LaunchRail
@@ -281,6 +351,25 @@ function requestedId(param: "agent" | "group", records: { id: string }[]): strin
   if (typeof window === "undefined") return undefined;
   const id = new URLSearchParams(window.location.search).get(param);
   return records.some((record) => record.id === id) ? (id ?? undefined) : undefined;
+}
+
+/** Left rail of a new group: a placeholder until its first scenario is saved. */
+function NewGroupRail() {
+  const t = useT();
+  return (
+    <aside aria-label={t("library.label")} className="flex min-w-0 flex-col gap-3">
+      <div className="flex flex-col gap-1.5 rounded-lg border border-dashed border-line-strong p-4">
+        <p className="text-[13px] font-medium">{t("groups.newRailTitle")}</p>
+        <p className="text-xs text-muted">{t("groups.newRailHint")}</p>
+      </div>
+      {[0, 1, 2].map((row) => (
+        <span key={row} aria-hidden="true" className="flex h-11 flex-col justify-center gap-1.5 rounded-lg px-3 opacity-60">
+          <span className="h-3 w-4/5 rounded bg-chip" />
+          <span className="h-2.5 w-1/3 rounded bg-chip" />
+        </span>
+      ))}
+    </aside>
+  );
 }
 
 /** Right rail: launches the saved scenario; a new one has to be saved first. */
