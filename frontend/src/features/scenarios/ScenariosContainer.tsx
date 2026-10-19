@@ -28,6 +28,9 @@ import type { Scenario, ScenarioGroup } from "./types";
 
 const NO_AGENT_HINT_ID = "new-scenario-needs-agent";
 
+/** Groups per page, like the runs list. */
+const GROUPS_PER_PAGE = 20;
+
 type GroupFilters = { search: string; agentId: string; tag: string };
 const NO_FILTERS: GroupFilters = { search: "", agentId: "", tag: "" };
 
@@ -57,7 +60,13 @@ export function ScenariosContainer() {
   const scenarios = useScenarios();
   const agents = useAgents();
   const [launching, setLaunching] = useState<Scenario[] | undefined>(undefined);
-  const [filters, setFilters] = useState(NO_FILTERS);
+  const [filters, setFiltersState] = useState(NO_FILTERS);
+  const [page, setPage] = useState(1);
+  // Any filter change starts over on the first page.
+  const setFilters = (next: GroupFilters | ((current: GroupFilters) => GroupFilters)) => {
+    setFiltersState(next);
+    setPage(1);
+  };
 
   const agentList = agents.data ?? [];
   const noAgents = agents.isSuccess && agentList.length === 0;
@@ -104,23 +113,39 @@ export function ScenariosContainer() {
   } else {
     const loaded = scenarios.data;
     const tags = [...new Set(groups.data.flatMap((group) => group.tags))].sort((a, b) => a.localeCompare(b));
-    const shown = filterGroups(groups.data, filters);
+    // A chosen tag or agent that no longer exists (e.g. after a refetch) filters nothing out.
+    const active: GroupFilters = {
+      ...filters,
+      tag: tags.includes(filters.tag) ? filters.tag : "",
+      agentId: agentList.some((agent) => agent.id === filters.agentId) ? filters.agentId : "",
+    };
+    const matching = filterGroups(groups.data, active);
+    const lastPage = Math.max(1, Math.ceil(matching.length / GROUPS_PER_PAGE));
+    const current = Math.min(page, lastPage);
+    const shown = matching.slice((current - 1) * GROUPS_PER_PAGE, current * GROUPS_PER_PAGE);
+    const first = matching.length === 0 ? 0 : (current - 1) * GROUPS_PER_PAGE + 1;
+    const last = Math.min(matching.length, current * GROUPS_PER_PAGE);
     body = (
       <>
         <div className="flex flex-wrap items-end gap-4">
-          <SearchField
-            label={t("groups.search")}
-            placeholder={t("groups.searchPlaceholder")}
-            value={filters.search}
-            onChange={(event) => setFilters((current) => ({ ...current, search: event.target.value }))}
-            className="w-full sm:w-72"
-          />
+          <div className="flex w-full flex-col gap-1.5 sm:w-72">
+            {/* Seen like the other filters' labels; the field's own (hidden) label names it. */}
+            <span aria-hidden="true" className="text-xs font-medium text-muted">
+              {t("groups.searchLabel")}
+            </span>
+            <SearchField
+              label={t("groups.search")}
+              placeholder={t("groups.searchPlaceholder")}
+              value={filters.search}
+              onChange={(event) => setFilters((current) => ({ ...current, search: event.target.value }))}
+            />
+          </div>
           <div className="w-full sm:w-60">
             <Field label={t("common.agent")}>
               {(props) => (
                 <Select
                   {...props}
-                  value={filters.agentId}
+                  value={active.agentId}
                   onChange={(event) => setFilters((current) => ({ ...current, agentId: event.target.value }))}
                 >
                   <option value="">{t("groups.allAgents")}</option>
@@ -138,7 +163,7 @@ export function ScenariosContainer() {
               {(props) => (
                 <Select
                   {...props}
-                  value={filters.tag}
+                  value={active.tag}
                   onChange={(event) => setFilters((current) => ({ ...current, tag: event.target.value }))}
                 >
                   <option value="">{t("groups.allTags")}</option>
@@ -160,7 +185,7 @@ export function ScenariosContainer() {
             </Button>
           </Alert>
         ) : null}
-        {shown.length === 0 ? (
+        {matching.length === 0 ? (
           <div className="flex flex-wrap items-center gap-3 rounded-xl border border-dashed border-line-strong bg-panel p-5">
             <p className="text-sm text-muted">{t("groups.noMatch")}</p>
             <Button variant="secondary" onClick={() => setFilters(NO_FILTERS)}>
@@ -177,6 +202,29 @@ export function ScenariosContainer() {
             }
           />
         )}
+        {matching.length > 0 ? (
+          <nav aria-label={t("common.pagination")} className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted">
+            <span>{t("common.range", { first, last, total: matching.length })}</span>
+            <div className="flex gap-2">
+              <Button
+                variant="secondary"
+                disabled={current <= 1}
+                onClick={() => setPage(current - 1)}
+                aria-label={t("common.previousPage")}
+              >
+                {t("common.previous")}
+              </Button>
+              <Button
+                variant="secondary"
+                disabled={current >= lastPage}
+                onClick={() => setPage(current + 1)}
+                aria-label={t("common.nextPage")}
+              >
+                {t("common.next")}
+              </Button>
+            </div>
+          </nav>
+        ) : null}
       </>
     );
   }

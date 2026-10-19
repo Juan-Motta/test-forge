@@ -1176,4 +1176,5 @@ export const es: Messages = {
   "groups.filterTag": "Etiqueta",
   "groups.allTags": "Todas las etiquetas",
   "groups.noMatch": "Ningún grupo coincide con estos filtros.",
+  "groups.searchLabel": "Buscar",
 };

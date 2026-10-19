@@ -193,7 +193,7 @@ export function ModulesEs() {
           Tu biblioteca de conversaciones. Un escenario describe al usuario que interpreta el evaluador, qué sabe y qué quiere,
           y cómo califica el juez la llamada. Los escenarios viven en grupos: carpetas con título, descripción y etiquetas,
           que pueden tener escenarios de agentes distintos. La página lista los grupos con cuántos escenarios tiene cada uno,
-          sus agentes y el último cambio; búscalos por título, descripción o etiqueta, o fíltralos por agente o etiqueta. <Ui>Nuevo escenario</Ui> abre el editor en un grupo nuevo y en blanco: nómbralo con
+          sus agentes y el último cambio, veinte por página; búscalos por título, descripción o etiqueta, o fíltralos por agente o etiqueta. <Ui>Nuevo escenario</Ui> abre el editor en un grupo nuevo y en blanco: nómbralo con
           el lápiz al final del título (o toma el nombre del escenario) y se crea al guardar. La página de un grupo y cada uno de
           sus escenarios llevan arriba el título, la descripción y las etiquetas del grupo, que se editan ahí mismo (los
           lápices y <Ui>Agregar etiqueta</Ui>), con los escenarios del grupo en la barra lateral. Mientras no elijas uno, la

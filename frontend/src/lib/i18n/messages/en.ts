@@ -1202,4 +1202,5 @@ export const en = {
   "groups.filterTag": "Tag",
   "groups.allTags": "All tags",
   "groups.noMatch": "No groups match these filters.",
+  "groups.searchLabel": "Search",
 } as const;

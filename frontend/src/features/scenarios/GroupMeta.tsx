@@ -10,6 +10,15 @@ const MAX_TAG = 40;
 
 type Commit<T> = (next: T) => Promise<string | undefined> | string | undefined;
 
+/** Runs a commit, turning a thrown error into its message: a failed save is reported, never lost. */
+async function attempt<T>(commit: Commit<T>, next: T): Promise<string | undefined> {
+  try {
+    return await commit(next);
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error);
+  }
+}
+
 /**
  * Under a group's title: its description with a pencil at the end (a field while editing:
  * leaving it or Ctrl/Cmd+Enter keeps it, Escape restores it), then its tags with "Add tag".
@@ -52,7 +61,7 @@ function EditableDescription({ value, onCommit }: { value: string; onCommit: Com
     if (next === value.trim()) return setEditing(false);
     if (next.length > MAX_DESCRIPTION) return setError(t("common.maxChars", { max: MAX_DESCRIPTION }));
     saving.current = true;
-    const problem = await onCommit(next);
+    const problem = await attempt(onCommit, next);
     saving.current = false;
     if (problem) return setError(problem);
     setEditing(false);
@@ -122,8 +131,12 @@ function TagEditor({ tags: saved, onCommit }: { tags: string[]; onCommit: Commit
   const [tags, setTags] = useState(saved);
   const pending = useRef(0);
   const queue = useRef<Promise<unknown>>(Promise.resolve());
+  // The server's list: the last one received, plus what the saves that succeeded since left
+  // there (a failed save falls back to it, never to an older copy).
+  const confirmed = useRef(saved);
 
   useEffect(() => {
+    confirmed.current = saved;
     if (pending.current === 0) setTags(saved);
   }, [saved]);
 
@@ -135,11 +148,13 @@ function TagEditor({ tags: saved, onCommit }: { tags: string[]; onCommit: Commit
     setTags(next);
     pending.current += 1;
     const done = queue.current.then(async () => {
-      const problem = await onCommit(next);
+      const problem = await attempt(onCommit, next);
       pending.current -= 1;
       if (problem) {
         setError(problem);
-        if (pending.current === 0) setTags(saved);
+        if (pending.current === 0) setTags(confirmed.current);
+      } else {
+        confirmed.current = next;
       }
       return problem;
     });

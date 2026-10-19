@@ -156,6 +156,39 @@ describe("Scenario groups", () => {
     expect(screen.getByRole("searchbox", { name: "Search groups" })).toHaveValue("");
   });
 
+  it("labels the search like the other filters", async () => {
+    setup();
+    renderWithClient(<ScenariosContainer />);
+
+    await screen.findByRole("table", { name: "Scenario groups" });
+    expect(screen.getByText("Search")).toBeInTheDocument();
+  });
+
+  it("pages the groups twenty at a time and goes back to the first page when a filter changes", async () => {
+    const many = Array.from({ length: 25 }, (_, n) =>
+      groupFixture({ id: `g-${n}`, name: `Group ${String(n + 1).padStart(2, "0")}`, tags: n % 2 ? ["odd"] : [] }),
+    );
+    setup(many, []);
+    renderWithClient(<ScenariosContainer />);
+    const user = userEvent.setup();
+    const rows = () => within(screen.getByRole("table", { name: "Scenario groups" })).getAllByRole("row").length - 1;
+
+    await screen.findByRole("table", { name: "Scenario groups" });
+    const pager = screen.getByRole("navigation", { name: "Pagination" });
+    expect(pager).toHaveTextContent("1–20 of 25");
+    expect(rows()).toBe(20);
+    expect(within(pager).getByRole("button", { name: "Previous page" })).toBeDisabled();
+
+    await user.click(within(pager).getByRole("button", { name: "Next page" }));
+    expect(pager).toHaveTextContent("21–25 of 25");
+    expect(rows()).toBe(5);
+    expect(screen.getByRole("link", { name: "Group 25" })).toBeInTheDocument();
+    expect(within(pager).getByRole("button", { name: "Next page" })).toBeDisabled();
+
+    await user.selectOptions(screen.getByRole("combobox", { name: "Tag" }), "odd");
+    expect(pager).toHaveTextContent("1–12 of 12");
+  });
+
   it("offers New scenario, which opens the editor on a new group", async () => {
     setup();
     renderWithClient(<ScenariosContainer />);
