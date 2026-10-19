@@ -110,7 +110,9 @@ export function ScenarioEditor({
     // The chosen agent's kind decides what is required (a text agent needs the evaluator model).
     resolver: (values, context, options) => {
       const kind = agents.find((item) => item.id === values.agentId)?.kind ?? "voice";
-      return zodResolver(scenarioFormSchemaFor(t, kind))(values, context, options);
+      const connection = ttsOptions.find((option) => option.id === values.ttsConnectionId);
+      const voiceConnection = connection?.voices ? { name: connection.name, voices: connection.voices.pipeline } : undefined;
+      return zodResolver(scenarioFormSchemaFor(t, kind, voiceConnection))(values, context, options);
     },
     defaultValues: initialValues(scenario, agents[0]?.id),
     shouldFocusError: false,
@@ -123,6 +125,7 @@ export function ScenarioEditor({
     setError,
     clearErrors,
     setValue,
+    getValues,
     trigger,
     formState: { errors, isDirty },
   } = form;
@@ -148,6 +151,11 @@ export function ScenarioEditor({
   const ttsConnectionId = useWatch({ control, name: "ttsConnectionId" });
   // The voices of the chosen voice connection (its kind and TTS model); OpenAI's when none is chosen.
   const kindVoices = ttsOptions.find((option) => option.id === ttsConnectionId)?.voices ?? OPENAI_VOICES;
+  // The voice may not suit the newly chosen connection (or the mode it opened with): re-check it.
+  useEffect(() => {
+    if (getValues("voiceOverride").trim()) void trigger("voiceOverride");
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-run only when the connection changes
+  }, [ttsConnectionId]);
   const agent = agents.find((item) => item.id === agentId);
   // A text agent chats: no voice, no barge-ins, and the evaluator model writes every message.
   const text = agent?.kind === "text";

@@ -59,6 +59,7 @@ export function ConnectionForm({
     register,
     handleSubmit,
     control,
+    trigger,
     getValues,
     setValue,
     setError,
@@ -71,6 +72,13 @@ export function ConnectionForm({
   const kind = useWatch({ control, name: "kind" });
   const config = useWatch({ control, name: "config" });
   const definition = KINDS[kind];
+  // A checked field depends on the picked ones (the voice on the model): re-check it when they change.
+  const picked = definition.config.filter((field) => field.choices).map((field) => config?.[field.key] ?? "").join("\u0000");
+  useEffect(() => {
+    const checked = definition.config.filter((field) => field.check && (config?.[field.key] ?? "").trim());
+    if (checked.length) void trigger(checked.map((field) => `config.${field.key}` as const));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-run only when a picked value changes
+  }, [picked]);
   const secretPath = `secrets.${definition.secret.key}` as const;
 
   const fieldError = (path: string): string | undefined => (get(errors, path) as { message?: string } | undefined)?.message;

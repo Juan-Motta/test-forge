@@ -192,6 +192,33 @@ describe("Scenario editor: create", () => {
     expect(voices()).toEqual(["", "alloy", "ash", "coral", "echo", "fable", "nova", "onyx", "sage", "shimmer"]);
   });
 
+  it("flags a voice the chosen voice connection lacks and creates only once a valid one is picked", async () => {
+    const api = setup([]);
+    const legacy = connectionFixture({
+      id: "c-legacy",
+      name: "Legacy TTS",
+      config: { baseUrl: "https://api.openai.com/v1", ttsModel: "tts-1", ttsVoice: "alloy" },
+    });
+    mockConnectionsApi([...connections, legacy]);
+    const user = await renderEditor();
+    await fillMinimum(user);
+
+    await user.selectOptions(field("Evaluator voice (TTS connection)"), "OpenAI prod");
+    await user.selectOptions(field("Voice override (optional)"), "marin");
+    await user.selectOptions(field("Evaluator voice (TTS connection)"), "Legacy TTS");
+    await waitFor(() => expect(field("Voice override (optional)")).toHaveAttribute("aria-invalid", "true"));
+    expect(field("Voice override (optional)")).toHaveAccessibleDescription(
+      expect.stringContaining("Legacy TTS has no voice marin"),
+    );
+    await user.click(screen.getByRole("button", { name: "Create scenario" }));
+    expect(api.requests).toEqual([]);
+
+    await user.selectOptions(field("Voice override (optional)"), "coral");
+    await user.click(screen.getByRole("button", { name: "Create scenario" }));
+    await waitFor(() => expect(api.requests).toHaveLength(1));
+    expect(api.requests[0].body).toMatchObject({ ttsConnectionId: "c-legacy", voiceOverride: "coral" });
+  });
+
   it("keeps a stored language or voice that the lists do not offer", async () => {
     const api = setup([
       scenarioFixture({ persona: { name: "Lucía", locale: "es-VE", temperament: "hurried", notes: "" }, voiceOverride: "nova", evaluatorMode: "realtime" }),
@@ -201,6 +228,7 @@ describe("Scenario editor: create", () => {
     expect(field("Language")).toHaveValue("es-VE");
     // A pipeline voice the realtime evaluator cannot use stays selected and flagged until changed.
     expect(field("Voice override (optional)")).toHaveValue("nova");
+    await waitFor(() => expect(field("Voice override (optional)")).toHaveAttribute("aria-invalid", "true"));
     await user.selectOptions(field("Voice override (optional)"), "marin");
     await user.click(screen.getByRole("button", { name: "Save" }));
 

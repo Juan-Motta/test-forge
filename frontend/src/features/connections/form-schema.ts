@@ -103,7 +103,7 @@ export function draftIssues(
       if (field.required) issues.push({ path, message: t("connections.error.enter", { field: t(field.label).toLowerCase() }) });
       continue;
     }
-    const problem = FORMAT_CHECKS[field.format](t, value);
+    const problem = FORMAT_CHECKS[field.format](t, value) ?? field.check?.(t, value, values.config);
     if (problem) issues.push({ path, message: problem });
   }
   if (kind.exactlyOneOf) {

@@ -1,6 +1,14 @@
-import type { MessageKey } from "@/lib/i18n";
+import type { MessageKey, Translator } from "@/lib/i18n";
 import type { Connection, ConnectionKind } from "./types";
-import { OPENAI_REALTIME_VOICES, OPENAI_TTS_MODELS, OPENAI_TTS_VOICES, OPENAI_VOICES, ttsVoicesFor, type KindVoices } from "./voices";
+import {
+  OPENAI_REALTIME_VOICES,
+  OPENAI_TTS_MODELS,
+  OPENAI_TTS_VOICES,
+  OPENAI_VOICES,
+  lacksKnownVoice,
+  ttsVoicesFor,
+  type KindVoices,
+} from "./voices";
 
 /** How a config value is checked (mirrors the backend's field types). */
 export type FieldFormat = "url" | "identifier" | "region";
@@ -19,6 +27,8 @@ export type ConfigField = {
   hint?: MessageKey;
   /** Picked from a list instead of typed: the values offered, given the form's other config values. */
   choices?: (config: Record<string, unknown>) => readonly string[];
+  /** A problem with a value given the other config values (e.g. a voice its model lacks). */
+  check?: (t: Translator, value: string, config: Record<string, unknown>) => string | undefined;
 };
 
 export type KindDefinition = {
@@ -62,6 +72,10 @@ export const KINDS: Record<ConnectionKind, KindDefinition> = {
         required: false,
         defaultValue: "alloy",
         choices: (config) => ttsVoicesFor(config.ttsModel),
+        check: (t, value, config) =>
+          lacksKnownVoice(ttsVoicesFor(config.ttsModel), value)
+            ? t("connections.error.modelVoice", { model: String(config.ttsModel), voice: value })
+            : undefined,
       },
     ],
     secret: { key: "apiKey", label: "connections.field.apiKey" },

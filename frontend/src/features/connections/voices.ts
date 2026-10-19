@@ -19,6 +19,15 @@ export function ttsVoicesFor(model: unknown): readonly string[] {
   return model === "tts-1" || model === "tts-1-hd" ? LEGACY_TTS_VOICES : OPENAI_TTS_VOICES;
 }
 
+/**
+ * Whether `voice` is a known OpenAI TTS voice that `offered` lacks (e.g. marin on tts-1). Voices
+ * outside OpenAI's list (custom or another provider's) are not judged.
+ */
+export function lacksKnownVoice(offered: readonly string[], voice: string | null | undefined): boolean {
+  const value = (voice ?? "").trim();
+  return (OPENAI_TTS_VOICES as readonly string[]).includes(value) && !offered.includes(value);
+}
+
 /** `options` plus `current` when it is not among them, so a stored value stays selectable. */
 export function withCurrent(options: readonly string[], current: string | null | undefined): string[] {
   const value = (current ?? "").trim();

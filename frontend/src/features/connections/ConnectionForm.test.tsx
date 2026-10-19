@@ -286,6 +286,27 @@ describe("TTS model and voice", () => {
     expect(api.requests[0].body).toMatchObject({ config: { ttsModel: "tts-1", ttsVoice: "onyx" } });
   });
 
+  it("flags a voice the newly chosen model lacks and saves only once a valid one is picked", async () => {
+    const api = mockConnectionsApi([]);
+    const { user, dialog } = await openCreate();
+    const voice = within(dialog).getByLabelText("TTS voice");
+
+    await user.selectOptions(voice, "marin");
+    await user.selectOptions(within(dialog).getByLabelText("TTS model"), "tts-1");
+    await waitFor(() => expect(voice).toHaveAttribute("aria-invalid", "true"));
+    expect(voice).toHaveAccessibleDescription(expect.stringContaining("tts-1 has no voice marin"));
+    await user.type(within(dialog).getByLabelText("Name"), "Legacy TTS");
+    await user.type(within(dialog).getByLabelText("API key"), CANARY);
+    await user.click(within(dialog).getByRole("button", { name: "Create connection" }));
+    expect(api.requests).toEqual([]);
+
+    await user.selectOptions(voice, "nova");
+    await waitFor(() => expect(voice).not.toHaveAttribute("aria-invalid", "true"));
+    await user.click(within(dialog).getByRole("button", { name: "Create connection" }));
+    await waitFor(() => expect(api.requests).toHaveLength(1));
+    expect(api.requests[0].body).toMatchObject({ config: { ttsModel: "tts-1", ttsVoice: "nova" } });
+  });
+
   it("offers Azure OpenAI the TTS voices and keeps its deployment typed", async () => {
     mockConnectionsApi([]);
     const { user, dialog } = await openCreate();

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { AgentKind } from "@/features/agents/types";
+import { lacksKnownVoice } from "@/features/connections/voices";
 import type { Translator } from "@/lib/i18n";
 import {
   CRITERION_KINDS,
@@ -141,14 +142,29 @@ function withoutVoiceSettings(values: ScenarioFormValues): ScenarioFormValues {
   };
 }
 
+/** The chosen voice (TTS) connection: its name and the voices its TTS model has. */
+export type VoiceConnection = { name: string; voices: readonly string[] };
+
 /**
  * The form's schema for the kind of the chosen agent. A text agent ignores the voice-only
  * settings (voice override, interruptions, evaluator mode, max silence) and needs an evaluator
  * model connection.
  */
-export function scenarioFormSchemaFor(t: Translator, kind: AgentKind) {
+export function scenarioFormSchemaFor(t: Translator, kind: AgentKind, voiceConnection?: VoiceConnection) {
   const schema = scenarioFormSchema(t);
-  if (kind === "voice") return schema;
+  if (kind === "voice") {
+    if (!voiceConnection) return schema;
+    // In pipeline mode the voice connection speaks: a known voice its TTS model lacks is refused.
+    return schema.superRefine((values, ctx) => {
+      if (values.evaluatorMode === "pipeline" && lacksKnownVoice(voiceConnection.voices, values.voiceOverride)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["voiceOverride"],
+          message: t("scenarios.error.connectionVoice", { connection: voiceConnection.name, voice: values.voiceOverride.trim() }),
+        });
+      }
+    });
+  }
   return z.preprocess(withoutVoiceSettings, schema).superRefine((values, ctx) => {
     if (!values.evaluatorConnectionId) {
       ctx.addIssue({ code: "custom", path: ["evaluatorConnectionId"], message: t("scenarios.error.evaluatorModel") });
