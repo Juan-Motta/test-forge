@@ -6,7 +6,7 @@ import { errorMessage, formErrorView } from "@/lib/api";
 import { localizeFormError, useT } from "@/lib/i18n";
 import { useOrigin } from "@/lib/browser/use-origin";
 import { useNow } from "@/lib/time/use-now";
-import { Alert, Button, Card, CardHeader, Dialog, EmptyState, PlusIcon, SegmentedControl, Spinner, buttonClasses } from "@/ui";
+import { Alert, Button, Card, CardHeader, Dialog, EmptyState, ExternalLinkIcon, PlusIcon, SegmentedControl, Spinner, buttonClasses } from "@/ui";
 import { AgentSkillContainer } from "./AgentSkillContainer";
 import { ApiKeysTable } from "./ApiKeysTable";
 import { apiKeyStatus } from "./format";
@@ -185,7 +185,8 @@ export function ApiKeysContainer() {
               aria-label={t("nav.apiDocsNewTab")}
               className={buttonClasses("secondary", "no-underline")}
             >
-              {t("nav.apiDocs")} <span aria-hidden="true">↗</span>
+              <ExternalLinkIcon size={16} />
+              {t("nav.apiDocs")}
             </a>
             <Button icon={<PlusIcon size={16} />} onClick={openCreate}>
               {t("apiKeys.create")}

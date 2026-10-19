@@ -125,7 +125,7 @@ export default function Page() {
               </span>
               <span className="flex flex-col gap-1">
                 <span className="text-sm font-semibold">
-                  <T k="nav.apiDocs" /> <span aria-hidden="true">↗</span>
+                  <T k="nav.apiDocs" />
                   <span className="sr-only">
                     {" "}
                     <T k="common.newTab" />

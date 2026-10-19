@@ -44,6 +44,8 @@ describe("API keys list", () => {
     const filter = screen.getByRole("radiogroup", { name: "Show keys" });
     expect(within(filter).getByRole("radio", { name: "Active" })).toBeChecked();
     expect(names()).toEqual([expect.stringContaining("CI pipeline")]);
+    // The count follows the view: the keys listed, not every key.
+    expect(screen.getByText("1 key")).toBeInTheDocument();
 
     await user.click(within(filter).getByRole("radio", { name: "Revoked" }));
     expect(names()).toEqual([expect.stringContaining("Agent")]);
@@ -51,6 +53,7 @@ describe("API keys list", () => {
     // Expired keys are neither: only All lists them.
     await user.click(within(filter).getByRole("radio", { name: "All" }));
     expect(names()).toHaveLength(3);
+    expect(screen.getByText("3 keys")).toBeInTheDocument();
   });
 
   it("says when no key is in the chosen view", async () => {
