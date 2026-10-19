@@ -9,8 +9,8 @@ describe("createTranslator", () => {
 
   it("interpolates {name} placeholders and keeps unknown ones", () => {
     const t = createTranslator("en");
-    expect(t("shell.environment", { label: "staging" })).toBe("Environment · staging");
-    expect(t("shell.environment")).toBe("Environment · {label}");
+    expect(t("runs.batch", { id: "b0412f00" })).toBe("Batch b0412f00");
+    expect(t("runs.batch")).toBe("Batch {id}");
   });
 
   it("picks the plural form by count, with the count available as {count}", () => {

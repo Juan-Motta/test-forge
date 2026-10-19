@@ -22,7 +22,6 @@ origin:
 | Variable | Where | Default | Purpose |
 | --- | --- | --- | --- |
 | `BACKEND_URL` | server | `http://127.0.0.1:8000` | Target of the `/api/*` rewrite. Read when `next dev` starts and baked in by `next build`: rebuild after changing it. |
-| `NEXT_PUBLIC_ENVIRONMENT_LABEL` | browser | `local` | Text of the sidebar environment badge (inlined at build time). |
 | `SESSION_COOKIE_NAME` | server | `ve_session` | Must match the backend's session cookie name. |
 
 ## How it talks to the backend

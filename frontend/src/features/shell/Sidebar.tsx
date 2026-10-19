@@ -3,13 +3,11 @@ import { useT } from "@/lib/i18n";
 import { confirmLeave } from "@/lib/navigation/unsaved-changes";
 import { cn, ExternalLinkIcon, focusRing } from "@/ui";
 import { Brand } from "./Brand";
-import { EnvironmentBadge } from "./EnvironmentBadge";
 import { activeHref, NAV_PRIMARY, NAV_SECONDARY, type NavItem } from "./navigation";
 import { UserMenu, type ShellUser } from "./UserMenu";
 
 type SidebarProps = {
   pathname: string;
-  environmentLabel: string;
   /** Counts shown as an amber pill on a nav item, by href (e.g. active runs on "/live"); 0 hides it. */
   badges?: Partial<Record<string, number>>;
   user: ShellUser | undefined;
@@ -25,7 +23,6 @@ type SidebarProps = {
 
 export function Sidebar({
   pathname,
-  environmentLabel,
   badges,
   user,
   onSignOut,
@@ -53,7 +50,6 @@ export function Sidebar({
       <div className="hidden md:block">
         <Brand />
       </div>
-      <EnvironmentBadge label={environmentLabel} />
       <nav aria-label={t("nav.primary")} className="flex flex-1 flex-col gap-6">
         <ul className="flex flex-col gap-0.5">{NAV_PRIMARY.map(link)}</ul>
         <ul className="mt-auto flex flex-col gap-0.5">

@@ -12,7 +12,6 @@ function renderSidebar(pathname: string, overrides: Partial<Parameters<typeof Si
   render(
     <Sidebar
       pathname={pathname}
-      environmentLabel="dev"
       user={ADA}
       onSignOut={vi.fn()}
       signingOut={false}
@@ -74,7 +73,7 @@ describe("Sidebar", () => {
   );
 
   it("renders in Spanish when that is the page language", () => {
-    renderWithClient(<Sidebar pathname="/settings/connections" environmentLabel="dev" user={ADA} onSignOut={vi.fn()} signingOut={false} />, {
+    renderWithClient(<Sidebar pathname="/settings/connections" user={ADA} onSignOut={vi.fn()} signingOut={false} />, {
       locale: "es",
     });
     const nav = within(screen.getByRole("navigation", { name: "Principal" }));
@@ -84,10 +83,9 @@ describe("Sidebar", () => {
     expect(screen.queryByRole("radiogroup", { name: "Idioma" })).not.toBeInTheDocument();
   });
 
-  it("shows the environment and the signed-in user", () => {
+  it("shows the signed-in user", () => {
     renderSidebar("/");
 
-    expect(screen.getByText("Environment · dev")).toBeInTheDocument();
     expect(screen.getByText("Ada Lovelace")).toBeInTheDocument();
     expect(screen.getByText("ada@example.com")).toBeInTheDocument();
   });
@@ -128,12 +126,10 @@ describe("Sidebar", () => {
     expect(links.indexOf(guide)).toBe(links.indexOf(nav.getByRole("link", { name: "API docs (opens in a new tab)" })) + 1);
   });
 
-  it("draws the environment as a pill with a chevron, not as a control", () => {
+  it("shows no environment selector (there is nothing to switch to)", () => {
     renderSidebar("/");
 
-    const pill = screen.getByText("Environment · dev").closest("[data-environment]");
-    expect(pill).not.toBeNull();
-    expect(pill?.querySelector("svg")).not.toBeNull();
-    expect(screen.queryByRole("button", { name: /Environment/ })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Environment/)).not.toBeInTheDocument();
+    expect(document.querySelector("[data-environment]")).toBeNull();
   });
 });

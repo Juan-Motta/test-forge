@@ -41,7 +41,6 @@ export const es: Messages = {
   "nav.activeRuns.other": "{label} ({count} activas)",
 
   "shell.tagline": "Evaluación de agentes",
-  "shell.environment": "Entorno · {label}",
   "shell.openNavigation": "Abrir navegación",
   "shell.closeNavigation": "Cerrar navegación",
   "shell.signOutFailed": "No se pudo cerrar la sesión. Inténtalo de nuevo.",

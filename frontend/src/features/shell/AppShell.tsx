@@ -10,7 +10,6 @@ import { Brand } from "./Brand";
 import { Sidebar } from "./Sidebar";
 import { useActiveRunCount } from "./useActiveRunCount";
 
-const ENVIRONMENT_LABEL = process.env.NEXT_PUBLIC_ENVIRONMENT_LABEL || "local";
 const SIDEBAR_ID = "app-sidebar";
 
 /**
@@ -89,7 +88,6 @@ function Navigation({
       <Sidebar
         id={SIDEBAR_ID}
         pathname={pathname}
-        environmentLabel={ENVIRONMENT_LABEL}
         badges={activeRuns ? { "/live": activeRuns } : undefined}
         user={user}
         accountUnavailable={accountUnavailable}

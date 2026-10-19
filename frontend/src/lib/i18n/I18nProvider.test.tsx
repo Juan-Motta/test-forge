@@ -29,11 +29,11 @@ describe("I18nProvider", () => {
     render(
       <I18nProvider locale="es">
         <Probe />
-        <T k="shell.environment" vars={{ label: "local" }} />
+        <T k="runs.batch" vars={{ id: "b0412f00" }} />
       </I18nProvider>,
     );
     expect(screen.getByText("Tema")).toBeInTheDocument();
-    expect(screen.getByText("Entorno · local")).toBeInTheDocument();
+    expect(screen.getByText("Lote b0412f00")).toBeInTheDocument();
   });
 
   it("falls back to English outside a provider", () => {
