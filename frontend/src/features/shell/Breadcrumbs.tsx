@@ -20,7 +20,7 @@ export function Breadcrumbs({ items }: { items: readonly Crumb[] }) {
   return (
     <nav aria-label={t("common.breadcrumb")} data-breadcrumbs className="text-[13px] text-dim">
       {items.map((crumb, index) => (
-        <span key={crumb.href}>
+        <span key={index}>
           {index > 0 ? <span aria-hidden="true"> / </span> : null}
           <Link href={crumb.href} onNavigate={crumb.onNavigate} className="text-dim hover:text-fg">
             {crumb.label}

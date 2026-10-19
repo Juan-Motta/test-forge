@@ -7,6 +7,7 @@ import { mockRunsApi, runFixture, snapshotFixture } from "@/features/runs/testin
 import type { RunDetail } from "@/features/runs/types";
 import { installFakeAudio, installFakeSockets } from "@/lib/live/testing";
 import { renderWithClient } from "@/test/render";
+import { LiveRunContainer } from "./LiveRunContainer";
 import { LiveRunPanel } from "./LiveRunPanel";
 
 const redirect = vi.hoisted(() => ({ toLogin: vi.fn() }));
@@ -48,6 +49,17 @@ describe("Live run", () => {
   afterEach(() => {
     sockets.restore();
     audio.restore();
+  });
+
+  it("leads back to the runs and to this run's report", async () => {
+    mockRunsApi([running], { details: { "r-1": {} } });
+    renderWithClient(<LiveRunContainer runId="r-1" />);
+
+    const breadcrumb = screen.getByRole("navigation", { name: "Breadcrumb" });
+    expect(breadcrumb).toHaveTextContent(/^Runs & reports \/ Run r-1$/);
+    expect(within(breadcrumb).getByRole("link", { name: "Runs & reports" })).toHaveAttribute("href", "/runs");
+    expect(within(breadcrumb).getByRole("link", { name: "Run r-1" })).toHaveAttribute("href", "/runs/r-1");
+    await screen.findByRole("heading", { name: "Booking with date change" });
   });
 
   it("subscribes to the run and shows the snapshot, then the events in order", async () => {
