@@ -8,7 +8,7 @@ import { http, HttpResponse } from "msw/http";
 import { renderWithClient } from "@/test/render";
 import { apiUrl, server } from "@/test/server";
 import { ScenarioEditorContainer } from "./ScenarioEditorContainer";
-import { mockScenariosApi, scenarioFixture } from "./testing";
+import { groupFixture, mockGroupsApi, mockScenariosApi, scenarioFixture } from "./testing";
 
 const nav = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn() }));
 vi.mock("next/navigation", () => ({
@@ -24,7 +24,9 @@ function setup(scenarios = [stored], connections = [openai]) {
   mockAgentsApi([hotel, support]);
   mockConnectionsApi(connections);
   mockRunsApi([]);
-  return mockScenariosApi(scenarios, { agents: [hotel, support] });
+  const api = mockScenariosApi(scenarios, { agents: [hotel, support], groups: [groupFixture()] });
+  mockGroupsApi([groupFixture()], { scenarios: api });
+  return api;
 }
 
 async function renderEditor(scenarioId?: string) {
@@ -59,6 +61,7 @@ describe("Scenario export and import", () => {
       duet: "scenario",
       version: 1,
       agent: "Hotel booking assistant",
+      group: "Hotel booking assistant",
       ttsConnection: "OpenAI prod",
       evaluatorConnection: null,
       voiceOverride: "coral",
@@ -67,7 +70,7 @@ describe("Scenario export and import", () => {
         { text: "Reads back the confirmation code", kind: "should", source: "transcript", weight: 40 },
       ],
     });
-    expect(JSON.stringify(config)).not.toMatch(/"(id|agentId|ttsConnectionId)"|s-booking|c-openai|k-1/);
+    expect(JSON.stringify(config)).not.toMatch(/"(id|agentId|groupId|ttsConnectionId)"|s-booking|g-hotel|c-openai|k-1/);
   });
 
   it("round-trips: an exported scenario imported into a new one creates the same scenario", async () => {
@@ -89,6 +92,8 @@ describe("Scenario export and import", () => {
     await waitFor(() => expect(api.requests).toHaveLength(1));
     expect(api.requests[0].body).toMatchObject({
       agentId: "a-hotel",
+      // The group travels by name and is found again here.
+      groupId: "g-hotel",
       name: "Booking with date change",
       tags: ["booking", "regression"],
       persona: stored.persona,
@@ -114,6 +119,7 @@ describe("Scenario export and import", () => {
         duet: "scenario",
         version: 1,
         agent: "Lola personal shopper",
+        group: "Staging smoke",
         name: "Imported",
         ttsConnection: "Staging voice",
         evaluatorConnection: "openai prod",
@@ -125,6 +131,10 @@ describe("Scenario export and import", () => {
 
     expect(screen.getByText("No agent is named “Lola personal shopper” here: pick the agent under test.")).toBeInTheDocument();
     expect(screen.getByText("No connection is named “Staging voice” here: pick one.")).toBeInTheDocument();
+    expect(
+      screen.getByText("No group is named “Staging smoke” here: the scenario goes to its agent's group unless you pick one."),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Group")).toHaveValue("");
     // Names match case-insensitively: "openai prod" is found.
     expect(screen.queryByText(/“openai prod”/)).not.toBeInTheDocument();
     expect(screen.getByLabelText("Evaluator voice (TTS connection)")).toHaveValue("");
@@ -202,6 +212,26 @@ describe("Scenario editor: delete and agent preselection", () => {
     await user.click(screen.getByRole("button", { name: "Delete Booking with date change" }));
     await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Delete scenario" }));
     await waitFor(() => expect(nav.push).toHaveBeenCalledWith("/scenarios"));
+  });
+
+  it("preselects the group a new scenario was opened in and creates it there", async () => {
+    window.history.replaceState(null, "", "/scenarios/new?group=g-hotel");
+    const api = setup([]);
+    const user = await renderEditor();
+
+    await waitFor(() => expect(screen.getByLabelText("Group")).toHaveValue("g-hotel"));
+    const breadcrumb = screen.getByRole("navigation", { name: "Breadcrumb" });
+    expect(within(breadcrumb).getByRole("link", { name: "Hotel booking assistant" })).toHaveAttribute(
+      "href",
+      "/scenarios/groups/g-hotel",
+    );
+    await user.type(screen.getByLabelText("Name"), "Late check-out");
+    await user.type(screen.getByLabelText("Persona name"), "Marta");
+    await user.type(screen.getByLabelText("Goal"), "Get a late check-out.");
+    await user.type(screen.getByLabelText("Criterion 1 Text"), "Offers one");
+    await user.click(screen.getByRole("button", { name: "Create scenario" }));
+    await waitFor(() => expect(api.requests).toHaveLength(1));
+    expect(api.requests[0].body).toMatchObject({ groupId: "g-hotel" });
   });
 
   it("preselects the agent a new scenario was opened for", async () => {

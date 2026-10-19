@@ -8,7 +8,7 @@ import { mockRunsApi } from "@/features/runs/testing";
 import { renderWithClient } from "@/test/render";
 import { apiUrl, server } from "@/test/server";
 import { ScenarioEditorContainer } from "./ScenarioEditorContainer";
-import { mockScenariosApi, scenarioFixture } from "./testing";
+import { groupFixture, mockGroupsApi, mockScenariosApi, scenarioFixture } from "./testing";
 
 const nav = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn() }));
 vi.mock("next/navigation", () => ({
@@ -33,7 +33,9 @@ const connections = [connectionFixture(), connectionFixture({ id: "c-lf", name: 
 function setup(scenarios = [scenarioFixture({ agentId: "a-chat", agent: { id: "a-chat", name: "Chat desk" } })]) {
   mockAgentsApi(agents);
   mockConnectionsApi(connections);
-  return mockScenariosApi(scenarios, { agents });
+  const api = mockScenariosApi(scenarios, { agents });
+  mockGroupsApi([groupFixture()], { scenarios: api });
+  return api;
 }
 
 async function renderEditor(scenarioId?: string) {

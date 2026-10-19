@@ -9,7 +9,7 @@ import { apiUrl, server } from "@/test/server";
 import { ScenarioEditorContainer } from "./ScenarioEditorContainer";
 import { mockRunsApi } from "@/features/runs/testing";
 import { confirmLeave } from "@/lib/navigation/unsaved-changes";
-import { mockScenariosApi, scenarioFixture } from "./testing";
+import { groupFixture, mockGroupsApi, mockScenariosApi, scenarioFixture } from "./testing";
 
 const nav = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn() }));
 vi.mock("next/navigation", () => ({
@@ -35,7 +35,9 @@ const connections = [
 function setup(scenarios = [scenarioFixture()]) {
   mockAgentsApi(agents);
   mockConnectionsApi(connections);
-  return mockScenariosApi(scenarios, { agents });
+  const api = mockScenariosApi(scenarios, { agents });
+  mockGroupsApi([groupFixture()], { scenarios: api });
+  return api;
 }
 
 async function renderEditor(scenarioId?: string) {
@@ -754,24 +756,37 @@ describe("Scenario editor: layout", () => {
     name: "Refund dispute",
     tags: ["regression"],
   });
+  const otherGroup = scenarioFixture({
+    id: "s-elsewhere",
+    name: "Late check-out",
+    groupId: "g-other",
+    group: { id: "g-other", name: "Other" },
+  });
 
-  it("shows the breadcrumb back to Scenarios and the scenario's agent library grouped by tag", async () => {
-    setup([scenarioFixture(), cancel, otherAgent]);
+  it("shows the breadcrumb back to Scenarios and the scenario's group, and the group's library grouped by tag", async () => {
+    setup([scenarioFixture(), cancel, otherAgent, otherGroup]);
     await renderEditor("s-booking");
 
     const breadcrumb = screen.getByRole("navigation", { name: "Breadcrumb" });
-    expect(breadcrumb).toHaveTextContent(/^Scenarios$/);
+    expect(breadcrumb).toHaveTextContent(/^Scenarios \/ Hotel booking assistant$/);
     expect(within(breadcrumb).getByRole("link", { name: "Scenarios" })).toHaveAttribute("href", "/scenarios");
+    expect(within(breadcrumb).getByRole("link", { name: "Hotel booking assistant" })).toHaveAttribute(
+      "href",
+      "/scenarios/groups/g-hotel",
+    );
 
     const library = screen.getByRole("complementary", { name: "Scenario library" });
     const current = await within(library).findByRole("link", { name: /Booking with date change/ });
     expect(current).toHaveAttribute("aria-current", "page");
     expect(current).toHaveTextContent("Hurried");
     expect(within(library).getByRole("link", { name: /Cancel within 24h/ })).toHaveAttribute("href", "/scenarios/s-cancel");
-    expect(within(library).queryByText("Refund dispute")).not.toBeInTheDocument();
+    // A group may mix agents: the other agent's scenario of the same group is listed too.
+    expect(within(library).getByRole("link", { name: /Refund dispute/ })).toBeInTheDocument();
+    expect(within(library).queryByText("Late check-out")).not.toBeInTheDocument();
     expect(within(library).getByRole("heading", { name: "booking 1" })).toBeInTheDocument();
     expect(within(library).getByRole("heading", { name: "cancellation 1" })).toBeInTheDocument();
-    expect(within(library).getByRole("link", { name: "New scenario" })).toHaveAttribute("href", "/scenarios/new");
+    expect(within(library).getByRole("link", { name: /^Group/ })).toHaveAttribute("href", "/scenarios/groups/g-hotel");
+    expect(within(library).getByRole("link", { name: "New scenario" })).toHaveAttribute("href", "/scenarios/new?group=g-hotel");
   });
 
   it("renders the form while the library rail is still loading, with the rail's own placeholder", async () => {

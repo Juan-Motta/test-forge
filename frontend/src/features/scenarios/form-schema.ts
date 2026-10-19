@@ -30,6 +30,8 @@ import {
  */
 export type ScenarioFormValues = {
   agentId: string;
+  /** "" on create: the API puts the scenario in the group named after its agent. */
+  groupId: string;
   name: string;
   tags: string;
   context: string;
@@ -177,6 +179,7 @@ export const scenarioFormSchema = (t: Translator) =>
   z
   .object({
     agentId: z.string().min(1, t("scenarios.error.agent")),
+    groupId: z.string(),
     name: text(t, MAX.name, t("scenarios.error.name")),
     tags: z.string(),
     context: text(t, MAX.context),
@@ -294,10 +297,15 @@ export function newInterruption(rows: { agentTurn: string }[]): ScenarioFormValu
 }
 
 /** Initial values: blank with the backend's defaults on create, the stored scenario on edit. */
-export function initialValues(scenario: Scenario | undefined, defaultAgentId = ""): ScenarioFormValues {
+export function initialValues(
+  scenario: Scenario | undefined,
+  defaultAgentId = "",
+  defaultGroupId = "",
+): ScenarioFormValues {
   if (!scenario) {
     return {
       agentId: defaultAgentId,
+      groupId: defaultGroupId,
       name: "",
       tags: "",
       context: "",
@@ -322,6 +330,7 @@ export function initialValues(scenario: Scenario | undefined, defaultAgentId = "
   }
   return {
     agentId: scenario.agentId,
+    groupId: scenario.groupId,
     name: scenario.name,
     tags: scenario.tags.join(", "),
     context: scenario.context,
@@ -358,6 +367,7 @@ export function initialValues(scenario: Scenario | undefined, defaultAgentId = "
 export function toNewScenario(values: ScenarioFormValues, agentKind: AgentKind = "voice"): NewScenario {
   const shared = {
     agentId: values.agentId,
+    ...(values.groupId ? { groupId: values.groupId } : {}),
     name: values.name.trim(),
     tags: parseTags(values.tags),
     context: values.context.trim(),

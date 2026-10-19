@@ -22,6 +22,7 @@ const nameOf = (records: readonly Named[], id: string | null) => records.find((r
 export function scenarioToText(scenario: Scenario, connections: readonly Named[]): string {
   return toTransferText("scenario", {
     agent: scenario.agent.name,
+    group: scenario.group.name,
     name: scenario.name,
     tags: scenario.tags,
     context: scenario.context,
@@ -53,6 +54,7 @@ export function scenarioFromText(
   agents: readonly Named[],
   connections: readonly Named[],
   defaultAgentId = "",
+  groups: readonly Named[] = [],
 ): ScenarioImport {
   const parsed = parseTransfer(text, "scenario");
   if (!parsed.ok) return { ok: false, error: t(`transfer.error.${parsed.error}`, { kind: t("transfer.kind.scenario") }) };
@@ -63,14 +65,16 @@ export function scenarioFromText(
   // A named agent this server lacks stays unpicked (never another agent by default): the user chooses.
   const agentId = read.string(data.agent)?.trim() ? (idByName(agents, data.agent) ?? "") : defaultAgentId;
   const ttsConnectionId = idByName(connections, data.ttsConnection) ?? null;
+  // A group this server lacks stays unpicked: the scenario then goes to its agent's group.
+  const group = groups.find((item) => item.id === idByName(groups, data.group));
   const evaluatorConnectionId = idByName(connections, data.evaluatorConnection) ?? null;
 
   const scenario: Scenario = {
     id: "",
     agentId,
     agent: { id: agentId, name: "" },
-    groupId: "",
-    group: { id: "", name: "" },
+    groupId: group?.id ?? "",
+    group: group ?? { id: "", name: "" },
     name: read.string(data.name) ?? "",
     tags: read.array(data.tags).filter((tag): tag is string => typeof tag === "string"),
     context: read.string(data.context) ?? "",
@@ -118,11 +122,16 @@ export function scenarioFromText(
   if (values.criteria.length === 0) values.criteria = blank.criteria;
 
   const notes: string[] = [];
-  const missing = (name: unknown, found: unknown, key: "transfer.note.missingAgent" | "transfer.note.missingConnection") => {
+  const missing = (
+    name: unknown,
+    found: unknown,
+    key: "transfer.note.missingAgent" | "transfer.note.missingConnection" | "transfer.note.missingGroup",
+  ) => {
     const wanted = read.string(name)?.trim();
     if (wanted && !found) notes.push(t(key, { name: wanted }));
   };
   missing(data.agent, idByName(agents, data.agent), "transfer.note.missingAgent");
+  missing(data.group, group, "transfer.note.missingGroup");
   missing(data.ttsConnection, ttsConnectionId, "transfer.note.missingConnection");
   missing(data.evaluatorConnection, evaluatorConnectionId, "transfer.note.missingConnection");
   return { ok: true, values, notes };

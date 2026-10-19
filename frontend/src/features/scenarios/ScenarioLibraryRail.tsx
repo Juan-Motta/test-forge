@@ -31,10 +31,14 @@ type ScenarioLibraryRailProps = {
   failed: boolean;
   /** The scenario open in the editor, highlighted. */
   currentId?: string;
+  /** The group the scenarios belong to: named on top (opens it) and where New scenario goes. */
+  group?: { id: string; name: string };
+  /** On the group's own page: its name is the page, not a link. */
+  groupCurrent?: boolean;
 };
 
 /** Compact scenario library beside the editor: filter, groups by tag, the open one highlighted. */
-export function ScenarioLibraryRail({ scenarios, failed, currentId }: ScenarioLibraryRailProps) {
+export function ScenarioLibraryRail({ scenarios, failed, currentId, group, groupCurrent = false }: ScenarioLibraryRailProps) {
   const t = useT();
   const [query, setQuery] = useState("");
   const needle = query.trim().toLowerCase();
@@ -91,6 +95,21 @@ export function ScenarioLibraryRail({ scenarios, failed, currentId }: ScenarioLi
 
   return (
     <aside aria-label={t("library.label")} className="flex min-w-0 flex-col gap-3.5">
+      {group ? (
+        <Link
+          href={`/scenarios/groups/${encodeURIComponent(group.id)}`}
+          aria-current={groupCurrent ? "page" : undefined}
+          onNavigate={leave}
+          className={cn(
+            "flex min-h-11 flex-col justify-center rounded-lg border border-line bg-panel px-3 py-2 no-underline hover:border-line-strong",
+            groupCurrent && "border-evaluator-line",
+            focusRing,
+          )}
+        >
+          <span className="text-[11px] font-medium tracking-[0.06em] text-dim uppercase">{t("library.group")}</span>
+          <span className="text-[13px] font-semibold break-words text-fg">{group.name}</span>
+        </Link>
+      ) : null}
       <SearchField
         label={t("library.filter")}
         placeholder={t("library.filter")}
@@ -100,7 +119,7 @@ export function ScenarioLibraryRail({ scenarios, failed, currentId }: ScenarioLi
       />
       {body}
       <Link
-        href="/scenarios/new"
+        href={group ? `/scenarios/new?group=${encodeURIComponent(group.id)}` : "/scenarios/new"}
         onNavigate={leave}
         className={cn(
           "inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-dashed border-line-strong text-[13px] text-muted hover:text-fg",

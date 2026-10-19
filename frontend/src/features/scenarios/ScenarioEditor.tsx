@@ -82,6 +82,10 @@ type ScenarioEditorProps = {
   onDelete?: () => void;
   /** The agent a new scenario starts with; the first agent when absent. */
   defaultAgentId?: string;
+  /** The group a new scenario starts in; the agent's default group when absent. */
+  defaultGroupId?: string;
+  /** The groups a scenario can live in. */
+  groups: { id: string; name: string }[];
   /** The saved scenario as text (Export); absent while creating. */
   exportText?: string;
   /** Prefills a new scenario from an exported one (Import); absent while editing. */
@@ -115,6 +119,8 @@ export function ScenarioEditor({
   importConfig,
   onDelete,
   defaultAgentId,
+  defaultGroupId,
+  groups,
   duplicating = false,
   banner,
   library,
@@ -130,7 +136,7 @@ export function ScenarioEditor({
       const voiceConnection = connection?.voices ? { name: connection.name, voices: connection.voices.pipeline } : undefined;
       return zodResolver(scenarioFormSchemaFor(t, kind, voiceConnection))(values, context, options);
     },
-    defaultValues: initialValues(scenario, defaultAgentId ?? agents[0]?.id),
+    defaultValues: initialValues(scenario, defaultAgentId ?? agents[0]?.id, defaultGroupId),
     shouldFocusError: false,
   });
   const {
@@ -166,6 +172,9 @@ export function ScenarioEditor({
   const voice = useWatch({ control, name: "voiceOverride" });
   const ttsConnectionId = useWatch({ control, name: "ttsConnectionId" });
   const selectedAgentId = useWatch({ control, name: "agentId" });
+  // The stored group stays selectable while the list loads (or if it failed).
+  const groupOptions =
+    scenario && !groups.some((item) => item.id === scenario.groupId) ? [...groups, scenario.group] : groups;
   // The voices of the chosen voice connection (its kind and TTS model); OpenAI's when none is chosen.
   const kindVoices = ttsOptions.find((option) => option.id === ttsConnectionId)?.voices ?? OPENAI_VOICES;
   // The voice may not suit the newly chosen connection (or the mode it opened with): re-check it.
@@ -370,6 +379,18 @@ export function ScenarioEditor({
                     </option>
                   )}
                   {agents.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name}
+                    </option>
+                  ))}
+                </Select>
+              )}
+            </Field>
+            <Field label={t("scenarios.field.group")} hint={t("scenarios.field.groupHint")} error={fieldError("groupId")}>
+              {(props) => (
+                <Select {...props} {...registerField("groupId")}>
+                  {editing ? null : <option value="">{t("scenarios.field.groupDefault")}</option>}
+                  {groupOptions.map((item) => (
                     <option key={item.id} value={item.id}>
                       {item.name}
                     </option>

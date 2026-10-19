@@ -16,7 +16,16 @@ import { confirmLeave, useUnsavedChangesGuard } from "@/lib/navigation/unsaved-c
 import { Alert, Button, Card, EmptyState, ScenariosIcon, Spinner, buttonClasses } from "@/ui";
 import { toChanges, toNewScenario, type ScenarioFormValues } from "./form-schema";
 import { DeleteScenarioDialog } from "./DeleteScenarioDialog";
-import { useCreateScenario, useDeleteScenario, useDuplicateScenario, useScenario, useScenarios, useUpdateScenario } from "./queries";
+import { groupHref } from "./GroupTable";
+import {
+  useCreateScenario,
+  useDeleteScenario,
+  useDuplicateScenario,
+  useGroups,
+  useScenario,
+  useScenarios,
+  useUpdateScenario,
+} from "./queries";
 import { ScenarioEditor, type ConnectionOption } from "./ScenarioEditor";
 import { ScenarioLibraryRail } from "./ScenarioLibraryRail";
 import { scenarioFromText, scenarioToText } from "./transfer";
@@ -46,6 +55,7 @@ export function ScenarioEditorContainer({ scenarioId }: ScenarioEditorContainerP
   const create = useCreateScenario();
   const update = useUpdateScenario();
   const library = useScenarios();
+  const groups = useGroups();
   const duplicate = useDuplicateScenario();
   const remove = useDeleteScenario();
   const [deleting, setDeleting] = useState<Scenario | undefined>(undefined);
@@ -91,8 +101,8 @@ export function ScenarioEditorContainer({ scenarioId }: ScenarioEditorContainerP
     if (confirmLeave()) router.push("/scenarios");
   }
 
-  // Deleting the open scenario moves to the agent's next one (its library stays in view), or
-  // back to Scenarios after its last one.
+  // Deleting the open scenario moves to its group's next one (the group stays in view), or back
+  // to Scenarios after its last one.
   // mutateAsync, not mutate's onSuccess: reopening the dialog calls `remove.reset()`, which
   // drops pending mutate callbacks, and the page must still move on once the delete lands.
   async function confirmDelete(current: Scenario) {
@@ -103,7 +113,7 @@ export function ScenarioEditorContainer({ scenarioId }: ScenarioEditorContainerP
       return; // shown through the mutation's error state while the dialog is open
     }
     setDeleting(undefined);
-    const next = library.data?.find((item) => item.agentId === current.agentId && item.id !== current.id);
+    const next = library.data?.find((item) => item.groupId === current.groupId && item.id !== current.id);
     router.push(next ? `/scenarios/${encodeURIComponent(next.id)}` : "/scenarios");
   }
 
@@ -119,12 +129,13 @@ export function ScenarioEditorContainer({ scenarioId }: ScenarioEditorContainerP
   }
 
   const title = scenarioId ? (scenario.data?.name ?? t("scenarios.one")) : t("scenarios.new");
+  const leave: Crumb["onNavigate"] = (event) => (confirmLeave() ? undefined : event.preventDefault());
+  // The group in view: the scenario's, or the one a new scenario was opened in (`?group=`).
+  const requestedGroup = scenarioId ? undefined : requestedId("group", groups.data ?? []);
+  const groupInView = scenario.data?.group ?? groups.data?.find((group) => group.id === requestedGroup);
   const breadcrumbs: Crumb[] = [
-    {
-      label: t("nav.scenarios"),
-      href: "/scenarios",
-      onNavigate: (event) => (confirmLeave() ? undefined : event.preventDefault()),
-    },
+    { label: t("nav.scenarios"), href: "/scenarios", onNavigate: leave },
+    ...(groupInView ? [{ label: groupInView.name, href: groupHref(groupInView), onNavigate: leave }] : []),
   ];
   const header = <PageHeader title={title} breadcrumbs={breadcrumbs} />;
 
@@ -162,7 +173,7 @@ export function ScenarioEditorContainer({ scenarioId }: ScenarioEditorContainerP
         </Button>
       </Alert>
     );
-  } else if ((scenarioId && scenario.isPending) || agents.isPending || connections.isPending) {
+  } else if ((scenarioId && scenario.isPending) || agents.isPending || connections.isPending || groups.isPending) {
     body = <Spinner label={t("scenarios.loadingEditor")} />;
   } else if (!scenarioId && (agents.data ?? []).length === 0) {
     body = (
@@ -207,23 +218,27 @@ export function ScenarioEditorContainer({ scenarioId }: ScenarioEditorContainerP
               }
             : undefined
         }
-        defaultAgentId={scenarioId ? undefined : requestedAgentId(agents.data ?? [])}
+        defaultAgentId={scenarioId ? undefined : requestedId("agent", agents.data ?? [])}
+        defaultGroupId={requestedGroup}
+        groups={groups.data ?? []}
         duplicating={duplicate.isPending}
         // Only once the connections are known, so their names are never silently left out.
         exportText={scenario.data && connections.isSuccess ? scenarioToText(scenario.data, connections.data) : undefined}
         importConfig={
           scenarioId
             ? undefined
-            : (text) => scenarioFromText(t, text, agents.data ?? [], connections.data ?? [], agents.data?.[0]?.id)
+            : (text) =>
+                scenarioFromText(t, text, agents.data ?? [], connections.data ?? [], agents.data?.[0]?.id, groups.data ?? [])
         }
         banner={
           duplicate.isError ? <Alert>{t("scenarios.duplicateFailed", { error: errorMessage(duplicate.error) })}</Alert> : null
         }
         library={
           <ScenarioLibraryRail
-            scenarios={library.data?.filter((item) => !scenario.data || item.agentId === scenario.data.agentId)}
+            scenarios={library.data?.filter((item) => !groupInView || item.groupId === groupInView.id)}
             failed={loadFailed(library)}
             currentId={scenario.data?.id}
+            group={groupInView}
           />
         }
         launch={
@@ -259,13 +274,13 @@ export function ScenarioEditorContainer({ scenarioId }: ScenarioEditorContainerP
 }
 
 /**
- * The agent a new scenario was opened for (`?agent=<id>`, from the Scenarios table), when it
- * exists. The editor mounts only after its data loaded in the browser, so `window` is there.
+ * The agent (`?agent=<id>`) or group (`?group=<id>`) a new scenario was opened for, when it
+ * exists. Read in the browser only; on the server there is no request URL here.
  */
-function requestedAgentId(agents: { id: string }[]): string | undefined {
+function requestedId(param: "agent" | "group", records: { id: string }[]): string | undefined {
   if (typeof window === "undefined") return undefined;
-  const id = new URLSearchParams(window.location.search).get("agent");
-  return agents.some((agent) => agent.id === id) ? (id ?? undefined) : undefined;
+  const id = new URLSearchParams(window.location.search).get(param);
+  return records.some((record) => record.id === id) ? (id ?? undefined) : undefined;
 }
 
 /** Right rail: launches the saved scenario; a new one has to be saved first. */
