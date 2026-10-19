@@ -58,7 +58,8 @@ export function OverviewContainer() {
         ) : null}
         <OverviewKpis stats={stats.data} loading={stats.isPending} />
         <LiveNowCard runs={live.data?.items} total={live.data?.total ?? null} error={liveError} now={now} />
-        <div className="flex flex-wrap items-start gap-5">
+        {/* Stretched: Recent runs is as tall as the insights column beside it. */}
+        <div className="flex flex-wrap items-stretch gap-5">
           <RecentRunsCard runs={recent.data?.items ?? []} search={search} now={now} />
           <InsightsColumn stats={stats.data} loading={stats.isPending} />
         </div>
