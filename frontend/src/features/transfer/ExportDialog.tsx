@@ -23,7 +23,8 @@ export function ExportDialog({ open, title, text, fileName, onClose }: ExportDia
     link.href = url;
     link.download = fileName;
     link.click();
-    URL.revokeObjectURL(url);
+    // Some browsers start the download after click() returns: free the URL a moment later.
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
   return (

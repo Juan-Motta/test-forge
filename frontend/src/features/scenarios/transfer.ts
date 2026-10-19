@@ -60,7 +60,8 @@ export function scenarioFromText(
   const blank = initialValues(undefined, defaultAgentId);
   const persona = read.object(data.persona);
   const ends = read.object(data.endConditions);
-  const agentId = idByName(agents, data.agent) ?? defaultAgentId;
+  // A named agent this server lacks stays unpicked (never another agent by default): the user chooses.
+  const agentId = read.string(data.agent)?.trim() ? (idByName(agents, data.agent) ?? "") : defaultAgentId;
   const ttsConnectionId = idByName(connections, data.ttsConnection) ?? null;
   const evaluatorConnectionId = idByName(connections, data.evaluatorConnection) ?? null;
 

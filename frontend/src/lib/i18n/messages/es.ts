@@ -1148,4 +1148,6 @@ export const es: Messages = {
   "transfer.note.missingConnection": "Aquí no hay ninguna conexión llamada “{name}”: elige una.",
   "transfer.note.missingAgent": "Aquí no hay ningún agente llamado “{name}”: elige el agente a evaluar.",
   "transfer.note.apiKey": "La clave de API nunca se exporta: ingrésala de nuevo.",
+  "scenarios.pickAgent": "Elige el agente a evaluar",
+  "transfer.error.fileRead": "No se pudo leer el archivo: inténtalo de nuevo o pega su texto.",
 };

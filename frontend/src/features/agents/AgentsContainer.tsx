@@ -206,7 +206,13 @@ export function AgentsContainer({ scenarioCounts }: AgentsContainerProps = {}) {
         title={selected.name}
         actions={[
           ...addButtons,
-          <Button key="export" variant="secondary" onClick={() => setExporting(selected)}>
+          <Button
+            key="export"
+            variant="secondary"
+            // Only once the connections are known, so the Langfuse name is never silently left out.
+            disabled={!connections.isSuccess}
+            onClick={() => setExporting(selected)}
+          >
             {t("transfer.export")}
           </Button>,
           <Button

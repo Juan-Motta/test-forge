@@ -180,7 +180,8 @@ export function ScenarioEditorContainer({ scenarioId }: ScenarioEditorContainerP
         breadcrumbs={breadcrumbs}
         onDuplicate={scenario.data ? onDuplicate : undefined}
         duplicating={duplicate.isPending}
-        exportText={scenario.data ? scenarioToText(scenario.data, connections.data ?? []) : undefined}
+        // Only once the connections are known, so their names are never silently left out.
+        exportText={scenario.data && connections.isSuccess ? scenarioToText(scenario.data, connections.data) : undefined}
         importConfig={
           scenarioId
             ? undefined

@@ -103,7 +103,7 @@ describe("Scenario export and import", () => {
   });
 
   it("notes the agent and connections this server lacks and leaves them for the user to pick", async () => {
-    setup([], [openai]);
+    const api = setup([], [openai]);
     const user = await renderEditor();
 
     await importText(
@@ -127,6 +127,14 @@ describe("Scenario export and import", () => {
     expect(screen.queryByText(/“openai prod”/)).not.toBeInTheDocument();
     expect(screen.getByLabelText("Evaluator voice (TTS connection)")).toHaveValue("");
     expect(screen.getByLabelText("Language")).toHaveValue("es-CO");
+    // The missing agent is never replaced by another one: nothing is saved until one is picked.
+    expect(screen.getByLabelText("Agent under test")).toHaveValue("");
+    await user.click(screen.getByRole("button", { name: "Create scenario" }));
+    expect(api.requests).toEqual([]);
+    await user.selectOptions(screen.getByLabelText("Agent under test"), "Support triage");
+    await user.click(screen.getByRole("button", { name: "Create scenario" }));
+    await waitFor(() => expect(api.requests).toHaveLength(1));
+    expect(api.requests[0].body).toMatchObject({ agentId: "a-support", name: "Imported", evaluatorConnectionId: "c-openai" });
   });
 
   it("opens the import panel when reached from the Scenarios page's Import", async () => {

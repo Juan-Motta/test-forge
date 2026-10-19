@@ -159,6 +159,7 @@ export function ScenarioEditor({
   const locale = useWatch({ control, name: "persona.locale" });
   const voice = useWatch({ control, name: "voiceOverride" });
   const ttsConnectionId = useWatch({ control, name: "ttsConnectionId" });
+  const selectedAgentId = useWatch({ control, name: "agentId" });
   // The voices of the chosen voice connection (its kind and TTS model); OpenAI's when none is chosen.
   const kindVoices = ttsOptions.find((option) => option.id === ttsConnectionId)?.voices ?? OPENAI_VOICES;
   // The voice may not suit the newly chosen connection (or the mode it opened with): re-check it.
@@ -352,6 +353,11 @@ export function ScenarioEditor({
             <Field label={t("scenarios.field.agent")} error={fieldError("agentId")}>
               {(props) => (
                 <Select {...props} {...registerField("agentId")}>
+                  {selectedAgentId ? null : (
+                    <option value="" disabled>
+                      {t("scenarios.pickAgent")}
+                    </option>
+                  )}
                   {agents.map((item) => (
                     <option key={item.id} value={item.id}>
                       {item.name}

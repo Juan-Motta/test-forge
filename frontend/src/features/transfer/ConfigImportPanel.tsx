@@ -46,7 +46,13 @@ export function ConfigImportPanel({ id, label, onImport, onCancel }: ConfigImpor
       setError(t("transfer.error.fileTooLarge"));
       return;
     }
-    const content = await file.text();
+    let content: string;
+    try {
+      content = await file.text();
+    } catch {
+      setError(t("transfer.error.fileRead"));
+      return;
+    }
     setText(content);
     setError(undefined);
     importText(content);

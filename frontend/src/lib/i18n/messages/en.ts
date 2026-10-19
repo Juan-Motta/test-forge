@@ -1174,4 +1174,6 @@ export const en = {
   "transfer.note.missingConnection": "No connection is named “{name}” here: pick one.",
   "transfer.note.missingAgent": "No agent is named “{name}” here: pick the agent under test.",
   "transfer.note.apiKey": "The API key is never exported: enter it again.",
+  "scenarios.pickAgent": "Pick the agent under test",
+  "transfer.error.fileRead": "The file could not be read: try again or paste its text.",
 } as const;
