@@ -42,6 +42,8 @@ describe("Agents rail", () => {
     expect(supportItem).not.toHaveAttribute("aria-current");
 
     expect(screen.getByRole("heading", { level: 1, name: "Hotel booking assistant" })).toBeInTheDocument();
+    // Like every other page, the header carries the section's description under its title.
+    expect(screen.getByText("The voice and text agents under test, how to reach them and what they do.")).toBeInTheDocument();
   });
 
   it("leaves the scenario count out while it is unknown", async () => {

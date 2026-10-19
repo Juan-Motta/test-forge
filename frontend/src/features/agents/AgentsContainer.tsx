@@ -204,6 +204,7 @@ export function AgentsContainer({ scenarioCounts }: AgentsContainerProps = {}) {
       <PageHeader
         titleRef={titleRef}
         title={selected.name}
+        description={t("agents.description")}
         actions={[
           ...addButtons,
           <Button
