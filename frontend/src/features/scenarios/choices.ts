@@ -30,9 +30,9 @@ export function localeLabel(tag: string, uiLocale: string): string {
 }
 
 /** The offered languages, plus the current one when it is not among them (it stays selectable). */
-export function localeChoices(current: string, uiLocale: string): Choice[] {
+export function localeChoices(current: string | null | undefined, uiLocale: string): Choice[] {
   const tags: string[] = [...SCENARIO_LOCALES];
-  const value = current.trim();
+  const value = (current ?? "").trim();
   if (value && !tags.includes(value)) tags.push(value);
   return tags.map((tag) => ({ value: tag, label: localeLabel(tag, uiLocale) }));
 }
@@ -42,9 +42,9 @@ export function localeChoices(current: string, uiLocale: string): Choice[] {
  * current one when it is not among them, so a stored value stays visible (and flagged by
  * validation) until it is changed.
  */
-export function voiceChoices(offered: readonly string[], current: string): string[] {
+export function voiceChoices(offered: readonly string[], current: string | null | undefined): string[] {
   const voices = [...offered];
-  const value = current.trim();
+  const value = (current ?? "").trim();
   if (value && !voices.includes(value)) voices.push(value);
   return voices;
 }

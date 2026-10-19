@@ -209,7 +209,8 @@ Usually a human has already configured connections, agents and scenarios: list t
 
 - `persona.temperament`: `polite`, `hurried`, `skeptical`, `confused`, `angry`, `friendly`,
   `calm` or `detailed`. `persona.locale` is BCP 47-like (`es-MX`, `en-US`): the caller speaks
-  that language.
+  that language and accent. The app's editor offers es-MX, es-CO, es-AR, es-CL, es-PE, es-US,
+  es-ES, en-US, en-GB, pt-BR, pt-PT, fr-FR, it-IT and de-DE; the API accepts any tag.
 - `facts` are what the caller knows; it reveals each one only when asked. Keys are unique.
 - `criteria` (1-30): `kind` `must` (a failure sets `mustFailed`) or `should`; `source` is the
   evidence the judge uses: `transcript` (what was said), `timing` (turn timings and latencies)
@@ -226,8 +227,10 @@ Usually a human has already configured connections, agents and scenarios: list t
 - `evaluatorMode`: `pipeline` (default: chat model decides, TTS speaks) or `realtime` (a
   speech-to-speech model hears the agent and answers by voice). `realtimeModel`
   (`gpt-realtime-2.1-mini` default, or `gpt-realtime-2.1`) is used only in realtime mode.
-- `voiceOverride`: a voice id for this scenario. In realtime mode it must be one of `alloy`,
-  `ash`, `ballad`, `coral`, `echo`, `sage`, `shimmer`, `verse`, `marin`, `cedar`.
+- `voiceOverride`: a voice id for this scenario; `null` keeps the voice (TTS) connection's own
+  voice. In realtime mode it must be one of `alloy`, `ash`, `ballad`, `coral`, `echo`, `sage`,
+  `shimmer`, `verse`, `marin`, `cedar`. In pipeline mode, OpenAI and Azure OpenAI voice
+  connections (`gpt-4o-mini-tts`) also have `fable`, `nova` and `onyx`.
 - Names are unique per agent (`409`). `POST /api/scenarios/{scenarioId}/duplicate` copies one as
   `<name> (copy)`.
 
