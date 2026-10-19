@@ -151,7 +151,7 @@ export function ApiKeysContainer() {
     <>
       <PageHeader
         titleRef={titleRef}
-        eyebrow={t("nav.settings")}
+        breadcrumbs={[{ label: t("nav.settings"), href: "/settings" }]}
         title={t("nav.apiKeys")}
         description={t("apiKeys.description")}
         actions={

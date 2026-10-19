@@ -8,6 +8,7 @@ import type { Agent, AgentKind } from "@/features/agents/types";
 import type { FieldErrors } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { useUnsavedChangesGuard } from "@/lib/navigation/unsaved-changes";
+import type { Crumb } from "@/features/shell/Breadcrumbs";
 import { PageHeader } from "@/features/shell/PageHeader";
 import {
   Alert,
@@ -65,9 +66,9 @@ type ScenarioEditorProps = {
   error?: string;
   /** Per-field errors from the server, keyed by API location (`facts.2.key`); a new object per failure. */
   serverFieldErrors?: FieldErrors;
-  /** Page title and its breadcrumb eyebrow; the header also carries the save state and actions. */
+  /** Page title and its breadcrumbs; the header also carries the save state and actions. */
   title: string;
-  eyebrow?: ReactNode;
+  breadcrumbs?: readonly Crumb[];
   /** Duplicates the saved scenario; absent while creating. */
   onDuplicate?: () => void;
   duplicating?: boolean;
@@ -93,7 +94,7 @@ export function ScenarioEditor({
   error,
   serverFieldErrors = NO_SERVER_ERRORS,
   title,
-  eyebrow,
+  breadcrumbs,
   onDuplicate,
   duplicating = false,
   banner,
@@ -212,7 +213,7 @@ export function ScenarioEditor({
     <div className="flex flex-col gap-[22px]">
       <PageHeader
         title={title}
-        eyebrow={eyebrow}
+        breadcrumbs={breadcrumbs}
         actions={
           <>
             <p role="status" className="text-xs text-dim">

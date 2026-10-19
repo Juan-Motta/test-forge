@@ -21,8 +21,9 @@ describe("Run detail", () => {
     renderWithClient(<RunDetailContainer runId="r-1" />);
 
     expect(await screen.findByRole("heading", { level: 1, name: "r-1 Booking with date change" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Runs" })).toHaveAttribute("href", "/runs");
-    expect(screen.getByRole("link", { name: "Batch b-1" })).toHaveAttribute("href", "/runs?batchId=b-1");
+    const breadcrumb = screen.getByRole("navigation", { name: "Breadcrumb" });
+    expect(within(breadcrumb).getByRole("link", { name: "Runs & reports" })).toHaveAttribute("href", "/runs");
+    expect(within(breadcrumb).getByRole("link", { name: "Batch b-1" })).toHaveAttribute("href", "/runs?batchId=b-1");
     const chips = screen.getByRole("list", { name: "Run details" });
     // The chips and the header actions share one row (centred together, not on the title's baseline).
     expect(chips.parentElement).toContainElement(await screen.findByRole("button", { name: "Re-run" }));

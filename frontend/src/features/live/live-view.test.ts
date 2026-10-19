@@ -3,7 +3,7 @@ import { runFixture, snapshotFixture } from "@/features/runs/testing";
 import { createTranslator } from "@/lib/i18n";
 import { INITIAL_LIVE_STATE, type LiveRunState } from "./live-state";
 import {
-  batchEyebrow,
+  batchSummary,
   batchSegments,
   evaluatorChip,
   evaluatorGoals,
@@ -138,13 +138,13 @@ describe("batch progress", () => {
     expect(keys).toEqual(["completed", "running", "queued", "failed", "cancelled"]);
   });
 
-  it("titles the batch with its short id, label and start time", () => {
+  it("sums up the batch with its label and start time", () => {
     const createdAt = "2026-10-05T16:02:00Z";
     const time = new Date(createdAt).toLocaleTimeString("en", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
-    expect(batchEyebrow(t, { id: "b0412f00-1111", label: "Hotel booking regression", createdAt })).toBe(
-      `Batch b0412f00 · Hotel booking regression · started ${time}`,
+    expect(batchSummary(t, { label: "Hotel booking regression", createdAt })).toBe(
+      `Hotel booking regression · started ${time}`,
     );
-    expect(batchEyebrow(t, { id: "b-9", label: null, createdAt })).toBe(`Batch b-9 · started ${time}`);
+    expect(batchSummary(t, { label: null, createdAt })).toBe(`started ${time}`);
   });
 });
 

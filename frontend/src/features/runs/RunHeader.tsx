@@ -1,7 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import type { ReactNode } from "react";
+import { Breadcrumbs } from "@/features/shell/Breadcrumbs";
 import { useT, type Translator } from "@/lib/i18n";
 import { Badge, CopyButton } from "@/ui";
 import { clock, endReasonLabel, runDurationMs } from "./format";
@@ -28,7 +28,7 @@ export function evaluatorLabel(t: Translator, run: Pick<RunDetail, "snapshot">):
 export const shortRunId = (id: string) => id.slice(0, 8);
 
 /**
- * Report header: breadcrumb eyebrow, the run's short id and scenario, and chips for how it ended,
+ * Report header: breadcrumbs back to the runs and the batch, the run's short id and scenario, and chips for how it ended,
  * who took part, how long it took, the thread id (the Langfuse session, copyable) and the evaluator.
  */
 export function RunHeader({ run, actions }: { run: RunDetail; actions?: ReactNode }) {
@@ -45,15 +45,12 @@ export function RunHeader({ run, actions }: { run: RunDetail; actions?: ReactNod
 
   return (
     <header className="flex flex-col gap-2">
-      <nav aria-label={t("common.breadcrumb")} data-eyebrow className="text-[13px] text-dim">
-        <Link href="/runs" className="text-dim hover:text-fg">
-          {t("runs.breadcrumb")}
-        </Link>
-        <span aria-hidden="true"> / </span>
-        <Link href={`/runs?batchId=${encodeURIComponent(run.batchId)}`} className="text-dim hover:text-fg">
-          {t("runs.batch", { id: shortRunId(run.batchId) })}
-        </Link>
-      </nav>
+      <Breadcrumbs
+        items={[
+          { label: t("nav.runs"), href: "/runs" },
+          { label: t("runs.batch", { id: shortRunId(run.batchId) }), href: `/runs?batchId=${encodeURIComponent(run.batchId)}` },
+        ]}
+      />
       <h1 className="text-[28px] font-semibold tracking-[-0.02em] break-words">
         <span className="font-mono font-medium text-muted" title={t("runs.runId", { id: run.id })}>
           {shortRunId(run.id)}

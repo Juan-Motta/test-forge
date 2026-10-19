@@ -22,6 +22,8 @@ describe("API keys list", () => {
     expect(docs).toHaveAttribute("href", "/api/docs");
     expect(docs).toHaveAttribute("target", "_blank");
     expect(docs).toHaveAttribute("rel", expect.stringContaining("noopener"));
+    const breadcrumb = screen.getByRole("navigation", { name: "Breadcrumb" });
+    expect(within(breadcrumb).getByRole("link", { name: "Settings" })).toHaveAttribute("href", "/settings");
   });
 
   it("shows each key with its prefix, dates and status", async () => {

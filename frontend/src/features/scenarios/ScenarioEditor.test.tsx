@@ -673,12 +673,12 @@ describe("Scenario editor: layout", () => {
     tags: ["regression"],
   });
 
-  it("shows the breadcrumb with the first tag and the scenario's agent library grouped by tag", async () => {
+  it("shows the breadcrumb back to Scenarios and the scenario's agent library grouped by tag", async () => {
     setup([scenarioFixture(), cancel, otherAgent]);
     await renderEditor("s-booking");
 
     const breadcrumb = screen.getByRole("navigation", { name: "Breadcrumb" });
-    expect(breadcrumb).toHaveTextContent("Scenarios / booking / Booking with date change");
+    expect(breadcrumb).toHaveTextContent(/^Scenarios$/);
     expect(within(breadcrumb).getByRole("link", { name: "Scenarios" })).toHaveAttribute("href", "/scenarios");
 
     const library = screen.getByRole("complementary", { name: "Scenario library" });

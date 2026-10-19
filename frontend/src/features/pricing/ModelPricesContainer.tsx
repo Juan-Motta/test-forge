@@ -68,7 +68,7 @@ export function ModelPricesContainer() {
   return (
     <>
       <PageHeader
-        eyebrow={t("nav.settings")}
+        breadcrumbs={[{ label: t("nav.settings"), href: "/settings" }]}
         title={t("prices.title")}
         description={t("prices.description")}
       />

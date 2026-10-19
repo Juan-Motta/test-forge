@@ -113,10 +113,9 @@ function hourMinute(locale: string, iso: string): string {
   return new Date(iso).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
 }
 
-/** "Batch b0412f00 · Hotel booking regression · started 16:02". */
-export function batchEyebrow(t: Translator, batch: Pick<Batch, "id" | "label" | "createdAt">): string {
+/** "Hotel booking regression · started 16:02": the line under a batch's title (which names its id). */
+export function batchSummary(t: Translator, batch: Pick<Batch, "label" | "createdAt">): string {
   return [
-    t("runs.batch", { id: batch.id.slice(0, 8) }),
     batch.label,
     t("live.startedAt", { time: hourMinute(t.locale, batch.createdAt) }),
   ]

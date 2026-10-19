@@ -186,7 +186,6 @@ export function AgentsContainer({ scenarioCounts }: AgentsContainerProps = {}) {
     header = (
       <PageHeader
         titleRef={titleRef}
-        eyebrow={t("nav.agents")}
         title={selected.name}
         actions={
           <>

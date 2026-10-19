@@ -8,6 +8,7 @@ import type { AgentKind } from "@/features/agents/types";
 import { canChat } from "@/features/connections/kinds";
 import { LaunchPanel } from "@/features/runs/LaunchPanel";
 import { useConnections } from "@/features/connections/queries";
+import type { Crumb } from "@/features/shell/Breadcrumbs";
 import { PageHeader } from "@/features/shell/PageHeader";
 import { ApiError, errorMessage, formErrorView } from "@/lib/api";
 import { localizeFormError, useT } from "@/lib/i18n";
@@ -99,23 +100,14 @@ export function ScenarioEditorContainer({ scenarioId }: ScenarioEditorContainerP
   }
 
   const title = scenarioId ? (scenario.data?.name ?? t("scenarios.one")) : t("scenarios.new");
-  const tag = scenario.data?.tags[0];
-  const eyebrow = (
-    <nav aria-label={t("common.breadcrumb")}>
-      <Link href="/scenarios" onNavigate={(event) => (confirmLeave() ? undefined : event.preventDefault())}>
-        {t("nav.scenarios")}
-      </Link>
-      {tag ? (
-        <>
-          <span aria-hidden="true"> / </span>
-          <span>{tag}</span>
-        </>
-      ) : null}
-      <span aria-hidden="true"> / </span>
-      <span aria-current="page">{title}</span>
-    </nav>
-  );
-  const header = <PageHeader title={title} eyebrow={eyebrow} />;
+  const breadcrumbs: Crumb[] = [
+    {
+      label: t("nav.scenarios"),
+      href: "/scenarios",
+      onNavigate: (event) => (confirmLeave() ? undefined : event.preventDefault()),
+    },
+  ];
+  const header = <PageHeader title={title} breadcrumbs={breadcrumbs} />;
 
   let body;
   if (scenario.isError && scenario.error instanceof ApiError && scenario.error.status === 404) {
@@ -185,7 +177,7 @@ export function ScenarioEditorContainer({ scenarioId }: ScenarioEditorContainerP
         error={view?.message}
         serverFieldErrors={view?.fieldErrors}
         title={title}
-        eyebrow={eyebrow}
+        breadcrumbs={breadcrumbs}
         onDuplicate={scenario.data ? onDuplicate : undefined}
         duplicating={duplicate.isPending}
         banner={

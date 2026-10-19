@@ -78,6 +78,7 @@ describe("Live sessions", () => {
     expect(await screen.findByRole("heading", { level: 2, name: "Booking with date change" })).toBeInTheDocument();
     await waitFor(() => expect(socketFor("/api/runs/r-1/live")).toHaveLength(1));
     expect(screen.getByText("All active runs")).toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "Breadcrumb" })).not.toBeInTheDocument();
     expect(session(/Booking with date change/)).toHaveTextContent("Laura");
     expect(session(/Booking with date change/)).toHaveTextContent("Live");
     expect(session(/Cancel within 24h/)).toHaveTextContent("Connecting");
@@ -122,8 +123,10 @@ describe("Live sessions", () => {
         runs: [booking, cancel, queued],
       });
     });
-    expect(await screen.findByRole("heading", { level: 1, name: "Live sessions" })).toBeInTheDocument();
-    expect(await screen.findByText(/^Batch b-9 · Hotel regression · started \d\d:\d\d$/)).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: "Batch b-9" })).toBeInTheDocument();
+    const breadcrumb = screen.getByRole("navigation", { name: "Breadcrumb" });
+    expect(within(breadcrumb).getByRole("link", { name: "Live sessions" })).toHaveAttribute("href", "/live");
+    expect(await screen.findByText(/^Hotel regression · started \d\d:\d\d$/)).toBeInTheDocument();
     expect(screen.getByText("Concurrency 2 · 3 runs total")).toBeInTheDocument();
     expect(screen.getByRole("img", { name: /^Batch progress/ })).toHaveAccessibleName(
       "Batch progress: 0 completed, 2 running, 1 queued, 0 failed",

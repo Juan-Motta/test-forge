@@ -224,7 +224,6 @@ export function ScenariosContainer() {
       <PageHeader
         titleRef={titleRef}
         title={t("nav.scenarios")}
-        eyebrow={t("scenarios.eyebrow")}
         description={t("scenarios.description")}
         actions={newScenario}
       />

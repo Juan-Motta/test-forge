@@ -26,7 +26,7 @@ import {
   focusRing,
 } from "@/ui";
 import { useFollowPreference } from "./follow-preference";
-import { batchEyebrow, batchSegments, liveConnectionError, type SessionStats } from "./live-view";
+import { batchSummary, batchSegments, liveConnectionError, type SessionStats } from "./live-view";
 import { LiveRunPanel } from "./LiveRunPanel";
 import { SessionCard } from "./SessionCard";
 import { useBatchLive } from "./use-batch-live";
@@ -87,7 +87,7 @@ function AllActive() {
 
   return (
     <>
-      <PageHeader eyebrow={t("live.allActive")} title={t("nav.live")} />
+      <PageHeader title={t("nav.live")} description={t("live.allActive")} />
       {/* One failing poll must not hide what the others (or earlier polls) loaded. */}
       {failed && loaded ? (
         <Alert title={t("live.someFailed")}>{errorMessage(failed.error)}</Alert>
@@ -111,8 +111,9 @@ function BatchLive({ batchId }: { batchId: string }) {
   return (
     <>
       <PageHeader
-        eyebrow={batch.data ? batchEyebrow(t, batch.data) : t("runs.batch", { id: batchId.slice(0, 8) })}
-        title={t("nav.live")}
+        breadcrumbs={[{ label: t("nav.live"), href: "/live" }]}
+        title={t("runs.batch", { id: batchId.slice(0, 8) })}
+        description={batch.data ? batchSummary(t, batch.data) : undefined}
         actions={
           <>
             {finished ? <Badge tone="success">{t("live.batchFinished")}</Badge> : null}
