@@ -11,7 +11,6 @@ import { useNow } from "@/lib/time/use-now";
 import {
   Alert,
   Button,
-  CloseIcon,
   EmptyState,
   Field,
   RunsIcon,
@@ -20,9 +19,8 @@ import {
   Spinner,
   buttonClasses,
   cn,
-  focusRing,
 } from "@/ui";
-import { BatchesPanel, batchName } from "./BatchesPanel";
+import { batchName } from "./batch-name";
 import { statusLabel } from "./format";
 import { useBatch, useBatches, useRuns } from "./queries";
 import { RunCards } from "./RunCards";
@@ -81,7 +79,7 @@ export function RunsContainer() {
   }
   const now = useNow(5000);
   const scenarios = useScenarios();
-  const batches = useBatches({ limit: 5 }, { refetchInterval: POLL_MS });
+  const batches = useBatches({ limit: 20 }, { refetchInterval: POLL_MS });
   const batch = useBatch(filters.batchId || undefined);
   const runs = useRuns(
     {
@@ -121,11 +119,12 @@ export function RunsContainer() {
   const first = total === 0 ? 0 : (filters.page - 1) * PAGE_SIZE + 1;
   const last = Math.min(total, filters.page * PAGE_SIZE);
   const filtered = Boolean(filters.status || filters.scenarioId || filters.batchId);
-  const batchLabel = batch.data
-    ? batchName(t, batch.data)
-    : filters.batchId
-      ? t("runs.batch", { id: filters.batchId.slice(0, 8) })
-      : "";
+  // The recent batches, plus the filtered one when it is older (e.g. opened from a run report).
+  const recent = batches.data?.items ?? [];
+  const batchOptions: { id: string; label: string | null }[] =
+    filters.batchId && !recent.some((item) => item.id === filters.batchId)
+      ? [...recent, batch.data ?? { id: filters.batchId, label: null }]
+      : recent;
 
   let body;
   if (runs.isPending) {
@@ -204,9 +203,6 @@ export function RunsContainer() {
           </Link>
         }
       />
-      {batches.data && batches.data.items.length > 0 ? (
-        <BatchesPanel batches={batches.data.items} now={now} onPick={(picked) => update({ batchId: picked.id })} />
-      ) : null}
       <div className="flex flex-wrap items-end gap-4">
         <div className="w-full sm:w-48">
           <Field label={t("runs.filter.status")}>
@@ -240,6 +236,20 @@ export function RunsContainer() {
             )}
           </Field>
         </div>
+        <div className="w-full sm:w-64">
+          <Field label={t("runs.filter.batch")}>
+            {(props) => (
+              <Select {...props} value={filters.batchId} onChange={(event) => update({ batchId: event.target.value })}>
+                <option value="">{t("runs.filter.allBatches")}</option>
+                {batchOptions.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {batchName(t, option)}
+                  </option>
+                ))}
+              </Select>
+            )}
+          </Field>
+        </div>
         <SegmentedControl
           size="md"
           label={t("runs.filter.order")}
@@ -247,19 +257,6 @@ export function RunsContainer() {
           value={filters.order}
           onChange={(order) => update({ order })}
         />
-        {filters.batchId ? (
-          <span className="inline-flex min-h-9 items-center gap-1 rounded-full border border-evaluator bg-evaluator/15 pr-1 pl-3.5 text-xs">
-            {batchLabel}
-            <button
-              type="button"
-              aria-label={t("runs.clearBatch", { name: batchLabel })}
-              onClick={() => update({ batchId: "" })}
-              className={cn("inline-flex size-7 items-center justify-center rounded-full hover:bg-active", focusRing)}
-            >
-              <CloseIcon size={12} />
-            </button>
-          </span>
-        ) : null}
       </div>
       {body}
     </>

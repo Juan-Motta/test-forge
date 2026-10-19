@@ -127,10 +127,10 @@ export function ModulesEn() {
 
       <Region id="runs-and-reports" title="Runs & reports">
         <P>
-          Every run ever made, with its transcript, timings and (for calls) audio. Filter by <Ui>Status</Ui> or{" "}
-          <Ui>Scenario</Ui>, and switch between <Ui>Newest first</Ui> and <Ui>Oldest first</Ui> beside the filters; the
-          filters and the order are kept in the URL, so a link or a reload shows the same list. <Ui>Recent batches</Ui> shows
-          how each launch is progressing.
+          Every run ever made, with its transcript, timings and (for calls) audio. Filter by <Ui>Status</Ui>,{" "}
+          <Ui>Scenario</Ui> or <Ui>Batch</Ui> (one launch), and switch between <Ui>Newest first</Ui> and{" "}
+          <Ui>Oldest first</Ui> beside the filters; the filters and the order are kept in the URL, so a link or a reload
+          shows the same list. To watch a launch as it runs, open <Ui>Live sessions</Ui>.
         </P>
         <P>
           On wide screens (1280 px and up) the runs are a compact table. The <Ui>Scenario</Ui> cell holds the scenario name,

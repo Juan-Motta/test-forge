@@ -133,9 +133,10 @@ export function ModulesEs() {
       <Region id="runs-and-reports" title="Corridas y reportes">
         <P>
           Todas las corridas hechas, con su transcripción, sus tiempos y (en las llamadas) su audio. Filtra por{" "}
-          <Ui>Estado</Ui> o por <Ui>Escenario</Ui>, y alterna entre <Ui>Más recientes primero</Ui> y{" "}
-          <Ui>Más antiguas primero</Ui> junto a los filtros; los filtros y el orden se guardan en la URL, así que un enlace o
-          una recarga muestran la misma lista. <Ui>Lotes recientes</Ui> muestra cómo avanza cada lanzamiento.
+          <Ui>Estado</Ui>, <Ui>Escenario</Ui> o <Ui>Lote</Ui> (un lanzamiento), y alterna entre{" "}
+          <Ui>Más recientes primero</Ui> y <Ui>Más antiguas primero</Ui> junto a los filtros; los filtros y el orden se
+          guardan en la URL, así que un enlace o una recarga muestran la misma lista. Para ver un lanzamiento mientras corre,
+          abre <Ui>Sesiones en vivo</Ui>.
         </P>
         <P>
           En pantallas anchas (1280 px o más) las corridas forman una tabla compacta. La celda <Ui>Escenario</Ui> tiene el

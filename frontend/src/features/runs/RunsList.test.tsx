@@ -169,7 +169,10 @@ describe("Runs list", () => {
 
     await waitFor(() => expect(screen.queryAllByRole("row").length).toBe(2));
     expect(api.listQueries[0]).toContain("batchId=b-2");
-    await user.click(screen.getByRole("button", { name: "Clear batch filter nightly" }));
+    const batch = screen.getByRole("combobox", { name: "Batch" });
+    await waitFor(() => expect(batch).toHaveValue("b-2"));
+    expect(within(batch).getByRole("option", { name: "nightly" })).toBeInTheDocument();
+    await user.selectOptions(batch, "");
     await waitFor(() => expect(rowNames()).toHaveLength(3));
   });
 
@@ -229,30 +232,26 @@ describe("Runs list", () => {
     expect(screen.queryByRole("button", { name: /^Cancel run/ })).not.toBeInTheDocument();
   });
 
-  it("shows recent batches with their progress", async () => {
+  it("filters by one of the recent batches from the Batch filter, with no batches card", async () => {
     scenarios();
-    mockRunsApi([], {
+    const api = mockRunsApi([], {
       batches: [
-        batchFixture({
-          id: "b-9",
-          label: "Hotel regression",
-          status: "running",
-          total: 6,
-          counts: { completed: 2, running: 3, queued: 1 },
-          createdAt: "2026-10-05T19:00:00Z",
-        }),
+        batchFixture({ id: "b-9", label: "Hotel regression", status: "running", total: 6, createdAt: "2026-10-05T19:00:00Z" }),
+        batchFixture({ id: "b0412f00-7777", label: null, status: "completed", total: 2, createdAt: "2026-10-05T18:00:00Z" }),
       ],
     });
     renderWithClient(<RunsContainer />);
+    const user = userEvent.setup();
 
-    const batches = await screen.findByRole("region", { name: "Recent batches" });
-    const item = within(batches).getByRole("listitem", { name: "Hotel regression" });
-    expect(within(item).getByText("2 of 6 finished")).toBeInTheDocument();
-    expect(within(item).getByRole("link", { name: "Watch Hotel regression live" })).toHaveAttribute(
-      "href",
-      "/live?batchId=b-9",
-    );
-    expect(await screen.findByText("No runs yet")).toBeInTheDocument();
+    const batch = await screen.findByRole("combobox", { name: "Batch" });
+    await waitFor(() => expect(within(batch).getByRole("option", { name: "Hotel regression" })).toBeInTheDocument());
+    expect(within(batch).getByRole("option", { name: "All batches" })).toHaveValue("");
+    expect(within(batch).getByRole("option", { name: "Batch b0412f00…77" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Recent batches" })).not.toBeInTheDocument();
+
+    await user.selectOptions(batch, "b-9");
+    await waitFor(() => expect(api.listQueries.at(-1)).toContain("batchId=b-9"));
+    expect(nav.replace).toHaveBeenCalledWith(expect.stringContaining("batchId=b-9"), expect.anything());
   });
 });
 
