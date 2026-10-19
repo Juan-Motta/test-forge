@@ -19,7 +19,7 @@ Branch: `feat/scenario-groups` (from `main` at d008bc7). Delivery: work-unit com
 
 | ID | Specs | Route | Status | Commit |
 | --- | --- | --- | --- | --- |
-| T1 | S1, S4–S9 | inline | pending | |
+| T1 | S1, S4–S9 | inline | done (verifier pending) | e1a5d99 |
 | T2 | S2 | inline | pending | |
 | T3 | S3, S5 | inline | pending | |
 | T4 | all | inline | pending | |
@@ -35,3 +35,4 @@ Route evidence: no Writer trigger (units are sequential: T2–T3 depend on T1), 
 
 - L1 (user, 2026-10-19, verbatim): "quiero ajustar cosas, los scenarios no se entienden bien, por ello quiero hacer un revamp, un scenario es individual como hoy sucede, pero quiero poder agrupar scenarios, entonces la tabla de scenarios deberia poderse ver como los grupos de scenarios y el boton deberia ser nuevo grupo, una ves se crea el grupo se deberia mostrar la vista ya existente con el sidebar de scenarios y los datos del detalle, el grupo de scenario deberia tener titulo, detalle y tags"
 - L2: Decisions S5, S6 taken by the user through two questions. Backend map: migrations 0001–0015 never backfilled data with SQL; 0016 is the first. Tests TRUNCATE an explicit table list (`tests/conftest.py:607`).
+- L3: T1 e1a5d99: migration 0016 (first SQL backfill), `/api/scenario-groups` CRUD, scenarios `groupId`/`group`, `?groupId=`. Backend suite 1187 passed; migration test checks the backfill on real rows and the round trip to 0015; models match migrations.
