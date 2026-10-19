@@ -5,15 +5,16 @@ import { Spinner } from "./Spinner";
 export type ButtonVariant = "primary" | "secondary" | "danger" | "ghost";
 
 const VARIANTS: Record<ButtonVariant, string> = {
-  primary: "bg-evaluator text-on-evaluator font-semibold hover:bg-evaluator-hover",
+  primary: "bg-evaluator text-on-evaluator hover:bg-evaluator-hover",
   secondary: "border border-line-strong bg-transparent text-fg hover:bg-active",
-  danger: "bg-danger text-on-danger font-semibold hover:bg-danger-fg",
+  danger: "bg-danger text-on-danger hover:bg-danger-fg",
   ghost: "bg-transparent text-muted hover:bg-active hover:text-fg",
 };
 
 export const buttonClasses = (variant: ButtonVariant = "primary", className?: string) =>
   cn(
-    "inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-4 text-sm font-medium",
+    // One weight for every variant, so a filled button never looks heavier than the one beside it.
+    "inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold",
     "transition-colors disabled:cursor-not-allowed disabled:opacity-60",
     focusRing,
     VARIANTS[variant],

@@ -9,7 +9,7 @@ import { PageHeader } from "@/features/shell/PageHeader";
 import { ApiError, errorMessage } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { confirmLeave, useUnsavedChangesGuard } from "@/lib/navigation/unsaved-changes";
-import { AgentsIcon, Alert, Button, Card, Dialog, EmptyState, PlusIcon, Spinner, buttonClasses } from "@/ui";
+import { AgentsIcon, Alert, Button, Card, Dialog, EmptyState, ImportIcon, PlusIcon, Spinner, buttonClasses } from "@/ui";
 import { AgentForm } from "./AgentForm";
 import { AgentFormContainer, langfuseOptionsOf } from "./AgentFormContainer";
 import { agentToText } from "./transfer";
@@ -163,7 +163,7 @@ export function AgentsContainer({ scenarioCounts }: AgentsContainerProps = {}) {
   // Keyed, so a button keeps its element while the header gains the selected agent's actions
   // (a click during loading must land on the button it was aimed at).
   const addButtons = [
-    <Button key="import" variant="secondary" onClick={openImport}>
+    <Button key="import" variant="secondary" icon={<ImportIcon size={16} />} onClick={openImport}>
       {t("transfer.import")}
     </Button>,
     <Button key="add" variant={selected ? "secondary" : "primary"} icon={<PlusIcon size={16} />} onClick={openCreate}>

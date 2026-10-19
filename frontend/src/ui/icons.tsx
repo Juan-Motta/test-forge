@@ -169,6 +169,12 @@ export const PencilIcon = (p: IconProps) => (
   </Icon>
 );
 
+export const ImportIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19h14" />
+  </Icon>
+);
+
 export const TrashIcon = (p: IconProps) => (
   <Icon {...p}>
     <path d="M4 7h16M9 7V4.5h6V7M6.5 7l1 13h9l1-13M10 11v5M14 11v5" />

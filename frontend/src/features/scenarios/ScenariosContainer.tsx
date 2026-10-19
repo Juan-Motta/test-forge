@@ -13,6 +13,7 @@ import {
   Button,
   EmptyState,
   Field,
+  ImportIcon,
   PlusIcon,
   ScenariosIcon,
   SearchField,
@@ -85,6 +86,7 @@ export function ScenariosContainer() {
   // Opens a new scenario with the import panel (see ScenarioEditor); hidden until an agent exists.
   const importScenario = noAgents ? null : (
     <Link href="/scenarios/new#import" className={buttonClasses("secondary")}>
+      <ImportIcon size={16} />
       {t("transfer.import")}
     </Link>
   );
