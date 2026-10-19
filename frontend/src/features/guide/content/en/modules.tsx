@@ -180,10 +180,10 @@ export function ModulesEn() {
       <Region id="scenarios" title="Scenarios">
         <P>
           Your library of conversations. A scenario describes the user the evaluator plays, what it knows and wants, and how the
-          judge scores the call. Each agent has its own panel (collapse the ones you don&apos;t need) with{" "}
-          <Ui>Launch all</Ui>, and one row per scenario. Search by name or tag, pick an agent to filter by its tags, select
-          several to <Ui>Launch selected</Ui>, or click a scenario&apos;s title to open it and edit it. Each row has three icon
-          buttons, with a tooltip naming each: launch (play), duplicate (copy) and delete (trash, after a confirmation).
+          judge scores the call. The page lists your agents, one row each, with how many scenarios they have, their tags and
+          the latest change. Click an agent to open its newest scenario: the editor lists all of that agent&apos;s scenarios
+          beside it, grouped by tag. Each row also launches all of the agent&apos;s scenarios (play) or starts a new one for it
+          (plus). In the editor, <Ui>Duplicate</Ui> and <Ui>Delete</Ui> (after a confirmation) act on the open scenario.
         </P>
         <Table
           caption="The scenario editor, section by section"
