@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { KeyIcon } from "@/features/api-keys/KeyIcon";
 import { LanguageControl } from "@/features/shell/LanguageControl";
+import { ReplyFormatControl } from "@/features/shell/ReplyFormatControl";
 import { PageHeader } from "@/features/shell/PageHeader";
 import { ThemeControl } from "@/features/theme/ThemeControl";
 import { T, type MessageKey } from "@/lib/i18n";
@@ -58,6 +59,9 @@ export default function Page() {
           </Preference>
           <Preference title="language.label" description="settings.language">
             <LanguageControl />
+          </Preference>
+          <Preference title="replyFormat.label" description="settings.replyFormat">
+            <ReplyFormatControl />
           </Preference>
         </ul>
       </section>

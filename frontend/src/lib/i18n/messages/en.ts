@@ -1210,4 +1210,8 @@ export const en = {
   "apiKeys.view.empty.active": "No active keys. Create one, or show the revoked or all keys.",
   "apiKeys.view.empty.revoked": "No revoked keys.",
   "apiKeys.view.empty.all": "No keys.",
+  "replyFormat.label": "Agent replies",
+  "replyFormat.markdown": "Formatted",
+  "replyFormat.raw": "Raw",
+  "settings.replyFormat": "How text agents' replies show in runs: formatted as Markdown, or raw, exactly as sent.",
 } as const;

@@ -187,6 +187,13 @@ export function FaqEs() {
             y las transcripciones, se quedan como se escribieron.
           </P>
         </Item>
+        <Item question="¿Puedo ver las respuestas de un agente de texto tal como las envió?">
+          <P>
+            Sí. Las respuestas de los agentes de texto se muestran con formato Markdown (negritas, listas, enlaces, código).
+            Elige <Ui>Sin formato</Ui> en <Ui>Configuración → Preferencias → Respuestas del agente</Ui> para verlas tal como se
+            enviaron, con sus marcas. La elección se recuerda solo en este navegador.
+          </P>
+        </Item>
         <Item question="¿Quién puede leer esta guía?">
           <P>
             Cualquiera que pueda llegar a Duet: la guía y la referencia de la API no requieren iniciar sesión. Todo lo demás en

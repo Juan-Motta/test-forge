@@ -1184,4 +1184,8 @@ export const es: Messages = {
   "apiKeys.view.empty.active": "No hay claves activas. Crea una, o muestra las revocadas o todas.",
   "apiKeys.view.empty.revoked": "No hay claves revocadas.",
   "apiKeys.view.empty.all": "No hay claves.",
+  "replyFormat.label": "Respuestas del agente",
+  "replyFormat.markdown": "Con formato",
+  "replyFormat.raw": "Sin formato",
+  "settings.replyFormat": "Cómo se ven las respuestas de los agentes de texto en las corridas: con formato Markdown, o tal como se enviaron.",
 };

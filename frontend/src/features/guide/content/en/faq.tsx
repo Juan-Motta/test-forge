@@ -174,6 +174,13 @@ export function FaqEn() {
             as written.
           </P>
         </Item>
+        <Item question="Can I see a text agent's replies exactly as it sent them?">
+          <P>
+            Yes. Text agents&apos; replies show formatted as Markdown (bold, lists, links, code). Pick <Ui>Raw</Ui> under{" "}
+            <Ui>Settings → Preferences → Agent replies</Ui> to see them as sent, marks included. The choice is remembered in
+            this browser only.
+          </P>
+        </Item>
         <Item question="Who can read this guide?">
           <P>
             Anyone who can reach Duet: the guide and the API reference need no sign-in. Everything else in the app and the API

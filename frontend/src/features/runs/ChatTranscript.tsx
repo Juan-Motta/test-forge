@@ -3,6 +3,7 @@ import { Badge, Pin, cn } from "@/ui";
 import { clock, latency } from "./format";
 import type { Issue } from "./report/issues";
 import type { TranscriptEntry } from "./transcript";
+import { AgentText } from "./AgentText";
 
 const WHO = { agent: "common.agent", caller: "transcript.user" } as const;
 /** A reply whose first text took longer than this reads as slow. */
@@ -69,7 +70,12 @@ export function ChatTranscript({ entries, live = false, emptyText, anchors = fal
                     {entry.streaming ? <Badge tone="agent">{t("transcript.writing")}</Badge> : null}
                     {entry.incomplete ? <Badge tone="danger">{t("transcript.brokeOff")}</Badge> : null}
                   </div>
-                  <p className="text-sm leading-normal break-words whitespace-pre-wrap text-body">{entry.text}</p>
+                  {/* The agent's replies follow the Markdown preference; the evaluator's text stays as typed. */}
+                  {user ? (
+                    <p className="text-sm leading-normal break-words whitespace-pre-wrap text-body">{entry.text}</p>
+                  ) : (
+                    <AgentText text={entry.text} />
+                  )}
                   {entry.role === "agent" ? <ReplyTiming entry={entry} /> : null}
                   {entry.tools && entry.tools.length > 0 ? (
                     <ul aria-label={t("report.metric.toolsUsed")} className="flex flex-wrap gap-1.5">
