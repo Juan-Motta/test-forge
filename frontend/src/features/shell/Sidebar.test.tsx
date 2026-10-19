@@ -110,6 +110,8 @@ describe("Sidebar", () => {
     const nav = renderSidebar("/");
 
     const docs = nav.getByRole("link", { name: "API docs (opens in a new tab)" });
+    // One external-link icon before the label is enough: no trailing arrow.
+    expect(docs).toHaveTextContent(/^API docs$/);
     expect(docs).toHaveAttribute("href", "/api/docs");
     expect(docs).toHaveAttribute("target", "_blank");
     expect(docs).toHaveAttribute("rel", expect.stringContaining("noopener"));

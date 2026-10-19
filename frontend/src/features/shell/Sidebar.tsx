@@ -68,7 +68,7 @@ export function Sidebar({
               )}
             >
               <ExternalLinkIcon size={18} />
-              {t("nav.apiDocs")} <span aria-hidden="true">↗</span>
+              {t("nav.apiDocs")}
             </a>
           </li>
           <li>
