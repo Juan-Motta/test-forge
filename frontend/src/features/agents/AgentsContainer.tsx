@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useEffect, useId, useRef, useState } from "react";
 import { useConnections } from "@/features/connections/queries";
+import { ExportDialog } from "@/features/transfer/ExportDialog";
+import { transferFileName } from "@/features/transfer/transfer";
 import { PageHeader } from "@/features/shell/PageHeader";
 import { ApiError, errorMessage } from "@/lib/api";
 import { useT } from "@/lib/i18n";
@@ -10,6 +12,7 @@ import { confirmLeave, useUnsavedChangesGuard } from "@/lib/navigation/unsaved-c
 import { AgentsIcon, Alert, Button, Card, Dialog, EmptyState, PlusIcon, Spinner, buttonClasses } from "@/ui";
 import { AgentForm } from "./AgentForm";
 import { AgentFormContainer, langfuseOptionsOf } from "./AgentFormContainer";
+import { agentToText } from "./transfer";
 import { AgentsRail } from "./AgentsRail";
 import { ConnectionCheck, IDLE_TEST, ReachabilityPill, type ConnectionTestState } from "./ConnectionCheck";
 import { DeleteAgentDialog } from "./DeleteAgentDialog";
@@ -53,6 +56,8 @@ export function AgentsContainer({ scenarioCounts }: AgentsContainerProps = {}) {
   const [requestedId, setRequestedId] = useState<string | null>(agentFromAddress);
   const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState<Agent | undefined>(undefined);
+  const [importOnOpen, setImportOnOpen] = useState(false);
+  const [exporting, setExporting] = useState<Agent | undefined>(undefined);
   // Connection tests run in this session, by agent id; nothing is stored server-side.
   const [tests, setTests] = useState<Record<string, ConnectionTestState>>({});
   const testingNow = useRef(new Set<string>());
@@ -147,12 +152,24 @@ export function AgentsContainer({ scenarioCounts }: AgentsContainerProps = {}) {
     }
   }
 
-  const openCreate = () => setCreating(true);
-  const addButton = (
-    <Button variant={selected ? "secondary" : "primary"} icon={<PlusIcon size={16} />} onClick={openCreate}>
+  const openCreate = () => {
+    setImportOnOpen(false);
+    setCreating(true);
+  };
+  const openImport = () => {
+    setImportOnOpen(true);
+    setCreating(true);
+  };
+  // Keyed, so a button keeps its element while the header gains the selected agent's actions
+  // (a click during loading must land on the button it was aimed at).
+  const addButtons = [
+    <Button key="import" variant="secondary" onClick={openImport}>
+      {t("transfer.import")}
+    </Button>,
+    <Button key="add" variant={selected ? "secondary" : "primary"} icon={<PlusIcon size={16} />} onClick={openCreate}>
       {t("agents.add")}
-    </Button>
-  );
+    </Button>,
+  ];
 
   const inUse = remove.error instanceof ApiError && remove.error.status === 409;
   let header;
@@ -187,10 +204,13 @@ export function AgentsContainer({ scenarioCounts }: AgentsContainerProps = {}) {
       <PageHeader
         titleRef={titleRef}
         title={selected.name}
-        actions={
-          <>
-            {addButton}
-            <Button
+        actions={[
+          ...addButtons,
+          <Button key="export" variant="secondary" onClick={() => setExporting(selected)}>
+            {t("transfer.export")}
+          </Button>,
+          <Button
+              key="delete"
               variant="ghost"
               aria-label={t("scenarios.deleteNamed", { name: selected.name })}
               onClick={() => {
@@ -199,12 +219,11 @@ export function AgentsContainer({ scenarioCounts }: AgentsContainerProps = {}) {
               }}
             >
               {t("common.delete")}
-            </Button>
-            <Button type="submit" form={formId} loading={save.pending}>
-              {save.pending ? t("editor.saving") : t("agents.saveChanges")}
-            </Button>
-          </>
-        }
+            </Button>,
+          <Button key="save" type="submit" form={formId} loading={save.pending}>
+            {save.pending ? t("editor.saving") : t("agents.saveChanges")}
+          </Button>,
+        ]}
       />
     );
     body = (
@@ -252,7 +271,7 @@ export function AgentsContainer({ scenarioCounts }: AgentsContainerProps = {}) {
           titleRef={titleRef}
           title={t("nav.agents")}
           description={t("agents.description")}
-          actions={addButton}
+          actions={addButtons}
         />
       )}
       <p role="status" className="sr-only">
@@ -267,8 +286,18 @@ export function AgentsContainer({ scenarioCounts }: AgentsContainerProps = {}) {
         description={t("agents.addDescription")}
         onClose={() => setCreating(false)}
       >
-        {creating ? <AgentFormContainer onCancel={() => setCreating(false)} onSaved={onSaved} /> : null}
+        {creating ? (
+          <AgentFormContainer startWithImport={importOnOpen} onCancel={() => setCreating(false)} onSaved={onSaved} />
+        ) : null}
       </Dialog>
+
+      <ExportDialog
+        open={exporting !== undefined}
+        title={t("transfer.exportAgent", { name: exporting?.name ?? "" })}
+        text={exporting ? agentToText(exporting, langfuseOptionsOf(connections.data)) : ""}
+        fileName={transferFileName("agent", exporting?.name ?? "")}
+        onClose={() => setExporting(undefined)}
+      />
 
       <DeleteAgentDialog
         agent={deleting}

@@ -18,6 +18,8 @@ export function langfuseOptionsOf(connections: Connection[] | undefined): Langfu
 type AgentFormContainerProps = {
   onCancel: () => void;
   onSaved: (agent: Agent, outcome: SaveOutcome) => void;
+  /** Opens with the config import panel, to prefill the form from an exported agent. */
+  startWithImport?: boolean;
 };
 
 /**
@@ -25,7 +27,7 @@ type AgentFormContainerProps = {
  * Mounted only while its dialog is open, so every opening starts with clean mutation state.
  * Existing agents are edited inline, in the page's detail.
  */
-export function AgentFormContainer({ onCancel, onSaved }: AgentFormContainerProps) {
+export function AgentFormContainer({ onCancel, onSaved, startWithImport = false }: AgentFormContainerProps) {
   const t = useT();
   const connections = useConnections();
   const save = useAgentSave(undefined, onSaved);
@@ -34,6 +36,7 @@ export function AgentFormContainer({ onCancel, onSaved }: AgentFormContainerProp
 
   return (
     <AgentForm
+      startWithImport={startWithImport}
       langfuseOptions={langfuseOptionsOf(connections.data)}
       langfuseHint={connections.isError ? t("agents.langfuseUnavailable") : undefined}
       onSubmit={save.onSubmit}

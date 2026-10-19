@@ -19,7 +19,9 @@ import {
   Textarea,
 } from "@/ui";
 import { AGENT_FIELDS, agentFormSchema, initialValues, type AgentFormValues } from "./form-schema";
+import { ConfigImportPanel } from "@/features/transfer/ConfigImportPanel";
 import { CurlImportPanel, type CurlImportSuccess } from "./CurlImportPanel";
+import { agentFromText } from "./transfer";
 import { AGENT_KINDS, AGENT_PROTOCOLS, TEXT_AUTHS, TEXT_MODES, type Agent, type AgentKind } from "./types";
 
 const NO_SERVER_ERRORS: FieldErrors = {};
@@ -52,6 +54,8 @@ export type LangfuseOption = {
 };
 
 type AgentFormProps = {
+  /** Create only: opens with the config import panel. */
+  startWithImport?: boolean;
   /** Present when editing. */
   agent?: Agent;
   /** Connections of kind `langfuse` the agent may link to. */
@@ -102,6 +106,7 @@ export function AgentForm({
   connectionCheck,
   extraCards,
   onDirtyChange,
+  startWithImport = false,
 }: AgentFormProps) {
   const t = useT();
   const editing = agent !== undefined;
@@ -138,6 +143,31 @@ export function AgentForm({
   const importToggleId = useId();
   const [importOpen, setImportOpen] = useState(false);
   const [importSummary, setImportSummary] = useState<ImportSummary>();
+  const configPanelId = useId();
+  const configToggleId = useId();
+  const [configOpen, setConfigOpen] = useState(startWithImport && agent === undefined);
+  const [configNotes, setConfigNotes] = useState<string[]>();
+
+  function closeConfigImport() {
+    setConfigOpen(false);
+    document.getElementById(configToggleId)?.focus();
+  }
+
+  // An exported agent fills the whole form (as user edits, so it reads as unsaved); its API key
+  // never travels, and connections it names but this server lacks stay unpicked.
+  function applyConfigImport(text: string): string | undefined {
+    const result = agentFromText(t, text, langfuseOptions);
+    if (!result.ok) return result.error;
+    for (const field of AGENT_FIELDS) {
+      if (field === "apiKey") continue;
+      setValue(field, result.values[field], { shouldDirty: true });
+      clearErrors(field);
+    }
+    setImportSummary(undefined);
+    setConfigNotes([t("transfer.filled"), ...result.notes]);
+    closeConfigImport();
+    return undefined;
+  }
 
   function closeImport() {
     setImportOpen(false);
@@ -208,7 +238,23 @@ export function AgentForm({
 
   const importBlock = (
     <div className="flex flex-col gap-3">
-      <div>
+      <div className="flex flex-wrap gap-3">
+        {editing ? null : (
+          <Button
+            id={configToggleId}
+            variant="secondary"
+            aria-expanded={configOpen}
+            aria-controls={configOpen ? configPanelId : undefined}
+            onClick={() => {
+              if (configOpen) return closeConfigImport();
+              setImportOpen(false);
+              setConfigNotes(undefined);
+              setConfigOpen(true);
+            }}
+          >
+            {t("transfer.importConfig")}
+          </Button>
+        )}
         <Button
           id={importToggleId}
           variant="secondary"
@@ -216,6 +262,7 @@ export function AgentForm({
           aria-controls={importOpen ? importPanelId : undefined}
           onClick={() => {
             if (importOpen) return closeImport();
+            setConfigOpen(false);
             setImportSummary(undefined);
             setImportOpen(true);
           }}
@@ -223,6 +270,23 @@ export function AgentForm({
           {t("agents.importCurl")}
         </Button>
       </div>
+      {configOpen ? (
+        <ConfigImportPanel
+          id={configPanelId}
+          label={t("transfer.importAgent")}
+          onImport={applyConfigImport}
+          onCancel={closeConfigImport}
+        />
+      ) : null}
+      {configNotes ? (
+        <Alert tone="info">
+          {configNotes.map((note) => (
+            <span key={note} className="block">
+              {note}
+            </span>
+          ))}
+        </Alert>
+      ) : null}
       {importOpen ? <CurlImportPanel id={importPanelId} onImport={applyImport} onCancel={closeImport} /> : null}
       {importSummary ? (
         <Alert tone="info">
