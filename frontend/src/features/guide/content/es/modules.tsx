@@ -194,10 +194,11 @@ export function ModulesEs() {
           y cómo califica el juez la llamada. Los escenarios viven en grupos: carpetas con título, descripción y etiquetas,
           que pueden tener escenarios de agentes distintos. La página lista los grupos con cuántos escenarios tiene cada uno,
           sus agentes y el último cambio. <Ui>Nuevo escenario</Ui> abre el editor en un grupo nuevo y en blanco: nómbralo con
-          el lápiz al final del título (o toma el nombre del escenario) y se crea al guardar. La página de un grupo muestra sus
-          escenarios en una barra lateral junto a sus detalles (edítalos, o elimina el grupo cuando esté vacío). Haz clic en un
-          escenario para abrirlo en el editor, que mantiene la barra lateral del grupo y muestra el nombre del grupo como
-          título, con un lápiz para renombrarlo; el campo <Ui>Grupo</Ui> mueve el escenario a otro grupo.
+          el lápiz al final del título (o toma el nombre del escenario) y se crea al guardar. La página de un grupo y cada uno de
+          sus escenarios llevan arriba el título, la descripción y las etiquetas del grupo, que se editan ahí mismo (los
+          lápices y <Ui>Agregar etiqueta</Ui>), con los escenarios del grupo en la barra lateral. Mientras no elijas uno, la
+          página del grupo ofrece <Ui>Correr todos</Ui>; un grupo vacío se puede eliminar desde ahí. El campo{" "}
+          <Ui>Grupo</Ui> del escenario lo mueve a otro grupo.
           Cada grupo también lanza todos sus escenarios (reproducir) o empieza uno nuevo en él (más). En el editor,{" "}
           <Ui>Duplicar</Ui> y <Ui>Eliminar</Ui> (tras una confirmación) actúan sobre el escenario abierto. Un escenario creado
           sin grupo va al grupo con el nombre de su agente.

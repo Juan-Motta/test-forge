@@ -75,6 +75,8 @@ type ScenarioEditorProps = {
   serverFieldErrors?: FieldErrors;
   /** Page title and its breadcrumbs; the header also carries the save state and actions. */
   title: ReactNode;
+  /** Under the title: the group's description and tags. */
+  subtitle?: ReactNode;
   breadcrumbs?: readonly Crumb[];
   /** Duplicates the saved scenario; absent while creating. */
   onDuplicate?: () => void;
@@ -113,6 +115,7 @@ export function ScenarioEditor({
   error,
   serverFieldErrors = NO_SERVER_ERRORS,
   title,
+  subtitle,
   breadcrumbs,
   onDuplicate,
   exportText,
@@ -280,6 +283,7 @@ export function ScenarioEditor({
     <div className="flex flex-col gap-[22px]">
       <PageHeader
         title={title}
+        description={subtitle}
         breadcrumbs={breadcrumbs}
         actions={
           <>

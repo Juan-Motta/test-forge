@@ -7,31 +7,22 @@ import { useAgents } from "@/features/agents/queries";
 import { LaunchRunsDialog } from "@/features/runs/LaunchRunsDialog";
 import { PageHeader } from "@/features/shell/PageHeader";
 import { ApiError, errorMessage } from "@/lib/api";
-import { useFormat, useT } from "@/lib/i18n";
-import { Alert, Button, Dialog, EmptyState, PlayIcon, ScenariosIcon, Spinner, buttonClasses } from "@/ui";
-import { GroupForm } from "./GroupForm";
-import { useDeleteGroup, useGroup, useScenarios, useUpdateGroup } from "./queries";
+import { useT } from "@/lib/i18n";
+import { Alert, Button, Dialog, EmptyState, PlayIcon, PlusIcon, ScenariosIcon, Spinner, buttonClasses } from "@/ui";
+import { EditableTitle } from "./EditableTitle";
+import { GroupMeta } from "./GroupMeta";
+import { useDeleteGroup, useGroup, useScenarios } from "./queries";
 import { ScenarioLibraryRail } from "./ScenarioLibraryRail";
-import type { Scenario } from "./types";
-
-const DETAILS_FORM = "group-details-form";
+import type { Scenario, ScenarioGroup } from "./types";
+import { useGroupEdits } from "./use-group-edits";
 
 /**
- * `/scenarios/groups/[id]`: the group's scenarios in the sidebar (each opens the editor, which
- * keeps the same sidebar) beside the group's details: title, description and tags.
+ * `/scenarios/groups/[id]`: the group's title, description and tags (each edited in place) over
+ * its scenarios in the sidebar; until one is picked, a placeholder offers to run them all.
  */
 export function GroupContainer({ groupId }: { groupId: string }) {
   const t = useT();
-  const router = useRouter();
-  const { relativeTime } = useFormat();
   const group = useGroup(groupId);
-  const scenarios = useScenarios();
-  const agents = useAgents();
-  const update = useUpdateGroup();
-  const remove = useDeleteGroup();
-  const [saved, setSaved] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-  const [launching, setLaunching] = useState<Scenario[] | undefined>(undefined);
 
   if (group.isError && group.error instanceof ApiError && group.error.status === 404) {
     return (
@@ -58,14 +49,26 @@ export function GroupContainer({ groupId }: { groupId: string }) {
     );
   }
   if (group.isPending) return <Spinner label={t("groups.loadingOne")} />;
+  return <GroupPage group={group.data} />;
+}
 
-  const current = group.data;
-  const members = scenarios.data?.filter((scenario) => scenario.groupId === current.id);
+function GroupPage({ group }: { group: ScenarioGroup }) {
+  const t = useT();
+  const router = useRouter();
+  const scenarios = useScenarios();
+  const agents = useAgents();
+  const remove = useDeleteGroup();
+  const edits = useGroupEdits(group.id);
+  const [deleting, setDeleting] = useState(false);
+  const [launching, setLaunching] = useState<Scenario[] | undefined>(undefined);
+
+  const members = scenarios.data?.filter((scenario) => scenario.groupId === group.id);
   const agentList = agents.data ?? [];
+  const newScenarioHref = `/scenarios/new?group=${encodeURIComponent(group.id)}`;
 
   async function confirmDelete() {
     try {
-      await remove.mutateAsync(current);
+      await remove.mutateAsync(group);
     } catch {
       return; // shown in the dialog
     }
@@ -76,16 +79,22 @@ export function GroupContainer({ groupId }: { groupId: string }) {
   return (
     <div className="flex flex-col gap-[22px]">
       <PageHeader
-        title={current.name}
         breadcrumbs={[{ label: t("nav.scenarios"), href: "/scenarios" }]}
+        title={
+          <EditableTitle
+            value={group.name}
+            placeholder={t("groups.untitled")}
+            label={t("groups.rename", { name: group.name })}
+            onCommit={edits.rename}
+          />
+        }
+        description={
+          <GroupMeta description={group.description} tags={group.tags} onDescription={edits.describe} onTags={edits.retag} />
+        }
         actions={
-          members && members.length > 0 ? (
-            <Button
-              icon={<PlayIcon size={14} />}
-              aria-label={t("groups.launch", { name: current.name })}
-              onClick={() => setLaunching(members)}
-            >
-              {t("groups.launchShort")}
+          group.scenarioCount === 0 ? (
+            <Button variant="ghost" aria-label={t("groups.deleteNamed", { name: group.name })} onClick={() => setDeleting(true)}>
+              {t("common.delete")}
             </Button>
           ) : null
         }
@@ -94,61 +103,36 @@ export function GroupContainer({ groupId }: { groupId: string }) {
         <ScenarioLibraryRail
           scenarios={members}
           failed={scenarios.isError && scenarios.data === undefined}
-          group={current}
-          groupCurrent
+          group={group}
         />
-        <section
-          aria-labelledby="group-details-heading"
-          className="flex min-w-0 flex-col gap-4 rounded-xl border border-line bg-panel p-5"
-        >
-          <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <h2 id="group-details-heading" className="text-[15px] font-semibold">
-              {t("groups.details")}
-            </h2>
-            <p className="flex flex-wrap gap-1.5 text-xs text-muted">
-              <span>{t.plural("agents.scenarioCount", current.scenarioCount)}</span>
-              {current.latestScenarioAt ? (
-                <>
-                  <span aria-hidden="true">·</span>
-                  <span>{t("groups.latestChange", { time: relativeTime(current.latestScenarioAt) })}</span>
-                </>
-              ) : null}
-            </p>
-          </div>
-          <GroupForm
-            key={current.updatedAt}
-            id={DETAILS_FORM}
-            initial={current}
-            onSubmit={async (changes) => {
-              setSaved(false);
-              await update.mutateAsync({ id: current.id, changes });
-              setSaved(true);
-            }}
-            actions={
-              <>
-                <p role="status" className="mr-auto self-center text-xs text-dim">
-                  {saved ? t("editor.saved") : ""}
-                </p>
-                {current.scenarioCount === 0 ? (
-                  <Button variant="ghost" aria-label={t("groups.deleteNamed", { name: current.name })} onClick={() => setDeleting(true)}>
-                    {t("common.delete")}
-                  </Button>
-                ) : null}
-                <Button type="submit" form={DETAILS_FORM} loading={update.isPending}>
-                  {t("groups.save")}
+        {/* Like Live's empty state: pick a scenario from the sidebar, or run the whole group. */}
+        <EmptyState
+          icon={<ScenariosIcon size={22} />}
+          title={t("groups.pickTitle")}
+          description={members && members.length === 0 ? t("groups.pickEmpty") : t("groups.pickHint")}
+          action={
+            <div className="flex flex-wrap justify-center gap-3">
+              {members && members.length > 0 ? (
+                <Button
+                  icon={<PlayIcon size={14} />}
+                  aria-label={t("groups.launch", { name: group.name })}
+                  onClick={() => setLaunching(members)}
+                >
+                  {t("groups.runAll", { count: members.length })}
                 </Button>
-              </>
-            }
-          />
-          {current.scenarioCount > 0 ? (
-            <p className="text-xs text-muted">{t.plural("groups.deleteBlocked", current.scenarioCount)}</p>
-          ) : null}
-        </section>
+              ) : null}
+              <Link href={newScenarioHref} className={buttonClasses(members && members.length > 0 ? "secondary" : "primary")}>
+                <PlusIcon size={16} />
+                {t("scenarios.new")}
+              </Link>
+            </div>
+          }
+        />
       </div>
 
       <Dialog
         open={deleting}
-        title={t("common.deleteTitle", { name: current.name })}
+        title={t("common.deleteTitle", { name: group.name })}
         description={t("groups.deleteDescription")}
         onClose={() => setDeleting(false)}
         actions={

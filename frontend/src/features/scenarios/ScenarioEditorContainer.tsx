@@ -17,6 +17,7 @@ import { Alert, Button, Card, EmptyState, ScenariosIcon, Spinner, buttonClasses 
 import { toChanges, toNewScenario, type ScenarioFormValues } from "./form-schema";
 import { DeleteScenarioDialog } from "./DeleteScenarioDialog";
 import { EditableTitle } from "./EditableTitle";
+import { GroupMeta } from "./GroupMeta";
 import {
   useCreateGroup,
   useCreateScenario,
@@ -24,7 +25,6 @@ import {
   useDeleteScenario,
   useDuplicateScenario,
   useGroups,
-  useUpdateGroup,
   useScenario,
   useScenarios,
   useUpdateScenario,
@@ -33,6 +33,7 @@ import { ScenarioEditor, type ConnectionOption } from "./ScenarioEditor";
 import { ScenarioLibraryRail } from "./ScenarioLibraryRail";
 import { scenarioFromText, scenarioToText } from "./transfer";
 import type { Scenario, ScenarioGroup } from "./types";
+import { useGroupEdits } from "./use-group-edits";
 
 
 /** A load failed before any data arrived; a failed background refetch keeps the editor (and its edits). */
@@ -62,7 +63,8 @@ export function ScenarioEditorContainer({ scenarioId }: ScenarioEditorContainerP
   const duplicate = useDuplicateScenario();
   const remove = useDeleteScenario();
   const createGroup = useCreateGroup();
-  const updateGroup = useUpdateGroup();
+  const [newGroupDescription, setNewGroupDescription] = useState("");
+  const [newGroupTags, setNewGroupTags] = useState<string[]>([]);
   const deleteGroup = useDeleteGroup();
   const [newGroupTitle, setNewGroupTitle] = useState("");
   const [groupError, setGroupError] = useState<string>();
@@ -103,8 +105,8 @@ export function ScenarioEditorContainer({ scenarioId }: ScenarioEditorContainerP
         try {
           newGroup = await createGroup.mutateAsync({
             name: newGroupTitle.trim() || values.name.trim(),
-            description: "",
-            tags: [],
+            description: newGroupDescription,
+            tags: newGroupTags,
           });
         } catch (error) {
           setGroupError(
@@ -166,6 +168,7 @@ export function ScenarioEditorContainer({ scenarioId }: ScenarioEditorContainerP
   const requestedGroup = scenarioId ? undefined : requestedId("group", groups.data ?? []);
   const groupId = scenario.data?.groupId ?? requestedGroup;
   const groupInView = groups.data?.find((group) => group.id === groupId) ?? scenario.data?.group;
+  const edits = useGroupEdits(groupInView?.id ?? "");
   const breadcrumbs: Crumb[] = [{ label: t("nav.scenarios"), href: "/scenarios", onNavigate: leave }];
   // The page is titled by the group (renamed in place with the pencil); a new scenario outside
   // any group starts a blank one, whose title is kept here until the first save creates it.
@@ -174,15 +177,7 @@ export function ScenarioEditorContainer({ scenarioId }: ScenarioEditorContainerP
       value={groupInView.name}
       placeholder={t("groups.untitled")}
       label={t("groups.rename", { name: groupInView.name })}
-      onCommit={async (next) => {
-        if (!next) return t("groups.error.title");
-        try {
-          await updateGroup.mutateAsync({ id: groupInView.id, changes: { name: next } });
-          return undefined;
-        } catch (error) {
-          return error instanceof ApiError && error.status === 409 ? t("groups.error.taken") : errorMessage(error);
-        }
-      }}
+      onCommit={edits.rename}
     />
   ) : scenarioId ? (
     t("scenarios.one")
@@ -198,6 +193,24 @@ export function ScenarioEditorContainer({ scenarioId }: ScenarioEditorContainerP
       }}
     />
   );
+  // Under the title, the group's description and tags, edited in place (drafts for a new group).
+  const fullGroup = groups.data?.find((group) => group.id === groupInView?.id);
+  const subtitle = fullGroup ? (
+    <GroupMeta description={fullGroup.description} tags={fullGroup.tags} onDescription={edits.describe} onTags={edits.retag} />
+  ) : !scenarioId && !groupInView ? (
+    <GroupMeta
+      description={newGroupDescription}
+      tags={newGroupTags}
+      onDescription={(next) => {
+        setNewGroupDescription(next);
+        return undefined;
+      }}
+      onTags={(next) => {
+        setNewGroupTags(next);
+        return undefined;
+      }}
+    />
+  ) : undefined;
   const header = <PageHeader title={title} breadcrumbs={breadcrumbs} />;
 
   let body;
@@ -268,6 +281,7 @@ export function ScenarioEditorContainer({ scenarioId }: ScenarioEditorContainerP
         error={view?.message}
         serverFieldErrors={view?.fieldErrors}
         title={title}
+        subtitle={subtitle}
         breadcrumbs={breadcrumbs}
         onDuplicate={scenario.data ? onDuplicate : undefined}
         onDelete={

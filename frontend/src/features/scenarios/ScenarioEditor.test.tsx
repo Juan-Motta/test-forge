@@ -799,7 +799,6 @@ describe("Scenario editor: layout", () => {
     expect(within(library).queryByText("Late check-out")).not.toBeInTheDocument();
     expect(within(library).getByRole("heading", { name: "booking 1" })).toBeInTheDocument();
     expect(within(library).getByRole("heading", { name: "cancellation 1" })).toBeInTheDocument();
-    expect(within(library).getByRole("link", { name: /^Group/ })).toHaveAttribute("href", "/scenarios/groups/g-hotel");
     expect(within(library).getByRole("link", { name: "New scenario" })).toHaveAttribute("href", "/scenarios/new?group=g-hotel");
   });
 

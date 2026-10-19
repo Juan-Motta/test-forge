@@ -52,20 +52,25 @@ describe("Scenario group page", () => {
     nav.replace.mockReset();
   });
 
-  it("shows the group's scenarios in the sidebar beside its details", async () => {
+  it("heads the page with the group's title, description and tags, its scenarios in the sidebar and a placeholder", async () => {
     setup();
     await renderGroup();
 
-    expect(screen.getByRole("heading", { level: 1, name: "Regression" })).toBeInTheDocument();
-    const breadcrumb = screen.getByRole("navigation", { name: "Breadcrumb" });
-    expect(within(breadcrumb).getByRole("link", { name: "Scenarios" })).toHaveAttribute("href", "/scenarios");
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Regression");
+    expect(screen.getByRole("button", { name: "Rename the group Regression" })).toBeInTheDocument();
+    expect(screen.getByText("Everything that broke once.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Edit the description" })).toBeInTheDocument();
+    expect(within(screen.getByRole("list", { name: "Group tags" })).getByText("nightly")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add tag" })).toBeInTheDocument();
+    // No details form and no group card in the sidebar any more.
+    expect(screen.queryByRole("region", { name: "Group details" })).not.toBeInTheDocument();
+
     const library = screen.getByRole("complementary", { name: "Scenario library" });
-    expect(within(library).getByRole("link", { name: /^Group/ })).toHaveAttribute("aria-current", "page");
+    expect(within(library).queryByRole("link", { name: /^Group/ })).not.toBeInTheDocument();
     expect(await within(library).findByRole("link", { name: /Booking with date change/ })).toHaveAttribute(
       "href",
       "/scenarios/s-booking",
     );
-    // Scenarios of another agent in the same group are listed; other groups' are not.
     expect(within(library).getByRole("link", { name: /Refund dispute/ })).toBeInTheDocument();
     expect(within(library).queryByText("Late check-out")).not.toBeInTheDocument();
     expect(within(library).getByRole("link", { name: "New scenario" })).toHaveAttribute(
@@ -73,30 +78,40 @@ describe("Scenario group page", () => {
       "/scenarios/new?group=g-regression",
     );
 
-    const details = screen.getByRole("region", { name: "Group details" });
-    expect(within(details).getByLabelText("Title")).toHaveValue("Regression");
-    expect(within(details).getByLabelText("Description")).toHaveValue("Everything that broke once.");
-    expect(within(details).getByLabelText("Tags")).toHaveValue("nightly");
-    expect(within(details).getByText("2 scenarios")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Select a scenario" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Launch every scenario of Regression" })).toHaveTextContent("Run all (2)");
   });
 
-  it("saves the edited details", async () => {
+  it("edits the title, the description and the tags in place", async () => {
     const { groupApi } = setup();
     const user = await renderGroup();
-    const details = screen.getByRole("region", { name: "Group details" });
 
-    await user.clear(within(details).getByLabelText("Description"));
-    await user.type(within(details).getByLabelText("Description"), "What must not break again.");
-    await user.type(within(details).getByLabelText("Tags"), ", core");
-    await user.click(within(details).getByRole("button", { name: "Save group" }));
+    await user.click(screen.getByRole("button", { name: "Rename the group Regression" }));
+    await user.clear(screen.getByRole("textbox", { name: "Rename the group Regression" }));
+    await user.type(screen.getByRole("textbox", { name: "Rename the group Regression" }), "Regression suite{Enter}");
+    await waitFor(() => expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Regression suite"));
 
-    await waitFor(() => expect(groupApi.requests).toHaveLength(1));
-    expect(groupApi.requests[0]).toEqual({
-      method: "PATCH",
-      path: "/scenario-groups/g-regression",
-      body: { name: "Regression", description: "What must not break again.", tags: ["nightly", "core"] },
-    });
-    expect(await within(details).findByText("Saved")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Edit the description" }));
+    const description = screen.getByRole("textbox", { name: "Edit the description" });
+    await user.clear(description);
+    await user.type(description, "What must not break again.");
+    await user.keyboard("{Control>}{Enter}{/Control}");
+    await waitFor(() => expect(screen.queryByRole("textbox", { name: "Edit the description" })).not.toBeInTheDocument());
+    expect(screen.getByText("What must not break again.")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Add tag" }));
+    await user.type(screen.getByRole("textbox", { name: "New tag" }), "core{Enter}");
+    await waitFor(() => expect(within(screen.getByRole("list", { name: "Group tags" })).getByText("core")).toBeInTheDocument());
+    await user.keyboard("{Escape}");
+    await user.click(screen.getByRole("button", { name: "Remove the tag nightly" }));
+    await waitFor(() => expect(within(screen.getByRole("list", { name: "Group tags" })).queryByText("nightly")).not.toBeInTheDocument());
+
+    expect(groupApi.requests.map((request) => request.body)).toEqual([
+      { name: "Regression suite" },
+      { description: "What must not break again." },
+      { tags: ["nightly", "core"] },
+      { tags: ["core"] },
+    ]);
   });
 
   it("launches every scenario of the group", async () => {
@@ -111,12 +126,11 @@ describe("Scenario group page", () => {
     expect(runs.requests[0].body).toMatchObject({ scenarioIds: ["s-booking", "s-refund"] });
   });
 
-  it("explains why a group with scenarios cannot be deleted", async () => {
+  it("offers no delete while the group holds scenarios", async () => {
     setup();
     await renderGroup();
 
     expect(screen.queryByRole("button", { name: "Delete Regression" })).not.toBeInTheDocument();
-    expect(screen.getByText("Move or delete its 2 scenarios to delete this group.")).toBeInTheDocument();
   });
 
   it("deletes an empty group after a confirmation and goes back to Scenarios", async () => {
