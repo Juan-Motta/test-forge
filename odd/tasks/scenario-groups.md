@@ -16,6 +16,8 @@ Branch: `feat/scenario-groups` (from `main` at d008bc7). Delivery: work-unit com
 - S9 (assumption): scenario names stay unique per agent (unchanged).
 - S10 (user, verbatim): "en la vista de scenarios el nuevo scenario deberia crear un nuevo grupo de scenarios en blanco en donde el titulo deberia pdoer ser editable por ejemplo correo ara reprogramar... deberia ser new scenario y la barra lateral izq deberia estar con un placeholder mientras se guarda"
 - S11 (user, verbatim): "cuando entreo a un scenario en el titulo deberia mostrarse el nombre del grupo de scenarios y un icono al final del titulo para editar el nombre como un lapiz o algo"
+- S13 (user, verbatim): "quitemos la opcion de group y el form de group, por defecto como estamos agrupando ya es un group, y quedamos que el titulo tenga un boton para editar un icono al final del titulo, la descripcion me gustaria que apareciera debajo del titulo con un boton al final para editarlo tambien e icono y debajo de la descripcion una opcion para agregar tags y cuando se abra por defecto deberia mostrar un placeholder en blanco diciendo que seleccione un scenario o un boton de correr todo similar a con live sessions por ejemplo cuandoe sta en blanco"
+- S14 (assumption): "la opcion de group" is the sidebar's GROUP card; the editor's Group field stays (the only way to move a scenario). An empty group is deleted from a header button.
 - S12 (assumption): a new group's title left empty takes the scenario's name; the group is created when the scenario is first saved (and removed again if that save fails).
 
 ## Tasks
@@ -26,6 +28,7 @@ Branch: `feat/scenario-groups` (from `main` at d008bc7). Delivery: work-unit com
 | T2 | S2 | inline | done | 3ff47c4 |
 | T3 | S3, S5 | inline | done | 17acc6a |
 | T4 | all | inline | done | b2de159 |
+| T6 | S13, S14 | inline | pending | |
 | T5 | S10–S12 | inline | done | 0514af4 |
 
 - T1 Backend: `scenario_groups` table and migration 0016 (create, backfill one group per agent, `scenarios.group_id` NOT NULL FK RESTRICT); `/api/scenario-groups` CRUD with scenario counts and agents; scenarios carry `groupId`/`group`, filter `?groupId=`, move between groups; tests; skill guide.
@@ -48,3 +51,4 @@ Route evidence: no Writer trigger (units are sequential: T2–T3 depend on T1), 
 - L8: Native review of the branch (escalated to high for migration 0016; lenses risk, resilience, reliability): APPROVED and acknowledged. Fixed in 66a1530: launch offered only once scenarios loaded (error + retry otherwise); vanished agent → 422; group move pinned by a test. Advisories kept: NOT NULL in the same step as the backfill (single-instance deploy restarts, so no old writer remains); default group matched by name (S7, documented).
 - L9 (user, 2026-10-19, verbatim): "ahora en la vista de scenarios el nuevo scenario deberia crear un nuevo grupo de scenarios en blanco en donde el titulo deberia pdoer ser editable por ejemplo correo ara reprogramar... deberia ser new scenario y la barra lateral izq deberia estar con un placeholder mientras se guarda, cuando entreo a un scenario en el titulo deberia mostrarse el nombre del grupo de scenarios y un icono al final del titulo para editar el nombre como un lapiz o algo," (S10, S11; T5 added).
 - L10: T5 0514af4: Scenarios offers New scenario (no New group dialog); editor title is the group name with a pencil (EditableTitle; PATCH name, 409 inline); a new scenario outside a group shows a placeholder rail and an editable title, creates the group on first save (title or scenario name) and deletes it if the scenario fails; breadcrumb is just Scenarios. Frontend suite 854 passed (ScenarioEditor 422-mapping test flaky under 4 workers, passes alone).
+- L11 (user, 2026-10-19, verbatim): see S13 (T6 added).
