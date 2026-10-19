@@ -1,16 +1,20 @@
 import Link from "next/link";
 import { useFormat, useT } from "@/lib/i18n";
-import { Badge, CopyIcon, IconButton, PlayIcon, Spinner, TrashIcon, cn, focusRing } from "@/ui";
+import { useState } from "react";
+import type { AgentKind } from "@/features/agents/types";
+import { Badge, Button, ChevronDownIcon, CopyIcon, IconButton, PlayIcon, Spinner, TrashIcon, cn, focusRing } from "@/ui";
 import { temperamentLabel } from "./form-schema";
 import type { Scenario } from "./types";
 
-export type ScenarioGroup = { agentId: string; agentName: string; scenarios: Scenario[] };
+export type ScenarioGroup = { agentId: string; agentName: string; agentKind?: AgentKind; scenarios: Scenario[] };
 
 type ScenarioListProps = {
   groups: ScenarioGroup[];
   onDuplicate: (scenario: Scenario) => void;
   onDelete: (scenario: Scenario) => void;
   onLaunch: (scenario: Scenario) => void;
+  /** Launches every scenario the group shows (what the filters leave). */
+  onLaunchAll: (group: ScenarioGroup) => void;
   /** Ids picked for "Launch selected". */
   selected: ReadonlySet<string>;
   onToggleSelected: (scenario: Scenario) => void;
@@ -18,48 +22,95 @@ type ScenarioListProps = {
   duplicatingId?: string;
 };
 
-/** Scenarios grouped by their agent, one card per scenario. */
+/**
+ * Scenarios grouped by their agent: one panel per agent, headed by its name, kind and count,
+ * that collapses; inside, one compact row per scenario.
+ */
 export function ScenarioList({
   groups,
   onDuplicate,
   onDelete,
   onLaunch,
+  onLaunchAll,
   selected,
   onToggleSelected,
   duplicatingId,
 }: ScenarioListProps) {
+  const t = useT();
+  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
+  const toggle = (agentId: string) =>
+    setCollapsed((current) => {
+      const next = new Set(current);
+      if (next.has(agentId)) next.delete(agentId);
+      else next.add(agentId);
+      return next;
+    });
+
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4">
       {groups.map((group) => {
         const headingId = `agent-group-${group.agentId}`;
+        const listId = `agent-scenarios-${group.agentId}`;
+        const open = !collapsed.has(group.agentId);
         return (
-          <section key={group.agentId} aria-labelledby={headingId} className="flex flex-col gap-2.5">
-            <div className="flex items-center justify-between gap-2 px-1">
-              <h2 id={headingId} className="text-xs font-semibold tracking-[0.06em] text-muted uppercase">
+          <section
+            key={group.agentId}
+            aria-labelledby={headingId}
+            className="overflow-hidden rounded-xl border border-line bg-panel"
+          >
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3">
+              <button
+                type="button"
+                aria-expanded={open}
+                aria-controls={listId}
+                aria-label={t(open ? "scenarios.hideGroup" : "scenarios.showGroup", { name: group.agentName })}
+                onClick={() => toggle(group.agentId)}
+                className={cn("inline-flex size-8 items-center justify-center rounded-lg text-muted hover:bg-active", focusRing)}
+              >
+                <ChevronDownIcon size={16} className={cn("transition-transform", open ? "" : "-rotate-90")} />
+              </button>
+              <h2 id={headingId} className="min-w-0 text-[15px] font-semibold break-words">
                 {group.agentName}
               </h2>
-              <span className="text-xs text-dim">{group.scenarios.length}</span>
+              {group.agentKind ? (
+                <Badge tone={group.agentKind === "text" ? "agent" : "outline"}>{t(`agents.kind.${group.agentKind}`)}</Badge>
+              ) : null}
+              <span className="text-xs text-muted">{t.plural("agents.scenarioCount", group.scenarios.length)}</span>
+              <span className="flex-1" />
+              <Button
+                variant="secondary"
+                icon={<PlayIcon size={14} />}
+                aria-label={t("scenarios.launchAllNamed", { name: group.agentName })}
+                onClick={() => onLaunchAll(group)}
+              >
+                {t("scenarios.launchAll")}
+              </Button>
             </div>
-            <ul className="flex flex-col gap-2.5">
-              {group.scenarios.map((scenario) => (
-                <ScenarioItem
-                  key={scenario.id}
-                  scenario={scenario}
-                  onDuplicate={onDuplicate}
-                  onDelete={onDelete}
-                  onLaunch={onLaunch}
-                  selected={selected.has(scenario.id)}
-                  onToggleSelected={onToggleSelected}
-                  duplicating={duplicatingId === scenario.id}
-                />
-              ))}
-            </ul>
+            {open ? (
+              <ul id={listId} className="flex flex-col">
+                {group.scenarios.map((scenario) => (
+                  <ScenarioItem
+                    key={scenario.id}
+                    scenario={scenario}
+                    onDuplicate={onDuplicate}
+                    onDelete={onDelete}
+                    onLaunch={onLaunch}
+                    selected={selected.has(scenario.id)}
+                    onToggleSelected={onToggleSelected}
+                    duplicating={duplicatingId === scenario.id}
+                  />
+                ))}
+              </ul>
+            ) : null}
           </section>
         );
       })}
     </div>
   );
 }
+
+/** Tags shown on a row before the rest collapse into "+N". */
+const VISIBLE_TAGS = 3;
 
 function ScenarioItem({
   scenario,
@@ -83,58 +134,72 @@ function ScenarioItem({
   const nameId = `scenario-${scenario.id}`;
   const criteria = scenario.criteria.length;
   const interruptions = scenario.interruptions?.length ?? 0;
+  const evaluator =
+    scenario.evaluatorMode === "realtime"
+      ? scenario.realtimeModel === "gpt-realtime-2.1"
+        ? "Realtime 2.1"
+        : "Realtime mini"
+      : t("scenarios.pipeline");
+  const shownTags = scenario.tags.slice(0, VISIBLE_TAGS);
+  const moreTags = scenario.tags.length - shownTags.length;
   return (
     <li
       aria-labelledby={nameId}
       className={cn(
-        "flex flex-wrap items-center justify-between gap-4 rounded-xl border bg-panel p-4 transition-colors",
-        selected ? "border-evaluator/60" : "border-line hover:border-line-strong",
+        "grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1.5 border-t border-line px-4 py-3 transition-colors",
+        "lg:grid-cols-[auto_minmax(0,1fr)_7rem_7.5rem_6rem_8rem_auto]",
+        selected ? "bg-evaluator/8" : "hover:bg-active/40",
       )}
     >
-      <div className="flex min-w-0 items-start gap-3">
-        <input
-          type="checkbox"
-          checked={selected}
-          onChange={() => onToggleSelected(scenario)}
-          aria-label={t("scenarios.select", { name: scenario.name })}
-          className="mt-1 size-4 shrink-0 accent-evaluator"
-        />
-        <div className="flex min-w-0 flex-col gap-2">
-          <h3 id={nameId} className="text-[15px] font-semibold break-words">
-            {/* The title opens the scenario, so the card needs no separate "Open" button. */}
-            <Link
-              href={`/scenarios/${encodeURIComponent(scenario.id)}`}
-              className={cn("rounded text-fg no-underline hover:text-evaluator-fg hover:underline", focusRing)}
-            >
-              {scenario.name}
-            </Link>
-          </h3>
-          <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
-            <Badge tone="evaluator">{temperamentLabel(t, scenario.persona.temperament)}</Badge>
-            <span>{t.plural("scenarios.criteriaCount", criteria)}</span>
-            {interruptions > 0 ? (
-              <Badge tone="agent">{t.plural("scenarios.interruptsCount", interruptions)}</Badge>
+      <input
+        type="checkbox"
+        checked={selected}
+        onChange={() => onToggleSelected(scenario)}
+        aria-label={t("scenarios.select", { name: scenario.name })}
+        className="size-4 shrink-0 accent-evaluator"
+      />
+      <div className="flex min-w-0 flex-col gap-1.5">
+        <h3 id={nameId} className="text-sm font-semibold break-words">
+          {/* The title opens the scenario, so the row needs no separate "Open" button. */}
+          <Link
+            href={`/scenarios/${encodeURIComponent(scenario.id)}`}
+            className={cn("rounded text-evaluator-fg no-underline hover:underline", focusRing)}
+          >
+            {scenario.name}
+          </Link>
+        </h3>
+        {scenario.tags.length > 0 || interruptions > 0 ? (
+          <div className="flex flex-wrap items-center gap-1.5">
+            {scenario.tags.length > 0 ? (
+              <ul aria-label={t("scenarios.field.tags")} className="flex flex-wrap gap-1.5">
+                {shownTags.map((tag) => (
+                  <li key={tag}>
+                    <Badge tone="outline" mono>
+                      {tag}
+                    </Badge>
+                  </li>
+                ))}
+                {moreTags > 0 ? (
+                  <li title={scenario.tags.slice(VISIBLE_TAGS).join(", ")}>
+                    <Badge tone="outline">+{moreTags}</Badge>
+                  </li>
+                ) : null}
+              </ul>
             ) : null}
-            {scenario.evaluatorMode === "realtime" ? (
-              <Badge tone="evaluator">{scenario.realtimeModel === "gpt-realtime-2.1" ? "Realtime 2.1" : "Realtime mini"}</Badge>
-            ) : null}
-            <span aria-hidden="true">·</span>
-            <time dateTime={scenario.updatedAt} title={absoluteTime(scenario.updatedAt)}>
-              {t("scenarios.updated", { time: relativeTime(scenario.updatedAt) })}
-            </time>
+            {interruptions > 0 ? <Badge tone="agent">{t.plural("scenarios.interruptsCount", interruptions)}</Badge> : null}
           </div>
-          {scenario.tags.length > 0 ? (
-            <ul aria-label={t("scenarios.field.tags")} className="flex flex-wrap gap-1.5">
-              {scenario.tags.map((tag) => (
-                <li key={tag}>
-                  <Badge tone="outline" mono>
-                    {tag}
-                  </Badge>
-                </li>
-              ))}
-            </ul>
-          ) : null}
-        </div>
+        ) : null}
+      </div>
+      {/* One line under the name on small screens; from lg its cells become the row's columns. */}
+      <div className="col-start-2 row-start-2 flex flex-wrap items-center gap-2 text-xs text-muted lg:contents">
+        <span>
+          <Badge tone="evaluator">{temperamentLabel(t, scenario.persona.temperament)}</Badge>
+        </span>
+        <span>{evaluator}</span>
+        <span>{t.plural("scenarios.criteriaCount", criteria)}</span>
+        <time dateTime={scenario.updatedAt} title={absoluteTime(scenario.updatedAt)}>
+          {t("scenarios.updated", { time: relativeTime(scenario.updatedAt) })}
+        </time>
       </div>
       <div className="flex items-center gap-1">
         <IconButton

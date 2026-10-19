@@ -2,7 +2,15 @@ import type { Agent } from "@/features/agents/types";
 import type { ScenarioGroup } from "./ScenarioList";
 import type { Scenario } from "./types";
 
-export type LibraryFilters = { agentId: string; tag: string | null };
+/** `tag` applies only with an agent picked (its tags are the ones offered); `search` matches names and tags. */
+export type LibraryFilters = { agentId: string; tag: string | null; search: string };
+
+/** Whether a scenario's name or one of its tags contains the search (case-insensitive). */
+function matchesSearch(scenario: Scenario, search: string): boolean {
+  const wanted = search.trim().toLowerCase();
+  if (!wanted) return true;
+  return scenario.name.toLowerCase().includes(wanted) || scenario.tags.some((tag) => tag.toLowerCase().includes(wanted));
+}
 
 /** Every tag in use, alphabetically. */
 export function allTags(scenarios: Scenario[]): string[] {
@@ -17,13 +25,16 @@ export function groupScenarios(scenarios: Scenario[], agents: Agent[], filters: 
   const matching = scenarios.filter(
     (scenario) =>
       (!filters.agentId || scenario.agentId === filters.agentId) &&
-      (filters.tag === null || scenario.tags.includes(filters.tag)),
+      (filters.tag === null || scenario.tags.includes(filters.tag)) &&
+      matchesSearch(scenario, filters.search),
   );
   const groups = new Map<string, ScenarioGroup>();
+  const kinds = new Map(agents.map((agent) => [agent.id, agent.kind]));
   for (const scenario of matching) {
     const group = groups.get(scenario.agentId) ?? {
       agentId: scenario.agentId,
       agentName: scenario.agent.name,
+      agentKind: kinds.get(scenario.agentId),
       scenarios: [],
     };
     group.scenarios.push(scenario);

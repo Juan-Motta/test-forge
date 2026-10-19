@@ -1145,4 +1145,11 @@ export const es: Messages = {
   "transfer.note.apiKey": "La clave de API nunca se exporta: ingrésala de nuevo.",
   "scenarios.pickAgent": "Elige el agente a evaluar",
   "transfer.error.fileRead": "No se pudo leer el archivo: inténtalo de nuevo o pega su texto.",
+  "scenarios.hideGroup": "Ocultar los escenarios de {name}",
+  "scenarios.showGroup": "Mostrar los escenarios de {name}",
+  "scenarios.launchAll": "Lanzar todos",
+  "scenarios.launchAllNamed": "Lanzar todos los escenarios de {name}",
+  "scenarios.pipeline": "Por etapas",
+  "scenarios.search": "Buscar escenarios",
+  "scenarios.searchPlaceholder": "Nombre o etiqueta del escenario",
 };

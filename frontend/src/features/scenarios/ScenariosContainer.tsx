@@ -16,6 +16,7 @@ import {
   FilterChips,
   PlusIcon,
   ScenariosIcon,
+  SearchField,
   Select,
   Spinner,
   buttonClasses,
@@ -29,7 +30,7 @@ import { ScenarioList } from "./ScenarioList";
 import type { Scenario } from "./types";
 
 const NO_AGENT_HINT_ID = "new-scenario-needs-agent";
-const NO_FILTERS: LibraryFilters = { agentId: "", tag: null };
+const NO_FILTERS: LibraryFilters = { agentId: "", tag: null, search: "" };
 
 /** Container for `/scenarios`: the library, filtered by agent and tag in the browser. */
 export function ScenariosContainer() {
@@ -154,7 +155,8 @@ export function ScenariosContainer() {
       />
     );
   } else {
-    const tags = allTags(list);
+    // Only the chosen agent's tags: across every agent they would be a wall of chips.
+    const tags = filters.agentId ? allTags(list.filter((scenario) => scenario.agentId === filters.agentId)) : [];
     body = (
       <>
         <div className="flex flex-wrap items-end gap-4">
@@ -164,7 +166,8 @@ export function ScenariosContainer() {
                 <Select
                   {...props}
                   value={filters.agentId}
-                  onChange={(event) => setFilters((current) => ({ ...current, agentId: event.target.value }))}
+                  // Another agent has other tags: its list starts unfiltered by tag.
+                  onChange={(event) => setFilters((current) => ({ ...current, agentId: event.target.value, tag: null }))}
                 >
                   <option value="">{t("scenarios.allAgents")}</option>
                   {agentList.map((agent) => (
@@ -176,7 +179,15 @@ export function ScenariosContainer() {
               )}
             </Field>
           </div>
-          {tags.length > 0 ? (
+          <SearchField
+            label={t("scenarios.search")}
+            placeholder={t("scenarios.searchPlaceholder")}
+            value={filters.search}
+            onChange={(event) => setFilters((current) => ({ ...current, search: event.target.value }))}
+            className="w-full sm:w-72"
+          />
+        </div>
+        {tags.length > 0 ? (
             <FilterChips
               label={t("scenarios.filterByTag")}
               size="md"
@@ -185,7 +196,6 @@ export function ScenariosContainer() {
               onToggle={(tag) => setFilters((f) => ({ ...f, tag: tag === "" || f.tag === tag ? null : tag }))}
             />
           ) : null}
-        </div>
         {picked.length > 0 || hiddenCount > 0 ? (
           <div className="flex flex-wrap items-center gap-3 rounded-xl border border-evaluator-line bg-panel px-4 py-3">
             {picked.length > 0 ? (
@@ -216,6 +226,7 @@ export function ScenariosContainer() {
               showDelete(scenario);
             }}
             onLaunch={(scenario) => setLaunching([scenario])}
+            onLaunchAll={(group) => setLaunching(group.scenarios)}
             selected={selected}
             onToggleSelected={toggleSelected}
             duplicatingId={duplicate.isPending ? duplicate.variables?.id : undefined}

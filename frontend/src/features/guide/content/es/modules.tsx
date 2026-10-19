@@ -191,9 +191,11 @@ export function ModulesEs() {
       <Region id="scenarios" title="Escenarios">
         <P>
           Tu biblioteca de conversaciones. Un escenario describe al usuario que interpreta el evaluador, qué sabe y qué quiere,
-          y cómo califica el juez la llamada. Filtra por agente o etiqueta, selecciona varios para <Ui>Lanzar seleccionados</Ui>{" "}
-          o haz clic en el título de un escenario para abrirlo y editarlo. Cada escenario tiene tres botones de ícono, cada uno
-          con una descripción emergente: lanzar (reproducir), duplicar (copiar) y eliminar (papelera, tras una confirmación).
+          y cómo califica el juez la llamada. Cada agente tiene su panel (contrae los que no necesites) con{" "}
+          <Ui>Lanzar todos</Ui> y una fila por escenario. Busca por nombre o etiqueta, elige un agente para filtrar por sus
+          etiquetas, selecciona varios para <Ui>Lanzar seleccionados</Ui> o haz clic en el título de un escenario para abrirlo
+          y editarlo. Cada fila tiene tres botones de ícono, cada uno con una descripción emergente: lanzar (reproducir),
+          duplicar (copiar) y eliminar (papelera, tras una confirmación).
         </P>
         <Table
           caption="El editor de escenarios, sección por sección"

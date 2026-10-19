@@ -1171,4 +1171,11 @@ export const en = {
   "transfer.note.apiKey": "The API key is never exported: enter it again.",
   "scenarios.pickAgent": "Pick the agent under test",
   "transfer.error.fileRead": "The file could not be read: try again or paste its text.",
+  "scenarios.hideGroup": "Hide {name}'s scenarios",
+  "scenarios.showGroup": "Show {name}'s scenarios",
+  "scenarios.launchAll": "Launch all",
+  "scenarios.launchAllNamed": "Launch all {name} scenarios",
+  "scenarios.pipeline": "Pipeline",
+  "scenarios.search": "Search scenarios",
+  "scenarios.searchPlaceholder": "Scenario name or tag",
 } as const;

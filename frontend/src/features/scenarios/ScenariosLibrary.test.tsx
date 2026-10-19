@@ -89,26 +89,77 @@ describe("Scenarios library", () => {
     expect(within(supportGroup).getByText("Realtime 2.1")).toBeInTheDocument();
   });
 
-  it("filters by agent and by tag", async () => {
+  it("filters by agent, then by that agent's tags only", async () => {
+    mockAgentsApi(agents);
+    mockScenariosApi([booking, cancel, refund], { agents });
+    renderWithClient(<ScenariosContainer />);
+    const user = userEvent.setup();
+    await screen.findByRole("region", { name: "Support triage" });
+    // Across every agent the tags would be a wall of chips: they appear once an agent is picked.
+    expect(screen.queryByRole("group", { name: "Filter by tag" })).not.toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText("Agent"), "Hotel booking assistant");
+    const tags = screen.getByRole("group", { name: "Filter by tag" });
+    expect(within(tags).getAllByRole("button").map((button) => button.textContent)).toEqual([
+      "All tags",
+      "booking",
+      "cancellation",
+      "regression",
+    ]);
+    expect(screen.queryByRole("region", { name: "Support triage" })).not.toBeInTheDocument();
+    await user.click(within(tags).getByRole("button", { name: "cancellation" }));
+    expect(item("Cancel within 24h")).toBeInTheDocument();
+    expect(screen.queryByRole("listitem", { name: "Booking with date change" })).not.toBeInTheDocument();
+
+    // Another agent starts without a tag filter (the old tag may not exist there).
+    await user.selectOptions(screen.getByLabelText("Agent"), "Support triage");
+    expect(item("Refund dispute")).toBeInTheDocument();
+    expect(within(screen.getByRole("group", { name: "Filter by tag" })).getAllByRole("button").map((b) => b.textContent)).toEqual([
+      "All tags",
+      "regression",
+    ]);
+    await user.selectOptions(screen.getByLabelText("Agent"), "All agents");
+    expect(item("Cancel within 24h")).toBeInTheDocument();
+  });
+
+  it("searches scenarios by name or tag", async () => {
     mockAgentsApi(agents);
     mockScenariosApi([booking, cancel, refund], { agents });
     renderWithClient(<ScenariosContainer />);
     const user = userEvent.setup();
     await screen.findByRole("region", { name: "Support triage" });
 
-    await user.click(screen.getByRole("button", { name: "regression" }));
-    expect(screen.getByRole("button", { name: "regression" })).toHaveAttribute("aria-pressed", "true");
+    await user.type(screen.getByRole("searchbox", { name: "Search scenarios" }), "CANCEL");
+    expect(item("Cancel within 24h")).toBeInTheDocument();
+    expect(screen.queryByRole("listitem", { name: "Booking with date change" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Support triage" })).not.toBeInTheDocument();
+
+    await user.clear(screen.getByRole("searchbox", { name: "Search scenarios" }));
+    await user.type(screen.getByRole("searchbox", { name: "Search scenarios" }), "regression");
     expect(item("Booking with date change")).toBeInTheDocument();
     expect(item("Refund dispute")).toBeInTheDocument();
     expect(screen.queryByRole("listitem", { name: "Cancel within 24h" })).not.toBeInTheDocument();
+  });
 
-    await user.selectOptions(screen.getByLabelText("Agent"), "Support triage");
+  it("heads each agent's panel with its kind and count, and collapses it", async () => {
+    mockAgentsApi([hotel, agentFixture({ id: "a-support", name: "Support triage", kind: "text", textMode: "stream", auth: "none", userId: null })]);
+    mockScenariosApi([booking, cancel, refund], { agents });
+    renderWithClient(<ScenariosContainer />);
+    const user = userEvent.setup();
+
+    const hotelGroup = await screen.findByRole("region", { name: "Hotel booking assistant" });
+    expect(within(hotelGroup).getByText("Voice")).toBeInTheDocument();
+    expect(within(hotelGroup).getByText("2 scenarios")).toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: "Support triage" })).getByText("Text")).toBeInTheDocument();
+
+    const toggle = within(hotelGroup).getByRole("button", { name: "Hide Hotel booking assistant's scenarios" });
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(within(hotelGroup).queryByRole("checkbox")).not.toBeInTheDocument();
     expect(item("Refund dispute")).toBeInTheDocument();
-    expect(screen.queryByRole("region", { name: "Hotel booking assistant" })).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "All tags" }));
-    await user.selectOptions(screen.getByLabelText("Agent"), "All agents");
-    expect(item("Cancel within 24h")).toBeInTheDocument();
+    await user.click(within(hotelGroup).getByRole("button", { name: "Show Hotel booking assistant's scenarios" }));
+    expect(within(hotelGroup).getAllByRole("checkbox")).toHaveLength(2);
   });
 
   it("says when no scenario matches the filters and clears them", async () => {
@@ -118,8 +169,8 @@ describe("Scenarios library", () => {
     const user = userEvent.setup();
     await screen.findByRole("region", { name: "Support triage" });
 
-    await user.click(screen.getByRole("button", { name: "cancellation" }));
     await user.selectOptions(screen.getByLabelText("Agent"), "Support triage");
+    await user.type(screen.getByRole("searchbox", { name: "Search scenarios" }), "cancellation");
     expect(screen.getByText("No scenarios match these filters.")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Clear filters" }));
@@ -258,6 +309,22 @@ describe("Scenarios library: launch", () => {
     await waitFor(() => expect(nav.push).toHaveBeenCalledWith("/live?batchId=b-new-1"));
   });
 
+  it("launches every scenario an agent's panel shows with Launch all", async () => {
+    mockAgentsApi(agents);
+    mockScenariosApi([booking, cancel, refund], { agents });
+    const runs = mockRunsApi();
+    renderWithClient(<ScenariosContainer />);
+    const user = userEvent.setup();
+
+    const hotelGroup = await screen.findByRole("region", { name: "Hotel booking assistant" });
+    await user.click(within(hotelGroup).getByRole("button", { name: "Launch all Hotel booking assistant scenarios" }));
+    const dialog = screen.getByRole("dialog", { name: "Launch 2 scenarios" });
+    await user.click(within(dialog).getByRole("button", { name: /^Launch \d+ runs?$/ }));
+
+    await waitFor(() => expect(runs.requests).toHaveLength(1));
+    expect(runs.requests[0].body).toMatchObject({ scenarioIds: ["s-cancel", "s-booking"] });
+  });
+
   it("launches only the selected scenarios the filters still show, and says how many are hidden", async () => {
     mockAgentsApi(agents);
     mockScenariosApi([booking, cancel, refund], { agents });
@@ -268,7 +335,7 @@ describe("Scenarios library: launch", () => {
 
     await user.click(screen.getByRole("checkbox", { name: "Select Cancel within 24h" }));
     await user.click(screen.getByRole("checkbox", { name: "Select Refund dispute" }));
-    await user.click(screen.getByRole("button", { name: "cancellation" }));
+    await user.type(screen.getByRole("searchbox", { name: "Search scenarios" }), "cancellation");
     expect(screen.queryByRole("listitem", { name: "Refund dispute" })).not.toBeInTheDocument();
 
     expect(screen.getByText("1 scenario selected")).toBeInTheDocument();
@@ -288,11 +355,11 @@ describe("Scenarios library: launch", () => {
     await screen.findByRole("region", { name: "Support triage" });
 
     await user.click(screen.getByRole("checkbox", { name: "Select Refund dispute" }));
-    await user.click(screen.getByRole("button", { name: "cancellation" }));
+    await user.type(screen.getByRole("searchbox", { name: "Search scenarios" }), "cancellation");
     expect(screen.queryByRole("button", { name: /Launch selected/ })).not.toBeInTheDocument();
     expect(screen.getByText("1 selected scenario is hidden by the filters.")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "All tags" }));
+    await user.clear(screen.getByRole("searchbox", { name: "Search scenarios" }));
     expect(screen.getByRole("button", { name: "Launch selected (1)" })).toBeInTheDocument();
   });
 
