@@ -189,7 +189,7 @@ export function ModulesEn() {
           head={["Section", "Key fields"]}
           rows={[
             ["1 · Target agent and context", "Name, tags, the agent under test, and context added on top of the agent's shared context."],
-            ["2 · Persona the evaluator plays", "Persona name, locale (the caller speaks that language), voice override, temperament, notes."],
+            ["2 · Persona the evaluator plays", "Persona name, language (picked from a list; the caller speaks it), voice override (the voices of the chosen voice connection), temperament, notes."],
             ["3 · Goal and instructions", "Goal (the judge checks it), how to behave, and facts the caller knows (only revealed when asked)."],
             ["4 · Success criteria for the judge", "Up to 30 criteria: text, Must or Should, evidence source (transcript, timing or trace) and weight. Weights total 100."],
             ["5 · When the call ends", "Max duration (30–1800 s, default 360), max silence (5–120 s, default 15), and hang up when: goal met or goodbye said, goodbye said, or max duration reached. For a text agent: max turns (1–100 user messages, default 20) instead of max silence."],
@@ -200,6 +200,11 @@ export function ModulesEn() {
         <Tips>
           <li>
             Duplicate a good scenario to make a variant, like the same request from an angry caller.
+          </li>
+          <li>
+            <Ui>Export</Ui> (in an open scenario) shows it as text to copy or download as a <Code>.json</Code> file;{" "}
+            <Ui>Import</Ui> (on this page or in a new scenario) pastes or loads that text to prefill a new scenario, which you
+            review and save. The agent and the connections travel by name: ones this server lacks are listed for you to pick.
           </li>
           <li>Use tags such as &ldquo;smoke&rdquo; or &ldquo;regression&rdquo; to launch the right group quickly.</li>
           <li>
@@ -236,6 +241,10 @@ export function ModulesEn() {
           <li>
             <Ui>Import from cURL</Ui> fills in the connection fields from a request copied in your browser&apos;s developer
             tools. Name and context are not touched.
+          </li>
+          <li>
+            <Ui>Export</Ui> shows an agent as text (never its API key); <Ui>Import</Ui> prefills a new agent from that text or
+            its <Code>.json</Code> file, ready to review and create.
           </li>
           <li>
             <Ui>Run connection test</Ui> checks the agent answers before you spend money on runs. For a text agent it sends

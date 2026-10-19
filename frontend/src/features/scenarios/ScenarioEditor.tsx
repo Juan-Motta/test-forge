@@ -2,13 +2,16 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import Link from "next/link";
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useForm, useWatch, type Path } from "react-hook-form";
 import type { Agent, AgentKind } from "@/features/agents/types";
 import type { FieldErrors } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { useUnsavedChangesGuard } from "@/lib/navigation/unsaved-changes";
 import type { Crumb } from "@/features/shell/Breadcrumbs";
+import { ConfigImportPanel } from "@/features/transfer/ConfigImportPanel";
+import { ExportDialog } from "@/features/transfer/ExportDialog";
+import { transferFileName } from "@/features/transfer/transfer";
 import { PageHeader } from "@/features/shell/PageHeader";
 import { OPENAI_VOICES, type KindVoices } from "@/features/connections/voices";
 import {
@@ -27,6 +30,7 @@ import {
   focusRing,
 } from "@/ui";
 import { localeChoices, voiceChoices } from "./choices";
+import type { ScenarioImport } from "./transfer";
 import { CriteriaEditor, WeightsStatus } from "./CriteriaEditor";
 import { errorAt, formPath } from "./editor-form";
 import { FactsEditor } from "./FactsEditor";
@@ -74,6 +78,10 @@ type ScenarioEditorProps = {
   breadcrumbs?: readonly Crumb[];
   /** Duplicates the saved scenario; absent while creating. */
   onDuplicate?: () => void;
+  /** The saved scenario as text (Export); absent while creating. */
+  exportText?: string;
+  /** Prefills a new scenario from an exported one (Import); absent while editing. */
+  importConfig?: (text: string) => ScenarioImport;
   duplicating?: boolean;
   /** Shown under the header (e.g. a failed duplicate). */
   banner?: ReactNode;
@@ -99,6 +107,8 @@ export function ScenarioEditor({
   title,
   breadcrumbs,
   onDuplicate,
+  exportText,
+  importConfig,
   duplicating = false,
   banner,
   library,
@@ -218,6 +228,31 @@ export function ScenarioEditor({
   const status = isDirty ? t("editor.unsaved") : saved ? t("editor.saved") : "";
 
   const formId = "scenario-form";
+  const importPanelId = useId();
+  const importToggleId = useId();
+  // The Scenarios page's Import links here with #import. The editor mounts only once its data
+  // has loaded in the browser, so reading the hash here never differs from a server render.
+  const [importOpen, setImportOpen] = useState(
+    () => importConfig !== undefined && typeof window !== "undefined" && window.location.hash === "#import",
+  );
+  const [importNotes, setImportNotes] = useState<string[]>();
+  const [exportOpen, setExportOpen] = useState(false);
+
+  function closeImport() {
+    setImportOpen(false);
+    document.getElementById(importToggleId)?.focus();
+  }
+
+  // The whole form takes the imported scenario, as unsaved edits; nothing is stored until Create.
+  function applyImport(text: string): string | undefined {
+    const result = importConfig?.(text);
+    if (!result) return undefined;
+    if (!result.ok) return result.error;
+    reset(result.values, { keepDefaultValues: true });
+    setImportNotes([t("transfer.filled"), ...result.notes]);
+    closeImport();
+    return undefined;
+  }
   const temperament = useWatch({ control, name: "persona.temperament" });
   const realtimeModel = useWatch({ control, name: "realtimeModel" });
   const setEvaluatorMode = (mode: EvaluatorMode) => {
@@ -238,6 +273,22 @@ export function ScenarioEditor({
             <Button variant="ghost" onClick={onCancel}>
               {t("common.cancel")}
             </Button>
+            {importConfig ? (
+              <Button
+                id={importToggleId}
+                variant="secondary"
+                aria-expanded={importOpen}
+                aria-controls={importOpen ? importPanelId : undefined}
+                onClick={() => (importOpen ? closeImport() : (setImportNotes(undefined), setImportOpen(true)))}
+              >
+                {t("transfer.import")}
+              </Button>
+            ) : null}
+            {exportText ? (
+              <Button variant="secondary" onClick={() => setExportOpen(true)}>
+                {t("transfer.export")}
+              </Button>
+            ) : null}
             {onDuplicate ? (
               <Button variant="secondary" loading={duplicating} onClick={onDuplicate}>
                 {duplicating ? t("editor.duplicating") : t("editor.duplicate")}
@@ -250,6 +301,27 @@ export function ScenarioEditor({
         }
       />
       {banner}
+      {importOpen ? (
+        <ConfigImportPanel id={importPanelId} label={t("transfer.importScenario")} onImport={applyImport} onCancel={closeImport} />
+      ) : null}
+      {importNotes ? (
+        <Alert tone="info">
+          {importNotes.map((note) => (
+            <span key={note} className="block">
+              {note}
+            </span>
+          ))}
+        </Alert>
+      ) : null}
+      {exportText ? (
+        <ExportDialog
+          open={exportOpen}
+          title={t("transfer.exportScenario", { name: scenario?.name ?? "" })}
+          text={exportText}
+          fileName={transferFileName("scenario", scenario?.name ?? "")}
+          onClose={() => setExportOpen(false)}
+        />
+      ) : null}
       <div className="grid items-start gap-5 min-[1340px]:grid-cols-[240px_minmax(0,1fr)_280px]">
         {library}
         <form

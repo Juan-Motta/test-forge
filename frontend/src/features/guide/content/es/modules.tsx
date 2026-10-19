@@ -211,6 +211,12 @@ export function ModulesEs() {
           <li>
             Duplicar un buen escenario sirve para hacer una variante, como la misma solicitud de alguien molesto.
           </li>
+          <li>
+            <Ui>Exportar</Ui> (en un escenario abierto) lo muestra como texto para copiarlo o descargarlo como archivo{" "}
+            <Code>.json</Code>; <Ui>Importar</Ui> (en esta página o en un escenario nuevo) pega o carga ese texto para prellenar
+            un escenario nuevo, que revisas y guardas. El agente y las conexiones viajan por nombre: las que este servidor no
+            tiene se listan para que las elijas.
+          </li>
           <li>Usa etiquetas como «smoke» o «regression» para lanzar rápido el grupo correcto.</li>
           <li>
             Escribe criterios que el juez pueda comprobar en la llamada: «Confirma que la tarjeta está bloqueada» funciona mejor
@@ -246,6 +252,10 @@ export function ModulesEs() {
           <li>
             <Ui>Importar desde cURL</Ui> completa los campos de conexión a partir de una solicitud copiada en las herramientas
             para desarrolladores de tu navegador. El nombre y el contexto no se tocan.
+          </li>
+          <li>
+            <Ui>Exportar</Ui> muestra un agente como texto (nunca su clave de API); <Ui>Importar</Ui> prellena un agente nuevo
+            con ese texto o su archivo <Code>.json</Code>, listo para revisar y crear.
           </li>
           <li>
             <Ui>Probar la conexión</Ui> comprueba que el agente responde antes de que gastes dinero en corridas. En un agente de

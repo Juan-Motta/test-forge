@@ -18,6 +18,7 @@ import { toChanges, toNewScenario, type ScenarioFormValues } from "./form-schema
 import { useCreateScenario, useDuplicateScenario, useScenario, useScenarios, useUpdateScenario } from "./queries";
 import { ScenarioEditor, type ConnectionOption } from "./ScenarioEditor";
 import { ScenarioLibraryRail } from "./ScenarioLibraryRail";
+import { scenarioFromText, scenarioToText } from "./transfer";
 import type { Scenario } from "./types";
 
 
@@ -179,6 +180,12 @@ export function ScenarioEditorContainer({ scenarioId }: ScenarioEditorContainerP
         breadcrumbs={breadcrumbs}
         onDuplicate={scenario.data ? onDuplicate : undefined}
         duplicating={duplicate.isPending}
+        exportText={scenario.data ? scenarioToText(scenario.data, connections.data ?? []) : undefined}
+        importConfig={
+          scenarioId
+            ? undefined
+            : (text) => scenarioFromText(t, text, agents.data ?? [], connections.data ?? [], agents.data?.[0]?.id)
+        }
         banner={
           duplicate.isError ? <Alert>{t("scenarios.duplicateFailed", { error: errorMessage(duplicate.error) })}</Alert> : null
         }

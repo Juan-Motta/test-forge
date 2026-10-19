@@ -108,6 +108,12 @@ export function ScenariosContainer() {
       {t("scenarios.new")}
     </Link>
   );
+  // Opens a new scenario with the import panel (see ScenarioEditor); hidden until an agent exists.
+  const importScenario = noAgents ? null : (
+    <Link href="/scenarios/new#import" className={buttonClasses("secondary")}>
+      {t("transfer.import")}
+    </Link>
+  );
 
   const list = scenarios.data ?? [];
   const groups = groupScenarios(list, agentList, filters);
@@ -225,7 +231,12 @@ export function ScenariosContainer() {
         titleRef={titleRef}
         title={t("nav.scenarios")}
         description={t("scenarios.description")}
-        actions={newScenario}
+        actions={
+          <>
+            {importScenario}
+            {newScenario}
+          </>
+        }
       />
       {noAgents ? (
         <div className="flex flex-wrap items-center gap-2 text-sm text-muted">
