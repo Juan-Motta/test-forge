@@ -11,12 +11,22 @@ rm -f "$conf"
 cidr="${TRUSTED_PROXY_CIDR:-}"
 [ -n "$cidr" ] || exit 0
 
+reject() {
+    echo "$0: TRUSTED_PROXY_CIDR must be one address or subnet, not '$cidr'" >&2
+    # nginx refuses to start on this line, so a bad value never runs untrusted.
+    echo "invalid_trusted_proxy_cidr;" > "$conf"
+    exit 1
+}
+
 case "$cidr" in
-    *[!0-9a-fA-F.:/]* | */*/* | 0.0.0.0/0 | ::/0)
-        echo "$0: TRUSTED_PROXY_CIDR must be one address or subnet, not '$cidr'" >&2
-        # nginx refuses to start on this line, so a bad value never runs untrusted.
-        echo "invalid_trusted_proxy_cidr;" > "$conf"
-        exit 1
+    *[!0-9a-fA-F.:/]* | */*/* | /* | */) reject ;;
+esac
+# A prefix length of 0 (in any spelling: /0, /00, 10.0.0.0/0) would trust every peer.
+case "$cidr" in
+    */*)
+        prefix="${cidr#*/}"
+        case "$prefix" in *[!0-9]*) reject ;; esac
+        [ -n "$(printf '%s' "$prefix" | sed 's/^0*//')" ] || reject
         ;;
 esac
 
