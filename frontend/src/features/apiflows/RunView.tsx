@@ -239,10 +239,11 @@ function Body({ body, secrets, label }: { body: unknown; secrets: SecretView; la
     <pre aria-label={label} data-kind={pretty.kind} className={PRE}>
       {jsonTokens(pretty.text).map((token, index) =>
         token.kind === "plain" ? (
-          token.text
+          // A body cut short can leave a placeholder outside any string.
+          <SecretText key={index} text={token.text} {...secrets} />
         ) : (
           <span key={index} data-token={token.kind} className={TOKEN_CLASS[token.kind]}>
-            {token.kind === "key" || token.kind === "string" ? <SecretText text={token.text} {...secrets} /> : token.text}
+            <SecretText text={token.text} {...secrets} />
           </span>
         ),
       )}

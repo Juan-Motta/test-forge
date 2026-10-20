@@ -50,7 +50,7 @@ export function prettyBody(body: unknown): { kind: "json" | "text"; text: string
 
 export type JsonToken = { kind: "key" | "string" | "number" | "literal" | "plain"; text: string };
 
-const JSON_TOKEN = /("(?:\\.|[^"\\])*")(\s*:)?|\b(?:true|false|null)\b|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?/g;
+const JSON_TOKEN = /("(?:\\.|[^"\\])*")(\s*:)?|\b(?:true|false|null)\b|(?<![\w.])-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?(?![\w.])/g;
 
 /** JSON text split into keys, strings, numbers and literals (true, false, null), so each can be
  * coloured. Works on JSON cut short too: whatever does not match stays plain. */

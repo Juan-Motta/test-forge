@@ -112,6 +112,10 @@ describe("JSON bodies", () => {
     expect(of("string")).toEqual(['"pikachu"', '"a \\"quoted\\": word"']);
     expect(of("number")).toEqual(["25"]);
     expect(of("literal")).toEqual(["true", "null"]);
+    expect(jsonTokens("… [99 more characters]").filter((token) => token.kind === "number")).toEqual([
+      { kind: "number", text: "99" },
+    ]);
+    expect(jsonTokens("v2 ok").some((token) => token.kind === "number")).toBe(false);
     expect(tokens.map((token) => token.text).join("")).toBe('{\n  "name": "pikachu",\n  "id": 25,\n  "is_default": true,\n  "past": null,\n  "note": "a \\"quoted\\": word"\n}');
   });
 });
