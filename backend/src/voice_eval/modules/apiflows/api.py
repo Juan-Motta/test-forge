@@ -7,12 +7,12 @@ import uuid
 from datetime import datetime
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from pydantic import ConfigDict, Field, StringConstraints, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from voice_eval.modules.agents.domain import AgentKind, InvalidAgentInput, check_base_url
-from voice_eval.modules.apiflows import service
+from voice_eval.modules.apiflows import runs, service
 from voice_eval.modules.apiflows.domain import (
     MAX_HEADERS,
     MAX_SECRET_LENGTH,
@@ -37,6 +37,9 @@ from voice_eval.modules.apiflows.domain import (
     Steps,
     Tags,
 )
+from voice_eval.modules.apiflows.runner import FlowInputError, GenerationError
+from voice_eval.modules.apiflows.runs import FlowRunner
+from voice_eval.modules.connections.domain import ConnectionNotFound, UnsupportedConnection
 from voice_eval.modules.scenarios.domain import unique_tags
 from voice_eval.modules.users.deps import Principal, current_principal
 from voice_eval.platform.db import get_db_session
@@ -323,7 +326,8 @@ async def get_api(api_id: uuid.UUID, db: Db) -> ApiOut:
 
 @apis_router.patch("/{api_id}", response_model=ApiOut, summary="Update an API")
 async def update_api(api_id: uuid.UUID, body: UpdateApiIn, db: Db, box: Box) -> ApiOut:
-    """Only the fields sent change. `secrets` sets or (with null) removes single secrets."""
+    """Only the fields sent change. `secrets` sets or (with null) removes single secrets; an API
+    holds at most 10 (422 otherwise)."""
     try:
         updated = await service.update_api(
             db, box, api_id, changes={name: getattr(body, name) for name in body.model_fields_set}
@@ -332,6 +336,8 @@ async def update_api(api_id: uuid.UUID, body: UpdateApiIn, db: Db, box: Box) -> 
         raise _api_not_found() from None
     except ApiNameTaken:
         raise HTTPException(status.HTTP_409_CONFLICT, "API name already in use") from None
+    except InvalidFlowInput as exc:
+        raise _invalid(exc) from None
     except SecretDecryptionError:
         raise _undecryptable() from None
     return ApiOut.of(updated)
@@ -430,3 +436,182 @@ async def delete_flow(flow_id: uuid.UUID, db: Db) -> Response:
     except FlowNotFound:
         raise _flow_not_found() from None
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ---- Runs ----
+
+
+class RunFlowIn(DomainModel):
+    model_config = ConfigDict(
+        json_schema_extra={"examples": [{"inputs": {"query": "king size linen"}}, {"inputs": {}}]}
+    )
+
+    inputs: Annotated[dict[str, str | int | float | bool | None], Field(max_length=50)] = Field(
+        default={},
+        description="Values by input name. Omitted inputs take their default; inputs with "
+        "`generate` and no value are written by AI.",
+    )
+    ai_connection_id: uuid.UUID | None = Field(
+        default=None,
+        description="Chat connection that writes generated inputs (default: the first OpenAI or "
+        "Azure OpenAI connection with a chat model, by name).",
+    )
+
+
+class ResolvedInputOut(DomainModel):
+    name: str
+    value: Any
+    source: str = Field(description="given, default or generated")
+
+
+class StepRunOut(DomainModel):
+    index: int
+    title: str
+    status: str = Field(description="passed, failed or skipped (after a failed step)")
+    request: dict[str, Any] | None = Field(
+        description="method, url, headers and body as sent, secrets as {{secret.<name>}}."
+    )
+    response: dict[str, Any] | None = Field(
+        description="status, headers, body (JSON when the API sent JSON; long bodies are "
+        "truncated) and sizeBytes. Secret values echoed by the API appear as placeholders."
+    )
+    duration_ms: int | None
+    saved: dict[str, Any] = Field(description="Values this step saved for later steps.")
+    checks: list[dict[str, Any]] = Field(
+        description="Each check, whether it passed, and the actual value."
+    )
+    error: str | None = Field(description="Why the step failed when it is not a check.")
+
+
+class FlowRunOut(DomainModel):
+    id: uuid.UUID
+    flow_id: uuid.UUID
+    status: str = Field(description="passed when every step passed, otherwise failed")
+    inputs: list[ResolvedInputOut]
+    steps: list[StepRunOut]
+    duration_ms: int
+    created_at: datetime
+
+    @classmethod
+    def of(cls, run: Any) -> "FlowRunOut":
+        return cls(
+            id=run.id,
+            flow_id=run.flow_id,
+            status=run.status,
+            inputs=[ResolvedInputOut.model_validate(item) for item in run.inputs],
+            steps=[StepRunOut.model_validate(step) for step in run.steps],
+            duration_ms=run.duration_ms,
+            created_at=run.created_at,
+        )
+
+
+class CurlOut(DomainModel):
+    curl: str
+
+
+class FlowCurlsOut(DomainModel):
+    steps: list[CurlOut]
+
+
+def _ai_error(msg: str) -> dict[str, Any]:
+    return {"type": "value_error", "loc": ["aiConnectionId"], "msg": msg}
+
+
+def flow_runner(request: Request) -> FlowRunner:
+    return request.app.state.flow_runner
+
+
+Runner = Annotated[FlowRunner, Depends(flow_runner)]
+Reveal = Annotated[
+    bool,
+    Query(description="true: the API's secrets in clear; false: their masked hints."),
+]
+runs_router = APIRouter(prefix="/flow-runs", tags=["API flows"])
+
+
+@flows_router.post(
+    "/{flow_id}/runs",
+    response_model=FlowRunOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="Run a flow",
+)
+async def run_flow(
+    flow_id: uuid.UUID, body: RunFlowIn, principal: CurrentPrincipal, db: Db, runner: Runner
+) -> FlowRunOut:
+    """Runs every step now (each has 30 s) and returns the whole trace: per step the request,
+    the response, saved values and checks. The run stops at the first failed step. A failed run
+    is still 201: read `status`, then the first step whose status is `failed`."""
+    try:
+        run = await runner.run(
+            db,
+            flow_id,
+            inputs=body.inputs,
+            connection_id=body.ai_connection_id,
+            created_by=principal.user.id,
+        )
+    except FlowNotFound:
+        raise _flow_not_found() from None
+    except FlowInputError as exc:
+        raise _invalid(InvalidFlowInput(exc.errors)) from None
+    except ConnectionNotFound:
+        raise _invalid(InvalidFlowInput([_ai_error("connection not found")])) from None
+    except UnsupportedConnection as exc:
+        raise _invalid(InvalidFlowInput([_ai_error(str(exc))])) from None
+    except GenerationError as exc:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from None
+    except SecretDecryptionError:
+        raise _undecryptable() from None
+    return FlowRunOut.of(run)
+
+
+@flows_router.get("/{flow_id}/runs", response_model=list[FlowRunOut], summary="List a flow's runs")
+async def list_runs(
+    flow_id: uuid.UUID, db: Db, limit: Annotated[int, Query(ge=1, le=50)] = 20
+) -> list[FlowRunOut]:
+    """Newest first."""
+    try:
+        return [FlowRunOut.of(run) for run in await runs.list_runs(db, flow_id, limit=limit)]
+    except FlowNotFound:
+        raise _flow_not_found() from None
+
+
+@flows_router.get("/{flow_id}/curl", response_model=FlowCurlsOut, summary="A flow as cURL")
+async def flow_curl(
+    flow_id: uuid.UUID, db: Db, box: Box, request: Request, reveal: Reveal = False
+) -> FlowCurlsOut:
+    """Each step as a cURL command before running it. Query parameters other than `reveal` fill
+    inputs by name (`?query=linen`); defaults fill the rest. Values only a run knows (saved
+    values, AI-written inputs) stay as `{{…}}` placeholders."""
+    inputs = {k: v for k, v in request.query_params.items() if k != "reveal"}
+    try:
+        commands = await runs.flow_curls(db, box, flow_id, inputs=inputs, reveal=reveal)
+    except FlowNotFound:
+        raise _flow_not_found() from None
+    except SecretDecryptionError:
+        raise _undecryptable() from None
+    return FlowCurlsOut(steps=[CurlOut(curl=command) for command in commands])
+
+
+@runs_router.get("/{run_id}", response_model=FlowRunOut, summary="Get a flow run")
+async def get_run(run_id: uuid.UUID, db: Db) -> FlowRunOut:
+    try:
+        return FlowRunOut.of(await runs.get_run(db, run_id))
+    except runs.FlowRunNotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Run not found") from None
+
+
+@runs_router.get(
+    "/{run_id}/steps/{step}/curl", response_model=CurlOut, summary="A run step as cURL"
+)
+async def run_step_curl(
+    run_id: uuid.UUID, step: int, db: Db, box: Box, reveal: Reveal = False
+) -> CurlOut:
+    """The request a step sent in that run, as a cURL command (`step` counts from 0)."""
+    try:
+        return CurlOut(curl=await runs.run_curl(db, box, run_id, step, reveal=reveal))
+    except runs.FlowRunNotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Run not found") from None
+    except runs.StepNotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Step not found or not sent") from None
+    except SecretDecryptionError:
+        raise _undecryptable() from None

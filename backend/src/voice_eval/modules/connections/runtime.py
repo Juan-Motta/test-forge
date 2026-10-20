@@ -284,3 +284,39 @@ async def build_trace_reader(
         secret_key=secrets["secret_key"],
         allow_private=allow_private,
     )
+
+
+async def build_chat_client(
+    db: AsyncSession,
+    connection_id: uuid.UUID,
+    *,
+    secret_box: SecretBox,
+    allow_local_http: bool = False,
+    role: str = "writer of generated values",
+) -> tuple[Any, str]:
+    """An OpenAI-compatible client and the model (or Azure deployment) to call it with.
+
+    Raises `ConnectionNotFound`, `UnsupportedConnection` and `SecretDecryptionError`.
+    """
+    from voice_eval.providers.openai_chat import azure_client, openai_client
+
+    kind, config, secrets = await _chat_settings(
+        db, connection_id, secret_box=secret_box, allow_local_http=allow_local_http, role=role
+    )
+    if kind is ConnectionKind.OPENAI:
+        return openai_client(secrets["api_key"], config.base_url), config.chat_model
+    client = azure_client(secrets["api_key"], config.endpoint, config.api_version)
+    return client, config.chat_deployment
+
+
+async def first_chat_connection(db: AsyncSession) -> uuid.UUID | None:
+    """The first connection (by name) that has a chat model, for uses with no connection set."""
+    records = await db.scalars(
+        select(ConnectionRecord)
+        .where(ConnectionRecord.kind.in_([ConnectionKind.OPENAI, ConnectionKind.AZURE_OPENAI]))
+        .order_by(ConnectionRecord.name)
+    )
+    for record in records:
+        if record.kind == ConnectionKind.OPENAI or record.config.get("chat_deployment"):
+            return record.id
+    return None

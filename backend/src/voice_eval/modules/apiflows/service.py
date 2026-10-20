@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from voice_eval.modules.agents.models import AgentRecord
 from voice_eval.modules.apiflows.domain import (
+    MAX_SECRETS,
     AgentRef,
     Api,
     ApiNameTaken,
@@ -123,7 +124,7 @@ def _store_secrets(box: SecretBox, record: ApiRecord, secrets: dict[str, str]) -
     record.secret_hints = {name: secret_hint(value) for name, value in secrets.items()}
 
 
-def _open_secrets(box: SecretBox, record: ApiRecord) -> dict[str, str]:
+def open_secrets(box: SecretBox, record: ApiRecord) -> dict[str, str]:
     if record.secrets_ciphertext is None:
         return {}
     return box.open(record.secrets_ciphertext, owner=record.id, kind=SECRETS_KIND)
@@ -170,12 +171,22 @@ async def update_api(
     if "headers" in changes:
         record.headers = [header.model_dump() for header in changes["headers"]]
     if "secrets" in changes:
-        secrets = _open_secrets(box, record)
+        secrets = open_secrets(box, record)
         for name, value in changes["secrets"].items():
             if value is None:
                 secrets.pop(name, None)
             else:
                 secrets[name] = value
+        if len(secrets) > MAX_SECRETS:
+            raise InvalidFlowInput(
+                [
+                    {
+                        "type": "value_error",
+                        "loc": ["secrets"],
+                        "msg": f"an API holds at most {MAX_SECRETS} secrets",
+                    }
+                ]
+            )
         _store_secrets(box, record, secrets)
     record.updated_at = func.now()
     await _commit_api(db)
@@ -184,7 +195,7 @@ async def update_api(
 
 async def reveal_secrets(db: AsyncSession, box: SecretBox, api_id: uuid.UUID) -> dict[str, str]:
     """The API's secrets in clear. Only for an explicit request to see them."""
-    return _open_secrets(box, await _fetch_api(db, api_id))
+    return open_secrets(box, await _fetch_api(db, api_id))
 
 
 async def delete_api(db: AsyncSession, api_id: uuid.UUID) -> None:

@@ -142,6 +142,24 @@ async def test_updates_single_secrets_and_keeps_the_others(user_client):
     assert (await user_client.get(f"/api/apis/{api['id']}/secrets")).json() == revealed
 
 
+async def test_an_api_holds_at_most_ten_secrets(user_client):
+    api = await make_api(user_client, secrets={f"a{n}": "x" for n in range(10)})
+    grown = await user_client.patch(f"/api/apis/{api['id']}", json={"secrets": {"b": "y"}})
+    assert grown.status_code == 422
+    assert grown.json()["detail"] == [
+        {
+            "type": "value_error",
+            "loc": ["body", "secrets"],
+            "msg": "an API holds at most 10 secrets",
+        }
+    ]
+    swapped = await user_client.patch(
+        f"/api/apis/{api['id']}", json={"secrets": {"a0": None, "b": "y"}}
+    )
+    assert swapped.status_code == 200
+    assert len(swapped.json()["secrets"]) == 10
+
+
 @pytest.mark.parametrize(
     ("overrides", "loc"),
     [

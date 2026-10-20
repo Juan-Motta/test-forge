@@ -38,9 +38,9 @@ Branch: `feat/api-flows` (from `main` at 0d666e6). Delivery: work-unit commits, 
 
 | ID | Specs | Route | Status | Commit |
 | --- | --- | --- | --- | --- |
-| T1 | S1–S3, S10, S11, S14 | inline | done, verifier pending | see L6 |
-| T2 | S3, S4, S6, S10, S12–S16 | inline | pending | |
-| T3 | S7, S8, S14 | inline | pending | |
+| T1 | S1–S3, S10, S11, S14 | inline | done, verified (blocker fixed) | cbee3b8, fix in T2 commit |
+| T2 | S3, S4, S6, S10, S12–S16 | inline | done, verifier pending | see L8 |
+| T3 | S7, S8, S14 | inline | done | see L8 |
 | T4 | S1, S2, S9 | inline | pending | |
 | T5 | S3–S5, S9, S12, S13 | inline | pending | |
 | T6 | S5, S9, S10 | inline | pending | |
@@ -70,4 +70,6 @@ Route evidence: the units are sequential (T2 needs T1; T4–T6 need T1–T2), so
 - L4 (user, 2026-10-20, verbatim): S8. Plan written; implementation awaits the user's go-ahead.
 - L5 (user, 2026-10-20, verbatim): see S10. Credentials are no longer write-only: they are masked by default and revealed with an eye toggle (UI) or the reveal endpoint (API).
 - L6: T1: module `apiflows` (domain, models, service, api), migration 0017 (apis, api_flows, api_flow_agents), `/api/apis` (CRUD, `/secrets` reveal) and `/api/flows` (CRUD, `?apiId`, `?agentId`, reference validation with field locations), OpenAPI summaries and examples. 30 new tests pass; full backend 1217 passed, 1 failed only because the shell exports VOICE_EVAL_MASTER_KEY (passes without it). The tests were written after the code (new module, no RED observed). Delivery strategy: the user's standing convention, work-unit commits on the branch, then fast-forward into main on the user's word.
+- L7: Verifier on T1 (run against a `git archive` export of cbee3b8): S1, S2, S3, S10, S12 and S14 pass. Blocker: PATCH merged secrets past the cap of 10 (S11). Fixed: the cap is checked after the merge (422 at `["body", "secrets"]`), with a test. Advisories kept: removing a secret that a flow uses leaves the flow referencing it (the run then fails that step with "{{secret.x}} has no value"); API names are unique by exact case.
+- L8: T2: `runner.py` (inputs given → default → AI, typed values, templates, steps in order stopping at the first failure, saves, checks, secrets hidden in records and echoed responses, capped bodies, safe transport errors including the egress guard), `ai.py` (one structured chat call writes the generated inputs), `runs.py` (`FlowRunner` on the app: guarded transport with `allow_private` in development, local hosts dialled via `LOCAL_TARGET_HOST`, the first chat connection by default), migration 0018 `api_flow_runs`, and routes `POST/GET /api/flows/{id}/runs`, `GET /api/flows/{id}/curl`, `GET /api/flow-runs/{id}` and `/steps/{n}/curl` (masked unless `?reveal=true`). `connections.runtime` gains `build_chat_client` and `first_chat_connection`. T3: the "API flows" section of the agent skill guide. Full backend suite: 1233 passed (with VOICE_EVAL_MASTER_KEY unset).
 - Forecast: about 3,500 authored changed lines (backend ~1,600, frontend ~1,900), over the 400-line budget, so the delivery strategy is to be chosen before the first commit.

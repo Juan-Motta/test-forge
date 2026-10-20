@@ -15,6 +15,7 @@ from sqlalchemy import text
 from voice_eval.modules.agents import api as agents_api
 from voice_eval.modules.api_keys import api as api_keys_api
 from voice_eval.modules.apiflows import api as apiflows_api
+from voice_eval.modules.apiflows.runs import FlowRunner
 from voice_eval.modules.connections import api as connections_api
 from voice_eval.modules.judgements import api as judgements_api
 from voice_eval.modules.judgements.coordinator import JudgementCoordinator
@@ -113,6 +114,12 @@ def create_app(
     app.state.sessionmaker = sessionmaker
     app.state.runs = runs
     app.state.judgements = judgements
+    app.state.flow_runner = FlowRunner(
+        secret_box=secret_box,
+        allow_private=development,
+        allow_local_http=development,
+        local_target_host=settings.local_target_host,
+    )
     app.add_exception_handler(RequestValidationError, validation_error)
     app.add_middleware(
         CORSMiddleware,
@@ -131,6 +138,7 @@ def create_app(
     protected.include_router(scenario_groups_api.router)
     protected.include_router(apiflows_api.apis_router)
     protected.include_router(apiflows_api.flows_router)
+    protected.include_router(apiflows_api.runs_router)
     protected.include_router(runs_api.router)
     protected.include_router(judgements_api.router)
     protected.include_router(stats_api.router)

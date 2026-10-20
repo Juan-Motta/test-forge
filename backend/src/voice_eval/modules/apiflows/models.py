@@ -89,3 +89,23 @@ class FlowRecord(Base):
     agents: Mapped[list[AgentRecord]] = relationship(
         secondary=flow_agents, lazy="selectin", order_by=AgentRecord.name
     )
+
+
+class FlowRunRecord(Base):
+    """One run of a flow: inputs as used and each step's request (secrets as placeholders),
+    response, saved values and checks."""
+
+    __tablename__ = "api_flow_runs"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    flow_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("api_flows.id", ondelete="CASCADE"), index=True
+    )
+    status: Mapped[str] = mapped_column(String(20))
+    inputs: Mapped[list[dict[str, Any]]] = mapped_column(JSONB)
+    steps: Mapped[list[dict[str, Any]]] = mapped_column(JSONB)
+    duration_ms: Mapped[int]
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
