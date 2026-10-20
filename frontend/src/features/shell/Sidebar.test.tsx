@@ -48,7 +48,15 @@ describe("Sidebar", () => {
     const nav = renderSidebar("/");
     const names = nav.getAllByRole("link").map((link) => link.textContent);
 
-    expect(names.slice(0, 6)).toEqual(["Overview", "Live sessions", "Runs & reports", "Scenarios", "Agents", "Settings"]);
+    expect(names.slice(0, 7)).toEqual([
+      "Overview",
+      "Live sessions",
+      "Runs & reports",
+      "Scenarios",
+      "API flows",
+      "Agents",
+      "Settings",
+    ]);
     expect(nav.queryByRole("link", { name: "Connections" })).not.toBeInTheDocument();
     expect(nav.queryByRole("link", { name: "API keys" })).not.toBeInTheDocument();
   });
@@ -57,7 +65,7 @@ describe("Sidebar", () => {
     const nav = renderSidebar("/runs");
 
     expect(nav.getByRole("link", { name: "Runs & reports" })).toHaveAttribute("aria-current", "page");
-    for (const name of ["Overview", "Live sessions", "Scenarios", "Agents", "Settings"]) {
+    for (const name of ["Overview", "Live sessions", "Scenarios", "API flows", "Agents", "Settings"]) {
       expect(nav.getByRole("link", { name })).not.toHaveAttribute("aria-current");
     }
   });

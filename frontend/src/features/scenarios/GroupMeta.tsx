@@ -28,21 +28,34 @@ export function GroupMeta({
   tags,
   onDescription,
   onTags,
+  descriptionPlaceholder,
+  tagsLabel,
 }: {
   description: string;
   tags: string[];
   onDescription: Commit<string>;
   onTags: Commit<string[]>;
+  /** Wording for what is not a scenario group (defaults: the group's). */
+  descriptionPlaceholder?: string;
+  tagsLabel?: string;
 }) {
   return (
     <div className="flex flex-col gap-2.5">
-      <EditableDescription value={description} onCommit={onDescription} />
-      <TagEditor tags={tags} onCommit={onTags} />
+      <EditableDescription value={description} onCommit={onDescription} placeholder={descriptionPlaceholder} />
+      <TagEditor tags={tags} onCommit={onTags} label={tagsLabel} />
     </div>
   );
 }
 
-function EditableDescription({ value, onCommit }: { value: string; onCommit: Commit<string> }) {
+function EditableDescription({
+  value,
+  onCommit,
+  placeholder: given,
+}: {
+  value: string;
+  onCommit: Commit<string>;
+  placeholder?: string;
+}) {
   const t = useT();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
@@ -88,7 +101,7 @@ function EditableDescription({ value, onCommit }: { value: string; onCommit: Com
           aria-invalid={error ? true : undefined}
           rows={3}
           value={draft}
-          placeholder={t("groups.descriptionPlaceholder")}
+          placeholder={given ?? t("groups.descriptionPlaceholder")}
           onChange={(event) => {
             setDraft(event.target.value);
             setError(undefined);
@@ -104,7 +117,7 @@ function EditableDescription({ value, onCommit }: { value: string; onCommit: Com
   return (
     <span className="flex max-w-3xl items-start gap-1.5">
       <span className={cn("text-sm whitespace-pre-line", value ? "text-muted" : "text-dim")}>
-        {value || t("groups.descriptionPlaceholder")}
+        {value || (given ?? t("groups.descriptionPlaceholder"))}
       </span>
       <IconButton
         size="xs"
@@ -120,7 +133,15 @@ function EditableDescription({ value, onCommit }: { value: string; onCommit: Com
   );
 }
 
-function TagEditor({ tags: saved, onCommit }: { tags: string[]; onCommit: Commit<string[]> }) {
+function TagEditor({
+  tags: saved,
+  onCommit,
+  label,
+}: {
+  tags: string[];
+  onCommit: Commit<string[]>;
+  label?: string;
+}) {
   const t = useT();
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState("");
@@ -189,7 +210,7 @@ function TagEditor({ tags: saved, onCommit }: { tags: string[]; onCommit: Commit
 
   return (
     <div className="flex flex-col gap-1">
-      <ul aria-label={t("groups.tagsLabel")} className="flex flex-wrap items-center gap-1.5">
+      <ul aria-label={label ?? t("groups.tagsLabel")} className="flex flex-wrap items-center gap-1.5">
         {tags.map((tag) => (
           <li key={tag}>
             <Badge tone="outline" mono className="gap-1 pr-1">

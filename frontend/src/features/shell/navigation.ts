@@ -2,6 +2,7 @@ import type { ComponentType } from "react";
 import type { MessageKey } from "@/lib/i18n";
 import {
   AgentsIcon,
+  ApiFlowsIcon,
   LiveIcon,
   OverviewIcon,
   RunsIcon,
@@ -21,6 +22,7 @@ export const NAV_PRIMARY: NavItem[] = [
   { href: "/live", label: "nav.live", icon: LiveIcon },
   { href: "/runs", label: "nav.runs", icon: RunsIcon },
   { href: "/scenarios", label: "nav.scenarios", icon: ScenariosIcon },
+  { href: "/apis", label: "nav.apis", icon: ApiFlowsIcon },
   { href: "/agents", label: "nav.agents", icon: AgentsIcon },
 ];
 

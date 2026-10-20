@@ -1,5 +1,5 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { act, screen, waitFor } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw/http";
 import { use } from "react";
@@ -203,6 +203,25 @@ describe("AppShell", () => {
     rerender(<QueryClientProvider client={queryClient}>{shell()}</QueryClientProvider>);
 
     expect(screen.getByRole("button", { name: "Open navigation" })).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("lists API flows right after Scenarios and marks it current on every /apis page", async () => {
+    signedIn();
+    nav.pathname = "/apis/api-shop";
+    renderWithClient(
+      <AppShell>
+        <p>content</p>
+      </AppShell>,
+    );
+    const primary = screen.getByRole("navigation", { name: "Primary" });
+    const names = within(primary)
+      .getAllByRole("link")
+      .map((link) => link.getAttribute("href"));
+    expect(names.indexOf("/apis")).toBe(names.indexOf("/scenarios") + 1);
+    const apis = within(primary).getByRole("link", { name: "API flows" });
+    expect(apis).toHaveAttribute("href", "/apis");
+    expect(apis).toHaveAttribute("aria-current", "page");
+    expect(within(primary).getByRole("link", { name: "Scenarios" })).not.toHaveAttribute("aria-current");
   });
 
   it("badges Live sessions with the number of queued, connecting and running runs", async () => {

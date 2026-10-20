@@ -206,3 +206,20 @@ export const PriceIcon = (p: IconProps) => (
     <path d="M12 3v18M16.5 7.5c-.8-1.2-2.4-2-4.5-2-2.5 0-4 1.3-4 3s1.6 2.6 4 3.2c2.6.6 4.5 1.5 4.5 3.4s-1.9 3.4-4.5 3.4c-2.2 0-3.9-.9-4.7-2.3" />
   </Icon>
 );
+
+/** API flows: requests chained one after another. */
+export const ApiFlowsIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <rect x="3" y="4" width="7" height="5" rx="1.5" />
+    <rect x="14" y="15" width="7" height="5" rx="1.5" />
+    <path d="M10 6.5h3.5a2 2 0 0 1 2 2V15" />
+    <path d="m13.5 13 2 2 2-2" />
+  </Icon>
+);
+
+export const KeyIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <circle cx="8" cy="15" r="4" />
+    <path d="m10.8 12.2 8.7-8.7M16.5 6.5l2.5 2.5M14 9l2 2" />
+  </Icon>
+);
