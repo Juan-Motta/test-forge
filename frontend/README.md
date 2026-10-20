@@ -1,4 +1,4 @@
-# Duet web
+# TestForge web
 
 Next.js (App Router) console for the voice-eval backend in `../backend`.
 

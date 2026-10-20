@@ -8,7 +8,7 @@ export function ScoringEn() {
   return (
     <>
       <P>
-        After each call, a judge model reviews it against the scenario&apos;s success criteria. Duet keeps the judge on a
+        After each call, a judge model reviews it against the scenario&apos;s success criteria. TestForge keeps the judge on a
         short leash: it picks a band from 1 to 5 for each criterion, and fixed rules turn those bands into points, verdicts and
         an overall score. That keeps scores stable from one judgement to the next.
       </P>

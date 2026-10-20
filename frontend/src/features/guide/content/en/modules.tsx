@@ -307,7 +307,7 @@ export function ModulesEn() {
 
       <Region id="connections" title="Connections">
         <P>
-          Under <Ui>Settings → Connections</Ui>: the credentials Duet uses to reach providers. Secrets are write-only: they are
+          Under <Ui>Settings → Connections</Ui>: the credentials TestForge uses to reach providers. Secrets are write-only: they are
           stored encrypted and only their last 4 characters are ever shown.
         </P>
         <Table
@@ -331,7 +331,7 @@ export function ModulesEn() {
 
       <Region id="api-keys" title="API keys">
         <P>
-          Under <Ui>Settings → API keys</Ui>: keys let scripts, CI or an AI agent use Duet without signing in. A key acts as you.
+          Under <Ui>Settings → API keys</Ui>: keys let scripts, CI or an AI agent use TestForge without signing in. A key acts as you.
         </P>
         <Bullets>
           <li>
@@ -352,7 +352,7 @@ export function ModulesEn() {
 
       <Region id="model-prices" title="Model prices">
         <P>
-          Under <Ui>Settings → Model prices</Ui>: the token prices Duet uses to estimate what each evaluation costs. Each run
+          Under <Ui>Settings → Model prices</Ui>: the token prices TestForge uses to estimate what each evaluation costs. Each run
           report shows the <Ui>Evaluation cost</Ui> (the evaluator plus the judge, never your agent) and the runs list a
           compact <Ui>Cost</Ui> column.
         </P>

@@ -58,7 +58,7 @@ describe("Scenario export and import", () => {
     const config = JSON.parse((within(dialog).getByLabelText("Exported config") as HTMLTextAreaElement).value);
 
     expect(config).toMatchObject({
-      duet: "scenario",
+      testforge: "scenario",
       version: 1,
       agent: "Hotel booking assistant",
       group: "Hotel booking assistant",
@@ -116,7 +116,7 @@ describe("Scenario export and import", () => {
     await importText(
       user,
       JSON.stringify({
-        duet: "scenario",
+        testforge: "scenario",
         version: 1,
         agent: "Lola personal shopper",
         group: "Staging smoke",
@@ -161,7 +161,7 @@ describe("Scenario export and import", () => {
     setup([]);
     const user = await renderEditor();
 
-    await importText(user, JSON.stringify({ duet: "agent", version: 1, name: "x" }));
+    await importText(user, JSON.stringify({ testforge: "agent", version: 1, name: "x" }));
     expect(screen.getByLabelText("Exported config")).toHaveAccessibleDescription(
       expect.stringContaining("This config is not a scenario."),
     );

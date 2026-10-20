@@ -42,7 +42,7 @@ async function show(Page: Page, lang: "en" | "es" = "en") {
 const GUIDE_SECTIONS = guideSections("en");
 
 describe("Guide layout", () => {
-  it("has the Duet brand, a link into the app and the Swagger reference", async () => {
+  it("has the TestForge brand, a link into the app and the Swagger reference", async () => {
     render(
       <Layout params={Promise.resolve({ lang: "en" })}>
         <p>content</p>
@@ -50,7 +50,7 @@ describe("Guide layout", () => {
     );
 
     const header = screen.getByRole("banner");
-    expect(within(header).getByText("Duet")).toBeInTheDocument();
+    expect(within(header).getByText("TestForge")).toBeInTheDocument();
     expect(within(header).getByRole("link", { name: "Open the app" })).toHaveAttribute("href", "/");
     const swagger = within(header).getByRole("link", { name: /API reference \(Swagger\)/ });
     expect(swagger).toHaveAttribute("href", "/api/docs");
@@ -74,7 +74,7 @@ describe("Guide index", () => {
     }
   });
 
-  it("explains Duet and draws the end-to-end flow", async () => {
+  it("explains TestForge and draws the end-to-end flow", async () => {
     await show(OverviewPage);
 
     expect(screen.getByRole("figure", { name: /From scenario to report/ })).toBeInTheDocument();
@@ -184,9 +184,9 @@ describe("Guide in Spanish", () => {
   const SPANISH = guideSections("es");
 
   it("titles the layout in the page language", async () => {
-    expect(await layoutMetadata()).toMatchObject({ title: { default: "Duet guide" } });
+    expect(await layoutMetadata()).toMatchObject({ title: { default: "TestForge guide" } });
     root.lang = "es";
-    expect(await layoutMetadata()).toMatchObject({ title: { default: "Guía de Duet" } });
+    expect(await layoutMetadata()).toMatchObject({ title: { default: "Guía de TestForge" } });
   });
 
   describe.each(SPANISH.map((item) => [item.slug, item] as const))("page %s", (slug, item) => {
@@ -208,7 +208,7 @@ describe("Guide in Spanish", () => {
 
       root.lang = "es";
       expect(await PAGES[slug].metadata()).toEqual({
-        title: { absolute: `${item.title} · Guía de Duet` },
+        title: { absolute: `${item.title} · Guía de TestForge` },
         description: item.summary,
       });
     });

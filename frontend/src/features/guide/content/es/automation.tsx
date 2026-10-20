@@ -4,26 +4,26 @@ import { CodeBlock } from "@/ui";
 const AUTH_HEADER = "Authorization: Bearer ve_xxxxxxxx_<secret>";
 
 const LAUNCH = `# Guarda la clave en una variable de entorno; nunca la pegues en archivos ni registros.
-curl -s -X POST "$DUET_URL/api/runs" \\
-  -H "Authorization: Bearer $DUET_API_KEY" \\
+curl -s -X POST "$TESTFORGE_URL/api/runs" \\
+  -H "Authorization: Bearer $TESTFORGE_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{"scenarioIds": ["<scenario id>"], "repetitions": 3, "concurrency": 1, "label": "nightly"}'`;
 
 const FOLLOW = `# El lote: su estado y el de cada corrida, el estado de su evaluación y su puntuación
-curl -s "$DUET_URL/api/runs/batches/<batch id>" -H "Authorization: Bearer $DUET_API_KEY"
+curl -s "$TESTFORGE_URL/api/runs/batches/<batch id>" -H "Authorization: Bearer $TESTFORGE_API_KEY"
 
 # La evaluación del juez de una corrida: puntuación, veredictos, sugerencias e informe
-curl -s "$DUET_URL/api/runs/<run id>/judgement" -H "Authorization: Bearer $DUET_API_KEY"`;
+curl -s "$TESTFORGE_URL/api/runs/<run id>/judgement" -H "Authorization: Bearer $TESTFORGE_API_KEY"`;
 
-const SKILL = `curl -s "$DUET_URL/api/skill" -o SKILL.md          # la guía como un solo archivo Markdown
-curl -s "$DUET_URL/api/skill.zip" -o voice-evaluator.zip   # una carpeta de skill con la referencia completa de la API`;
+const SKILL = `curl -s "$TESTFORGE_URL/api/skill" -o SKILL.md          # la guía como un solo archivo Markdown
+curl -s "$TESTFORGE_URL/api/skill.zip" -o voice-evaluator.zip   # una carpeta de skill con la referencia completa de la API`;
 
 /** The Spanish body of the "automation" guide page. */
 export function AutomationEs() {
   return (
     <>
       <P>
-        Todo lo que haces en la app también se puede hacer con la API HTTP de Duet: lanzar corridas desde la CI después de cada
+        Todo lo que haces en la app también se puede hacer con la API HTTP de TestForge: lanzar corridas desde la CI después de cada
         despliegue, reunir puntuaciones en un script o dejar que un agente de programación con IA ejecute un escenario, lea el
         informe y corrija tu agente. Tres cosas lo hacen posible.
       </P>
@@ -98,7 +98,7 @@ export function AutomationEs() {
 
       <H2 id="agent-skill">4. Dale la skill a un agente de IA</H2>
       <P>
-        La <Ui>skill para agentes</Ui> le enseña a un agente de programación con IA (como Claude Code) a usar Duet: qué son los
+        La <Ui>skill para agentes</Ui> le enseña a un agente de programación con IA (como Claude Code) a usar TestForge: qué son los
         escenarios, las corridas y las evaluaciones del juez, los flujos de arriba con las solicitudes exactas y cómo leer los
         resultados. Siempre coincide con la versión en ejecución y cualquiera puede obtenerla sin una clave.
       </P>

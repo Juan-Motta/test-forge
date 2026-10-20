@@ -43,7 +43,7 @@ describe("guide dictionaries", () => {
 
 describe("fill", () => {
   it("replaces known placeholders and leaves unknown ones", () => {
-    expect(fill("{title} · Duet guide", { title: "Scoring" })).toBe("Scoring · Duet guide");
+    expect(fill("{title} · TestForge guide", { title: "Scoring" })).toBe("Scoring · TestForge guide");
     expect(fill("Sample {n} of {total}", { n: 2 })).toBe("Sample 2 of {total}");
   });
 });

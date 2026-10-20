@@ -54,12 +54,12 @@ export const es: Messages = {
   "account.signingOut": "Cerrando sesión…",
 
   "login.metaTitle": "Iniciar sesión",
-  "login.title": "Inicia sesión en Duet",
+  "login.title": "Inicia sesión en TestForge",
   "login.subtitle": "Usa la cuenta que tu administrador creó para ti.",
   "login.guideLink": "¿Primera vez aquí? Lee la guía",
 
   "guideHeader.skip": "Saltar al contenido",
-  "guideHeader.home": "Inicio de la guía de Duet",
+  "guideHeader.home": "Inicio de la guía de TestForge",
   "guideHeader.badge": "Guía",
   "guideHeader.links": "Enlaces de la guía",
   "guideHeader.apiNewTab": "Referencia de la API (Swagger) (se abre en una pestaña nueva)",
@@ -1122,7 +1122,7 @@ export const es: Messages = {
   "transfer.kind.scenario": "un escenario",
   "transfer.error.json": "Esto no es una configuración exportada: pega el texto completo de Exportar.",
   "transfer.error.kind": "Esta configuración no es {kind}.",
-  "transfer.error.version": "Esta configuración viene de una versión de Duet más nueva o desconocida.",
+  "transfer.error.version": "Esta configuración viene de una versión de TestForge más nueva o desconocida.",
   "transfer.error.fileTooLarge": "Ese archivo es demasiado grande para ser una configuración.",
   "transfer.note.missingConnection": "Aquí no hay ninguna conexión llamada “{name}”: elige una.",
   "transfer.note.missingAgent": "Aquí no hay ningún agente llamado “{name}”: elige el agente a evaluar.",

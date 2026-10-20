@@ -4,15 +4,15 @@
 
 export const en = {
   meta: {
-    /** Absolute page title, so the app's "· Duet" template does not apply. */
-    title: "{title} · Duet guide",
-    layoutTitle: "Duet guide",
-    layoutDescription: "A visual, plain-language guide to Duet, the voice and text agent evaluator.",
+    /** Absolute page title, so the app's "· TestForge" template does not apply. */
+    title: "{title} · TestForge guide",
+    layoutTitle: "TestForge guide",
+    layoutDescription: "A visual, plain-language guide to TestForge, the voice and text agent evaluator.",
   },
   sections: {
     overview: {
       title: "Overview",
-      summary: "What Duet is, who it is for, and the idea behind it: a simulated user calls or chats with your agent.",
+      summary: "What TestForge is, who it is for, and the idea behind it: a simulated user calls or chats with your agent.",
     },
     "getting-started": {
       title: "Getting started",
@@ -36,11 +36,11 @@ export const en = {
     },
     automation: {
       title: "Automation",
-      summary: "Drive Duet from scripts, CI or an AI agent with API keys, the Swagger reference and the agent skill.",
+      summary: "Drive TestForge from scripts, CI or an AI agent with API keys, the Swagger reference and the agent skill.",
     },
     faq: {
       title: "Troubleshooting & FAQ",
-      summary: "Common problems and their fixes, frequent questions, and a glossary of the terms used in Duet.",
+      summary: "Common problems and their fixes, frequent questions, and a glossary of the terms used in TestForge.",
     },
   },
   nav: {

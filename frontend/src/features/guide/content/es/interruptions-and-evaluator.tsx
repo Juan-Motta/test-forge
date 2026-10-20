@@ -6,14 +6,14 @@ export function InterruptionsEs() {
   return (
     <>
       <P>
-        Las personas reales no esperan con paciencia a que termine cada frase. Esta página explica cómo quien llama en Duet
+        Las personas reales no esperan con paciencia a que termine cada frase. Esta página explica cómo quien llama en TestForge
         puede interrumpir a tu agente, las dos formas en que puede hablar y cómo termina una llamada.
       </P>
 
       <H2 id="barge-in">Interrupciones (barge-in)</H2>
       <P>
         Una <Ui>interrupción</Ui> (en inglés, <em>barge-in</em>) ocurre cuando alguien empieza a hablar mientras el otro lado
-        todavía está hablando. Duet puede hacer que quien llama corte a tu agente a mitad de respuesta, exactamente como lo
+        todavía está hablando. TestForge puede hacer que quien llama corte a tu agente a mitad de respuesta, exactamente como lo
         haría una persona, para comprobar que el agente se detiene, escucha y no da por hecho que quien llama oyó la parte que
         nunca se reprodujo.
       </P>
@@ -44,7 +44,7 @@ export function InterruptionsEs() {
         </li>
         <li>Quien llama solo reacciona a lo que escuchó, como lo haría una persona.</li>
         <li>
-          Duet registra si el servidor de tu agente <Ui>confirmó</Ui> el corte (recortó o eliminó la parte no escuchada de su
+          TestForge registra si el servidor de tu agente <Ui>confirmó</Ui> el corte (recortó o eliminó la parte no escuchada de su
           respuesta). La confirmación puede llegar un poco más tarde en la llamada.
         </li>
         <li>

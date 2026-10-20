@@ -6,13 +6,13 @@ export function InterruptionsEn() {
   return (
     <>
       <P>
-        Real callers do not wait politely for every sentence to finish. This page explains how Duet&apos;s caller can
+        Real callers do not wait politely for every sentence to finish. This page explains how TestForge&apos;s caller can
         interrupt your agent, the two ways it can speak, and how a call comes to an end.
       </P>
 
       <H2 id="barge-in">Interruptions (barge-in)</H2>
       <P>
-        A <Ui>barge-in</Ui> is when someone starts talking while the other side is still speaking. Duet can make the caller cut
+        A <Ui>barge-in</Ui> is when someone starts talking while the other side is still speaking. TestForge can make the caller cut
         your agent off mid-reply, exactly like a person would, to check that the agent stops, listens, and does not pretend the
         caller heard the part that was never played.
       </P>
@@ -45,7 +45,7 @@ export function InterruptionsEn() {
           The caller only reacts to what it heard, like a person would.
         </li>
         <li>
-          Duet records whether your agent&apos;s server <Ui>confirmed</Ui> the cut (it trimmed or deleted the unheard part of
+          TestForge records whether your agent&apos;s server <Ui>confirmed</Ui> the cut (it trimmed or deleted the unheard part of
           its reply). The confirmation can arrive a little later in the call.
         </li>
         <li>

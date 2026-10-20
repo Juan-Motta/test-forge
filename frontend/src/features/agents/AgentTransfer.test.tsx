@@ -46,7 +46,7 @@ describe("Agent export", () => {
     const text = (within(dialog).getByLabelText("Exported config") as HTMLTextAreaElement).value;
 
     expect(JSON.parse(text)).toEqual({
-      duet: "agent",
+      testforge: "agent",
       version: 1,
       kind: "text",
       name: "Chat desk",
@@ -69,7 +69,7 @@ describe("Agent import", () => {
     const api = mockAgentsApi([]);
     const { user, dialog, panel } = await openImport();
     const exported = {
-      duet: "agent",
+      testforge: "agent",
       version: 1,
       kind: "text",
       name: "Chat desk",
@@ -112,7 +112,7 @@ describe("Agent import", () => {
 
     await user.click(within(panel).getByLabelText("Exported config"));
     await user.paste(
-      JSON.stringify({ duet: "agent", version: 1, kind: "text", name: "Keyed", baseUrl: "https://k.example.com", channelId: "k", auth: "api_key", langfuseConnection: "traces" }),
+      JSON.stringify({ testforge: "agent", version: 1, kind: "text", name: "Keyed", baseUrl: "https://k.example.com", channelId: "k", auth: "api_key", langfuseConnection: "traces" }),
     );
     await user.click(within(panel).getByRole("button", { name: "Import" }));
 
@@ -132,12 +132,12 @@ describe("Agent import", () => {
     expect(field).toHaveAccessibleDescription(expect.stringContaining("This is not an exported config"));
 
     await user.clear(field);
-    await user.paste(JSON.stringify({ duet: "scenario", version: 1, name: "x" }));
+    await user.paste(JSON.stringify({ testforge: "scenario", version: 1, name: "x" }));
     await user.click(within(panel).getByRole("button", { name: "Import" }));
     expect(field).toHaveAccessibleDescription(expect.stringContaining("This config is not an agent."));
 
     await user.clear(field);
-    await user.paste(JSON.stringify({ duet: "agent", version: 2 }));
+    await user.paste(JSON.stringify({ testforge: "agent", version: 2 }));
     await user.click(within(panel).getByRole("button", { name: "Import" }));
     expect(field).toHaveAccessibleDescription(expect.stringContaining("newer or unknown version"));
   });
@@ -147,7 +147,7 @@ describe("Agent import", () => {
     mockAgentsApi([]);
     const { user, dialog, panel } = await openImport();
     const file = new File(
-      [JSON.stringify({ duet: "agent", version: 1, kind: "voice", name: "From file", baseUrl: "wss://f.example.com/ws", channelId: "f", userId: "u", protocol: "live" })],
+      [JSON.stringify({ testforge: "agent", version: 1, kind: "voice", name: "From file", baseUrl: "wss://f.example.com/ws", channelId: "f", userId: "u", protocol: "live" })],
       "from-file.agent.json",
       { type: "application/json" },
     );

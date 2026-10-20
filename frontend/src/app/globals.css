@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-/* Design tokens from the Duet design canvas: blue is the agent under test, amber is the evaluator
+/* Design tokens from the TestForge design canvas: blue is the agent under test, amber is the evaluator
    (and the primary action). Dark is the default palette; the light one below keeps the same names
    and applies when the system prefers light (unless the page forces dark) or when the page forces
    light. `data-theme` on <html> is set by the theme control (see lib/browser/theme.ts). */

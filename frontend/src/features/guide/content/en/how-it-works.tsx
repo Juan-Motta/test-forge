@@ -14,7 +14,7 @@ export function HowItWorksEn() {
 
       <H2 id="scenario-to-batch">From scenario to batch</H2>
       <P>
-        When you press <Ui>Launch</Ui>, Duet creates a <Ui>batch</Ui>: one <Ui>run</Ui> for every scenario you picked, times
+        When you press <Ui>Launch</Ui>, TestForge creates a <Ui>batch</Ui>: one <Ui>run</Ui> for every scenario you picked, times
         the number of runs each. Launching 2 scenarios with 3 runs each makes a batch of 6 runs. An optional label helps you
         find the batch later, like &ldquo;after prompt fix&rdquo;.
       </P>
@@ -29,7 +29,7 @@ export function HowItWorksEn() {
         </li>
         <li>
           Each run opens its own connection with a fresh <Ui>thread ID</Ui>. It is also the agent&apos;s Langfuse session id,
-          which is how Duet finds the agent&apos;s traces for that call.
+          which is how TestForge finds the agent&apos;s traces for that call.
         </li>
       </Bullets>
       <Callout locale="en" tone="warning" title="A scenario that cannot run stops the launch">
@@ -39,16 +39,16 @@ export function HowItWorksEn() {
 
       <H2 id="the-call">The call: evaluator and agent</H2>
       <P>
-        When a run starts, Duet opens your agent&apos;s WebSocket exactly like a real client and waits until the agent says its
+        When a run starts, TestForge opens your agent&apos;s WebSocket exactly like a real client and waits until the agent says its
         session is ready. Then the conversation flows turn by turn:
       </P>
       <Bullets>
-        <li>The agent speaks (often a greeting first). Duet records its audio and its text.</li>
+        <li>The agent speaks (often a greeting first). TestForge records its audio and its text.</li>
         <li>
           The evaluator decides what the caller says next, following the persona, the goal, the instructions and the facts. It
           only reveals a fact when the agent asks for it.
         </li>
-        <li>The evaluator speaks with a synthetic voice, and the agent answers. Duet times every reply.</li>
+        <li>The evaluator speaks with a synthetic voice, and the agent answers. TestForge times every reply.</li>
         <li>
           The call ends when the caller reaches its goal or says goodbye (depending on the scenario), when the agent closes
           the session, when the time limit is reached, or after too long without speech.
@@ -62,12 +62,12 @@ export function HowItWorksEn() {
 
       <H2 id="text-agents">Text agents: a chat instead of a call</H2>
       <P>
-        With a text agent there is no audio. Duet reaches the agent over Vivi&apos;s channel API, and the evaluator writes
+        With a text agent there is no audio. TestForge reaches the agent over Vivi&apos;s channel API, and the evaluator writes
         first:
       </P>
       <Bullets>
         <li>
-          The evaluator writes the user&apos;s message, following the same persona, goal, instructions and facts, and Duet
+          The evaluator writes the user&apos;s message, following the same persona, goal, instructions and facts, and TestForge
           sends it with an HTTP request: <Code>/stream</Code> (the reply arrives in pieces as it is written) or{" "}
           <Code>/invoke</Code> (the whole reply in one response), depending on the agent&apos;s mode.
         </li>
@@ -76,7 +76,7 @@ export function HowItWorksEn() {
           also the Langfuse session id, as for calls.
         </li>
         <li>
-          Duet times each reply from the moment the message is sent: the time to the <Ui>first text</Ui> (the latency in
+          TestForge times each reply from the moment the message is sent: the time to the <Ui>first text</Ui> (the latency in
           Stream mode) and to the <Ui>full reply</Ui> (the latency in Invoke mode), and notes the tools the agent ran.
         </li>
         <li>
@@ -118,10 +118,10 @@ export function HowItWorksEn() {
           ["The agent's reply failed", "Failed", "Text agents: an HTTP error, a timeout, or a stream that stopped without its end-of-reply event."],
           ["Could not connect to the agent", "Failed", "The WebSocket URL could not be reached."],
           ["The agent never became ready", "Failed", "The connection opened but the session never started."],
-          ["Protocol error", "Failed", "Duet could not recognise or follow the agent's voice protocol."],
+          ["Protocol error", "Failed", "TestForge could not recognise or follow the agent's voice protocol."],
           ["Speech synthesis failed / The evaluator model failed", "Failed", "A problem with the caller's voice or brain: check the scenario's connections."],
           ["Cancelled", "Cancelled", "Someone stopped the run."],
-          ["The server stopped / restarted", "Interrupted", "Duet itself was stopped during the call."],
+          ["The server stopped / restarted", "Interrupted", "TestForge itself was stopped during the call."],
         ]}
       />
 
@@ -135,7 +135,7 @@ export function HowItWorksEn() {
         head={["State", "What is happening"]}
         rows={[
           ["Queued", "Waiting for the judge."],
-          ["Collecting traces", "Only with a Langfuse connection: Duet waits until the agent's traces are complete, checking every 30 seconds, for up to 20 minutes."],
+          ["Collecting traces", "Only with a Langfuse connection: TestForge waits until the agent's traces are complete, checking every 30 seconds, for up to 20 minutes."],
           ["Judging", "The judge model scores every criterion, three times, on the same evidence."],
           ["Completed", "The score, scorecard, suggestions and brief are ready."],
           ["Failed", "The judge could not finish; the report says why and offers Retry."],

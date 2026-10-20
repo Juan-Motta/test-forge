@@ -12,7 +12,7 @@ function Item({ question, children }: { question: string; children: ReactNode })
 
 const GLOSSARY = [
   { term: "Agente", definition: "El agente evaluado: un agente de voz al que se llega por su WebSocket, o un agente de texto al que se llega por la API de canales de Vivi. Se muestra en azul." },
-  { term: "Evaluador", definition: "El usuario simulado de Duet. Interpreta una persona y persigue un objetivo, hablando con una voz sintética a un agente de voz o escribiéndole a un agente de texto. Se muestra en ámbar." },
+  { term: "Evaluador", definition: "El usuario simulado de TestForge. Interpreta una persona y persigue un objetivo, hablando con una voz sintética a un agente de voz o escribiéndole a un agente de texto. Se muestra en ámbar." },
   { term: "Escenario", definition: "Un tipo de llamada: la persona, el objetivo, los datos, los criterios de éxito, las condiciones de fin, las interrupciones y la configuración del evaluador." },
   { term: "Persona", definition: "Quién llama: un nombre, un idioma (idioma y región), un temperamento y notas sobre sus hábitos." },
   { term: "Lote", definition: "Todo lo que crea un lanzamiento: una corrida por escenario y repetición." },
@@ -50,14 +50,14 @@ export function FaqEs() {
         </Item>
         <Item question="Mi corrida falló con «No se pudo conectar con el agente».">
           <P>
-            Duet no pudo llegar a la URL del WebSocket. Revísala en la página del agente y presiona{" "}
+            TestForge no pudo llegar a la URL del WebSocket. Revísala en la página del agente y presiona{" "}
             <Ui>Probar la conexión</Ui>. Usa <Code>wss://</Code> para agentes remotos; <Code>ws://</Code> solo funciona con
             direcciones locales como <Code>localhost</Code>.
           </P>
         </Item>
         <Item question="«El agente nunca estuvo listo» o «Error de protocolo».">
           <P>
-            La conexión se abrió, pero la sesión no empezó, o Duet no reconoció el protocolo del agente. Revisa el ID del canal,
+            La conexión se abrió, pero la sesión no empezó, o TestForge no reconoció el protocolo del agente. Revisa el ID del canal,
             el ID del usuario y el origen (volver a importar un cURL reciente es la forma más fácil) y prueba a poner en{" "}
             <Ui>Protocolo</Ui> el que habla tu agente en lugar de Detección automática.
           </P>
@@ -79,7 +79,7 @@ export function FaqEs() {
         </Item>
         <Item question="Mi agente de texto falla con «The agent refused the message (HTTP 422)».">
           <P>
-            Los canales API y WEB exigen que el <Code>threadId</Code> sea un UUID. Duet siempre envía uno, así que un 422 suele
+            Los canales API y WEB exigen que el <Code>threadId</Code> sea un UUID. TestForge siempre envía uno, así que un 422 suele
             significar que la URL base o el canal apuntan a otro servicio; revísalos, o vuelve a importar un cURL reciente, y
             presiona <Ui>Probar la conexión</Ui>.
           </P>
@@ -95,13 +95,13 @@ export function FaqEs() {
         </Item>
         <Item question="La evaluación del juez está tardando mucho.">
           <P>
-            Sin Langfuse suele tardar unos minutos. Con Langfuse, Duet espera a que las trazas del agente dejen de cambiar, lo
+            Sin Langfuse suele tardar unos minutos. Con Langfuse, TestForge espera a que las trazas del agente dejen de cambiar, lo
             que puede tardar hasta unos 20 minutos después de la llamada. El reporte muestra cuánto tiempo lleva esperando.
           </P>
         </Item>
         <Item question="Un criterio dice «Trazas no disponibles».">
           <P>
-            Es un criterio de traza, pero Duet no encontró trazas. Vincula una conexión de Langfuse al agente, comprueba que tu
+            Es un criterio de traza, pero TestForge no encontró trazas. Vincula una conexión de Langfuse al agente, comprueba que tu
             agente use el ID del hilo de la corrida como su ID de sesión de Langfuse y luego usa <Ui>Volver a evaluar</Ui> en la
             corrida.
           </P>
@@ -196,7 +196,7 @@ export function FaqEs() {
         </Item>
         <Item question="¿Quién puede leer esta guía?">
           <P>
-            Cualquiera que pueda llegar a Duet: la guía y la referencia de la API no requieren iniciar sesión. Todo lo demás en
+            Cualquiera que pueda llegar a TestForge: la guía y la referencia de la API no requieren iniciar sesión. Todo lo demás en
             la app y en la API sí.
           </P>
         </Item>

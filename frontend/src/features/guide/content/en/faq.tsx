@@ -12,7 +12,7 @@ function Item({ question, children }: { question: string; children: ReactNode })
 
 const GLOSSARY = [
   { term: "Agent", definition: "The agent under test: a voice agent reached over its WebSocket, or a text agent reached over Vivi's channel API. Shown in blue." },
-  { term: "Evaluator", definition: "Duet's simulated user. It plays a persona and pursues a goal, speaking with a synthetic voice to a voice agent or writing to a text agent. Shown in amber." },
+  { term: "Evaluator", definition: "TestForge's simulated user. It plays a persona and pursues a goal, speaking with a synthetic voice to a voice agent or writing to a text agent. Shown in amber." },
   { term: "Scenario", definition: "One kind of call: the persona, goal, facts, success criteria, end conditions, interruptions and evaluator setup." },
   { term: "Persona", definition: "Who the caller is: a name, a language (locale), a temperament and notes on habits." },
   { term: "Batch", definition: "Everything created by one launch: one run per scenario and repetition." },
@@ -50,14 +50,14 @@ export function FaqEn() {
         </Item>
         <Item question="My run failed with &ldquo;Could not connect to the agent&rdquo;.">
           <P>
-            Duet could not reach the WebSocket URL. Check it on the agent page and press <Ui>Run connection test</Ui>. Use{" "}
+            TestForge could not reach the WebSocket URL. Check it on the agent page and press <Ui>Run connection test</Ui>. Use{" "}
             <Code>wss://</Code> for remote agents; <Code>ws://</Code> only works for local addresses such as{" "}
             <Code>localhost</Code>.
           </P>
         </Item>
         <Item question="&ldquo;The agent never became ready&rdquo; or &ldquo;Protocol error&rdquo;.">
           <P>
-            The connection opened but the session did not start, or Duet did not recognise the agent&apos;s protocol. Check the
+            The connection opened but the session did not start, or TestForge did not recognise the agent&apos;s protocol. Check the
             Channel ID, User ID and Origin (re-importing a fresh cURL is the easiest way), and try setting <Ui>Protocol</Ui> to
             the one your agent speaks instead of Auto-detect.
           </P>
@@ -79,7 +79,7 @@ export function FaqEn() {
         </Item>
         <Item question="My text agent fails with &ldquo;The agent refused the message (HTTP 422)&rdquo;.">
           <P>
-            API and WEB channels require the <Code>threadId</Code> to be a UUID. Duet always sends one, so a 422 usually means
+            API and WEB channels require the <Code>threadId</Code> to be a UUID. TestForge always sends one, so a 422 usually means
             the base URL or channel points to a different service; check them, or re-import a fresh cURL, and press{" "}
             <Ui>Run connection test</Ui>.
           </P>
@@ -94,13 +94,13 @@ export function FaqEn() {
         </Item>
         <Item question="The judgement is taking a long time.">
           <P>
-            Without Langfuse it usually takes a few minutes. With Langfuse, Duet waits until the agent&apos;s traces stop
+            Without Langfuse it usually takes a few minutes. With Langfuse, TestForge waits until the agent&apos;s traces stop
             changing, which can take up to about 20 minutes after the call. The report shows how long it has been waiting.
           </P>
         </Item>
         <Item question="A criterion says &ldquo;Traces unavailable&rdquo;.">
           <P>
-            It is a trace criterion, but Duet found no traces. Link a Langfuse connection to the agent, check that your agent
+            It is a trace criterion, but TestForge found no traces. Link a Langfuse connection to the agent, check that your agent
             uses the run&apos;s thread ID as its Langfuse session id, then <Ui>Re-judge</Ui> the run.
           </P>
         </Item>
@@ -183,7 +183,7 @@ export function FaqEn() {
         </Item>
         <Item question="Who can read this guide?">
           <P>
-            Anyone who can reach Duet: the guide and the API reference need no sign-in. Everything else in the app and the API
+            Anyone who can reach TestForge: the guide and the API reference need no sign-in. Everything else in the app and the API
             does.
           </P>
         </Item>

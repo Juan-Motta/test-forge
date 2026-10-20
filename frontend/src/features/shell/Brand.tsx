@@ -1,6 +1,6 @@
 import { T } from "@/lib/i18n";
 
-/** Two-circle mark (blue agent, amber evaluator) and the Duet wordmark. */
+/** Two-circle mark (blue agent, amber evaluator) and the TestForge wordmark. */
 export function Brand() {
   return (
     <div className="flex items-center gap-2.5 px-2 py-1">
@@ -9,7 +9,7 @@ export function Brand() {
         <circle cx="19" cy="11" r="9" stroke="var(--ve-evaluator)" strokeWidth="2" />
       </svg>
       <div className="flex flex-col leading-tight">
-        <span className="text-[17px] font-bold tracking-[-0.01em]">Duet</span>
+        <span className="text-[17px] font-bold tracking-[-0.01em]">TestForge</span>
         <span className="text-xs text-dim">
           <T k="shell.tagline" />
         </span>

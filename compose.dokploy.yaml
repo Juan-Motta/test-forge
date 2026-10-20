@@ -40,7 +40,7 @@ services:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-voice_eval}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in Dokploy's Environment tab}@db:5432/${POSTGRES_DB:-voice_eval}
       VOICE_EVAL_MASTER_KEY: ${VOICE_EVAL_MASTER_KEY:?set VOICE_EVAL_MASTER_KEY in Dokploy's Environment tab}
       ENVIRONMENT: ${ENVIRONMENT:-production}
-      # The public origin, e.g. https://duet.example.com.
+      # The public origin, e.g. https://testforge.example.com.
       WEB_ORIGINS: ${WEB_ORIGINS:?set WEB_ORIGINS to the public https:// origin}
       # Traefik terminates TLS.
       SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-true}

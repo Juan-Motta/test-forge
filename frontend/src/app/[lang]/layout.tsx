@@ -21,7 +21,7 @@ const mono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: { default: "Duet", template: "%s · Duet" },
+  title: { default: "TestForge", template: "%s · TestForge" },
   description: "Agent evals",
 };
 

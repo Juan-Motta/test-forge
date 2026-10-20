@@ -56,12 +56,12 @@ export const en = {
   "account.signingOut": "Signing out…",
 
   "login.metaTitle": "Sign in",
-  "login.title": "Sign in to Duet",
+  "login.title": "Sign in to TestForge",
   "login.subtitle": "Use the account your administrator created for you.",
   "login.guideLink": "New here? Read the guide",
 
   "guideHeader.skip": "Skip to content",
-  "guideHeader.home": "Duet guide home",
+  "guideHeader.home": "TestForge guide home",
   "guideHeader.badge": "Guide",
   "guideHeader.links": "Guide links",
   "guideHeader.apiNewTab": "API reference (Swagger) (opens in a new tab)",
@@ -1148,7 +1148,7 @@ export const en = {
   "transfer.kind.scenario": "a scenario",
   "transfer.error.json": "This is not an exported config: paste the whole text from Export.",
   "transfer.error.kind": "This config is not {kind}.",
-  "transfer.error.version": "This config comes from a newer or unknown version of Duet.",
+  "transfer.error.version": "This config comes from a newer or unknown version of TestForge.",
   "transfer.error.fileTooLarge": "That file is too large to be a config.",
   "transfer.note.missingConnection": "No connection is named “{name}” here: pick one.",
   "transfer.note.missingAgent": "No agent is named “{name}” here: pick the agent under test.",

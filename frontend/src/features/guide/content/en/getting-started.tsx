@@ -22,7 +22,7 @@ export function GettingStartedEn() {
           reachable over Vivi&apos;s channel API.
         </li>
         <li>
-          An <Ui>OpenAI</Ui> or <Ui>Azure OpenAI</Ui> account: Duet uses it for the caller&apos;s voice, the
+          An <Ui>OpenAI</Ui> or <Ui>Azure OpenAI</Ui> account: TestForge uses it for the caller&apos;s voice, the
           evaluator&apos;s brain and the judge (a text agent needs no voice).
         </li>
         <li>
@@ -31,12 +31,12 @@ export function GettingStartedEn() {
         </li>
       </Bullets>
 
-      <H2 id="run-duet">1. Run Duet</H2>
+      <H2 id="run-duet">1. Run TestForge</H2>
       <P>
-        If someone already runs Duet for your team, skip to the next step. Otherwise, whoever manages the server starts it
+        If someone already runs TestForge for your team, skip to the next step. Otherwise, whoever manages the server starts it
         with Docker from the project folder:
       </P>
-      <CodeBlock code={RUN_STACK} label="Commands to start Duet with Docker" tone="command" />
+      <CodeBlock code={RUN_STACK} label="Commands to start TestForge with Docker" tone="command" />
       <P>
         The last command creates the first user (there is no public sign-up) and asks for a password of at least 12
         characters. The web app is then at <Code>http://localhost:3000</Code>.
@@ -54,7 +54,7 @@ export function GettingStartedEn() {
 
       <H2 id="add-connections">3. Add your connections</H2>
       <P>
-        A connection holds the credentials Duet uses to reach a provider. Secrets are stored encrypted and are never shown
+        A connection holds the credentials TestForge uses to reach a provider. Secrets are stored encrypted and are never shown
         again; only their last 4 characters appear as a hint.
       </P>
       <Steps>
@@ -91,24 +91,24 @@ export function GettingStartedEn() {
           judge read it before each call.
         </Step>
         <Step title="Leave Protocol on Auto-detect.">
-          Duet works out on each run which voice protocol your agent speaks. Pick one only to skip that check.
+          TestForge works out on each run which voice protocol your agent speaks. Pick one only to skip that check.
         </Step>
         <Step title="Optionally link a Langfuse connection, then Create agent.">
           With Langfuse linked, the judge also reads the agent&apos;s traces for each call.
         </Step>
         <Step title="Press Run connection test.">
-          Duet dials the agent like a real run, waits until the session is ready (at most 8 seconds) and hangs up without
+          TestForge dials the agent like a real run, waits until the session is ready (at most 8 seconds) and hangs up without
           sending audio. You see each step and how long the connection took.
         </Step>
       </Steps>
       <Callout locale="en" tone="note" title="Testing an agent on your own machine">
-        Use <Code>ws://localhost:…</Code>: plain <Code>ws://</Code> works for local addresses. When Duet runs in Docker, it
+        Use <Code>ws://localhost:…</Code>: plain <Code>ws://</Code> works for local addresses. When TestForge runs in Docker, it
         reaches your machine automatically.
       </Callout>
 
       <H2 id="add-a-text-agent">Adding a text agent</H2>
       <P>
-        A text agent is reached over Vivi&apos;s channel API: Duet sends each message as an HTTP request to{" "}
+        A text agent is reached over Vivi&apos;s channel API: TestForge sends each message as an HTTP request to{" "}
         <Code>{"{base URL}/channelsApi/{channelId}/stream"}</Code> (or <Code>/invoke</Code>) and reads the reply. In{" "}
         <Ui>Add agent</Ui>, choose the <Ui>Text</Ui> kind.
       </P>

@@ -3,14 +3,14 @@ import type { GuideText } from "./en";
 // Typed as the English text: a missing or extra key is a compile error.
 export const es: GuideText = {
   meta: {
-    title: "{title} · Guía de Duet",
-    layoutTitle: "Guía de Duet",
-    layoutDescription: "Una guía visual y en lenguaje sencillo de Duet, el evaluador de agentes de voz y de texto.",
+    title: "{title} · Guía de TestForge",
+    layoutTitle: "Guía de TestForge",
+    layoutDescription: "Una guía visual y en lenguaje sencillo de TestForge, el evaluador de agentes de voz y de texto.",
   },
   sections: {
     overview: {
       title: "Resumen",
-      summary: "Qué es Duet, para quién es y la idea detrás: un usuario simulado llama o chatea con tu agente.",
+      summary: "Qué es TestForge, para quién es y la idea detrás: un usuario simulado llama o chatea con tu agente.",
     },
     "getting-started": {
       title: "Primeros pasos",
@@ -34,11 +34,11 @@ export const es: GuideText = {
     },
     automation: {
       title: "Automatización",
-      summary: "Controla Duet desde scripts, la CI o un agente de IA con claves de API, la referencia de Swagger y la skill para agentes.",
+      summary: "Controla TestForge desde scripts, la CI o un agente de IA con claves de API, la referencia de Swagger y la skill para agentes.",
     },
     faq: {
       title: "Solución de problemas y preguntas frecuentes",
-      summary: "Problemas comunes y cómo resolverlos, preguntas frecuentes y un glosario de los términos que usa Duet.",
+      summary: "Problemas comunes y cómo resolverlos, preguntas frecuentes y un glosario de los términos que usa TestForge.",
     },
   },
   nav: {

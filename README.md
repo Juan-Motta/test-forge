@@ -136,7 +136,7 @@ host, the edge joins `dokploy-network`, and Traefik terminates TLS.
    | --- | --- |
    | `POSTGRES_PASSWORD` | `openssl rand -hex 24` (URL-safe) |
    | `VOICE_EVAL_MASTER_KEY` | see "Run with Docker"; back it up outside Dokploy |
-   | `WEB_ORIGINS` | the public origin, e.g. `https://duet.example.com` |
+   | `WEB_ORIGINS` | the public origin, e.g. `https://testforge.example.com` |
    | `TRUSTED_PROXY_CIDR` | the subnet of `dokploy-network`: `docker network inspect dokploy-network --format '{{(index .IPAM.Config 0).Subnet}}'` |
 
    `SESSION_COOKIE_SECURE` defaults to `true` here. If `172.29.53.0/24` collides with a network

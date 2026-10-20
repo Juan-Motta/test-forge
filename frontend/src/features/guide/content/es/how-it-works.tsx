@@ -14,7 +14,7 @@ export function HowItWorksEs() {
 
       <H2 id="scenario-to-batch">Del escenario al lote</H2>
       <P>
-        Cuando presionas <Ui>Lanzar</Ui>, Duet crea un <Ui>lote</Ui>: una <Ui>corrida</Ui> por cada escenario que elegiste,
+        Cuando presionas <Ui>Lanzar</Ui>, TestForge crea un <Ui>lote</Ui>: una <Ui>corrida</Ui> por cada escenario que elegiste,
         multiplicada por la cantidad de corridas por escenario. Lanzar 2 escenarios con 3 corridas cada uno crea un lote de 6
         corridas. Una etiqueta opcional te ayuda a encontrar el lote después, como «después del ajuste del prompt».
       </P>
@@ -30,7 +30,7 @@ export function HowItWorksEs() {
         </li>
         <li>
           Cada corrida abre su propia conexión con un <Ui>ID del hilo</Ui> nuevo. También es el ID de sesión de Langfuse del
-          agente, que es como Duet encuentra las trazas del agente para esa llamada.
+          agente, que es como TestForge encuentra las trazas del agente para esa llamada.
         </li>
       </Bullets>
       <Callout locale="es" tone="warning" title="Un escenario que no se puede ejecutar detiene el lanzamiento">
@@ -41,16 +41,16 @@ export function HowItWorksEs() {
 
       <H2 id="the-call">La llamada: evaluador y agente</H2>
       <P>
-        Cuando empieza una corrida, Duet abre el WebSocket de tu agente exactamente como un cliente real y espera a que el
+        Cuando empieza una corrida, TestForge abre el WebSocket de tu agente exactamente como un cliente real y espera a que el
         agente diga que su sesión está lista. Luego la conversación avanza turno por turno:
       </P>
       <Bullets>
-        <li>El agente habla (a menudo primero saluda). Duet graba su audio y su texto.</li>
+        <li>El agente habla (a menudo primero saluda). TestForge graba su audio y su texto.</li>
         <li>
           El evaluador decide qué dice después quien llama, siguiendo la persona, el objetivo, las instrucciones y los datos.
           Solo revela un dato cuando el agente se lo pide.
         </li>
-        <li>El evaluador habla con una voz sintética y el agente responde. Duet mide el tiempo de cada respuesta.</li>
+        <li>El evaluador habla con una voz sintética y el agente responde. TestForge mide el tiempo de cada respuesta.</li>
         <li>
           La llamada termina cuando quien llama cumple su objetivo o se despide (según el escenario), cuando el agente cierra la
           sesión, cuando se alcanza el límite de tiempo o después de demasiado tiempo sin habla.
@@ -64,13 +64,13 @@ export function HowItWorksEs() {
 
       <H2 id="text-agents">Agentes de texto: un chat en lugar de una llamada</H2>
       <P>
-        Con un agente de texto no hay audio. Duet llega al agente por la API de canales de Vivi, y el evaluador escribe
+        Con un agente de texto no hay audio. TestForge llega al agente por la API de canales de Vivi, y el evaluador escribe
         primero:
       </P>
       <Bullets>
         <li>
           El evaluador escribe el mensaje del usuario, siguiendo la misma persona, el objetivo, las instrucciones y los datos, y
-          Duet lo envía con una solicitud HTTP: <Code>/stream</Code> (la respuesta llega por partes a medida que se escribe) o{" "}
+          TestForge lo envía con una solicitud HTTP: <Code>/stream</Code> (la respuesta llega por partes a medida que se escribe) o{" "}
           <Code>/invoke</Code> (toda la respuesta de una vez), según el modo del agente.
         </li>
         <li>
@@ -78,7 +78,7 @@ export function HowItWorksEs() {
           También es el ID de sesión de Langfuse, igual que en las llamadas.
         </li>
         <li>
-          Duet mide cada respuesta desde el momento en que se envía el mensaje: el tiempo hasta el <Ui>primer texto</Ui> (la
+          TestForge mide cada respuesta desde el momento en que se envía el mensaje: el tiempo hasta el <Ui>primer texto</Ui> (la
           latencia en modo Stream) y hasta la <Ui>respuesta completa</Ui> (la latencia en modo Invoke), y anota las
           herramientas que ejecutó el agente.
         </li>
@@ -121,10 +121,10 @@ export function HowItWorksEs() {
           ["Falló la respuesta del agente", "Fallida", "Agentes de texto: un error HTTP, un tiempo de espera agotado o un stream que se detuvo sin su evento de fin de respuesta."],
           ["No se pudo conectar con el agente", "Fallida", "No se pudo llegar a la URL del WebSocket."],
           ["El agente nunca estuvo listo", "Fallida", "La conexión se abrió, pero la sesión nunca empezó."],
-          ["Error de protocolo", "Fallida", "Duet no pudo reconocer o seguir el protocolo de voz del agente."],
+          ["Error de protocolo", "Fallida", "TestForge no pudo reconocer o seguir el protocolo de voz del agente."],
           ["Falló la síntesis de voz / Falló el modelo del evaluador", "Fallida", "Un problema con la voz o el cerebro de quien llama: revisa las conexiones del escenario."],
           ["Cancelada", "Cancelada", "Alguien detuvo la corrida."],
-          ["El servidor se detuvo / se reinició", "Interrumpida", "Duet se detuvo durante la llamada."],
+          ["El servidor se detuvo / se reinició", "Interrumpida", "TestForge se detuvo durante la llamada."],
         ]}
       />
 
@@ -139,7 +139,7 @@ export function HowItWorksEs() {
         head={["Estado", "Qué está pasando"]}
         rows={[
           ["En cola", "Esperando al juez."],
-          ["Recopilando trazas", "Solo con una conexión de Langfuse: Duet espera a que las trazas del agente estén completas, revisando cada 30 segundos, hasta 20 minutos."],
+          ["Recopilando trazas", "Solo con una conexión de Langfuse: TestForge espera a que las trazas del agente estén completas, revisando cada 30 segundos, hasta 20 minutos."],
           ["Evaluando", "El modelo juez califica cada criterio, tres veces, sobre la misma evidencia."],
           ["Completada", "La puntuación, la tabla de criterios, las sugerencias y el informe están listos."],
           ["Fallida", "El juez no pudo terminar; el reporte dice por qué y ofrece Reintentar."],

@@ -7,26 +7,26 @@ export function OverviewEn() {
   return (
     <>
       <Lead>
-        Duet tests agents the way your customers meet them: on a call or in a chat. A simulated user, the{" "}
+        TestForge tests agents the way your customers meet them: on a call or in a chat. A simulated user, the{" "}
         <strong className="text-evaluator-fg">evaluator</strong>, phones or writes to your{" "}
         <strong className="text-agent-fg">agent under test</strong>, plays a person with a goal, and every conversation is
         recorded and then scored by a judge.
       </Lead>
 
-      <H2 id="what-is-duet">What is Duet?</H2>
+      <H2 id="what-is-duet">What is TestForge?</H2>
       <P>
         Building a voice agent is the easy part. Knowing whether it still works after you change a prompt, a tool or a model
-        is hard: you would have to call it yourself, again and again, and listen carefully every time. Duet does those calls
+        is hard: you would have to call it yourself, again and again, and listen carefully every time. TestForge does those calls
         for you.
       </P>
       <P>
         You write down the kinds of calls you care about (a customer who lost a card, someone in a hurry, a caller who keeps
-        interrupting). Duet places those calls for real, against your agent&apos;s own voice connection, and gives you back
+        interrupting). TestForge places those calls for real, against your agent&apos;s own voice connection, and gives you back
         the recording, the transcript, timings and a report that says what went well, what went wrong and what to change.
       </P>
 
       <H2 id="voice-and-text">Voice and text agents</H2>
-      <P>Duet tests two kinds of agents with the same scenarios, judge and reports:</P>
+      <P>TestForge tests two kinds of agents with the same scenarios, judge and reports:</P>
       <Bullets>
         <li>
           <strong className="text-fg">Voice agents</strong> are called over their realtime WebSocket. The evaluator speaks,
@@ -55,13 +55,13 @@ export function OverviewEn() {
         </li>
         <li>
           <strong className="text-fg">Developers and AI coding agents</strong> who want a ready-made brief of what to fix, or
-          who drive Duet from scripts and CI through its API.
+          who drive TestForge from scripts and CI through its API.
         </li>
       </Bullets>
 
       <H2 id="the-idea">The idea: the evaluator is the user</H2>
       <P>
-        Most test tools send text to a model. Duet instead acts like a phone caller. The evaluator connects to your agent over
+        Most test tools send text to a model. TestForge instead acts like a phone caller. The evaluator connects to your agent over
         the same WebSocket voice protocol a real client uses, speaks with a real synthetic voice, listens to the answers and
         decides what to say next, following a persona and a goal. It can even cut the agent off mid-sentence, like people
         do. With a text agent it does the same in writing: it sends each message through the agent&apos;s channel API and
@@ -107,7 +107,7 @@ export function OverviewEn() {
 
       <H2 id="where-next">Where to go next</H2>
       <P>
-        New to Duet? Follow <GuideLink href="/guide/getting-started">Getting started</GuideLink> for your first run. Looking
+        New to TestForge? Follow <GuideLink href="/guide/getting-started">Getting started</GuideLink> for your first run. Looking
         for a specific screen? See <GuideLink href="/guide/modules">The modules</GuideLink>. Puzzled by a score? Read{" "}
         <GuideLink href="/guide/scoring">Scoring</GuideLink>.
       </P>

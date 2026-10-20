@@ -8,7 +8,7 @@ export function ScoringEs() {
   return (
     <>
       <P>
-        Después de cada llamada, un modelo juez la revisa contra los criterios de éxito del escenario. Duet mantiene al juez
+        Después de cada llamada, un modelo juez la revisa contra los criterios de éxito del escenario. TestForge mantiene al juez
         con poco margen: elige una banda del 1 al 5 para cada criterio, y reglas fijas convierten esas bandas en puntos,
         veredictos y una puntuación general. Así las puntuaciones se mantienen estables de una evaluación a la siguiente.
       </P>

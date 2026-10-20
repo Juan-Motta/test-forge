@@ -53,7 +53,7 @@ export function neighbours(slug: GuideSlug, locale: Locale): { previous?: GuideS
   return { previous: sections[index - 1], next: sections[index + 1] };
 }
 
-/** "<Section> · Duet guide", absolute so the app's "· Duet" template does not apply. */
+/** "<Section> · TestForge guide", absolute so the app's "· TestForge" template does not apply. */
 export function guideMetadata(slug: GuideSlug, locale: Locale): Metadata {
   const { title, summary } = section(slug, locale);
   return { title: { absolute: fill(guideText(locale).meta.title, { title }) }, description: summary };

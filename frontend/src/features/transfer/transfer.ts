@@ -1,7 +1,8 @@
 /**
  * Export and import of agent and scenario configs as text: a JSON object tagged with what it is
- * (`duet`) and the format version. References to other records travel by name, never by id, so a
- * config moves between environments; secrets never travel.
+ * (`testforge`; files exported before the rename say `duet` and are still accepted) and the
+ * format version. References to other records travel by name, never by id, so a config moves
+ * between environments; secrets never travel.
  */
 export const TRANSFER_VERSION = 1;
 
@@ -11,7 +12,7 @@ export type ParsedTransfer = { ok: true; data: Record<string, unknown> } | { ok:
 
 /** The text to save or share: pretty-printed so it reads and diffs well. */
 export function toTransferText(kind: TransferKind, config: Record<string, unknown>): string {
-  return `${JSON.stringify({ duet: kind, version: TRANSFER_VERSION, ...config }, null, 2)}\n`;
+  return `${JSON.stringify({ testforge: kind, version: TRANSFER_VERSION, ...config }, null, 2)}\n`;
 }
 
 /** The config inside a pasted or uploaded text, or why it cannot be one of `kind`. */
@@ -23,8 +24,8 @@ export function parseTransfer(text: string, kind: TransferKind): ParsedTransfer 
     return { ok: false, error: "json" };
   }
   if (typeof value !== "object" || value === null || Array.isArray(value)) return { ok: false, error: "json" };
-  const { duet, version, ...data } = value as Record<string, unknown>;
-  if (duet !== kind) return { ok: false, error: "kind" };
+  const { testforge, duet, version, ...data } = value as Record<string, unknown>;
+  if ((testforge ?? duet) !== kind) return { ok: false, error: "kind" };
   if (version !== TRANSFER_VERSION) return { ok: false, error: "version" };
   return { ok: true, data };
 }

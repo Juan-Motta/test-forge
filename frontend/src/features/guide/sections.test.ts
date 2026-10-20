@@ -36,11 +36,11 @@ describe("guide sections", () => {
     expect(neighbours("faq", "es")).toEqual({ previous: section("automation", "es"), next: undefined });
   });
 
-  it("titles every page '<Section> · Duet guide' in the page language", () => {
-    expect(guideMetadata("scoring", "en").title).toEqual({ absolute: "Scoring · Duet guide" });
-    expect(guideMetadata("overview", "en").title).toEqual({ absolute: "Overview · Duet guide" });
+  it("titles every page '<Section> · TestForge guide' in the page language", () => {
+    expect(guideMetadata("scoring", "en").title).toEqual({ absolute: "Scoring · TestForge guide" });
+    expect(guideMetadata("overview", "en").title).toEqual({ absolute: "Overview · TestForge guide" });
     expect(guideMetadata("faq", "en").description).toEqual(section("faq", "en").summary);
-    expect(guideMetadata("scoring", "es").title).toEqual({ absolute: "Puntuación · Guía de Duet" });
+    expect(guideMetadata("scoring", "es").title).toEqual({ absolute: "Puntuación · Guía de TestForge" });
     expect(guideMetadata("faq", "es").description).toEqual(section("faq", "es").summary);
   });
 });

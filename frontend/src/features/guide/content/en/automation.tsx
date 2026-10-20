@@ -4,26 +4,26 @@ import { CodeBlock } from "@/ui";
 const AUTH_HEADER = "Authorization: Bearer ve_xxxxxxxx_<secret>";
 
 const LAUNCH = `# Keep the key in an environment variable; never paste it into files or logs.
-curl -s -X POST "$DUET_URL/api/runs" \\
-  -H "Authorization: Bearer $DUET_API_KEY" \\
+curl -s -X POST "$TESTFORGE_URL/api/runs" \\
+  -H "Authorization: Bearer $TESTFORGE_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{"scenarioIds": ["<scenario id>"], "repetitions": 3, "concurrency": 1, "label": "nightly"}'`;
 
 const FOLLOW = `# The batch: its status and every run's status, judgement status and score
-curl -s "$DUET_URL/api/runs/batches/<batch id>" -H "Authorization: Bearer $DUET_API_KEY"
+curl -s "$TESTFORGE_URL/api/runs/batches/<batch id>" -H "Authorization: Bearer $TESTFORGE_API_KEY"
 
 # One run's judgement: score, verdicts, suggestions and the brief
-curl -s "$DUET_URL/api/runs/<run id>/judgement" -H "Authorization: Bearer $DUET_API_KEY"`;
+curl -s "$TESTFORGE_URL/api/runs/<run id>/judgement" -H "Authorization: Bearer $TESTFORGE_API_KEY"`;
 
-const SKILL = `curl -s "$DUET_URL/api/skill" -o SKILL.md          # the guide as one Markdown file
-curl -s "$DUET_URL/api/skill.zip" -o voice-evaluator.zip   # a skill folder with the full API reference`;
+const SKILL = `curl -s "$TESTFORGE_URL/api/skill" -o SKILL.md          # the guide as one Markdown file
+curl -s "$TESTFORGE_URL/api/skill.zip" -o voice-evaluator.zip   # a skill folder with the full API reference`;
 
 /** The English body of the "automation" guide page. */
 export function AutomationEn() {
   return (
     <>
       <P>
-        Everything you do in the app can also be done through Duet&apos;s HTTP API: launching runs from CI after every deploy,
+        Everything you do in the app can also be done through TestForge&apos;s HTTP API: launching runs from CI after every deploy,
         collecting scores in a script, or letting an AI coding agent run a scenario, read the brief and fix your agent. Three
         things make that possible.
       </P>
@@ -92,7 +92,7 @@ export function AutomationEn() {
 
       <H2 id="agent-skill">4. Give an AI agent the skill</H2>
       <P>
-        The <Ui>agent skill</Ui> teaches an AI coding agent (such as Claude Code) how to use Duet: what scenarios, runs and
+        The <Ui>agent skill</Ui> teaches an AI coding agent (such as Claude Code) how to use TestForge: what scenarios, runs and
         judgements are, the flows above with exact requests, and how to read results. It always matches the running version,
         and anyone can fetch it without a key.
       </P>

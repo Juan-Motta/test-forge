@@ -320,7 +320,7 @@ export function ModulesEs() {
 
       <Region id="connections" title="Conexiones">
         <P>
-          En <Ui>Configuración → Conexiones</Ui>: las credenciales que Duet usa para llegar a los proveedores. Los secretos son
+          En <Ui>Configuración → Conexiones</Ui>: las credenciales que TestForge usa para llegar a los proveedores. Los secretos son
           de solo escritura: se guardan cifrados y solo se muestran sus últimos 4 caracteres.
         </P>
         <Table
@@ -344,7 +344,7 @@ export function ModulesEs() {
 
       <Region id="api-keys" title="Claves de API">
         <P>
-          En <Ui>Configuración → Claves de API</Ui>: las claves permiten que scripts, la CI o un agente de IA usen Duet sin
+          En <Ui>Configuración → Claves de API</Ui>: las claves permiten que scripts, la CI o un agente de IA usen TestForge sin
           iniciar sesión. Una clave actúa como tú.
         </P>
         <Bullets>
@@ -366,7 +366,7 @@ export function ModulesEs() {
 
       <Region id="model-prices" title="Precios de modelos">
         <P>
-          En <Ui>Configuración → Precios de modelos</Ui>: los precios por token que Duet usa para estimar cuánto cuesta cada
+          En <Ui>Configuración → Precios de modelos</Ui>: los precios por token que TestForge usa para estimar cuánto cuesta cada
           evaluación. El reporte de cada corrida muestra el <Ui>Costo de la evaluación</Ui> (el evaluador más el juez, nunca tu
           agente) y la lista de corridas tiene una columna <Ui>Costo</Ui> compacta.
         </P>

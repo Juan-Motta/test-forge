@@ -4,11 +4,15 @@ import { idByName, parseTransfer, toTransferText, transferFileName } from "./tra
 describe("config transfer", () => {
   it("tags the text with what it is and its version, and reads it back", () => {
     const text = toTransferText("agent", { name: "Desk" });
-    expect(JSON.parse(text)).toEqual({ duet: "agent", version: 1, name: "Desk" });
+    expect(JSON.parse(text)).toEqual({ testforge: "agent", version: 1, name: "Desk" });
     expect(parseTransfer(text, "agent")).toEqual({ ok: true, data: { name: "Desk" } });
     expect(parseTransfer(text, "scenario")).toEqual({ ok: false, error: "kind" });
     expect(parseTransfer("[1]", "agent")).toEqual({ ok: false, error: "json" });
-    expect(parseTransfer('{"duet":"agent","version":2}', "agent")).toEqual({ ok: false, error: "version" });
+    expect(parseTransfer('{"testforge":"agent","version":2}', "agent")).toEqual({ ok: false, error: "version" });
+  });
+
+  it("still reads files exported before the rename, tagged duet", () => {
+    expect(parseTransfer('{"duet":"agent","version":1,"name":"Old"}', "agent")).toEqual({ ok: true, data: { name: "Old" } });
   });
 
   it("names the file after the record", () => {
