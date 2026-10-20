@@ -88,11 +88,11 @@ def _typed(item: FlowInput, raw: Any, loc: list[Any]) -> Any:
     if item.type is InputType.NUMBER:
         if isinstance(raw, bool):
             raise FlowInputError([_err(loc, "must be a number")])
-        if isinstance(raw, int | float) and math.isfinite(raw):
+        if isinstance(raw, int) or (isinstance(raw, float) and math.isfinite(raw)):
             return raw
         try:
             number = float(str(raw).strip())
-        except ValueError:
+        except (ValueError, OverflowError):
             raise FlowInputError([_err(loc, "must be a number")]) from None
         if not math.isfinite(number):
             raise FlowInputError([_err(loc, "must be a finite number")])
@@ -429,7 +429,7 @@ async def run_flow(
             async with asyncio.timeout(STEP_TIMEOUT_S):
                 response, content = await _send(client, sent)
         except (httpx.TimeoutException, TimeoutError):
-            record.status, record.error = "failed", f"no response within {STEP_TIMEOUT_S:.0f} s"
+            record.status, record.error = "failed", f"no response within {STEP_TIMEOUT_S:g} s"
             continue
         except (httpx.HTTPError, DestinationNotAllowed) as exc:
             record.status, record.error = "failed", _transport_error(exc)

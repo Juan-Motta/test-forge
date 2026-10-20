@@ -39,6 +39,8 @@ class FakeShop:
                 content=b'{"ratio": NaN, "note": "a\\u0000b"}',
                 headers={"content-type": "application/json"},
             )
+        if request.url.path == "/v1/nul":
+            return httpx.Response(200, json={"note": "a\x00b"})
         if request.url.path == "/v1/orders":
             return httpx.Response(201, json={"received": json.loads(request.content)})
         return httpx.Response(404, text="not here")
@@ -393,4 +395,23 @@ async def test_a_step_has_a_total_time_limit(app, user_client, monkeypatch):
         user_client, api["id"], inputs=[], steps=[{"method": "GET", "path": "/"}]
     )
     result = (await run(user_client, flow["id"])).json()
-    assert result["steps"][0]["error"] == "no response within 0 s"
+    assert result["steps"][0]["error"] == "no response within 0.1 s"
+    assert result["steps"][0]["durationMs"] is None
+
+
+async def test_stores_json_bodies_that_hold_a_nul_character(user_client, shop):
+    api = await make_api(user_client)
+    flow = await make_flow(
+        user_client, api["id"], inputs=[], steps=[{"method": "GET", "path": "/nul"}]
+    )
+    response = await run(user_client, flow["id"])
+    assert response.status_code == 201, response.text
+    assert response.json()["steps"][0]["response"]["body"] == {"note": "a\ufffdb"}
+
+
+async def test_accepts_a_huge_integer_input(user_client, shop):
+    api = await make_api(user_client)
+    flow = await make_flow(user_client, api["id"])
+    response = await run(user_client, flow["id"], inputs={"query": "x", "max_price": 10**400})
+    assert response.status_code == 201, response.text
+    assert shop.requests[1].url.params["max"] == str(10**400)
