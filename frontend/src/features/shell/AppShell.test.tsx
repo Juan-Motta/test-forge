@@ -205,7 +205,7 @@ describe("AppShell", () => {
     expect(screen.getByRole("button", { name: "Open navigation" })).toHaveAttribute("aria-expanded", "false");
   });
 
-  it("lists API flows right after Scenarios and marks it current on every /apis page", async () => {
+  it("opens the API group and marks Connections current on every /apis page", async () => {
     signedIn();
     nav.pathname = "/apis/api-shop";
     renderWithClient(
@@ -213,15 +213,37 @@ describe("AppShell", () => {
         <p>content</p>
       </AppShell>,
     );
-    const primary = screen.getByRole("navigation", { name: "Primary" });
-    const names = within(primary)
-      .getAllByRole("link")
-      .map((link) => link.getAttribute("href"));
-    expect(names.indexOf("/apis")).toBe(names.indexOf("/scenarios") + 1);
-    const apis = within(primary).getByRole("link", { name: "API flows" });
-    expect(apis).toHaveAttribute("href", "/apis");
-    expect(apis).toHaveAttribute("aria-current", "page");
-    expect(within(primary).getByRole("link", { name: "Scenarios" })).not.toHaveAttribute("aria-current");
+    const primary = within(screen.getByRole("navigation", { name: "Primary" }));
+    expect(primary.getByRole("button", { name: "API" })).toHaveAttribute("aria-expanded", "true");
+    const api = within(primary.getByRole("list", { name: "API" }));
+    const connections = api.getByRole("link", { name: "Connections" });
+    expect(connections).toHaveAttribute("href", "/apis");
+    expect(connections).toHaveAttribute("aria-current", "page");
+    expect(api.getByRole("link", { name: "Flows" })).not.toHaveAttribute("aria-current");
+    expect(primary.getByRole("link", { name: "Scenarios" })).not.toHaveAttribute("aria-current");
+  });
+
+  it("toggles a group inside the mobile drawer without closing it", async () => {
+    signedIn();
+    window.localStorage.clear();
+    renderWithClient(
+      <AppShell>
+        <p>content</p>
+      </AppShell>,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Open navigation" }));
+    const primary = within(screen.getByRole("navigation", { name: "Primary" }));
+
+    const agents = primary.getByRole("button", { name: "Agents" });
+    await userEvent.click(agents);
+    expect(agents).toHaveAttribute("aria-expanded", "false");
+    // The drawer stays open while a group is toggled.
+    expect(screen.getByRole("button", { name: "Close navigation" })).toHaveAttribute("aria-expanded", "true");
+
+    expect(primary.queryByRole("link", { name: "Scenarios" })).not.toBeInTheDocument();
+    await userEvent.click(agents);
+    expect(primary.getByRole("link", { name: "Scenarios" })).toHaveAttribute("href", "/scenarios");
+    window.localStorage.clear();
   });
 
   it("badges Live sessions with the number of queued, connecting and running runs", async () => {

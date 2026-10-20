@@ -1,10 +1,12 @@
 import { cleanup, render, screen, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import userEvent from "@testing-library/user-event";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { renderWithClient } from "@/test/render";
-import { activeHref, NAV_PRIMARY, NAV_SECONDARY } from "./navigation";
+import { navGroupStorageKey } from "./nav-group-preference";
+import { activeHref, NAV_PRIMARY, NAV_SECONDARY, navItems } from "./navigation";
 import { Sidebar } from "./Sidebar";
 
-const ALL = [...NAV_PRIMARY, ...NAV_SECONDARY];
+const ALL = [...navItems(NAV_PRIMARY), ...NAV_SECONDARY];
 
 const ADA = { displayName: "Ada Lovelace", email: "ada@example.com" };
 
@@ -31,6 +33,11 @@ describe("activeHref", () => {
     ["/settings/connections/abc", "/settings"],
     ["/settings/api-keys", "/settings"],
     ["/settings/pricing", "/settings"],
+    ["/agents", "/agents"],
+    ["/scenarios/s-1", "/scenarios"],
+    ["/apis/api-shop", "/apis"],
+    ["/flows", "/flows"],
+    ["/flows/f-1", "/flows"],
     ["/unknown", null],
   ])("%s -> %s", (pathname, expected) => {
     expect(activeHref(pathname, ALL)).toBe(expected);
@@ -38,36 +45,100 @@ describe("activeHref", () => {
 });
 
 describe("Sidebar", () => {
+  beforeEach(() => window.localStorage.clear());
+
   it("leaves the theme and language switches to Settings", () => {
     renderSidebar("/");
     expect(screen.queryByRole("radiogroup", { name: "Theme" })).not.toBeInTheDocument();
     expect(screen.queryByRole("radiogroup", { name: "Language" })).not.toBeInTheDocument();
   });
 
-  it("lists the main sections and Settings, but not Connections or API keys", () => {
+  it("lists the main sections, the Agents and API groups with their pages, and Settings", () => {
     const nav = renderSidebar("/");
-    const names = nav.getAllByRole("link").map((link) => link.textContent);
+    const hrefs = nav.getAllByRole("link").map((link) => link.getAttribute("href"));
 
-    expect(names.slice(0, 7)).toEqual([
-      "Overview",
-      "Live sessions",
-      "Runs & reports",
-      "Scenarios",
-      "API flows",
-      "Agents",
-      "Settings",
-    ]);
-    expect(nav.queryByRole("link", { name: "Connections" })).not.toBeInTheDocument();
+    expect(hrefs.slice(0, 8)).toEqual(["/", "/live", "/runs", "/agents", "/scenarios", "/apis", "/flows", "/settings"]);
+    const agents = within(nav.getByRole("list", { name: "Agents" }));
+    expect(agents.getAllByRole("link").map((link) => link.textContent)).toEqual(["Connections", "Scenarios"]);
+    const api = within(nav.getByRole("list", { name: "API" }));
+    expect(api.getAllByRole("link").map((link) => link.textContent)).toEqual(["Connections", "Flows"]);
     expect(nav.queryByRole("link", { name: "API keys" })).not.toBeInTheDocument();
+    expect(hrefs).not.toContain("/settings/connections");
   });
 
   it("marks only the current section with aria-current=page", () => {
     const nav = renderSidebar("/runs");
 
     expect(nav.getByRole("link", { name: "Runs & reports" })).toHaveAttribute("aria-current", "page");
-    for (const name of ["Overview", "Live sessions", "Scenarios", "API flows", "Agents", "Settings"]) {
-      expect(nav.getByRole("link", { name })).not.toHaveAttribute("aria-current");
+    for (const link of nav.getAllByRole("link")) {
+      if (link.getAttribute("href") !== "/runs") expect(link).not.toHaveAttribute("aria-current");
     }
+  });
+
+  it.each([
+    ["/agents", "Agents", "/agents"],
+    ["/scenarios", "Agents", "/scenarios"],
+    ["/scenarios/s-1/edit", "Agents", "/scenarios"],
+    ["/apis", "API", "/apis"],
+    ["/apis/api-shop", "API", "/apis"],
+    ["/flows", "API", "/flows"],
+  ])("on %s opens the %s group and marks its page", (pathname, group, href) => {
+    // Collapsed by the user elsewhere: the current page opens it anyway.
+    window.localStorage.setItem(navGroupStorageKey(group === "Agents" ? "agents" : "api"), "closed");
+    const nav = renderSidebar(pathname);
+
+    const button = nav.getByRole("button", { name: group });
+    expect(button).toHaveAttribute("aria-expanded", "true");
+    const list = document.getElementById(button.getAttribute("aria-controls")!)!;
+    const current = within(list).getAllByRole("link").filter((link) => link.getAttribute("aria-current") === "page");
+    expect(current.map((link) => link.getAttribute("href"))).toEqual([href]);
+  });
+
+  it("collapses and expands a group, and remembers the choice in this browser", async () => {
+    const nav = renderSidebar("/");
+    const api = nav.getByRole("button", { name: "API" });
+    expect(api).toHaveAttribute("aria-expanded", "true");
+    expect(nav.getByRole("link", { name: "Flows" })).toBeVisible();
+
+    await userEvent.click(api);
+
+    expect(api).toHaveAttribute("aria-expanded", "false");
+    expect(nav.queryByRole("link", { name: "Flows" })).not.toBeInTheDocument();
+    expect(window.localStorage.getItem(navGroupStorageKey("api"))).toBe("closed");
+    // The other group is independent.
+    expect(nav.getByRole("button", { name: "Agents" })).toHaveAttribute("aria-expanded", "true");
+    cleanup();
+
+    const again = renderSidebar("/runs");
+    expect(again.getByRole("button", { name: "API" })).toHaveAttribute("aria-expanded", "false");
+    await userEvent.click(again.getByRole("button", { name: "API" }));
+    expect(again.getByRole("button", { name: "API" })).toHaveAttribute("aria-expanded", "true");
+    expect(window.localStorage.getItem(navGroupStorageKey("api"))).toBe("open");
+  });
+
+  it("marks a collapsed group that holds the current page", async () => {
+    const nav = renderSidebar("/flows");
+    const api = nav.getByRole("button", { name: "API" });
+    expect(api).not.toHaveAttribute("data-holds-current");
+
+    await userEvent.click(api);
+
+    expect(api).toHaveAttribute("aria-expanded", "false");
+    expect(api).toHaveAttribute("data-holds-current");
+    expect(nav.getByRole("button", { name: "Agents" })).not.toHaveAttribute("data-holds-current");
+  });
+
+  it("still works when the browser refuses to store the choice", async () => {
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("blocked");
+    });
+    const nav = renderSidebar("/");
+
+    await userEvent.click(nav.getByRole("button", { name: "Agents" }));
+
+    expect(nav.getByRole("button", { name: "Agents" })).toHaveAttribute("aria-expanded", "false");
+    await userEvent.click(nav.getByRole("button", { name: "Agents" }));
+    expect(nav.getByRole("button", { name: "Agents" })).toHaveAttribute("aria-expanded", "true");
   });
 
   it.each(["/settings", "/settings/connections", "/settings/api-keys", "/settings/pricing"])(
@@ -87,7 +158,14 @@ describe("Sidebar", () => {
     const nav = within(screen.getByRole("navigation", { name: "Principal" }));
 
     expect(nav.getByRole("link", { name: "Configuración" })).toHaveAttribute("aria-current", "page");
-    expect(nav.queryByRole("link", { name: "Conexiones" })).not.toBeInTheDocument();
+    expect(nav.getByRole("button", { name: "Agentes" })).toBeInTheDocument();
+    expect(nav.getByRole("button", { name: "API" })).toBeInTheDocument();
+    const agents = within(nav.getByRole("list", { name: "Agentes" }));
+    expect(agents.getAllByRole("link").map((link) => link.textContent)).toEqual(["Conexiones", "Escenarios"]);
+    expect(within(nav.getByRole("list", { name: "API" })).getByRole("link", { name: "Flujos" })).toHaveAttribute(
+      "href",
+      "/flows",
+    );
     expect(screen.queryByRole("radiogroup", { name: "Idioma" })).not.toBeInTheDocument();
   });
 
