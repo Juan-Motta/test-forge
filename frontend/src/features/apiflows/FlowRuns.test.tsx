@@ -189,6 +189,22 @@ describe("run view", () => {
     );
   });
 
+  it("copies the response with one icon and searches it, marking every match", async () => {
+    const { user } = await renderRun();
+    await user.click(screen.getByRole("button", { name: "Step 1: Get a token, Passed" }));
+    const response = within(screen.getByRole("region", { name: "Step 1: Get a token" })).getByRole("region", { name: "Response" });
+
+    await user.click(within(response).getByRole("button", { name: "Copy response" }));
+    expect(await navigator.clipboard.readText()).toBe('{\n  "access_token": "tok-1",\n  "expires_in": 3600\n}');
+
+    await user.type(within(response).getByRole("searchbox", { name: "Search the response" }), "TOK");
+    expect(within(response).getByText("2 matches")).toHaveAttribute("role", "status");
+    const body = within(response).getByLabelText("Response");
+    expect(Array.from(body.querySelectorAll("mark[data-match]")).map((mark) => mark.textContent)).toEqual(["tok", "tok"]);
+    // The body text itself is unchanged by the marks.
+    expect(body.textContent).toBe('{\n  "access_token": "tok-1",\n  "expires_in": 3600\n}');
+  });
+
   it("says when the run does not exist", async () => {
     setup();
     await renderAt("flow=f-products&run=missing");

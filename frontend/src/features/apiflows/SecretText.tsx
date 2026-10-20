@@ -10,15 +10,37 @@ type SecretTextProps = {
   hints: Record<string, string>;
   /** Values in clear by name, while the eye shows them. */
   shown: Record<string, string>;
+  /** Text to mark where it appears (a search), case-insensitive. */
+  highlight?: string;
 };
 
+/** `text` with every case-insensitive occurrence of `query` wrapped in a mark. */
+export function Highlighted({ text, query }: { text: string; query?: string }) {
+  if (!query) return <>{text}</>;
+  const lower = text.toLowerCase();
+  const needle = query.toLowerCase();
+  const parts = [];
+  let from = 0;
+  for (let at = lower.indexOf(needle); at !== -1; at = lower.indexOf(needle, from)) {
+    if (at > from) parts.push(text.slice(from, at));
+    parts.push(
+      <mark key={at} data-match className="rounded-sm bg-evaluator/30 text-inherit">
+        {text.slice(at, at + needle.length)}
+      </mark>,
+    );
+    from = at + needle.length;
+  }
+  if (from < text.length) parts.push(text.slice(from));
+  return <>{parts.map((part, index) => (typeof part === "string" ? <Fragment key={`t${index}`}>{part}</Fragment> : part))}</>;
+}
+
 /** Text from a run record with each `{{secret.<name>}}` masked as `name ••••hint`, or its value while shown. */
-export function SecretText({ text, hints, shown }: SecretTextProps) {
+export function SecretText({ text, hints, shown, highlight }: SecretTextProps) {
   const t = useT();
   return (
     <>
       {secretSegments(text).map((segment, index) => {
-        if ("text" in segment) return <Fragment key={index}>{segment.text}</Fragment>;
+        if ("text" in segment) return <Highlighted key={index} text={segment.text} query={highlight} />;
         const value = shown[segment.secret];
         if (value !== undefined) {
           return (

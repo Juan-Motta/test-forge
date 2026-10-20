@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useId, type ReactNode } from "react";
+import { useId, useState, type ReactNode } from "react";
 import { useFormat, useT } from "@/lib/i18n";
 import {
   Alert,
@@ -9,12 +9,14 @@ import {
   Button,
   CheckIcon,
   CloseIcon,
+  CopyButton,
   CopyIcon,
   EyeIcon,
   EyeOffIcon,
   MinusIcon,
   PencilIcon,
   PlayIcon,
+  SearchField,
   Spinner,
   buttonClasses,
   cn,
@@ -22,7 +24,17 @@ import {
   type BadgeTone,
 } from "@/ui";
 import { MethodChip } from "./MethodChip";
-import { checkRule, formatBytes, formatDuration, jsonTokens, pathOf, prettyBody, textOf, type JsonToken } from "./run-view";
+import {
+  checkRule,
+  formatBytes,
+  formatDuration,
+  jsonTokens,
+  pathOf,
+  prettyBody,
+  secretSegments,
+  textOf,
+  type JsonToken,
+} from "./run-view";
 import { SecretText } from "./SecretText";
 import type { ApiHeader, FlowRun, StepRun, StepStatus } from "./types";
 
@@ -224,14 +236,24 @@ function Headers({ headers, secrets }: { headers: ApiHeader[]; secrets: SecretVi
   );
 }
 
-function Body({ body, secrets, label }: { body: unknown; secrets: SecretView; label: string }) {
+/** What a copy of the body holds: the text shown, secrets as their hints or, while the eye shows
+ * them, their values. */
+export function bodyCopyText(body: unknown, secrets: SecretView): string {
+  const pretty = prettyBody(body);
+  if (!pretty) return "";
+  return secretSegments(pretty.text)
+    .map((segment) => ("text" in segment ? segment.text : (secrets.shown[segment.secret] ?? secrets.hints[segment.secret] ?? "••••")))
+    .join("");
+}
+
+function Body({ body, secrets, label, query }: { body: unknown; secrets: SecretView; label: string; query?: string }) {
   const t = useT();
   const pretty = prettyBody(body);
   if (!pretty) return <p className="text-xs text-dim">{t("flowRuns.noBody")}</p>;
   if (pretty.kind === "text") {
     return (
       <pre aria-label={label} data-kind={pretty.kind} className={PRE}>
-        <SecretText text={pretty.text} {...secrets} />
+        <SecretText text={pretty.text} {...secrets} highlight={query} />
       </pre>
     );
   }
@@ -240,10 +262,10 @@ function Body({ body, secrets, label }: { body: unknown; secrets: SecretView; la
       {jsonTokens(pretty.text).map((token, index) =>
         token.kind === "plain" ? (
           // A body cut short can leave a placeholder outside any string.
-          <SecretText key={index} text={token.text} {...secrets} />
+          <SecretText key={index} text={token.text} {...secrets} highlight={query} />
         ) : (
           <span key={index} data-token={token.kind} className={TOKEN_CLASS[token.kind]}>
-            <SecretText text={token.text} {...secrets} />
+            <SecretText text={token.text} {...secrets} highlight={query} />
           </span>
         ),
       )}
@@ -311,8 +333,16 @@ function ResponsePanel({ step, secrets }: { step: StepRun; secrets: SecretView }
   const t = useT();
   const format = useFormat();
   const response = step.response;
+  const [query, setQuery] = useState("");
+  const copyText = response ? bodyCopyText(response.body, secrets) : "";
+  const matches = query && copyText ? countMatches(copyText, query) : 0;
   return (
-    <Panel title={t("flowRuns.response")}>
+    <Panel
+      title={t("flowRuns.response")}
+      actions={
+        copyText ? <CopyButton text={copyText} label={t("flowRuns.copyResponse")} size="sm" /> : undefined
+      }
+    >
       {response ? (
         <>
           <dl className="flex flex-wrap gap-x-5 gap-y-1 text-xs">
@@ -327,7 +357,23 @@ function ResponsePanel({ step, secrets }: { step: StepRun; secrets: SecretView }
               <dd className="font-mono text-fg">{formatBytes(response.sizeBytes, format.number)}</dd>
             </div>
           </dl>
-          <Body body={response.body} secrets={secrets} label={t("flowRuns.response")} />
+          {copyText ? (
+            <div className="flex flex-wrap items-center gap-3">
+              <SearchField
+                label={t("flowRuns.searchResponse")}
+                placeholder={t("flowRuns.searchResponse")}
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                className="min-h-9 flex-1 text-xs"
+              />
+              {query ? (
+                <span role="status" className="text-xs text-dim">
+                  {t.plural("flowRuns.matches", matches)}
+                </span>
+              ) : null}
+            </div>
+          ) : null}
+          <Body body={response.body} secrets={secrets} label={t("flowRuns.response")} query={query} />
           {response.headers.length > 0 ? (
             <details className="text-xs">
               <summary className={cn("cursor-pointer rounded text-muted hover:text-fg", focusRing)}>
@@ -344,6 +390,14 @@ function ResponsePanel({ step, secrets }: { step: StepRun; secrets: SecretView }
       )}
     </Panel>
   );
+}
+
+function countMatches(text: string, query: string): number {
+  const lower = text.toLowerCase();
+  const needle = query.toLowerCase();
+  let count = 0;
+  for (let at = lower.indexOf(needle); at !== -1; at = lower.indexOf(needle, at + needle.length)) count += 1;
+  return count;
 }
 
 function ChecksPanel({ step, secrets }: { step: StepRun; secrets: SecretView }) {
