@@ -12,13 +12,18 @@ type PairRowsProps = {
   onAdd: () => void;
   error?: string;
   max?: number;
+  /** Replaces the default legend ("Secrets" / "Headers"); `srOnly` keeps it for screen readers only. */
+  legend?: string;
+  legendSrOnly?: boolean;
+  /** Replaces the text shown without rows; `null` shows none. */
+  emptyText?: string | null;
 };
 
 /**
  * Name/value rows (plain headers, or secrets in password fields). A kept secret shows its name
  * fixed and an empty value that changes it only when typed.
  */
-export function PairRows({ kind, rows, onChange, onAdd, error, max }: PairRowsProps) {
+export function PairRows({ kind, rows, onChange, onAdd, error, max, legend, legendSrOnly = false, emptyText }: PairRowsProps) {
   const t = useT();
   const secret = kind === "secret";
   const update = (key: string, change: Partial<PairRow>) =>
@@ -26,8 +31,12 @@ export function PairRows({ kind, rows, onChange, onAdd, error, max }: PairRowsPr
 
   return (
     <fieldset className="flex flex-col gap-2">
-      <legend className="mb-1.5 text-xs font-medium text-muted">{t(secret ? "apis.field.secrets" : "apis.field.headers")}</legend>
-      {rows.length === 0 ? <p className="text-xs text-dim">{t(secret ? "apis.noSecrets" : "apis.noHeaders")}</p> : null}
+      <legend className={legendSrOnly ? "sr-only" : "mb-1.5 text-xs font-medium text-muted"}>
+        {legend ?? t(secret ? "apis.field.secrets" : "apis.field.headers")}
+      </legend>
+      {rows.length === 0 && emptyText !== null ? (
+        <p className="text-xs text-dim">{emptyText ?? t(secret ? "apis.noSecrets" : "apis.noHeaders")}</p>
+      ) : null}
       {rows.map((row, index) => {
         const n = index + 1;
         const nameLabel = t(secret ? "apis.secretName" : "apis.headerName", { n });

@@ -66,3 +66,23 @@ export function fieldError(errors: Record<string, string>, prefix: string): stri
   const key = Object.keys(errors).find((name) => name === prefix || name.startsWith(`${prefix}.`));
   return key === undefined ? undefined : errors[key];
 }
+
+/** Tags typed as one comma-separated line: trimmed, blanks dropped, each kept once. */
+export function tagsOf(text: string): string[] {
+  return [...new Set(text.split(",").map((tag) => tag.trim()).filter(Boolean))];
+}
+
+/** A whole PATCH of an API's details: only what differs from the stored API. */
+export function apiChanges(
+  stored: { name: string; description: string; tags: string[]; baseUrl: string; headers: ApiHeader[]; secrets: ApiSecret[] },
+  form: { name: string; description: string; tags: string; baseUrl: string; headers: PairRow[]; secrets: PairRow[] },
+): ApiChanges {
+  const changes: ApiChanges = {};
+  const name = form.name.trim();
+  if (name !== stored.name) changes.name = name;
+  const description = form.description.trim();
+  if (description !== stored.description) changes.description = description;
+  const tags = tagsOf(form.tags);
+  if (JSON.stringify(tags) !== JSON.stringify(stored.tags)) changes.tags = tags;
+  return { ...changes, ...connectionChanges(stored, form) };
+}

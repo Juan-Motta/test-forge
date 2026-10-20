@@ -1,21 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { EditableTitle } from "@/features/scenarios/EditableTitle";
-import { GroupMeta } from "@/features/scenarios/GroupMeta";
+import { useEffect, useId, useState } from "react";
 import { PageHeader } from "@/features/shell/PageHeader";
 import { errorMessage } from "@/lib/api";
 import { useT } from "@/lib/i18n";
-import { Alert, ApiFlowsIcon, Button, EmptyState, PencilIcon, PlusIcon, Spinner } from "@/ui";
-import { ApiConnection } from "./ApiConnection";
-import { ApiFlowsCard } from "./ApiFlowsCard";
+import { confirmLeave, useUnsavedChangesGuard } from "@/lib/navigation/unsaved-changes";
+import { Alert, ApiFlowsIcon, Button, EmptyState, PlusIcon, Spinner } from "@/ui";
+import { ApiForm } from "./ApiForm";
 import { ApisRail } from "./ApisRail";
 import { DeleteApiDialog } from "./DeleteApiDialog";
-import { EditConnectionDialog } from "./EditConnectionDialog";
 import { NewApiForm } from "./NewApiForm";
 import { useApis } from "./queries";
 import type { Api } from "./types";
-import { useApiEdits } from "./use-api-edits";
+import { useApiSave, type ApiSaveOutcome } from "./use-api-save";
 
 /** The address names the open API (`/apis?api=<id>`), so a detail can be linked and reloaded. */
 const API_PARAM = "api";
@@ -35,15 +32,25 @@ function writeApiToAddress(id: string | null) {
 }
 
 /**
- * Container for `/apis`: master/detail, like `/agents`. The header shows the open API's name,
- * description, tags and connection (each edited in place); the rail lists the APIs beside its flows.
- * New APIs are created in a form beside the rail. The flow workspace stays at `/apis/[id]`.
+ * Container for `/apis`: master/detail, like `/agents`. The rail lists the APIs; the detail edits
+ * the open one's connection in cards (name, description, tags, base URL, secrets, headers), saved
+ * from the header. New APIs are created in a form beside the rail. Flows live on API → Flows.
  */
 export function ApisContainer() {
   const t = useT();
   const apis = useApis();
+  const formId = useId();
   const [requestedId, setRequestedId] = useState<string | null>(apiFromAddress);
   const [creating, setCreating] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  // Persistent polite live region: announces saves that otherwise only change the form.
+  const [notice, setNotice] = useState("");
+  // The open API's form holds unsaved edits: switching APIs (or leaving the page) asks first.
+  const [dirty, setDirty] = useState(false);
+  useUnsavedChangesGuard(dirty, t("common.leaveUnsaved"));
+  // Bumped per API after a successful save: the form remounts on what is stored now. A
+  // background refetch alone never remounts it, so it never discards edits.
+  const [formVersions, setFormVersions] = useState<Record<string, number>>({});
   // A client-side navigation (the API page's breadcrumb) can render this before the address
   // changes; read it again once mounted, and on back/forward.
   useEffect(() => {
@@ -55,21 +62,83 @@ export function ApisContainer() {
 
   const list = apis.data ?? [];
   const selected = list.find((api) => api.id === requestedId) ?? list[0];
+  const save = useApiSave(selected, onSaved);
 
   function select(id: string | null) {
     setRequestedId(id);
     writeApiToAddress(id);
   }
 
+  /** Opens another API from the rail, once any unsaved edits may be discarded. */
+  function open(id: string) {
+    if (id === selected?.id) return;
+    if (!confirmLeave()) return;
+    save.reset();
+    select(id);
+  }
+
+  function onSaved(api: Api, outcome: ApiSaveOutcome) {
+    setNotice(outcome === "saved" ? t("common.savedNamed", { name: api.name }) : t("common.noChanges"));
+    if (outcome === "saved") setFormVersions((current) => ({ ...current, [api.id]: (current[api.id] ?? 0) + 1 }));
+  }
+
   /** After a delete, open the API that took its place in the rail (the next one, else the previous). */
   function onDeleted(api: Api) {
+    setDeleting(false);
+    setNotice(t("common.deleted", { name: api.name }));
     const index = list.findIndex((item) => item.id === api.id);
     const rest = list.filter((item) => item.id !== api.id);
     select(rest[Math.min(Math.max(index, 0), rest.length - 1)]?.id ?? null);
   }
 
-  const openCreate = () => setCreating(true);
+  const openCreate = () => {
+    if (!confirmLeave()) return;
+    save.reset();
+    setCreating(true);
+  };
+  const addButton = (
+    <Button key="add" variant="secondary" icon={<PlusIcon size={16} />} onClick={openCreate}>
+      {t("apis.add")}
+    </Button>
+  );
 
+  const status = (
+    <p role="status" className="sr-only">
+      {notice}
+    </p>
+  );
+
+  if (creating) {
+    return (
+      <>
+        <PageHeader title={t("apis.connectionsTitle")} description={t("apis.description")} />
+        {status}
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-start">
+          {list.length > 0 ? (
+            <ApisRail
+              apis={list}
+              selectedId={null}
+              onSelect={(api) => {
+                setCreating(false);
+                select(api.id);
+              }}
+              onNew={() => setCreating(true)}
+            />
+          ) : null}
+          <NewApiForm
+            onClose={() => setCreating(false)}
+            onCreated={(api) => {
+              setCreating(false);
+              setNotice(t("common.created", { name: api.name }));
+              select(api.id);
+            }}
+          />
+        </div>
+      </>
+    );
+  }
+
+  let header;
   let body;
   if (apis.isPending) {
     body = <Spinner label={t("apis.loading")} />;
@@ -95,106 +164,55 @@ export function ApisContainer() {
         }
       />
     );
-  }
-
-  if (creating) {
-    return (
-      <>
-        <PageHeader title={t("apis.connectionsTitle")} description={t("apis.description")} />
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-start">
-          {list.length > 0 ? (
-            <ApisRail apis={list} selectedId={null} onSelect={(api) => { setCreating(false); select(api.id); }} onNew={openCreate} />
-          ) : null}
-          <NewApiForm
-            onClose={() => setCreating(false)}
-            onCreated={(api) => {
-              setCreating(false);
-              select(api.id);
-            }}
+  } else {
+    header = (
+      <PageHeader
+        title={selected.name}
+        description={t("apis.description")}
+        actions={[
+          addButton,
+          selected.flowCount === 0 ? (
+            <Button
+              key="delete"
+              variant="ghost"
+              aria-label={t("apis.deleteNamed", { name: selected.name })}
+              onClick={() => setDeleting(true)}
+            >
+              {t("common.delete")}
+            </Button>
+          ) : null,
+          <Button key="save" type="submit" form={formId} loading={save.pending}>
+            {save.pending ? t("editor.saving") : t("apis.saveChanges")}
+          </Button>,
+        ]}
+      />
+    );
+    body = (
+      <div className="flex flex-col gap-5 lg:flex-row lg:items-start">
+        <ApisRail apis={list} selectedId={selected.id} onSelect={(api) => open(api.id)} onNew={openCreate} />
+        <div className="flex min-w-0 flex-1 flex-col gap-4">
+          <ApiForm
+            // A fresh form per API and after each of its saves: half-typed edits and revealed
+            // secrets never carry over; a background refetch alone never remounts it.
+            key={`${selected.id}:${formVersions[selected.id] ?? 0}`}
+            api={selected}
+            formId={formId}
+            onSubmit={save.onSubmit}
+            error={save.error}
+            serverFieldErrors={save.fieldErrors}
+            onDirtyChange={setDirty}
           />
         </div>
-      </>
+      </div>
     );
   }
 
   return (
     <>
-      {selected && !body ? (
-        <>
-          {/* A fresh header per API: half-typed edits and revealed secrets never carry over. */}
-          <ApiHeader key={selected.id} api={selected} onDeleted={onDeleted} />
-          <div className="flex flex-col gap-5 lg:flex-row lg:items-start">
-            <ApisRail apis={list} selectedId={selected.id} onSelect={(api) => select(api.id)} onNew={openCreate} />
-            <div className="flex min-w-0 flex-1 flex-col gap-4">
-              <ApiFlowsCard key={selected.id} api={selected} />
-            </div>
-          </div>
-        </>
-      ) : (
-        <>
-          <PageHeader title={t("apis.connectionsTitle")} description={t("apis.description")} />
-          {body}
-        </>
-      )}
-    </>
-  );
-}
-
-/** The open API's header: its name, description, tags and connection, each edited in place; edit and delete. */
-function ApiHeader({ api, onDeleted }: { api: Api; onDeleted: (api: Api) => void }) {
-  const t = useT();
-  const edits = useApiEdits(api.id);
-  const [editing, setEditing] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-
-  return (
-    <>
-      <PageHeader
-        title={
-          <EditableTitle
-            value={api.name}
-            placeholder={t("apis.untitled")}
-            label={t("apis.rename", { name: api.name })}
-            onCommit={edits.rename}
-          />
-        }
-        description={
-          <div className="flex flex-col gap-2.5">
-            <GroupMeta
-              description={api.description}
-              tags={api.tags}
-              onDescription={edits.describe}
-              onTags={edits.retag}
-              descriptionPlaceholder={t("apis.descriptionPlaceholder")}
-              tagsLabel={t("apis.tagsLabel")}
-            />
-            {/* A save hides any revealed value again (the secrets may have changed). */}
-            <ApiConnection key={api.updatedAt} api={api} />
-          </div>
-        }
-        actions={
-          <>
-            <Button variant="secondary" icon={<PencilIcon size={14} />} onClick={() => setEditing(true)}>
-              {t("apis.editConnection")}
-            </Button>
-            {api.flowCount === 0 ? (
-              <Button variant="ghost" aria-label={t("apis.deleteNamed", { name: api.name })} onClick={() => setDeleting(true)}>
-                {t("common.delete")}
-              </Button>
-            ) : null}
-          </>
-        }
-      />
-
-      {editing ? <EditConnectionDialog api={api} onClose={() => setEditing(false)} /> : null}
-      <DeleteApiDialog
-        api={deleting ? api : undefined}
-        onClose={() => setDeleting(false)}
-        onDeleted={(gone) => {
-          setDeleting(false);
-          onDeleted(gone);
-        }}
-      />
+      {header ?? <PageHeader title={t("apis.connectionsTitle")} description={t("apis.description")} actions={addButton} />}
+      {status}
+      {body}
+      <DeleteApiDialog api={deleting ? selected : undefined} onClose={() => setDeleting(false)} onDeleted={onDeleted} />
     </>
   );
 }

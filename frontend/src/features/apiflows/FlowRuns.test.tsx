@@ -5,7 +5,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { mockAgentsApi } from "@/features/agents/testing";
 import { renderWithClient } from "@/test/render";
 import { ApiContainer } from "./ApiContainer";
-import { ApisContainer } from "./ApisContainer";
 import { apiFixture, flowFixture, mockApisApi, runFixture } from "./testing";
 import type { FlowRun } from "./types";
 
@@ -259,18 +258,5 @@ describe("Run all", () => {
       "/flows/f-ai/runs",
     ]);
     expect(posts.every((r) => JSON.stringify(r.body) === '{"inputs":{}}')).toBe(true);
-  });
-
-  it("runs an API's flows from its row in the APIs table", async () => {
-    const state = setup({ onRun: outcomes });
-    const user = userEvent.setup({ delay: null });
-    renderWithClient(<ApisContainer />);
-
-    await user.click(await screen.findByRole("button", { name: "Run all flows of Shop API" }));
-    const dialog = await screen.findByRole("dialog", { name: "Run 2 flows" });
-    await user.click(within(dialog).getByRole("button", { name: "Run 2 flows" }));
-    const results = await screen.findByRole("list", { name: "Results" });
-    await waitFor(() => expect(within(results).getAllByRole("listitem")[1]).toHaveTextContent("Failed"));
-    expect(state.requests.filter((r) => r.method === "POST")).toHaveLength(2);
   });
 });
