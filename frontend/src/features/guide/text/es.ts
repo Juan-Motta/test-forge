@@ -166,6 +166,17 @@ export const es: GuideText = {
     wallTime: "≈ 18 min de duración total",
     launch: "Lanzar 3 corridas",
   },
+  apiFlowMockup: {
+    caption: "Ejemplo de una corrida de un flujo (datos de ejemplo): la franja de pasos y la solicitud del paso elegido, con su secreto oculto.",
+    label:
+      "Ejemplo de corrida de un flujo: fallida en 2,4 segundos. Paso 1 POST /auth/token aprobado, 200 en 120 ms. Paso 2 GET /products fallido, 500 en 80 ms. La solicitud del paso 1 muestra el encabezado X-Key como apiKey con una pista oculta, un ojo para mostrar secretos y un botón para copiar el cURL.",
+    runOf: "Corrida de Buscar productos",
+    failed: "Fallida · 2,4 s",
+    passed: "Aprobada",
+    request: "Solicitud",
+    showSecrets: "Mostrar secretos",
+    copyCurl: "Copiar cURL",
+  },
   kpiMockup: {
     caption: "Ejemplo de métricas clave en la página Resumen (datos de ejemplo).",
     label: "Ejemplo de métricas clave: puntuación promedio del juez 82, objetivos cumplidos 75 por ciento, latencia por turno del agente p50 1.2 segundos.",

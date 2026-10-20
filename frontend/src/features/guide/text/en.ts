@@ -165,6 +165,17 @@ export const en = {
     wallTime: "≈ 18 min wall time",
     launch: "Launch 3 runs",
   },
+  apiFlowMockup: {
+    caption: "Example run of a flow (sample data): the steps strip, then the selected step's request with its secret masked.",
+    label:
+      "Example flow run: Failed in 2.4 seconds. Step 1 POST /auth/token passed, 200 in 120 ms. Step 2 GET /products failed, 500 in 80 ms. The request of step 1 shows the header X-Key as apiKey with a masked hint, a Show secrets eye and a Copy cURL button.",
+    runOf: "Run of Search products",
+    failed: "Failed · 2.4 s",
+    passed: "Passed",
+    request: "Request",
+    showSecrets: "Show secrets",
+    copyCurl: "Copy cURL",
+  },
   kpiMockup: {
     caption: "Example key metrics on the Overview page (sample data).",
     label: "Example key metrics: average judge score 82, goal completion 75 percent, agent turn latency p50 1.2 seconds.",

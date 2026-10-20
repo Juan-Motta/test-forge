@@ -289,6 +289,47 @@ describe("Guide in Spanish", () => {
     for (const fact of facts) expect(text).toMatch(fact);
   });
 
+  it.each([
+    {
+      lang: "en" as const,
+      heading: "API flows",
+      figure: /Example run of a flow/,
+      facts: [
+        /An API holds a base URL.*named secrets/,
+        /A flow is one or more calls in order/,
+        /Fixed.*Flow input.*API secret.*From a step.*AI generated/,
+        /Run flow opens a small form.*leave an AI input empty and AI writes it/,
+        /opens on the first failed step/,
+        /fetched only when you click it and hidden again/,
+        /Copy cURL copies what you see/,
+        /Agents find, read and run flows through the API/,
+      ],
+    },
+    {
+      lang: "es" as const,
+      heading: "Flujos de API",
+      figure: /Ejemplo de una corrida de un flujo/,
+      facts: [
+        /Una API tiene una URL base.*secretos con nombre/,
+        /Un flujo es una o más llamadas en orden/,
+        /Fijo.*Entrada del flujo.*Secreto de la API.*De un paso.*Generado por IA/,
+        /Ejecutar flujo abre un formulario pequeño.*deja vacía una entrada de IA y la IA la escribe/,
+        /Abre en el primer paso fallido/,
+        /se piden solo cuando haces clic y se ocultan otra vez/,
+        /Copiar cURL copia lo que ves/,
+        /Los agentes encuentran, leen y ejecutan flujos por la API/,
+      ],
+    },
+  ])("explains API flows, their runs, the eye and Copy cURL ($lang)", async ({ lang, heading, figure, facts }) => {
+    const { container } = await show(ModulesPage, lang);
+    const region = screen.getByRole("region", { name: heading });
+    expect(screen.getByRole("heading", { level: 2, name: heading })).toHaveAttribute("id", "api-flows");
+    expect(within(region).getByRole("figure", { name: figure })).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: lang === "en" ? "Modules on this page" : /módulos/i })).toBeInTheDocument();
+    const text = (container.textContent ?? "").replace(/\s+/g, " ");
+    for (const fact of facts) expect(text).toMatch(fact);
+  });
+
   it("answers the Preferences questions and defines the glossary in Spanish", async () => {
     await show(FaqPage, "es");
 

@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { KpiMockup, VerdictMockup } from "@/features/guide/mockups";
+import { ApiFlowRunMockup, KpiMockup, VerdictMockup } from "@/features/guide/mockups";
 import { Bullets, Callout, Code, GuideLink, P, Region, Table, Ui } from "@/features/guide/prose";
 
 const MODULES = [
@@ -7,6 +7,7 @@ const MODULES = [
   ["live-sessions", "Live sessions"],
   ["runs-and-reports", "Runs & reports"],
   ["scenarios", "Scenarios"],
+  ["api-flows", "API flows"],
   ["agents", "Agents"],
   ["connections", "Connections"],
   ["api-keys", "API keys"],
@@ -218,6 +219,47 @@ export function ModulesEn() {
           <li>
             Write criteria the judge can check from the call: &ldquo;Confirms the card is blocked&rdquo; works better than
             &ldquo;Is helpful&rdquo;. See <GuideLink href="/guide/scoring#writing-criteria">writing good criteria</GuideLink>.
+          </li>
+        </Tips>
+      </Region>
+
+      <Region id="api-flows" title="API flows">
+        <P>
+          Saved calls to the APIs your agents use, so people and agents can reuse them instead of writing scripts. An{" "}
+          <Ui>API</Ui> holds a base URL, headers every call sends, and named secrets (an API key, a password), stored sealed. A{" "}
+          <Ui>flow</Ui> is one or more calls in order: for example, get a token with the API key, then search products with
+          that token. The page lists the APIs; open one to see its flows in the sidebar and its connection above them.
+        </P>
+        <Table
+          caption="Where each value of a step comes from"
+          head={["Chip", "What it means"]}
+          rows={[
+            ["Fixed", "Plain text, sent as written."],
+            ["Flow input", <>A value given when the flow runs: <Code>{"{{input.name}}"}</Code>.</>],
+            ["API secret", <>One of the API&apos;s secrets: <Code>{"{{secret.name}}"}</Code>. Masked in runs and cURLs.</>],
+            ["From a step", <>A value an earlier step saved from its response: <Code>{"{{saved.name}}"}</Code>.</>],
+            ["AI generated", "An input AI writes from its description when the run gives no value and it has no default."],
+          ]}
+        />
+        <P>
+          <Ui>Run flow</Ui> opens a small form, one field per input, filled with its default; leave an AI input empty and AI
+          writes it. The run then shows each step as a strip: passed, failed or skipped, with its method, path, status and
+          time. It opens on the first failed step, with its request, its response (JSON shown pretty), its checks with the
+          actual value, and the values it saved. <Ui>Run all</Ui>, on an API and in its row of the table, runs every flow
+          once with no inputs and lists how each ended.
+        </P>
+        <ApiFlowRunMockup locale="en" />
+        <Tips>
+          <li>
+            Secrets show as <Code>apiKey ••••7890</Code>. The eye (<Ui>Show secrets</Ui>) shows the values; they are fetched
+            only when you click it and hidden again when you click it again or leave the page.
+          </li>
+          <li>
+            <Ui>Copy cURL</Ui> copies what you see: masked, or with the values while the eye shows them.
+          </li>
+          <li>
+            Link a flow to the agents it is for. Agents find, read and run flows through the API: see the &ldquo;API
+            flows&rdquo; section of the <GuideLink href="/guide/automation">agent skill</GuideLink>.
           </li>
         </Tips>
       </Region>

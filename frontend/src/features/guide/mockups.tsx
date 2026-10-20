@@ -1,4 +1,4 @@
-import { Badge, Button, KpiTile, ScoreBar, cn, type BadgeTone } from "@/ui";
+import { Badge, Button, CheckIcon, CloseIcon, CopyIcon, EyeIcon, KpiTile, ScoreBar, cn, type BadgeTone } from "@/ui";
 import type { Locale } from "@/lib/i18n/config";
 import { Figure, Mockup } from "./prose";
 import { fill, guideText } from "./text";
@@ -152,6 +152,61 @@ export function KpiMockup({ locale }: { locale: Locale }) {
           <KpiTile label={text.averageScore} value="82" sub={text.lastWeek} />
           <KpiTile label={text.goalCompletion} value="75" unit="%" sub={text.mustPassed} />
           <KpiTile label={text.latency} value="1.2" unit="s" />
+        </div>
+      </Mockup>
+    </Figure>
+  );
+}
+
+/** A flow run: header, the steps strip, and step 1's request with a masked secret, the eye and Copy cURL. */
+export function ApiFlowRunMockup({ locale }: { locale: Locale }) {
+  const text = guideText(locale).apiFlowMockup;
+  const steps = [
+    { method: "POST", tone: "success" as const, path: "/auth/token", facts: "200 · 120 ms", ok: true },
+    { method: "GET", tone: "agent" as const, path: "/products?q=shoes", facts: "500 · 80 ms", ok: false },
+  ];
+  return (
+    <Figure caption={text.caption}>
+      <Mockup label={text.label}>
+        <div className="flex flex-col gap-3">
+          <div className={cn(CARD, "flex-row flex-wrap items-center justify-between gap-2")}>
+            <span className="text-sm font-semibold">{text.runOf}</span>
+            <Badge tone="danger">{text.failed}</Badge>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {steps.map((step, index) => (
+              <div key={step.path} className={cn(CARD, "gap-1 p-3", index === 0 && "border-evaluator")}>
+                <span className="flex items-center gap-1.5">
+                  {step.ok ? <CheckIcon size={14} className="text-success-fg" /> : <CloseIcon size={14} className="text-danger-fg" />}
+                  <Badge tone={step.tone} mono className="text-[10px] font-semibold">
+                    {step.method}
+                  </Badge>
+                </span>
+                <span className="font-mono text-xs text-fg">{step.path}</span>
+                <span className="font-mono text-[11px] text-dim">{step.facts}</span>
+              </div>
+            ))}
+          </div>
+          <div className={cn(CARD, "gap-2.5")}>
+            <span className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-sm font-semibold">{text.request}</span>
+              <span className="flex gap-2">
+                <Button variant="ghost" tabIndex={-1} icon={<EyeIcon size={14} />}>
+                  {text.showSecrets}
+                </Button>
+                <Button variant="secondary" tabIndex={-1} icon={<CopyIcon size={14} />}>
+                  {text.copyCurl}
+                </Button>
+              </span>
+            </span>
+            <span className="font-mono text-xs text-fg">POST https://shop.example.com/v1/auth/token</span>
+            <span className="font-mono text-xs">
+              <span className="text-muted">X-Key </span>
+              <span className="inline-flex items-center gap-1 rounded-full border border-field-line bg-field px-1.5">
+                <span className="text-fg">apiKey</span> <span className="text-dim">••••7890</span>
+              </span>
+            </span>
+          </div>
         </div>
       </Mockup>
     </Figure>

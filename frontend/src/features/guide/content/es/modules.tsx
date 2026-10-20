@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { KpiMockup, VerdictMockup } from "@/features/guide/mockups";
+import { ApiFlowRunMockup, KpiMockup, VerdictMockup } from "@/features/guide/mockups";
 import { Bullets, Callout, Code, GuideLink, P, Region, Table, Ui } from "@/features/guide/prose";
 
 // Anchor ids match the English page, so links to a module work in both languages.
@@ -8,6 +8,7 @@ const MODULES = [
   ["live-sessions", "Sesiones en vivo"],
   ["runs-and-reports", "Corridas y reportes"],
   ["scenarios", "Escenarios"],
+  ["api-flows", "Flujos de API"],
   ["agents", "Agentes"],
   ["connections", "Conexiones"],
   ["api-keys", "Claves de API"],
@@ -197,7 +198,7 @@ export function ModulesEs() {
           el lápiz al final del título (o toma el nombre del escenario) y se crea al guardar. La página de un grupo y cada uno de
           sus escenarios llevan arriba el título, la descripción y las etiquetas del grupo, que se editan ahí mismo (los
           lápices y <Ui>Agregar etiqueta</Ui>), con los escenarios del grupo en la barra lateral. Mientras no elijas uno, la
-          página del grupo ofrece <Ui>Correr todos</Ui>; un grupo vacío se puede eliminar desde ahí. El campo{" "}
+          página del grupo ofrece <Ui>Ejecutar todos</Ui>; un grupo vacío se puede eliminar desde ahí. El campo{" "}
           <Ui>Grupo</Ui> del escenario lo mueve a otro grupo.
           Cada grupo también lanza todos sus escenarios (reproducir) o empieza uno nuevo en él (más). En el editor,{" "}
           <Ui>Duplicar</Ui> y <Ui>Eliminar</Ui> (tras una confirmación) actúan sobre el escenario abierto. Por la API, un
@@ -230,6 +231,48 @@ export function ModulesEs() {
           <li>
             Escribe criterios que el juez pueda comprobar en la llamada: «Confirma que la tarjeta está bloqueada» funciona mejor
             que «Es útil». Consulta <GuideLink href="/guide/scoring#writing-criteria">cómo escribir buenos criterios</GuideLink>.
+          </li>
+        </Tips>
+      </Region>
+
+      <Region id="api-flows" title="Flujos de API">
+        <P>
+          Llamadas guardadas a las APIs que usan tus agentes, para que personas y agentes las reutilicen sin escribir
+          scripts. Una <Ui>API</Ui> tiene una URL base, encabezados que envía cada llamada y secretos con nombre (una clave de
+          API, una contraseña), guardados sellados. Un <Ui>flujo</Ui> es una o más llamadas en orden: por ejemplo, obtener un
+          token con la clave de API y luego buscar productos con ese token. La página lista las APIs; abre una para ver sus
+          flujos en la barra lateral y su conexión arriba.
+        </P>
+        <Table
+          caption="De dónde sale cada valor de un paso"
+          head={["Etiqueta", "Qué significa"]}
+          rows={[
+            ["Fijo", "Texto tal cual, se envía como está escrito."],
+            ["Entrada del flujo", <>Un valor que se da al ejecutar el flujo: <Code>{"{{input.name}}"}</Code>.</>],
+            ["Secreto de la API", <>Uno de los secretos de la API: <Code>{"{{secret.name}}"}</Code>. Oculto en corridas y cURLs.</>],
+            ["De un paso", <>Un valor que un paso anterior guardó de su respuesta: <Code>{"{{saved.name}}"}</Code>.</>],
+            ["Generado por IA", "Una entrada que la IA escribe a partir de su descripción cuando la corrida no da valor y no tiene valor por defecto."],
+          ]}
+        />
+        <P>
+          <Ui>Ejecutar flujo</Ui> abre un formulario pequeño, un campo por entrada, con su valor por defecto; deja vacía una
+          entrada de IA y la IA la escribe. La corrida muestra cada paso en una franja: aprobado, fallido u omitido, con su
+          método, ruta, estado y tiempo. Abre en el primer paso fallido, con su solicitud, su respuesta (el JSON se muestra
+          ordenado), sus verificaciones con el valor real y los valores que guardó. <Ui>Ejecutar todos</Ui>, en una API y en su
+          fila de la tabla, ejecuta cada flujo una vez sin entradas y muestra cómo terminó cada uno.
+        </P>
+        <ApiFlowRunMockup locale="es" />
+        <Tips>
+          <li>
+            Los secretos se ven como <Code>apiKey ••••7890</Code>. El ojo (<Ui>Mostrar secretos</Ui>) muestra los valores: se
+            piden solo cuando haces clic y se ocultan otra vez al volver a hacer clic o al salir de la página.
+          </li>
+          <li>
+            <Ui>Copiar cURL</Ui> copia lo que ves: oculto, o con los valores mientras el ojo los muestra.
+          </li>
+          <li>
+            Vincula un flujo con los agentes a los que sirve. Los agentes encuentran, leen y ejecutan flujos por la API: mira la
+            sección &ldquo;API flows&rdquo; de la <GuideLink href="/guide/automation">skill para agentes</GuideLink>.
           </li>
         </Tips>
       </Region>
