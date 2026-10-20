@@ -455,3 +455,59 @@ async def test_number_notations(user_client, shop, given, status, sent):
     assert response.status_code == status, response.text
     if sent:
         assert shop.requests[1].url.params["max"] == sent
+
+
+async def test_lists_runs_of_every_flow_with_filters(user_client, shop):
+    shop_api = await make_api(user_client)
+    other_api = await make_api(user_client, name="Booking API")
+    search = await make_flow(user_client, shop_api["id"])
+    ping = await make_flow(
+        user_client,
+        other_api["id"],
+        name="Ping",
+        inputs=[],
+        steps=[{"method": "GET", "path": "/nope"}],
+    )
+    first = (await run(user_client, search["id"], inputs={"query": "a"})).json()
+    failed = (await run(user_client, ping["id"])).json()
+    assert failed["status"] == "passed"  # no checks: a 404 still passes
+    page = (await user_client.get("/api/flow-runs")).json()
+    assert page["total"] == 2
+    assert [item["id"] for item in page["items"]] == [failed["id"], first["id"]]
+    assert page["items"][1] == {
+        "id": first["id"],
+        "flowId": search["id"],
+        "flowName": "Product search",
+        "apiId": shop_api["id"],
+        "apiName": "Vivi Shop API",
+        "status": "passed",
+        "stepCount": 2,
+        "durationMs": first["durationMs"],
+        "createdAt": first["createdAt"],
+    }
+    by_api = (await user_client.get("/api/flow-runs", params={"apiId": other_api["id"]})).json()
+    assert [item["id"] for item in by_api["items"]] == [failed["id"]]
+    by_flow = (await user_client.get("/api/flow-runs", params={"flowId": search["id"]})).json()
+    assert by_flow["total"] == 1
+    none_failed = (await user_client.get("/api/flow-runs", params={"status": "failed"})).json()
+    assert none_failed == {"items": [], "total": 0}
+    paged = (await user_client.get("/api/flow-runs", params={"limit": 1, "offset": 1})).json()
+    assert ([item["id"] for item in paged["items"]], paged["total"]) == ([first["id"]], 2)
+    bad = await user_client.get("/api/flow-runs", params={"status": "running"})
+    assert bad.status_code == 422
+
+
+async def test_flows_carry_their_last_run(user_client, shop):
+    api = await make_api(user_client)
+    flow = await make_flow(user_client, api["id"])
+    assert flow["lastRun"] is None
+    await run(user_client, flow["id"], inputs={"query": "a"})
+    latest = (await run(user_client, flow["id"], inputs={"query": "b"})).json()
+    expected = {
+        "id": latest["id"],
+        "status": "passed",
+        "createdAt": latest["createdAt"],
+        "durationMs": latest["durationMs"],
+    }
+    assert (await user_client.get(f"/api/flows/{flow['id']}")).json()["lastRun"] == expected
+    assert (await user_client.get("/api/flows")).json()[0]["lastRun"] == expected

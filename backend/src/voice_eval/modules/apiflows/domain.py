@@ -303,6 +303,14 @@ class Api:
 
 
 @dataclass(frozen=True)
+class LastRun:
+    id: uuid.UUID
+    status: str
+    created_at: datetime
+    duration_ms: int
+
+
+@dataclass(frozen=True)
 class Flow:
     id: uuid.UUID
     api: ApiSummary
@@ -313,6 +321,7 @@ class Flow:
     agents: list[AgentRef]
     created_at: datetime
     updated_at: datetime
+    last_run: LastRun | None = None
 
 
 class ApiNotFound(Exception):

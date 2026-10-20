@@ -656,8 +656,10 @@ with `passed: false` (compare `actual` with the check), then its `response`.
 Errors: `422` when inputs are unusable (`loc` is `["body", "inputs", "<name>"]`: unknown input,
 wrong type, or a value is required); `502` when AI could not write inputs.
 
-`GET /api/flows/{flowId}/runs` lists past runs (newest first; `limit` 1-50, default 20) and
-`GET /api/flow-runs/{runId}` reads one. As shell commands: `GET /api/flows/{flowId}/curl`
+`GET /api/flows/{flowId}/runs` lists past runs (newest first; `limit` 1-50, default 20),
+`GET /api/flow-runs` lists every flow's runs as summaries (`{items, total}`, newest first;
+`status`, `apiId`, `flowId`, `limit`, `offset`) and `GET /api/flow-runs/{runId}` reads one. Each
+flow also carries `lastRun` (`id`, `status`, `createdAt`, `durationMs`, or null). As shell commands: `GET /api/flows/{flowId}/curl`
 (before a run; query parameters fill inputs by name) and
 `GET /api/flow-runs/{runId}/steps/{index}/curl` (as sent in a run; `index` from 0). Both mask
 secrets unless `?reveal=true`.

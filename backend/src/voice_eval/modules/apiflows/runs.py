@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Any
 
 import httpx
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from voice_eval.modules.apiflows import service
@@ -186,6 +186,63 @@ async def list_runs(db: AsyncSession, flow_id: uuid.UUID, *, limit: int) -> list
         .limit(min(limit, MAX_LISTED_RUNS))
     )
     return [_run(record) for record in records]
+
+
+@dataclass(frozen=True)
+class FlowRunSummary:
+    id: uuid.UUID
+    flow_id: uuid.UUID
+    flow_name: str
+    api_id: uuid.UUID
+    api_name: str
+    status: str
+    step_count: int
+    duration_ms: int
+    created_at: datetime
+
+
+async def list_all_runs(
+    db: AsyncSession,
+    *,
+    status: str | None,
+    api_id: uuid.UUID | None,
+    flow_id: uuid.UUID | None,
+    limit: int,
+    offset: int,
+) -> tuple[list[FlowRunSummary], int]:
+    """Runs of every flow, newest first, without their steps' bodies."""
+    filters = []
+    if status is not None:
+        filters.append(FlowRunRecord.status == status)
+    if flow_id is not None:
+        filters.append(FlowRunRecord.flow_id == flow_id)
+    if api_id is not None:
+        filters.append(FlowRecord.api_id == api_id)
+    base = (
+        select(FlowRunRecord, FlowRecord.name, ApiRecord.id, ApiRecord.name)
+        .join(FlowRecord, FlowRecord.id == FlowRunRecord.flow_id)
+        .join(ApiRecord, ApiRecord.id == FlowRecord.api_id)
+        .where(*filters)
+    )
+    total = await db.scalar(select(func.count()).select_from(base.subquery())) or 0
+    rows = await db.execute(
+        base.order_by(FlowRunRecord.created_at.desc(), FlowRunRecord.id).limit(limit).offset(offset)
+    )
+    items = [
+        FlowRunSummary(
+            id=run.id,
+            flow_id=run.flow_id,
+            flow_name=flow_name,
+            api_id=api_id_,
+            api_name=api_name,
+            status=run.status,
+            step_count=len(run.steps),
+            duration_ms=run.duration_ms,
+            created_at=run.created_at,
+        )
+        for run, flow_name, api_id_, api_name in rows
+    ]
+    return items, total
 
 
 async def _secrets_for(

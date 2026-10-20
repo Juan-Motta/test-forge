@@ -5,7 +5,7 @@ Written for agents first: every route says what it is for, and request models ca
 
 import uuid
 from datetime import datetime
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from pydantic import ConfigDict, Field, StringConstraints, field_validator
@@ -214,6 +214,13 @@ class ApiSummaryOut(DomainModel):
     name: str
 
 
+class LastRunOut(DomainModel):
+    id: uuid.UUID
+    status: str
+    created_at: datetime
+    duration_ms: int
+
+
 class FlowOut(DomainModel):
     id: uuid.UUID
     api_id: uuid.UUID
@@ -225,6 +232,7 @@ class FlowOut(DomainModel):
     agents: list[AgentRefOut]
     created_at: datetime
     updated_at: datetime
+    last_run: LastRunOut | None = Field(description="The flow's newest run, if any.")
 
     @classmethod
     def of(cls, flow: Flow) -> "FlowOut":
@@ -239,6 +247,14 @@ class FlowOut(DomainModel):
             agents=[AgentRefOut.of(agent) for agent in flow.agents],
             created_at=flow.created_at,
             updated_at=flow.updated_at,
+            last_run=LastRunOut(
+                id=flow.last_run.id,
+                status=flow.last_run.status,
+                created_at=flow.last_run.created_at,
+                duration_ms=flow.last_run.duration_ms,
+            )
+            if flow.last_run
+            else None,
         )
 
 
@@ -590,6 +606,45 @@ async def flow_curl(
     except SecretDecryptionError:
         raise _undecryptable() from None
     return FlowCurlsOut(steps=[CurlOut(curl=command) for command in commands])
+
+
+class FlowRunSummaryOut(DomainModel):
+    id: uuid.UUID
+    flow_id: uuid.UUID
+    flow_name: str
+    api_id: uuid.UUID
+    api_name: str
+    status: str
+    step_count: int
+    duration_ms: int
+    created_at: datetime
+
+
+class FlowRunPageOut(DomainModel):
+    items: list[FlowRunSummaryOut]
+    total: int
+
+
+@runs_router.get("", response_model=FlowRunPageOut, summary="List runs of every flow")
+async def list_all_runs(
+    db: Db,
+    status_: Annotated[
+        Literal["passed", "failed"] | None, Query(alias="status", description="passed or failed")
+    ] = None,
+    api_id: Annotated[uuid.UUID | None, Query(alias="apiId")] = None,
+    flow_id: Annotated[uuid.UUID | None, Query(alias="flowId")] = None,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> FlowRunPageOut:
+    """Every flow's runs, newest first, as summaries (read one with GET /api/flow-runs/{runId}
+    for its steps)."""
+    items, total = await runs.list_all_runs(
+        db, status=status_, api_id=api_id, flow_id=flow_id, limit=limit, offset=offset
+    )
+    return FlowRunPageOut(
+        items=[FlowRunSummaryOut.model_validate(item, from_attributes=True) for item in items],
+        total=total,
+    )
 
 
 @runs_router.get("/{run_id}", response_model=FlowRunOut, summary="Get a flow run")

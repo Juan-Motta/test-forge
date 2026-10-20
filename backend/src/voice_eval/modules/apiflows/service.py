@@ -8,6 +8,7 @@ import uuid
 from typing import Any
 
 from sqlalchemy import delete, func, insert, select
+from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -26,6 +27,7 @@ from voice_eval.modules.apiflows.domain import (
     FlowNotFound,
     Header,
     InvalidFlowInput,
+    LastRun,
     SecretInfo,
     Step,
     check_flow,
@@ -36,6 +38,7 @@ from voice_eval.modules.apiflows.models import (
     FLOW_NAME_UNIQUE_CONSTRAINT,
     ApiRecord,
     FlowRecord,
+    FlowRunRecord,
     flow_agents,
 )
 from voice_eval.platform.secrets import SecretBox
@@ -219,7 +222,7 @@ async def _flow_count(db: AsyncSession, api_id: uuid.UUID) -> int:
 # ---- Flows ----
 
 
-def _flow(record: FlowRecord) -> Flow:
+def _flow(record: FlowRecord, last_run: LastRun | None = None) -> Flow:
     return Flow(
         id=record.id,
         api=ApiSummary(record.api.id, record.api.name),
@@ -230,7 +233,25 @@ def _flow(record: FlowRecord) -> Flow:
         agents=[AgentRef(agent.id, agent.name) for agent in record.agents],
         created_at=record.created_at,
         updated_at=record.updated_at,
+        last_run=last_run,
     )
+
+
+async def _last_runs(db: AsyncSession, flow_ids: list[uuid.UUID]) -> dict[uuid.UUID, LastRun]:
+    """Each flow's newest run."""
+    rows = await db.execute(
+        select(
+            FlowRunRecord.flow_id,
+            FlowRunRecord.id,
+            FlowRunRecord.status,
+            FlowRunRecord.created_at,
+            FlowRunRecord.duration_ms,
+        )
+        .where(FlowRunRecord.flow_id.in_(flow_ids))
+        .ext(distinct_on(FlowRunRecord.flow_id))
+        .order_by(FlowRunRecord.flow_id, FlowRunRecord.created_at.desc(), FlowRunRecord.id)
+    )
+    return {row[0]: LastRun(row[1], row[2], row[3], row[4]) for row in rows}
 
 
 async def _fetch_flow(db: AsyncSession, flow_id: uuid.UUID) -> FlowRecord:
@@ -252,11 +273,14 @@ async def list_flows(
                 select(flow_agents.c.flow_id).where(flow_agents.c.agent_id == agent_id)
             )
         )
-    return [_flow(record) for record in await db.scalars(query)]
+    records = list(await db.scalars(query))
+    last = await _last_runs(db, [record.id for record in records])
+    return [_flow(record, last.get(record.id)) for record in records]
 
 
 async def get_flow(db: AsyncSession, flow_id: uuid.UUID) -> Flow:
-    return _flow(await _fetch_flow(db, flow_id))
+    record = await _fetch_flow(db, flow_id)
+    return _flow(record, (await _last_runs(db, [record.id])).get(record.id))
 
 
 async def _validate(
