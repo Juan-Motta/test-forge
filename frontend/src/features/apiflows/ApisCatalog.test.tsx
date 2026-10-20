@@ -206,7 +206,7 @@ describe("API connections", () => {
     renderWithClient(<ApisContainer />);
     expect(await screen.findByRole("heading", { name: "No APIs yet" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "New API" }));
-    expect(screen.getByRole("dialog", { name: "New API" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "New API" })).toBeInTheDocument();
   });
 
   it("offers a retry when the APIs cannot be loaded", async () => {
@@ -231,7 +231,9 @@ describe("API connections", () => {
     const { user, rail } = await renderCatalog();
 
     await user.click(within(rail).getByRole("button", { name: "New API" }));
-    const dialog = screen.getByRole("dialog", { name: "New API" });
+    const dialog = screen.getByRole("region", { name: "New API" });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("API connections");
     await user.type(within(dialog).getByRole("textbox", { name: "Name" }), "Billing");
     await user.type(within(dialog).getByRole("textbox", { name: "Description" }), "Invoices.");
     await user.type(within(dialog).getByRole("textbox", { name: "Base URL" }), "https://billing.example.com");
@@ -246,8 +248,10 @@ describe("API connections", () => {
     await user.click(within(dialog).getByRole("button", { name: "Create API" }));
 
     await waitFor(() => expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Billing"));
-    expect(screen.queryByRole("dialog", { name: "New API" })).not.toBeInTheDocument();
-    expect(within(rail).getByRole("button", { name: /Billing/ })).toHaveAttribute("aria-current", "true");
+    expect(screen.queryByRole("region", { name: "New API" })).not.toBeInTheDocument();
+    // The form sits beside the rail, so the rail is a fresh element once the API opens.
+    const after = screen.getByRole("complementary", { name: "APIs" });
+    expect(within(after).getByRole("button", { name: /Billing/ })).toHaveAttribute("aria-current", "true");
     expect(window.location.search).toBe("?api=api-new-1");
     expect(state.requests.filter((request) => request.method === "POST")).toEqual([
       {
@@ -270,7 +274,7 @@ describe("API connections", () => {
     const { user, rail } = await renderCatalog();
 
     await user.click(within(rail).getByRole("button", { name: "New API" }));
-    const dialog = screen.getByRole("dialog", { name: "New API" });
+    const dialog = screen.getByRole("region", { name: "New API" });
     const name = within(dialog).getByRole("textbox", { name: "Name" });
     const baseUrl = within(dialog).getByRole("textbox", { name: "Base URL" });
     await user.type(name, "CRM");
@@ -294,7 +298,7 @@ describe("API connections", () => {
     const state = setup();
     const { user, rail } = await renderCatalog();
     await user.click(within(rail).getByRole("button", { name: "New API" }));
-    const dialog = screen.getByRole("dialog", { name: "New API" });
+    const dialog = screen.getByRole("region", { name: "New API" });
     await user.click(within(dialog).getByRole("button", { name: "Create API" }));
     expect(within(dialog).getByText("Enter a name.")).toBeInTheDocument();
     expect(within(dialog).getByText("Enter the base URL.")).toBeInTheDocument();

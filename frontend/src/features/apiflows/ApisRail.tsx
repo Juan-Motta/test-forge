@@ -20,7 +20,8 @@ export function searchApis(apis: Api[], search: string): Api[] {
 
 type ApisRailProps = {
   apis: Api[];
-  selectedId: string;
+  /** None while a new API is being created. */
+  selectedId: string | null;
   onSelect: (api: Api) => void;
   onNew: () => void;
 };

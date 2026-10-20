@@ -1195,6 +1195,7 @@ export const es: Messages = {
   "settings.replyFormat": "Cómo se ven las respuestas de los agentes de texto en las corridas: con formato Markdown, o tal como se enviaron.",
 
   // Flujos de API: las APIs (URL base, encabezados, secretos) y sus flujos guardados.
+  "apis.connectionsTitle": "Conexiones de API",
   "apis.description": "APIs que llaman tus agentes, cada una con sus flujos guardados: llamadas encadenadas que puedes leer, ejecutar y reutilizar.",
   "apis.one": "API",
   "apis.new": "Nueva API",

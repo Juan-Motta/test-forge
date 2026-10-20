@@ -1221,6 +1221,7 @@ export const en = {
   "settings.replyFormat": "How text agents' replies show in runs: formatted as Markdown, or raw, exactly as sent.",
 
   // API flows: the APIs (base URL, headers, secrets) and their saved flows.
+  "apis.connectionsTitle": "API connections",
   "apis.description": "APIs your agents call, each with its saved flows: chained requests you can read, run and reuse.",
   "apis.one": "API",
   "apis.new": "New API",

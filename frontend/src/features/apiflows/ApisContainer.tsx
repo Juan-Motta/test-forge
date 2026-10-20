@@ -12,7 +12,7 @@ import { ApiFlowsCard } from "./ApiFlowsCard";
 import { ApisRail } from "./ApisRail";
 import { DeleteApiDialog } from "./DeleteApiDialog";
 import { EditConnectionDialog } from "./EditConnectionDialog";
-import { NewApiDialog } from "./NewApiDialog";
+import { NewApiForm } from "./NewApiForm";
 import { useApis } from "./queries";
 import type { Api } from "./types";
 import { useApiEdits } from "./use-api-edits";
@@ -37,7 +37,7 @@ function writeApiToAddress(id: string | null) {
 /**
  * Container for `/apis`: master/detail, like `/agents`. The header shows the open API's name,
  * description, tags and connection (each edited in place); the rail lists the APIs beside its flows.
- * New APIs are created in a dialog. The flow workspace stays at `/apis/[id]`.
+ * New APIs are created in a form beside the rail. The flow workspace stays at `/apis/[id]`.
  */
 export function ApisContainer() {
   const t = useT();
@@ -89,6 +89,26 @@ export function ApisContainer() {
     );
   }
 
+  if (creating) {
+    return (
+      <>
+        <PageHeader title={t("apis.connectionsTitle")} description={t("apis.description")} />
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-start">
+          {list.length > 0 ? (
+            <ApisRail apis={list} selectedId={null} onSelect={(api) => { setCreating(false); select(api.id); }} onNew={openCreate} />
+          ) : null}
+          <NewApiForm
+            onClose={() => setCreating(false)}
+            onCreated={(api) => {
+              setCreating(false);
+              select(api.id);
+            }}
+          />
+        </div>
+      </>
+    );
+  }
+
   return (
     <>
       {selected && !body ? (
@@ -104,19 +124,10 @@ export function ApisContainer() {
         </>
       ) : (
         <>
-          <PageHeader title={t("nav.apis")} description={t("apis.description")} />
+          <PageHeader title={t("apis.connectionsTitle")} description={t("apis.description")} />
           {body}
         </>
       )}
-      {creating ? (
-        <NewApiDialog
-          onClose={() => setCreating(false)}
-          onCreated={(api) => {
-            setCreating(false);
-            select(api.id);
-          }}
-        />
-      ) : null}
     </>
   );
 }

@@ -1,19 +1,19 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useId, useState, type FormEvent } from "react";
 import { formErrorView } from "@/lib/api";
 import { localizeFormError, useT } from "@/lib/i18n";
-import { Alert, Button, Dialog, Field, Input, Textarea } from "@/ui";
+import { Alert, Button, Card, Field, Input, Textarea } from "@/ui";
 import { MAX_SECRETS, fieldError, headersOf, rowKeys, rowsProblem, secretsOf, type PairRow } from "./connection-form";
 import { PairRows } from "./PairRows";
 import { useCreateApi } from "./queries";
 import type { Api } from "./types";
 
-const FORM_ID = "new-api-form";
-
-/** "New API": name, description, base URL, secrets and plain headers. Mounted only while open. */
-export function NewApiDialog({ onClose, onCreated }: { onClose: () => void; onCreated: (api: Api) => void }) {
+/** "New API", in the page beside the rail: name, description, base URL, secrets and plain
+ * headers. Mounted only while open. */
+export function NewApiForm({ onClose, onCreated }: { onClose: () => void; onCreated: (api: Api) => void }) {
   const t = useT();
+  const headingId = useId();
   const create = useCreateApi();
   const [nextKey] = useState(() => rowKeys("row"));
   const [name, setName] = useState("");
@@ -53,24 +53,14 @@ export function NewApiDialog({ onClose, onCreated }: { onClose: () => void; onCr
   }
 
   return (
-    <Dialog
-      open
-      size="lg"
-      title={t("apis.newTitle")}
-      description={t("apis.newDescription")}
-      onClose={onClose}
-      actions={
-        <>
-          <Button variant="ghost" onClick={onClose}>
-            {t("common.cancel")}
-          </Button>
-          <Button type="submit" form={FORM_ID} loading={create.isPending}>
-            {t("apis.create")}
-          </Button>
-        </>
-      }
-    >
-      <form id={FORM_ID} noValidate onSubmit={(event) => void submit(event)} className="flex flex-col gap-4">
+    <Card aria-labelledby={headingId} className="min-w-0 flex-1">
+      <div className="flex flex-col gap-1">
+        <h2 id={headingId} className="text-[17px] font-semibold">
+          {t("apis.newTitle")}
+        </h2>
+        <p className="text-sm text-muted">{t("apis.newDescription")}</p>
+      </div>
+      <form noValidate onSubmit={(event) => void submit(event)} className="flex flex-col gap-4">
         {view?.message ? <Alert>{view.message}</Alert> : null}
         <Field label={t("apis.field.name")} error={errors.name}>
           {(props) => <Input {...props} value={name} maxLength={160} onChange={(event) => setName(event.target.value)} />}
@@ -107,7 +97,15 @@ export function NewApiDialog({ onClose, onCreated }: { onClose: () => void; onCr
           onAdd={() => setHeaders((rows) => [...rows, { key: nextKey(), name: "", value: "" }])}
           error={fieldError(errors, "headers")}
         />
+        <div className="flex flex-wrap justify-end gap-3">
+          <Button variant="ghost" onClick={onClose}>
+            {t("common.cancel")}
+          </Button>
+          <Button type="submit" loading={create.isPending}>
+            {t("apis.create")}
+          </Button>
+        </div>
       </form>
-    </Dialog>
+    </Card>
   );
 }
