@@ -219,7 +219,17 @@ async def list_all_runs(
     if api_id is not None:
         filters.append(FlowRecord.api_id == api_id)
     base = (
-        select(FlowRunRecord, FlowRecord.name, ApiRecord.id, ApiRecord.name)
+        select(
+            FlowRunRecord.id,
+            FlowRunRecord.flow_id,
+            FlowRecord.name,
+            ApiRecord.id,
+            ApiRecord.name,
+            FlowRunRecord.status,
+            func.jsonb_array_length(FlowRunRecord.steps),
+            FlowRunRecord.duration_ms,
+            FlowRunRecord.created_at,
+        )
         .join(FlowRecord, FlowRecord.id == FlowRunRecord.flow_id)
         .join(ApiRecord, ApiRecord.id == FlowRecord.api_id)
         .where(*filters)
@@ -228,20 +238,7 @@ async def list_all_runs(
     rows = await db.execute(
         base.order_by(FlowRunRecord.created_at.desc(), FlowRunRecord.id).limit(limit).offset(offset)
     )
-    items = [
-        FlowRunSummary(
-            id=run.id,
-            flow_id=run.flow_id,
-            flow_name=flow_name,
-            api_id=api_id_,
-            api_name=api_name,
-            status=run.status,
-            step_count=len(run.steps),
-            duration_ms=run.duration_ms,
-            created_at=run.created_at,
-        )
-        for run, flow_name, api_id_, api_name in rows
-    ]
+    items = [FlowRunSummary(*row) for row in rows]
     return items, total
 
 

@@ -491,8 +491,14 @@ async def test_lists_runs_of_every_flow_with_filters(user_client, shop):
     assert by_flow["total"] == 1
     none_failed = (await user_client.get("/api/flow-runs", params={"status": "failed"})).json()
     assert none_failed == {"items": [], "total": 0}
-    paged = (await user_client.get("/api/flow-runs", params={"limit": 1, "offset": 1})).json()
-    assert ([item["id"] for item in paged["items"]], paged["total"]) == ([first["id"]], 2)
+    assert by_api["total"] == 1
+    shop.token_status = 500
+    broken = (await run(user_client, search["id"], inputs={"query": "c"})).json()
+    only_failed = (await user_client.get("/api/flow-runs", params={"status": "failed"})).json()
+    assert ([i["id"] for i in only_failed["items"]], only_failed["total"]) == ([broken["id"]], 1)
+    shop.token_status = 200
+    paged = (await user_client.get("/api/flow-runs", params={"limit": 1, "offset": 2})).json()
+    assert ([item["id"] for item in paged["items"]], paged["total"]) == ([first["id"]], 3)
     bad = await user_client.get("/api/flow-runs", params={"status": "running"})
     assert bad.status_code == 422
 
