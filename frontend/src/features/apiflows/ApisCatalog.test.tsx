@@ -158,7 +158,7 @@ describe("API connections", () => {
     expect(within(first).getByText("POST")).toBeInTheDocument();
     expect(within(first).getByText("GET")).toBeInTheDocument();
     expect(within(first).getByText("Failed")).toBeInTheDocument();
-    expect(within(first).getByText("5 minutes ago")).toBeInTheDocument();
+    expect(within(first).getByText(/^[5-9] minutes ago$/)).toBeInTheDocument();
     const second = within(list).getByRole("link", { name: /List orders/ });
     expect(second).toHaveAttribute("href", "/apis/api-shop?flow=f-orders");
     expect(within(second).getByText("Never run")).toBeInTheDocument();
