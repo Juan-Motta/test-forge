@@ -29,12 +29,19 @@ const traceKey = (id: string) => [...runsQueryKey, "trace", id] as const;
 
 type Polling = { refetchInterval?: number | false };
 
-/** `pollActiveMs`: refetch at this interval while the page shows an active run or judgement. */
-export function useRuns(filters: RunFilters, options: { pollActiveMs?: number; refetchInterval?: number } = {}) {
-  const { pollActiveMs, refetchInterval } = options;
+/**
+ * `pollActiveMs`: refetch at this interval while the page shows an active run or judgement.
+ * `enabled: false` leaves the list unasked (the runs page showing only API flow runs).
+ */
+export function useRuns(
+  filters: RunFilters,
+  options: { pollActiveMs?: number; refetchInterval?: number; enabled?: boolean } = {},
+) {
+  const { pollActiveMs, refetchInterval, enabled = true } = options;
   return useQuery({
     queryKey: listKey(filters),
     queryFn: ({ signal }) => listRuns(filters, signal),
+    enabled,
     refetchInterval: (query) =>
       refetchInterval ??
       (pollActiveMs && query.state.data?.items.some((run) => isActive(run.status) || isJudging(run.judgementStatus))
