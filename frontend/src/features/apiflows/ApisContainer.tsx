@@ -1,61 +1,66 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { useAgents } from "@/features/agents/queries";
+import { EditableTitle } from "@/features/scenarios/EditableTitle";
+import { GroupMeta } from "@/features/scenarios/GroupMeta";
 import { PageHeader } from "@/features/shell/PageHeader";
 import { errorMessage } from "@/lib/api";
 import { useT } from "@/lib/i18n";
-import { Alert, ApiFlowsIcon, Button, EmptyState, Field, PlusIcon, SearchField, Select, Spinner } from "@/ui";
-import { ApiTable, apiHref } from "./ApiTable";
+import { Alert, ApiFlowsIcon, Button, EmptyState, PencilIcon, PlusIcon, Spinner } from "@/ui";
+import { ApiConnection } from "./ApiConnection";
+import { ApiFlowsCard } from "./ApiFlowsCard";
+import { ApisRail } from "./ApisRail";
+import { DeleteApiDialog } from "./DeleteApiDialog";
+import { EditConnectionDialog } from "./EditConnectionDialog";
 import { NewApiDialog } from "./NewApiDialog";
-import { RunAllDialog } from "./RunAllDialog";
 import { useApis } from "./queries";
 import type { Api } from "./types";
+import { useApiEdits } from "./use-api-edits";
 
-/** APIs per page, like the scenario groups. */
-const APIS_PER_PAGE = 20;
+/** The address names the open API (`/apis?api=<id>`), so a detail can be linked and reloaded. */
+const API_PARAM = "api";
 
-type ApiFilters = { search: string; agentId: string; tag: string };
-const NO_FILTERS: ApiFilters = { search: "", agentId: "", tag: "" };
-
-/** The APIs matching every filter: search in name, base URL, description or tags; one agent; one tag. */
-function filterApis(apis: Api[], { search, agentId, tag }: ApiFilters): Api[] {
-  const wanted = search.trim().toLowerCase();
-  return apis.filter(
-    (api) =>
-      (!wanted ||
-        api.name.toLowerCase().includes(wanted) ||
-        api.baseUrl.toLowerCase().includes(wanted) ||
-        api.description.toLowerCase().includes(wanted) ||
-        api.tags.some((item) => item.toLowerCase().includes(wanted))) &&
-      (!agentId || api.agents.some((agent) => agent.id === agentId)) &&
-      (!tag || api.tags.includes(tag)),
-  );
+function apiFromAddress(): string | null {
+  if (typeof window === "undefined") return null;
+  return new URLSearchParams(window.location.search).get(API_PARAM);
 }
 
-/** `/apis`: the APIs, one row each. A name opens the API: its connection, tags and flows. */
+/** The native History API keeps Next's router in sync without a navigation. */
+function writeApiToAddress(id: string | null) {
+  const params = new URLSearchParams(window.location.search);
+  if (id === null) params.delete(API_PARAM);
+  else params.set(API_PARAM, id);
+  const query = params.toString();
+  window.history.replaceState(window.history.state, "", `${window.location.pathname}${query ? `?${query}` : ""}`);
+}
+
+/**
+ * Container for `/apis`: master/detail, like `/agents`. The header shows the open API's name,
+ * description, tags and connection (each edited in place); the rail lists the APIs beside its flows.
+ * New APIs are created in a dialog. The flow workspace stays at `/apis/[id]`.
+ */
 export function ApisContainer() {
   const t = useT();
-  const router = useRouter();
   const apis = useApis();
-  const agents = useAgents();
+  const [requestedId, setRequestedId] = useState<string | null>(apiFromAddress);
   const [creating, setCreating] = useState(false);
-  const [runningAll, setRunningAll] = useState<Api>();
-  const [filters, setFiltersState] = useState(NO_FILTERS);
-  const [page, setPage] = useState(1);
-  // Any filter change starts over on the first page.
-  const setFilters = (next: ApiFilters | ((current: ApiFilters) => ApiFilters)) => {
-    setFiltersState(next);
-    setPage(1);
-  };
 
-  const agentList = agents.data ?? [];
-  const newApi = (
-    <Button icon={<PlusIcon size={16} />} onClick={() => setCreating(true)}>
-      {t("apis.new")}
-    </Button>
-  );
+  const list = apis.data ?? [];
+  const selected = list.find((api) => api.id === requestedId) ?? list[0];
+
+  function select(id: string | null) {
+    setRequestedId(id);
+    writeApiToAddress(id);
+  }
+
+  /** After a delete, open the API that took its place in the rail (the next one, else the previous). */
+  function onDeleted(api: Api) {
+    const index = list.findIndex((item) => item.id === api.id);
+    const rest = list.filter((item) => item.id !== api.id);
+    select(rest[Math.min(Math.max(index, 0), rest.length - 1)]?.id ?? null);
+  }
+
+  const openCreate = () => setCreating(true);
 
   let body;
   if (apis.isPending) {
@@ -69,132 +74,108 @@ export function ApisContainer() {
         </Button>
       </Alert>
     );
-  } else if (apis.data.length === 0) {
+  } else if (!selected) {
     body = (
       <EmptyState
         icon={<ApiFlowsIcon size={22} />}
         title={t("apis.emptyTitle")}
         description={t("apis.emptyDescription")}
-        action={newApi}
+        action={
+          <Button icon={<PlusIcon size={16} />} onClick={openCreate}>
+            {t("apis.new")}
+          </Button>
+        }
       />
-    );
-  } else {
-    const tags = [...new Set(apis.data.flatMap((api) => api.tags))].sort((a, b) => a.localeCompare(b));
-    // A chosen tag or agent that no longer exists (e.g. after a refetch) filters nothing out.
-    const active: ApiFilters = {
-      ...filters,
-      tag: tags.includes(filters.tag) ? filters.tag : "",
-      agentId: agentList.some((agent) => agent.id === filters.agentId) ? filters.agentId : "",
-    };
-    const matching = filterApis(apis.data, active);
-    const lastPage = Math.max(1, Math.ceil(matching.length / APIS_PER_PAGE));
-    const current = Math.min(page, lastPage);
-    const shown = matching.slice((current - 1) * APIS_PER_PAGE, current * APIS_PER_PAGE);
-    const first = matching.length === 0 ? 0 : (current - 1) * APIS_PER_PAGE + 1;
-    const last = Math.min(matching.length, current * APIS_PER_PAGE);
-    body = (
-      <>
-        <div className="flex flex-wrap items-end gap-4">
-          <div className="flex w-full flex-col gap-1.5 sm:w-72">
-            {/* Seen like the other filters' labels; the field's own (hidden) label names it. */}
-            <span aria-hidden="true" className="text-xs font-medium text-muted">
-              {t("groups.searchLabel")}
-            </span>
-            <SearchField
-              label={t("apis.search")}
-              placeholder={t("apis.searchPlaceholder")}
-              value={filters.search}
-              onChange={(event) => setFilters((value) => ({ ...value, search: event.target.value }))}
-            />
-          </div>
-          <div className="w-full sm:w-60">
-            <Field label={t("common.agent")}>
-              {(props) => (
-                <Select
-                  {...props}
-                  value={active.agentId}
-                  onChange={(event) => setFilters((value) => ({ ...value, agentId: event.target.value }))}
-                >
-                  <option value="">{t("groups.allAgents")}</option>
-                  {agentList.map((agent) => (
-                    <option key={agent.id} value={agent.id}>
-                      {agent.name}
-                    </option>
-                  ))}
-                </Select>
-              )}
-            </Field>
-          </div>
-          <div className="w-full sm:w-48">
-            <Field label={t("groups.filterTag")}>
-              {(props) => (
-                <Select
-                  {...props}
-                  value={active.tag}
-                  onChange={(event) => setFilters((value) => ({ ...value, tag: event.target.value }))}
-                >
-                  <option value="">{t("groups.allTags")}</option>
-                  {tags.map((tag) => (
-                    <option key={tag} value={tag}>
-                      {tag}
-                    </option>
-                  ))}
-                </Select>
-              )}
-            </Field>
-          </div>
-        </div>
-        {matching.length === 0 ? (
-          <div className="flex flex-wrap items-center gap-3 rounded-xl border border-dashed border-line-strong bg-panel p-5">
-            <p className="text-sm text-muted">{t("apis.noMatch")}</p>
-            <Button variant="secondary" onClick={() => setFilters(NO_FILTERS)}>
-              {t("common.clearFilters")}
-            </Button>
-          </div>
-        ) : (
-          <ApiTable apis={shown} onRunAll={setRunningAll} />
-        )}
-        {matching.length > 0 ? (
-          <nav aria-label={t("common.pagination")} className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted">
-            <span>{t("common.range", { first, last, total: matching.length })}</span>
-            <div className="flex gap-2">
-              <Button
-                variant="secondary"
-                disabled={current <= 1}
-                onClick={() => setPage(current - 1)}
-                aria-label={t("common.previousPage")}
-              >
-                {t("common.previous")}
-              </Button>
-              <Button
-                variant="secondary"
-                disabled={current >= lastPage}
-                onClick={() => setPage(current + 1)}
-                aria-label={t("common.nextPage")}
-              >
-                {t("common.next")}
-              </Button>
-            </div>
-          </nav>
-        ) : null}
-      </>
     );
   }
 
   return (
     <>
-      <PageHeader title={t("nav.apis")} description={t("apis.description")} actions={newApi} />
-      {body}
+      {selected && !body ? (
+        <>
+          {/* A fresh header per API: half-typed edits and revealed secrets never carry over. */}
+          <ApiHeader key={selected.id} api={selected} onDeleted={onDeleted} />
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-start">
+            <ApisRail apis={list} selectedId={selected.id} onSelect={(api) => select(api.id)} onNew={openCreate} />
+            <div className="flex min-w-0 flex-1 flex-col gap-4">
+              <ApiFlowsCard key={selected.id} api={selected} />
+            </div>
+          </div>
+        </>
+      ) : (
+        <>
+          <PageHeader title={t("nav.apis")} description={t("apis.description")} />
+          {body}
+        </>
+      )}
       {creating ? (
         <NewApiDialog
           onClose={() => setCreating(false)}
           onCreated={(api) => {
             setCreating(false);
-            router.push(apiHref(api));
+            select(api.id);
           }}
         />
       ) : null}
-      {runningAll ? <RunAllDialog api={runningAll} onClose={() => setRunningAll(undefined)} /> : null}
+    </>
+  );
+}
+
+/** The open API's header: its name, description, tags and connection, each edited in place; edit and delete. */
+function ApiHeader({ api, onDeleted }: { api: Api; onDeleted: (api: Api) => void }) {
+  const t = useT();
+  const edits = useApiEdits(api.id);
+  const [editing, setEditing] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  return (
+    <>
+      <PageHeader
+        title={
+          <EditableTitle
+            value={api.name}
+            placeholder={t("apis.untitled")}
+            label={t("apis.rename", { name: api.name })}
+            onCommit={edits.rename}
+          />
+        }
+        description={
+          <div className="flex flex-col gap-2.5">
+            <GroupMeta
+              description={api.description}
+              tags={api.tags}
+              onDescription={edits.describe}
+              onTags={edits.retag}
+              descriptionPlaceholder={t("apis.descriptionPlaceholder")}
+              tagsLabel={t("apis.tagsLabel")}
+            />
+            {/* A save hides any revealed value again (the secrets may have changed). */}
+            <ApiConnection key={api.updatedAt} api={api} />
+          </div>
+        }
+        actions={
+          <>
+            <Button variant="secondary" icon={<PencilIcon size={14} />} onClick={() => setEditing(true)}>
+              {t("apis.editConnection")}
+            </Button>
+            {api.flowCount === 0 ? (
+              <Button variant="ghost" aria-label={t("apis.deleteNamed", { name: api.name })} onClick={() => setDeleting(true)}>
+                {t("common.delete")}
+              </Button>
+            ) : null}
+          </>
+        }
+      />
+
+      {editing ? <EditConnectionDialog api={api} onClose={() => setEditing(false)} /> : null}
+      <DeleteApiDialog
+        api={deleting ? api : undefined}
+        onClose={() => setDeleting(false)}
+        onDeleted={(gone) => {
+          setDeleting(false);
+          onDeleted(gone);
+        }}
+      />
     </>
   );
 }

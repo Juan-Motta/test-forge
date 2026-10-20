@@ -53,7 +53,7 @@ describe("API page", () => {
     const state = setup();
     await renderApi();
 
-    expect(screen.getByRole("link", { name: "API flows" })).toHaveAttribute("href", "/apis");
+    expect(screen.getByRole("link", { name: "API flows" })).toHaveAttribute("href", "/apis?api=api-shop");
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Shop API");
     expect(screen.getByRole("button", { name: "Rename the API Shop API" })).toBeInTheDocument();
     expect(screen.getByText("Products and orders of the demo shop.")).toBeInTheDocument();

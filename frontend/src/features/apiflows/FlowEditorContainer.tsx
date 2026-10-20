@@ -7,7 +7,7 @@ import { ApiError } from "@/lib/api";
 import { localErrorMessage, useT } from "@/lib/i18n";
 import { Alert, Button, Dialog, useClipboard } from "@/ui";
 import { flowCurls } from "./api";
-import { apiHref, flowHref, runHref } from "./ApiTable";
+import { apiHref, flowHref, runHref } from "./links";
 import { draftOf, payloadOf, type FlowDraft } from "./flow-draft";
 import { flowErrors, isPlaced } from "./flow-errors";
 import { FlowEditor } from "./FlowEditor";

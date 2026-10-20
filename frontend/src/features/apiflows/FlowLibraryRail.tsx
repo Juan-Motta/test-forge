@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { useT } from "@/lib/i18n";
 import { PlusIcon, SearchField, cn, focusRing } from "@/ui";
-import { flowHref, newFlowHref } from "./ApiTable";
+import { flowHref, newFlowHref } from "./links";
 import { MethodChip } from "./MethodChip";
 import type { Api, Flow } from "./types";
 

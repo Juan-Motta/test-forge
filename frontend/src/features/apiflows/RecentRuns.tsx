@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useFormat, useT } from "@/lib/i18n";
 import { Badge, cn, focusRing } from "@/ui";
-import { runHref } from "./ApiTable";
+import { runHref } from "./links";
 import { useFlowRuns } from "./queries";
 import { formatDuration } from "./run-view";
 import type { Api, FlowRun } from "./types";

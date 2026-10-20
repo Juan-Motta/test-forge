@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { useFormat, useT } from "@/lib/i18n";
 import { Badge, buttonClasses, cn, focusRing, PlayIcon } from "@/ui";
-import { apiHref, flowHref, runHref } from "./ApiTable";
+import { apiHref, flowHref, runHref } from "./links";
 import { MethodChip } from "./MethodChip";
 import type { Flow } from "./types";
 

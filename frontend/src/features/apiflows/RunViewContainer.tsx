@@ -5,7 +5,7 @@ import { ApiError, errorMessage } from "@/lib/api";
 import { localErrorMessage, useT } from "@/lib/i18n";
 import { Alert, ApiFlowsIcon, Button, EmptyState, Spinner, useClipboard } from "@/ui";
 import { stepCurl } from "./api";
-import { flowHref, runHref } from "./ApiTable";
+import { flowHref, runHref } from "./links";
 import { useFlowRun } from "./queries";
 import { defaultStepIndex } from "./run-view";
 import { RunView } from "./RunView";

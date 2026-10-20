@@ -5,7 +5,7 @@ import { useState, type FormEvent } from "react";
 import { ApiError } from "@/lib/api";
 import { localErrorMessage, useT } from "@/lib/i18n";
 import { Alert, Button, Field, Input, PlayIcon, Select, Spinner } from "@/ui";
-import { runHref } from "./ApiTable";
+import { runHref } from "./links";
 import { useRunFlow } from "./queries";
 import { initialRunValues, runInputsOf } from "./run-view";
 import type { Api, Flow, FlowInput } from "./types";

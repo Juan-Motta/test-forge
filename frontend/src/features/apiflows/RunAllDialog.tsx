@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { useT } from "@/lib/i18n";
 import { Badge, Button, Dialog, Spinner, cn, focusRing, type BadgeTone } from "@/ui";
 import { runFlow } from "./api";
-import { runHref } from "./ApiTable";
+import { runHref } from "./links";
 import { storedRun, useApiFlows } from "./queries";
 import { runAllOutcome, type RunAllOutcome } from "./run-view";
 import type { Api, Flow } from "./types";

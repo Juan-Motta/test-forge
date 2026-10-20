@@ -8,13 +8,14 @@ import { GroupMeta } from "@/features/scenarios/GroupMeta";
 import { PageHeader } from "@/features/shell/PageHeader";
 import { ApiError, errorMessage } from "@/lib/api";
 import { useT } from "@/lib/i18n";
-import { Alert, ApiFlowsIcon, Button, Dialog, EmptyState, PencilIcon, PlayIcon, PlusIcon, Spinner, buttonClasses } from "@/ui";
+import { Alert, ApiFlowsIcon, Button, EmptyState, PencilIcon, PlayIcon, PlusIcon, Spinner, buttonClasses } from "@/ui";
 import { ApiConnection } from "./ApiConnection";
-import { newFlowHref } from "./ApiTable";
+import { DeleteApiDialog } from "./DeleteApiDialog";
 import { EditConnectionDialog } from "./EditConnectionDialog";
 import { FlowEditorContainer } from "./FlowEditorContainer";
 import { FlowLibraryRail } from "./FlowLibraryRail";
-import { useApi, useApiFlows, useDeleteApi } from "./queries";
+import { apiConnectionHref, newFlowHref } from "./links";
+import { useApi, useApiFlows } from "./queries";
 import { RunAllDialog } from "./RunAllDialog";
 import { RunFormContainer } from "./RunForm";
 import { RunViewContainer } from "./RunViewContainer";
@@ -66,26 +67,15 @@ function ApiPage({ api }: { api: Api }) {
   const creating = params.get("new") === "flow";
   const runId = params.get("run") ?? undefined;
   const flows = useApiFlows(api.id);
-  const remove = useDeleteApi();
   const edits = useApiEdits(api.id);
   const [deleting, setDeleting] = useState(false);
   const [editing, setEditing] = useState(false);
   const [runningAll, setRunningAll] = useState(false);
 
-  async function confirmDelete() {
-    try {
-      await remove.mutateAsync(api);
-    } catch {
-      return; // shown in the dialog
-    }
-    setDeleting(false);
-    router.push("/apis");
-  }
-
   return (
     <div className="flex flex-col gap-[22px]">
       <PageHeader
-        breadcrumbs={[{ label: t("nav.apis"), href: "/apis" }]}
+        breadcrumbs={[{ label: t("nav.apis"), href: apiConnectionHref(api) }]}
         title={
           <EditableTitle
             value={api.name}
@@ -138,24 +128,14 @@ function ApiPage({ api }: { api: Api }) {
 
       {editing ? <EditConnectionDialog api={api} onClose={() => setEditing(false)} /> : null}
       {runningAll ? <RunAllDialog api={api} onClose={() => setRunningAll(false)} /> : null}
-      <Dialog
-        open={deleting}
-        title={t("common.deleteTitle", { name: api.name })}
-        description={t("apis.deleteDescription")}
+      <DeleteApiDialog
+        api={deleting ? api : undefined}
         onClose={() => setDeleting(false)}
-        actions={
-          <>
-            <Button variant="ghost" onClick={() => setDeleting(false)}>
-              {t("common.cancel")}
-            </Button>
-            <Button variant="danger" loading={remove.isPending} onClick={() => void confirmDelete()}>
-              {t("apis.delete")}
-            </Button>
-          </>
-        }
-      >
-        {remove.isError ? <Alert>{errorMessage(remove.error)}</Alert> : null}
-      </Dialog>
+        onDeleted={() => {
+          setDeleting(false);
+          router.push("/apis");
+        }}
+      />
     </div>
   );
 }
