@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState, type FormEvent } from "react";
+import { useEffect, useId, useState, type FormEvent } from "react";
 import { formErrorView } from "@/lib/api";
 import { localizeFormError, useT } from "@/lib/i18n";
 import { Alert, Button, Card, Field, Input, Textarea } from "@/ui";
@@ -11,7 +11,16 @@ import type { Api } from "./types";
 
 /** "New API", in the page beside the rail: name, description, base URL, secrets and plain
  * headers. Mounted only while open. */
-export function NewApiForm({ onClose, onCreated }: { onClose: () => void; onCreated: (api: Api) => void }) {
+export function NewApiForm({
+  onClose,
+  onCreated,
+  onDirtyChange,
+}: {
+  onClose: () => void;
+  onCreated: (api: Api) => void;
+  /** Whether anything was typed, so leaving can ask first. */
+  onDirtyChange?: (dirty: boolean) => void;
+}) {
   const t = useT();
   const headingId = useId();
   const create = useCreateApi();
@@ -22,6 +31,11 @@ export function NewApiForm({ onClose, onCreated }: { onClose: () => void; onCrea
   const [secrets, setSecrets] = useState<PairRow[]>([]);
   const [headers, setHeaders] = useState<PairRow[]>([]);
   const [local, setLocal] = useState<Record<string, string>>({});
+  const dirty = Boolean(name || description || baseUrl || secrets.length || headers.length);
+  useEffect(() => {
+    onDirtyChange?.(dirty);
+  }, [dirty, onDirtyChange]);
+  useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
 
   const view = create.isError ? localizeFormError(t, create.error, formErrorView(create.error, t("apis.error.taken"))) : undefined;
   const errors = { ...view?.fieldErrors, ...local };

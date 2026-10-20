@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { PageHeader } from "@/features/shell/PageHeader";
 import { errorMessage } from "@/lib/api";
 import { useT } from "@/lib/i18n";
@@ -47,6 +47,7 @@ export function ApisContainer() {
   const [notice, setNotice] = useState("");
   // The open API's form holds unsaved edits: switching APIs (or leaving the page) asks first.
   const [dirty, setDirty] = useState(false);
+  const deleteNext = useRef<string | null>(null);
   useUnsavedChangesGuard(dirty, t("common.leaveUnsaved"));
   // Bumped per API after a successful save: the form remounts on what is stored now. A
   // background refetch alone never remounts it, so it never discards edits.
@@ -86,9 +87,7 @@ export function ApisContainer() {
   function onDeleted(api: Api) {
     setDeleting(false);
     setNotice(t("common.deleted", { name: api.name }));
-    const index = list.findIndex((item) => item.id === api.id);
-    const rest = list.filter((item) => item.id !== api.id);
-    select(rest[Math.min(Math.max(index, 0), rest.length - 1)]?.id ?? null);
+    select(deleteNext.current);
   }
 
   const openCreate = () => {
@@ -119,6 +118,7 @@ export function ApisContainer() {
               apis={list}
               selectedId={null}
               onSelect={(api) => {
+                if (!confirmLeave()) return;
                 setCreating(false);
                 select(api.id);
               }}
@@ -126,6 +126,7 @@ export function ApisContainer() {
             />
           ) : null}
           <NewApiForm
+            onDirtyChange={setDirty}
             onClose={() => setCreating(false)}
             onCreated={(api) => {
               setCreating(false);
@@ -176,7 +177,13 @@ export function ApisContainer() {
               key="delete"
               variant="ghost"
               aria-label={t("apis.deleteNamed", { name: selected.name })}
-              onClick={() => setDeleting(true)}
+              onClick={() => {
+                // The neighbour is chosen now: once deleted, the refetched list no longer holds it.
+                const index = list.findIndex((item) => item.id === selected.id);
+                const rest = list.filter((item) => item.id !== selected.id);
+                deleteNext.current = rest[Math.min(Math.max(index, 0), rest.length - 1)]?.id ?? null;
+                setDeleting(true);
+              }}
             >
               {t("common.delete")}
             </Button>

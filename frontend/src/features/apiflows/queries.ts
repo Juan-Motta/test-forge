@@ -52,6 +52,8 @@ export function useAllFlows() {
 /** Seeds the API's cache and refreshes the list (and the flows, which show the API's name). */
 function storedApi(queryClient: QueryClient, api: Api) {
   queryClient.setQueryData(apiQueryKey(api.id), api);
+  // The list is what pages render from: show the saved API now, not after the refetch.
+  queryClient.setQueryData<Api[]>(apisListKey, (list) => list?.map((item) => (item.id === api.id ? api : item)));
   return Promise.all([
     queryClient.invalidateQueries({ queryKey: apisListKey }),
     queryClient.invalidateQueries({ queryKey: flowsQueryKey }),

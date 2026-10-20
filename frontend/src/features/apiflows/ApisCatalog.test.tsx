@@ -361,6 +361,25 @@ describe("API connections", () => {
     expect(screen.queryByRole("form", { name: "API connection" })).not.toBeInTheDocument();
   });
 
+  it("asks before leaving a half-typed new API for one in the rail", async () => {
+    setup();
+    const { user } = await renderCatalog();
+    await user.click(screen.getByRole("button", { name: "Add API" }));
+    const form = screen.getByRole("region", { name: "New API" });
+    await user.type(within(form).getByRole("textbox", { name: "Name" }), "Billing");
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+
+    const rail = screen.getByRole("complementary", { name: "APIs" });
+    await user.click(within(rail).getByRole("button", { name: /CRM/ }));
+    expect(confirm).toHaveBeenCalled();
+    expect(within(screen.getByRole("region", { name: "New API" })).getByRole("textbox", { name: "Name" })).toHaveValue("Billing");
+
+    confirm.mockReturnValue(true);
+    await user.click(within(rail).getByRole("button", { name: /CRM/ }));
+    expect(screen.queryByRole("region", { name: "New API" })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("CRM");
+  });
+
   it("deletes an API without flows after confirming, then opens another one", async () => {
     const state = setup([shop, crm, empty]);
     window.history.replaceState(null, "", "/apis?api=api-empty");
