@@ -442,3 +442,16 @@ async def test_a_flow_preview_types_its_inputs_like_a_run(user_client):
     flow = await make_flow(user_client, api["id"], inputs=INPUTS[1:], steps=steps)
     preview = (await user_client.get(f"/api/flows/{flow['id']}/curl")).json()["steps"][0]
     assert """--data-raw '{"max": 120}'""" in preview["curl"]
+
+
+@pytest.mark.parametrize(
+    ("given", "status", "sent"),
+    [("1e3", 201, "1000"), ("1.5", 201, "1.5"), ("9" * 5000, 422, None)],
+)
+async def test_number_notations(user_client, shop, given, status, sent):
+    api = await make_api(user_client)
+    flow = await make_flow(user_client, api["id"])
+    response = await run(user_client, flow["id"], inputs={"query": "x", "max_price": given})
+    assert response.status_code == status, response.text
+    if sent:
+        assert shop.requests[1].url.params["max"] == sent

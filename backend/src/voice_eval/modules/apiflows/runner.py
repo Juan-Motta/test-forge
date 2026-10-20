@@ -93,7 +93,7 @@ def _typed(item: FlowInput, raw: Any, loc: list[Any]) -> Any:
         if isinstance(raw, int) or (isinstance(raw, float) and math.isfinite(raw)):
             return raw
         text = str(raw).strip()
-        if re.fullmatch(r"[+-]?\d+", text):
+        if re.fullmatch(r"[+-]?\d{1,4000}", text):
             return int(text)  # exact, however large
         try:
             number = float(text)
@@ -101,7 +101,8 @@ def _typed(item: FlowInput, raw: Any, loc: list[Any]) -> Any:
             raise FlowInputError([_err(loc, "must be a number")]) from None
         if not math.isfinite(number):
             raise FlowInputError([_err(loc, "must be a finite number")])
-        return number
+        # Integral notations such as 1e3 stay integers; 1.0 keeps the decimal it was given.
+        return int(number) if number.is_integer() and "." not in text else number
     if item.type is InputType.BOOLEAN:
         if isinstance(raw, bool):
             return raw
