@@ -46,7 +46,7 @@ describe("Flows page", () => {
 
     expect(await screen.findByRole("table", { name: "Flows" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 1, name: "Flows" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "API" })).toHaveAttribute("href", "/apis");
+    expect(screen.queryByRole("navigation", { name: /breadcrumb/i })).not.toBeInTheDocument();
     expect(flowNames()).toEqual(["Search products", "List orders", "Find contact"]);
 
     const row = rowOf("Search products");

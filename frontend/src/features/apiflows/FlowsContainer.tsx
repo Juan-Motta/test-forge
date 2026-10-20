@@ -181,7 +181,6 @@ export function FlowsContainer() {
       <PageHeader
         title={t("nav.flows")}
         description={t("flowsPage.description")}
-        breadcrumbs={[{ label: t("nav.api"), href: "/apis" }]}
       />
       {body}
     </>
