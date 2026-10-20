@@ -41,9 +41,9 @@ Branch: `feat/api-flows` (from `main` at 0d666e6). Delivery: work-unit commits, 
 | T1 | S1–S3, S10, S11, S14 | inline | done, verified (blocker fixed) | cbee3b8, fix in T2 commit |
 | T2 | S3, S4, S6, S10, S12–S16 | inline | done, verified, reviewed | 9664c0d, afcecda, see L9 |
 | T3 | S7, S8, S14 | inline | done, reviewed | 6b1ce88 |
-| T4 | S1, S2, S9 | delegated (context backstop) | done, verifier running | a8ccdd8 |
-| T5 | S3–S5, S9, S12, S13 | delegated (context backstop) | in progress | |
-| T6 | S5, S9, S10 | inline | pending | |
+| T4 | S1, S2, S9 | delegated (context backstop) | done, verified, reviewed | a8ccdd8 |
+| T5 | S3–S5, S9, S12, S13 | delegated (context backstop) | done | 9c3e54d |
+| T6 | S5, S9, S10 | delegated (context backstop) | in progress | |
 
 - T1 Backend model and CRUD:
   - Tables `apis`, `api_flows` and `api_flow_agents`, migration 0017.
@@ -75,4 +75,6 @@ Route evidence: the units are sequential (T2 needs T1; T4–T6 need T1–T2), so
 - L9: The native review of T1–T3 (risk and reliability lenses, consent granted by the user) found one critical issue: secrets in a path or query were recorded percent-encoded, so their cURL could not be masked or revealed. Fixed in afcecda; targeted validation approved; review acknowledged. The T2 verifier found the same issue plus three blockers: a check's `actual` stored an echoed secret; a saved echo of a secret reached the next recorded request in clear; and a step had no total time limit (httpx bounds each read only). It also gave advisories: non-finite numbers caused a 500, an unusable AI value was blamed on the caller, bodies holding NaN or NUL could not be stored, and the AI connection was built even when no input needed it. All fixed with tests in the next commit. Advisories kept: `..` segments in a templated path can climb the base path (never the host), and secrets echoed in another encoding are not hidden. Full backend: 1240 passed.
 - L10: A third native review (selectorless, the whole branch to 9881c9d, reliability lens) was approved and acknowledged. Its advisories were fixed in c91cdc3: revealed cURL is encoded like the sent URL; `-g`; exact integers given as text; a field named `length`; typed previews. One stays open: a run holds its DB session for the whole run.
 - L11: T4 (writer delegated at the parent's context backstop): /apis table and /apis/[id] page with masked secrets and an eye toggle (fetch on click, component state only), Edit connection, flow rail, nav item. Parent added GroupMeta label props and the Sidebar order test. Frontend 886 passed, tsc and eslint clean. a8ccdd8. Verifier and the T5 writer were launched in parallel.
+- L12: T4 verifier: S1, S2, S9 and S10 pass, no blockers (reveal only on click, no cache/storage/URL/console leak, hidden after save or unmount). The whole branch exceeded the review budget, so the unreviewed slice from 9881c9d was reviewed alone (risk and reliability lenses, consent granted): approved and acknowledged. Its backend advisories were fixed in 2f5e51a: integer text bounded to 4000 digits, and 1e3 stays an integer. The frontend advisory (two eyes clicked at once) goes to T6.
+- L13: T5 flow editor (writer): `?flow=` and `?new=flow` on the API page; value-source chips; 422 errors mapped to their rows; Copy cURL; delete; agents picker. Frontend 911 passed, tsc and eslint clean. 9c3e54d. Choices recorded: the secret chip shows when the only placeholders are secrets; backend error messages appear verbatim; "From a step" uses the success (green) token because there is no teal token.
 - Forecast: about 3,500 authored changed lines (backend ~1,600, frontend ~1,900), over the 400-line budget, so the delivery strategy is to be chosen before the first commit.
