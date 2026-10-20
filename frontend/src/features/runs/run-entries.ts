@@ -14,7 +14,8 @@ export function mergeRuns(agentRuns: Run[], flowRuns: FlowRunSummary[]): RunEntr
     ...flowRuns.map((run) => ({ kind: "flow" as const, run })),
   ];
   // A stable sort keeps each kind's own order on equal times.
-  return entries.sort((a, b) => b.run.createdAt.localeCompare(a.run.createdAt));
+  // Compared as instants: ISO strings with and without fractions do not sort as text.
+  return entries.sort((a, b) => Date.parse(b.run.createdAt) - Date.parse(a.run.createdAt));
 }
 
 /** Where a flow run opens: its run view inside the API. */

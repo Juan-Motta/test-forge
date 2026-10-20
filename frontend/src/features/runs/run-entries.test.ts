@@ -20,4 +20,10 @@ describe("flowRunHref", () => {
       "/apis/api-shop?flow=f-products&run=run%201",
     );
   });
+
+  it("orders by instant even when only one time has fractional seconds", () => {
+    const later = runFixture({ id: "late", createdAt: "2026-10-20T10:00:00.5Z" });
+    const earlier = flowRunSummaryFixture({ id: "early", createdAt: "2026-10-20T10:00:00Z" });
+    expect(mergeRuns([later], [earlier]).map((entry) => entry.run.id)).toEqual(["late", "early"]);
+  });
 });
