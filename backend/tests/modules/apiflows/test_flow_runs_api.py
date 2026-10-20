@@ -33,6 +33,12 @@ class FakeShop:
             if request.headers.get("authorization") != f"Bearer {TOKEN}":
                 return httpx.Response(401, json={"detail": "no token"})
             return httpx.Response(200, json={"items": self.items, "total": len(self.items)})
+        if request.url.path == "/v1/odd":
+            return httpx.Response(
+                200,
+                content=b'{"ratio": NaN, "note": "a\\u0000b"}',
+                headers={"content-type": "application/json"},
+            )
         if request.url.path == "/v1/orders":
             return httpx.Response(201, json={"received": json.loads(request.content)})
         return httpx.Response(404, text="not here")
@@ -51,6 +57,8 @@ def generated(app) -> list:
     asked: list = []
 
     async def factory(db, flow, connection_id):
+        asked.append("connection")
+
         async def generate(items):
             asked.append([item.name for item in items])
             return {item.name: f"generated {item.name}" for item in items}
@@ -76,7 +84,7 @@ async def test_runs_every_step_passing_saved_values_on(user_client, shop, genera
         {"name": "query", "value": "linen", "source": "given"},
         {"name": "max_price", "value": 120, "source": "default"},
     ]
-    assert generated == []  # nothing left to write
+    assert generated == []  # nothing left to write, so no connection is even built
     first, second = result["steps"]
     assert (first["status"], second["status"]) == ("passed", "passed")
     assert first["saved"] == {"token": TOKEN}
@@ -100,7 +108,7 @@ async def test_ai_writes_inputs_that_have_no_value(user_client, shop, generated)
     api = await make_api(user_client)
     flow = await make_flow(user_client, api["id"])
     result = (await run(user_client, flow["id"])).json()
-    assert generated == [["query"]]
+    assert generated == ["connection", ["query"]]
     assert result["inputs"][0] == {
         "name": "query",
         "value": "generated query",
@@ -300,3 +308,89 @@ async def test_secrets_in_the_path_and_query_are_masked_or_revealed_in_curl(user
     assert f"/keys/{encoded}?key={encoded}" in revealed
     preview = (await user_client.get(f"/api/flows/{flow['id']}/curl")).json()["steps"][0]
     assert "/keys/••••?key=••••" in preview["curl"]
+
+
+async def test_check_values_never_store_a_secret(user_client, shop):
+    api = await make_api(user_client)
+    steps = copy.deepcopy(STEPS[:1])
+    steps[0]["checks"] = [{"type": "path", "path": "body.key", "op": "==", "value": "nope"}]
+    flow = await make_flow(user_client, api["id"], inputs=[], steps=steps)
+    response = await run(user_client, flow["id"])
+    check = response.json()["steps"][0]["checks"][0]
+    assert (check["passed"], check["actual"]) == (False, "{{secret.api_key}}")
+    assert SECRET not in response.text
+
+
+async def test_refuses_numbers_that_are_not_finite(user_client, shop):
+    api = await make_api(user_client)
+    flow = await make_flow(user_client, api["id"])
+    response = await run(user_client, flow["id"], inputs={"query": "x", "max_price": "inf"})
+    assert response.status_code == 422
+    assert response.json()["detail"][0]["msg"] == "must be a finite number"
+
+
+async def test_an_unusable_ai_value_is_the_ai_s_failure(app, user_client, shop):
+    async def factory(db, flow, connection_id):
+        async def generate(items):
+            return {"amount": "lots"}
+
+        return generate
+
+    app.state.flow_runner.build_generator = factory
+    api = await make_api(user_client)
+    inputs = [{"name": "amount", "type": "number", "generate": "An amount"}]
+    steps = [{"method": "GET", "path": "/orders/{{input.amount}}"}]
+    flow = await make_flow(user_client, api["id"], inputs=inputs, steps=steps)
+    response = await run(user_client, flow["id"])
+    assert response.status_code == 502
+    assert response.json()["detail"] == "AI wrote an unusable 'amount' (must be a number)"
+
+
+async def test_stores_responses_the_database_could_not_hold_as_json(user_client, shop):
+    api = await make_api(user_client)
+    flow = await make_flow(
+        user_client, api["id"], inputs=[], steps=[{"method": "GET", "path": "/odd"}]
+    )
+    response = await run(user_client, flow["id"])
+    assert response.status_code == 201, response.text
+    assert response.json()["steps"][0]["response"]["body"] == '{"ratio": NaN, "note": "a\\u0000b"}'
+
+
+async def test_a_saved_echo_of_a_secret_is_hidden_in_later_requests(user_client, shop):
+    api = await make_api(user_client)
+    steps = copy.deepcopy(STEPS[:1])
+    steps[0]["saves"] = [{"name": "k", "path": "body.key"}]
+    steps.append(
+        {
+            "method": "GET",
+            "path": "/elsewhere",
+            "headers": [{"name": "x-k", "value": "{{saved.k}}"}],
+        }
+    )
+    flow = await make_flow(user_client, api["id"], inputs=[], steps=steps)
+    response = await run(user_client, flow["id"])
+    assert response.json()["steps"][1]["request"]["headers"][1] == {
+        "name": "x-k",
+        "value": "{{secret.api_key}}",
+    }
+    assert shop.requests[1].headers["x-k"] == SECRET
+    assert SECRET not in response.text
+
+
+async def test_a_step_has_a_total_time_limit(app, user_client, monkeypatch):
+    import asyncio
+
+    from voice_eval.modules.apiflows import runner
+
+    async def slow(request):
+        await asyncio.sleep(2)
+        return httpx.Response(200)
+
+    monkeypatch.setattr(runner, "STEP_TIMEOUT_S", 0.1)
+    app.state.flow_runner.transport = lambda: httpx.MockTransport(slow)
+    api = await make_api(user_client)
+    flow = await make_flow(
+        user_client, api["id"], inputs=[], steps=[{"method": "GET", "path": "/"}]
+    )
+    result = (await run(user_client, flow["id"])).json()
+    assert result["steps"][0]["error"] == "no response within 0 s"

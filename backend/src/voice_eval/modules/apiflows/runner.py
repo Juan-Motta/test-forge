@@ -6,7 +6,9 @@ the real secret values, and recorded with `{{secret.<name>}}` in their place, so
 holds a secret: whoever reads it fills them in again only on purpose (see `curl`).
 """
 
+import asyncio
 import json
+import math
 import shlex
 import time
 from collections.abc import Awaitable, Callable, Mapping
@@ -86,12 +88,14 @@ def _typed(item: FlowInput, raw: Any, loc: list[Any]) -> Any:
     if item.type is InputType.NUMBER:
         if isinstance(raw, bool):
             raise FlowInputError([_err(loc, "must be a number")])
-        if isinstance(raw, int | float):
+        if isinstance(raw, int | float) and math.isfinite(raw):
             return raw
         try:
             number = float(str(raw).strip())
         except ValueError:
             raise FlowInputError([_err(loc, "must be a number")]) from None
+        if not math.isfinite(number):
+            raise FlowInputError([_err(loc, "must be a finite number")])
         return int(number) if number.is_integer() and "." not in str(raw) else number
     if item.type is InputType.BOOLEAN:
         if isinstance(raw, bool):
@@ -154,9 +158,12 @@ async def resolve_inputs(
             loc = ["inputs", item.name]
             if item.name not in written:
                 raise GenerationError(f"AI wrote no value for {item.name!r}")
-            resolved[item.name] = ResolvedInput(
-                item.name, _typed(item, written[item.name], loc), "generated"
-            )
+            try:
+                value = _typed(item, written[item.name], loc)
+            except FlowInputError as exc:
+                problem = exc.errors[0]["msg"]
+                raise GenerationError(f"AI wrote an unusable {item.name!r} ({problem})") from None
+            resolved[item.name] = ResolvedInput(item.name, value, "generated")
     return [resolved[item.name] for item in declared]
 
 
@@ -320,10 +327,34 @@ def _body_of(response: httpx.Response, content: bytes) -> Any:
     text = content.decode(response.encoding or "utf-8", errors="replace")
     if "json" in kind:
         try:
-            return json.loads(text)
+            # NaN and Infinity are not JSON that the database can store: keep such bodies as text.
+            return _storable(json.loads(text, parse_constant=_no_constant))
         except ValueError:
             pass
-    return text
+    return _storable(text)
+
+
+def _no_constant(name: str) -> Any:
+    raise ValueError(name)
+
+
+def needs_generation(declared: list[FlowInput], given: Mapping[str, Any]) -> bool:
+    """Whether AI must write some input (it has `generate`, no value given and no default)."""
+    return any(
+        item.generate and given.get(item.name) in (None, "") and item.default in (None, "")
+        for item in declared
+    )
+
+
+def _storable(value: Any) -> Any:
+    """`value` without NUL characters, which the database refuses in text and JSON."""
+    if isinstance(value, str):
+        return value.replace("\x00", "\ufffd")
+    if isinstance(value, list):
+        return [_storable(item) for item in value]
+    if isinstance(value, dict):
+        return {_storable(key): _storable(item) for key, item in value.items()}
+    return value
 
 
 def _hide(value: Any, secrets: dict[str, str]) -> Any:
@@ -387,14 +418,17 @@ async def run_flow(
         failed = True  # until the step passes
         try:
             sent = _request(step, base_url, headers, ctx, keep=False)
-            record.request = _request(step, base_url, headers, ctx, keep=True)
+            # Saved values can be secrets an earlier response echoed: hide those too.
+            record.request = _hide(_request(step, base_url, headers, ctx, keep=True), secrets)
         except _MissingValue as exc:
             record.status, record.error = "failed", str(exc)
             continue
         begun = time.monotonic()
         try:
-            response, content = await _send(client, sent)
-        except httpx.TimeoutException:
+            # The client's timeout bounds each read; this bounds the whole step.
+            async with asyncio.timeout(STEP_TIMEOUT_S):
+                response, content = await _send(client, sent)
+        except (httpx.TimeoutException, TimeoutError):
             record.status, record.error = "failed", f"no response within {STEP_TIMEOUT_S:.0f} s"
             continue
         except (httpx.HTTPError, DestinationNotAllowed) as exc:
@@ -403,7 +437,7 @@ async def run_flow(
         record.duration_ms = round((time.monotonic() - begun) * 1000)
         seen = {
             "status": response.status_code,
-            "headers": [{"name": k, "value": v} for k, v in response.headers.items()],
+            "headers": _storable([{"name": k, "value": v} for k, v in response.headers.items()]),
             "body": _body_of(response, content),
         }
         record.response = {
@@ -420,7 +454,10 @@ async def run_flow(
                 record.saved[save.name] = _short(_hide(value, secrets))
             else:
                 missing.append(f"{save.name} ({save.path} not found)")
-        record.checks = [_check(check, seen, record.duration_ms) for check in step.checks]
+        record.checks = [
+            {**result, "actual": _hide(result["actual"], secrets)}
+            for result in (_check(check, seen, record.duration_ms) for check in step.checks)
+        ]
         if missing:
             record.status, record.error = "failed", "could not save " + ", ".join(missing)
         elif not all(item["passed"] for item in record.checks):

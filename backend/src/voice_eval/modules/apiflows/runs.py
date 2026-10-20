@@ -20,6 +20,7 @@ from voice_eval.modules.apiflows.runner import (
     FlowInputError,
     Generator,
     curl,
+    needs_generation,
     preview_requests,
     resolve_inputs,
     run_flow,
@@ -119,7 +120,7 @@ class FlowRunner:
             raise FlowNotFound(str(flow_id))
         domain = await service.get_flow(db, flow_id)
         api: ApiRecord = flow.api
-        needs_ai = any(item.generate for item in domain.inputs)
+        needs_ai = needs_generation(domain.inputs, inputs)
         generator = await self.build_generator(db, flow, connection_id) if needs_ai else None
         resolved = await resolve_inputs(domain.inputs, inputs, generator)
         secrets = service.open_secrets(self.secret_box, api)
