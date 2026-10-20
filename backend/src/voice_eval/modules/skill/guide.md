@@ -37,6 +37,9 @@ flows and how to read the results.
   editing a scenario later never changes past runs. Each run gets a fresh `threadId`, which is
   also the agent's Langfuse session id.
 - **Judgement**: the judge's result for one run, produced automatically after the run ends.
+- **API** and **flow**: a saved, reusable sequence of HTTP calls against an API (see "API flows"
+  below). Use flows to call an agent's backend or any other API without writing a script, and
+  read them to learn how that API is used.
 
 ## Authentication
 
@@ -600,6 +603,70 @@ and `finished` messages with `runId`, and `batchFinished` once no run of the bat
 
 Polling is simpler and enough for an agent; use the WebSocket only when you need turn-by-turn
 progress.
+
+## API flows
+
+Humans save the calls they make to an API as **flows**, so you can reuse them instead of writing
+scripts, and so the flows document how the API works. Read them before calling an API yourself.
+
+- **API** (`/api/apis`): `name`, `description`, `tags`, `baseUrl`, plain `headers` every step
+  sends, and named **secrets** (an API key, a password). Responses show secrets as
+  `{"name", "hint"}` only; `GET /api/apis/{apiId}/secrets` returns them in clear. Ask for them
+  only when you must use one outside a flow, and never print them.
+- **Flow** (`/api/flows`): `name`, `description` (what it is for), typed `inputs` and ordered
+  `steps`, plus `agentIds`: the agents it is meant for.
+
+**Find** the flows for your work: `GET /api/flows?agentId=<agent>` (flows meant for an agent),
+`GET /api/flows?apiId=<api>`, or `GET /api/apis` then a flow's `description`.
+
+**Read** a flow: each step has `method`, `path` (added to the API's `baseUrl`), `query`,
+`headers`, a JSON `body`, `saves` (values it reads from its response for later steps) and
+`checks`. Text in a step may contain placeholders:
+
+- `{{input.<name>}}`: a flow input;
+- `{{secret.<name>}}`: one of the API's secrets;
+- `{{saved.<name>}}`: a value an earlier step saved (`saves: [{"name": "token", "path":
+  "body.access_token"}]`). Paths are `status`, `headers.<name>` or `body.a.0.b`.
+
+A body string that is exactly one placeholder keeps the value's type (a `number` input stays a
+number). Inputs have a `type` (`text`, `number`, `boolean`), an optional `default`, and an
+optional `generate`: a description from which AI writes a value when none is given.
+
+**Run** a flow (it costs nothing beyond the API calls, plus one chat call when AI writes inputs):
+
+```
+POST /api/flows/{flowId}/runs
+{"inputs": {"query": "king size linen"}}
+```
+
+The call returns when every step is done (each step has 30 s), with `201` and the whole trace,
+even when a step failed:
+
+- `status`: `passed` when every step passed, else `failed`.
+- `inputs`: each value used and its `source` (`given`, `default` or `generated`).
+- `steps[]`: `status` (`passed`, `failed`, `skipped` after a failure), `request` (as sent;
+  secrets appear as `{{secret.<name>}}`), `response` (`status`, `headers`, `body` as JSON when
+  the API sent JSON, `sizeBytes`), `durationMs`, `saved`, `checks` (`{check, passed, actual}`)
+  and `error` (why the step failed when it was not a check: `could not save token (body.jwt not
+  found)`, `could not connect to the API`, `no response within 30 s`, ...).
+
+To find what went wrong, read the first step whose `status` is `failed`: its `error`, the checks
+with `passed: false` (compare `actual` with the check), then its `response`.
+
+Errors: `422` when inputs are unusable (`loc` is `["body", "inputs", "<name>"]`: unknown input,
+wrong type, or a value is required); `502` when AI could not write inputs.
+
+`GET /api/flows/{flowId}/runs` lists past runs (newest first; `limit` 1-50, default 20) and
+`GET /api/flow-runs/{runId}` reads one. As shell commands: `GET /api/flows/{flowId}/curl`
+(before a run; query parameters fill inputs by name) and
+`GET /api/flow-runs/{runId}/steps/{index}/curl` (as sent in a run; `index` from 0). Both mask
+secrets unless `?reveal=true`.
+
+**Save** a flow you worked out, so others (and you, next time) can reuse it: `POST /api/flows`
+with `apiId`, `name`, `description`, `inputs`, `steps` and `agentIds`. References are checked:
+an unknown input or secret, or a saved value used before the step that saves it, is a `422`
+whose `loc` points at the text (for example `["body", "steps", 1, "headers", 0, "value"]`).
+Ask the human before creating or changing APIs, secrets or flows.
 
 ## API keys
 
