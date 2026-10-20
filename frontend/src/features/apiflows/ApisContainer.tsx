@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { EditableTitle } from "@/features/scenarios/EditableTitle";
 import { GroupMeta } from "@/features/scenarios/GroupMeta";
 import { PageHeader } from "@/features/shell/PageHeader";
@@ -44,6 +44,14 @@ export function ApisContainer() {
   const apis = useApis();
   const [requestedId, setRequestedId] = useState<string | null>(apiFromAddress);
   const [creating, setCreating] = useState(false);
+  // A client-side navigation (the API page's breadcrumb) can render this before the address
+  // changes; read it again once mounted, and on back/forward.
+  useEffect(() => {
+    const sync = () => setRequestedId(apiFromAddress());
+    sync();
+    window.addEventListener("popstate", sync);
+    return () => window.removeEventListener("popstate", sync);
+  }, []);
 
   const list = apis.data ?? [];
   const selected = list.find((api) => api.id === requestedId) ?? list[0];

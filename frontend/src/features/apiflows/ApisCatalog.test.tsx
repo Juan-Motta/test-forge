@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw/http";
 import { afterEach, describe, expect, it } from "vitest";
@@ -104,6 +104,19 @@ describe("API connections", () => {
     await user.click(within(rail).getByRole("button", { name: /CRM/ }));
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("CRM");
     expect(window.location.search).toBe("?api=api-crm");
+  });
+
+  it("follows the address on back and forward", async () => {
+    setup();
+    window.history.replaceState(null, "", "/apis?api=api-shop");
+    await renderCatalog();
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Shop API");
+
+    act(() => {
+      window.history.replaceState(null, "", "/apis?api=api-crm");
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    });
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("CRM");
   });
 
   it("falls back to the first API when the address names one that does not exist", async () => {
