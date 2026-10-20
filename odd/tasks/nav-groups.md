@@ -18,9 +18,9 @@ Branch: `feat/nav-groups` (from `main` at c7d9e19). Delivery: work-unit commits,
 | ID | Specs | Route | Status | Commit |
 | --- | --- | --- | --- | --- |
 | T1 | S4, S5, S7 | inline | done | see L3 |
-| T2 | S1, S2 | delegated | pending | |
-| T3 | S2, S6 | delegated | pending | |
-| T4 | S3, S4, S5 | delegated | pending | |
+| T2 | S1, S2 | delegated | done | see L5 |
+| T3 | S2, S6 | delegated | done | see L5 |
+| T4 | S3, S4, S5 | delegated | done | see L5 |
 
 - T1 Backend: `GET /api/flow-runs` with summaries, and `lastRun` on flows; tests; skill guide line.
 - T2 Frontend: sidebar groups (expandable, open on their current page, keyboard and screen-reader friendly), on desktop and in the mobile drawer.
@@ -34,3 +34,5 @@ Route evidence: T2–T4 share the i18n message files and run after T1, so one wr
 - L1 (user, 2026-10-20, verbatim): "Me gustaría empezar a realizar un pequeño ajuste en cómo estamos definiendo la barra lateral en la UI. Actualmente tenemos tres opciones, escenarios, API flows y agents. Me gustaría poder cambiar esa distribución y tener dos nuevos grupos. En este caso, tener el grupo de agents y tener el grupo de API, y dentro de esas opciones que se puedan desprender unos submenús. En el caso para ambas, digamos para agents, me gustaría tener la opción de conexiones y tener la opción de escenarios y runs. Y para API me gustaría tener la opción de conexiones y de flows, de tal manera que en lugar de tener las opciones separadas, puedo tener esas opciones agrupadas. Entonces así puedo pues organizar todo de una manera mucho, mucho más organizada. Entonces me gustaría que me ayudaras en esa parte."
 - L2: S2–S4 confirmed by the user through two questions.
 - L3: T1: `GET /api/flow-runs` (summaries, `{items,total}`, filters status/apiId/flowId, limit ≤200) and `lastRun` on flows (DISTINCT ON newest run). 62 apiflows tests pass; skill guide updated.
+- L4: Native review of T1 approved and acknowledged; advisories fixed in 0783246 (step count in SQL, failed-status filter test).
+- L5: T2–T4 (one writer): sidebar groups with per-group collapse memory, /flows page, Runs & reports Type filter (agents default unchanged, flows, all capped at 200 per kind). Frontend 961 passed, tsc and eslint clean. Not checked in a browser.
