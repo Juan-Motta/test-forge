@@ -22,7 +22,7 @@ const mono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   title: { default: "TestForge", template: "%s · TestForge" },
-  description: "Agent evals",
+  description: "Agent and API testing",
 };
 
 /** Every page is prerendered once per language; the proxy picks one without changing the URL. */

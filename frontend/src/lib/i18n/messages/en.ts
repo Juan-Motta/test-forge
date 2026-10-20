@@ -45,7 +45,7 @@ export const en = {
   "nav.activeRuns.one": "{label} ({count} active)",
   "nav.activeRuns.other": "{label} ({count} active)",
 
-  "shell.tagline": "Agent evals",
+  "shell.tagline": "Agent and API testing",
   "shell.openNavigation": "Open navigation",
   "shell.closeNavigation": "Close navigation",
   "shell.signOutFailed": "Could not sign out. Try again.",
