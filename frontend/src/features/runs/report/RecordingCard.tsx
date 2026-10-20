@@ -79,8 +79,8 @@ export function RecordingCard({
         <summary className="cursor-pointer text-muted select-none hover:text-fg">{t("report.separateTracks")}</summary>
         <div className="mt-3 flex flex-col gap-3">
           <div className="grid gap-4 sm:grid-cols-2">
-            <Track label={t("report.agentTrack")} src={agentSrc} tone="text-agent" />
-            <Track label={t("report.evaluatorTrack")} src={callerSrc} tone="text-evaluator" />
+            <Track label={t("report.agentTrack")} src={agentSrc} tone="text-agent-fg" />
+            <Track label={t("report.evaluatorTrack")} src={callerSrc} tone="text-evaluator-fg" />
           </div>
           <p className="text-dim">{t("report.tracksNotAligned")}</p>
         </div>

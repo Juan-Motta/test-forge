@@ -56,7 +56,7 @@ export function RunTranscript({ entries, live = false, emptyText, anchors = fals
               )}
             >
               <div className="flex flex-wrap items-center gap-2 text-xs">
-                <span className={cn("font-semibold", entry.role === "agent" ? "text-agent" : "text-evaluator")}>
+                <span className={cn("font-semibold", entry.role === "agent" ? "text-agent-fg" : "text-evaluator-fg")}>
                   {t(WHO[entry.role])}
                 </span>
                 {anchors && entry.ref ? <span className="font-mono text-[11px] text-faint">{entry.ref}</span> : null}

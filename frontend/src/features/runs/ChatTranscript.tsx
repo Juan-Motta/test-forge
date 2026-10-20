@@ -64,7 +64,7 @@ export function ChatTranscript({ entries, live = false, emptyText, anchors = fal
                   )}
                 >
                   <div className="flex flex-wrap items-center gap-2 text-xs">
-                    <span className={cn("font-semibold", user ? "text-evaluator" : "text-agent")}>{t(WHO[entry.role])}</span>
+                    <span className={cn("font-semibold", user ? "text-evaluator-fg" : "text-agent-fg")}>{t(WHO[entry.role])}</span>
                     {anchors && entry.ref ? <span className="font-mono text-[11px] text-faint">{entry.ref}</span> : null}
                     <span className="font-mono text-[11px] text-faint">{entry.tMs === null ? "—" : clock(entry.tMs)}</span>
                     {entry.streaming ? <Badge tone="agent">{t("transcript.writing")}</Badge> : null}

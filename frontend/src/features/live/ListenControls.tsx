@@ -47,7 +47,7 @@ export function ListenControls({
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-[10px] border border-line bg-raised px-3 py-2.5">
       <div className="flex flex-wrap items-center gap-2.5">
-        <span className="text-evaluator">
+        <span className="text-evaluator-fg">
           <HeadphonesIcon />
         </span>
         {listening ? (

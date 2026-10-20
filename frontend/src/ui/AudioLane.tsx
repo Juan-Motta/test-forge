@@ -52,7 +52,7 @@ export function AudioLane({
   return (
     <div className={cn("flex flex-col gap-1.5", className)}>
       <div className="flex items-center gap-3">
-        <span className={cn(LABEL_COL, "font-semibold", tone === "agent" ? "text-agent" : "text-evaluator")}>{label}</span>
+        <span className={cn(LABEL_COL, "font-semibold", tone === "agent" ? "text-agent-fg" : "text-evaluator-fg")}>{label}</span>
         <Waveform
           className="flex-1"
           values={values}

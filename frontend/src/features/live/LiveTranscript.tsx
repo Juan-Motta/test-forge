@@ -35,7 +35,7 @@ export function LiveTranscript({ entries, pending }: LiveTranscriptProps) {
                 )}
               >
                 <span className="flex flex-wrap items-center gap-2 text-xs">
-                  <span className={cn("font-semibold", entry.role === "agent" ? "text-agent" : "text-evaluator")}>
+                  <span className={cn("font-semibold", entry.role === "agent" ? "text-agent-fg" : "text-evaluator-fg")}>
                     {t(WHO[entry.role])}
                   </span>
                   {entry.role === "agent" ? <Latency ms={entry.latencyMs} /> : null}

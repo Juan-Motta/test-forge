@@ -5,7 +5,7 @@ export type BadgeTone = "neutral" | "agent" | "evaluator" | "success" | "danger"
 
 const TONES: Record<BadgeTone, string> = {
   neutral: "bg-chip text-fg",
-  agent: "bg-agent/15 text-agent",
+  agent: "bg-agent/15 text-agent-fg",
   evaluator: "bg-evaluator/15 text-evaluator-fg",
   success: "bg-success/15 text-success-fg",
   danger: "bg-danger/15 text-danger-fg",

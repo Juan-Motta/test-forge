@@ -94,20 +94,20 @@
   --ve-body-strong: #16191e;
   --ve-body-soft: #343a44;
 
-  --ve-agent: #2563eb;
-  --ve-agent-fg: #1d4ed8;
-  --ve-evaluator: #c2410c;
-  --ve-evaluator-hover: #9a3412;
-  --ve-evaluator-fg: #b13c0b;
-  --ve-on-evaluator: #ffffff;
-  --ve-evaluator-line: #fed7aa;
-  --ve-llm: #7c3aed;
-  --ve-llm-fg: #6d28d9;
-  --ve-success: #15803d;
-  --ve-success-fg: #166534;
-  --ve-danger: #dc2626;
-  --ve-danger-fg: #b91c1c;
-  --ve-on-danger: #ffffff;
+  --ve-agent: #6cb6f5;
+  --ve-agent-fg: #1667b0;
+  --ve-evaluator: #f0b04a;
+  --ve-evaluator-hover: #f6c978;
+  --ve-evaluator-fg: #8a5200;
+  --ve-on-evaluator: #1a1206;
+  --ve-evaluator-line: #f5dcab;
+  --ve-llm: #a58beb;
+  --ve-llm-fg: #6a3fd1;
+  --ve-success: #5fcb8a;
+  --ve-success-fg: #157a43;
+  --ve-danger: #f07a6a;
+  --ve-danger-fg: #c0362a;
+  --ve-on-danger: #1e0d0a;
   --ve-backdrop: rgb(17 19 24 / 0.4);
 }
 
@@ -143,20 +143,20 @@
     --ve-body-strong: #16191e;
     --ve-body-soft: #343a44;
 
-    --ve-agent: #2563eb;
-    --ve-agent-fg: #1d4ed8;
-    --ve-evaluator: #c2410c;
-    --ve-evaluator-hover: #9a3412;
-    --ve-evaluator-fg: #b13c0b;
-    --ve-on-evaluator: #ffffff;
-    --ve-evaluator-line: #fed7aa;
-    --ve-llm: #7c3aed;
-    --ve-llm-fg: #6d28d9;
-    --ve-success: #15803d;
-    --ve-success-fg: #166534;
-    --ve-danger: #dc2626;
-    --ve-danger-fg: #b91c1c;
-    --ve-on-danger: #ffffff;
+    --ve-agent: #6cb6f5;
+    --ve-agent-fg: #1667b0;
+    --ve-evaluator: #f0b04a;
+    --ve-evaluator-hover: #f6c978;
+    --ve-evaluator-fg: #8a5200;
+    --ve-on-evaluator: #1a1206;
+    --ve-evaluator-line: #f5dcab;
+    --ve-llm: #a58beb;
+    --ve-llm-fg: #6a3fd1;
+    --ve-success: #5fcb8a;
+    --ve-success-fg: #157a43;
+    --ve-danger: #f07a6a;
+    --ve-danger-fg: #c0362a;
+    --ve-on-danger: #1e0d0a;
     --ve-backdrop: rgb(17 19 24 / 0.4);
   }
 }

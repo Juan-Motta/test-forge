@@ -200,7 +200,7 @@ export function SamplesDiagram({ locale }: { locale: Locale }) {
         {samples.map((band, index) => (
           <span key={index} className="flex flex-col items-center gap-1 rounded-lg border border-line bg-field px-3 py-2">
             <span className="text-[11px] text-dim">{fill(text.sample, { n: index + 1 })}</span>
-            <span className={cn("font-mono text-lg font-semibold", band >= 4 ? "text-success" : band === 3 ? "text-evaluator" : "text-danger")}>
+            <span className={cn("font-mono text-lg font-semibold", band >= 4 ? "text-success-fg" : band === 3 ? "text-evaluator-fg" : "text-danger-fg")}>
               {`B${band}`}
             </span>
           </span>
@@ -208,7 +208,7 @@ export function SamplesDiagram({ locale }: { locale: Locale }) {
         <span className="font-mono text-dim">→</span>
         <span className="flex flex-col items-center gap-1 rounded-lg border border-success/40 bg-success/10 px-3 py-2">
           <span className="text-[11px] text-dim">{text.median}</span>
-          <span className="font-mono text-lg font-semibold text-success">B4 · 90</span>
+          <span className="font-mono text-lg font-semibold text-success-fg">B4 · 90</span>
         </span>
         <Badge tone="evaluator">{text.disagreed}</Badge>
       </div>

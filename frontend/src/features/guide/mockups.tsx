@@ -17,7 +17,7 @@ export function VerdictMockup({ locale }: { locale: Locale }) {
           <div className={cn(CARD, "flex-[1_1_160px]")}>
             <span className="text-[13px] text-muted">{text.overallScore}</span>
             <p className="flex items-baseline gap-1.5">
-              <span className="text-4xl font-semibold tracking-[-0.03em] text-evaluator tabular-nums">69</span>
+              <span className="text-4xl font-semibold tracking-[-0.03em] text-evaluator-fg tabular-nums">69</span>
               <span className="text-dim">/100</span>
             </p>
             <ScoreBar score={69} label={text.overallScore} className="my-1" />

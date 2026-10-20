@@ -50,7 +50,7 @@ export function LiveNowCard({ runs, total, error, now }: LiveNowCardProps) {
         <Link
           href="/live"
           aria-label={t("overview.openMonitor")}
-          className={cn("inline-flex min-h-11 items-center rounded text-[13px] font-medium text-agent", focusRing)}
+          className={cn("inline-flex min-h-11 items-center rounded text-[13px] font-medium text-agent-fg", focusRing)}
         >
           {`${t("overview.openMonitor")} →`}
         </Link>
