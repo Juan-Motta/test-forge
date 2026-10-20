@@ -1,6 +1,6 @@
 import { http, HttpResponse } from "msw/http";
 import { apiUrl, server } from "@/test/server";
-import type { Api, Flow, FlowRun, FlowStep, NamedRef, RunInputs, StepRun } from "./types";
+import type { Api, Flow, FlowRun, FlowRunSummary, FlowStep, NamedRef, RunInputs, StepRun } from "./types";
 
 /** A stored API as `/api/apis` returns it (flow count and agents follow `mockApisApi`'s flows). */
 export function apiFixture(overrides: Partial<Api> = {}): Api {
@@ -54,8 +54,48 @@ export function flowFixture(overrides: Partial<Flow> = {}): Flow {
     agents: [],
     createdAt: "2026-10-01T10:00:00Z",
     updatedAt: "2026-10-02T10:00:00Z",
+    lastRun: null,
     ...overrides,
   };
+}
+
+/** A run of `flowFixture()` as `GET /api/flow-runs` lists it. */
+export function flowRunSummaryFixture(overrides: Partial<FlowRunSummary> = {}): FlowRunSummary {
+  return {
+    id: "run-1",
+    flowId: "f-products",
+    flowName: "Search products",
+    apiId: "api-shop",
+    apiName: "Shop API",
+    status: "failed",
+    stepCount: 2,
+    durationMs: 2430,
+    createdAt: "2026-10-20T09:00:00Z",
+    ...overrides,
+  };
+}
+
+/**
+ * `GET /api/flow-runs` over these summaries: newest first, filtered by `status` and `apiId`,
+ * paginated by `limit`/`offset`. Records each query string (without the `?`).
+ */
+export function mockFlowRunSummaries(summaries: FlowRunSummary[]) {
+  const queries: string[] = [];
+  server.use(
+    http.get(apiUrl("/flow-runs"), ({ request }) => {
+      const params = new URL(request.url).searchParams;
+      queries.push(params.toString());
+      const status = params.get("status");
+      const apiId = params.get("apiId");
+      const limit = Number(params.get("limit") ?? 50);
+      const offset = Number(params.get("offset") ?? 0);
+      const matching = summaries
+        .filter((run) => (!status || run.status === status) && (!apiId || run.apiId === apiId))
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      return HttpResponse.json({ items: matching.slice(offset, offset + limit), total: matching.length });
+    }),
+  );
+  return queries;
 }
 
 /** A stored run of `flowFixture()`: the token step passed, the search step failed its check. */

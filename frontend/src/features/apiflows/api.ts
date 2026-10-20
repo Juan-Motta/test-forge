@@ -1,6 +1,17 @@
 import { apiFetch } from "@/lib/api";
 import type { FlowPayload } from "./flow-draft";
-import type { Api, ApiChanges, Flow, FlowCurls, FlowRun, NewApi, RevealedSecrets, RunInputs } from "./types";
+import type {
+  Api,
+  ApiChanges,
+  Flow,
+  FlowCurls,
+  FlowRun,
+  FlowRunSummaryFilters,
+  FlowRunSummaryPage,
+  NewApi,
+  RevealedSecrets,
+  RunInputs,
+} from "./types";
 
 const APIS = "/apis";
 const api = (id: string) => `${APIS}/${encodeURIComponent(id)}`;
@@ -66,6 +77,14 @@ export function runFlow(id: string, inputs: RunInputs): Promise<FlowRun> {
 /** The flow's latest runs, newest first. */
 export function listFlowRuns(id: string, limit: number, signal?: AbortSignal): Promise<FlowRun[]> {
   return apiFetch<FlowRun[]>(`${flow(id)}/runs?limit=${limit}`, { signal });
+}
+
+/** Runs of every flow, newest first, as summaries; `total` counts every match. */
+export function listAllFlowRuns(filters: FlowRunSummaryFilters, signal?: AbortSignal): Promise<FlowRunSummaryPage> {
+  const params = new URLSearchParams({ limit: String(filters.limit), offset: String(filters.offset) });
+  if (filters.status) params.set("status", filters.status);
+  if (filters.apiId) params.set("apiId", filters.apiId);
+  return apiFetch<FlowRunSummaryPage>(`/flow-runs?${params}`, { signal });
 }
 
 export function getFlowRun(id: string, signal?: AbortSignal): Promise<FlowRun> {

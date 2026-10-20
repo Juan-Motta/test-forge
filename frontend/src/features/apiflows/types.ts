@@ -77,7 +77,30 @@ export type Flow = {
   agents: NamedRef[];
   createdAt: string;
   updatedAt: string;
+  /** The flow's newest run, if it ever ran. */
+  lastRun: FlowLastRun | null;
 };
+
+/** `Flow.lastRun`: the newest run of a flow, without its steps. */
+export type FlowLastRun = { id: string; status: RunStatus; createdAt: string; durationMs: number };
+
+/** `GET /api/flow-runs`: one run of any flow, with its flow and API names and no step bodies. */
+export type FlowRunSummary = {
+  id: string;
+  flowId: string;
+  flowName: string;
+  apiId: string;
+  apiName: string;
+  status: RunStatus;
+  stepCount: number;
+  durationMs: number;
+  createdAt: string;
+};
+
+export type FlowRunSummaryPage = { items: FlowRunSummary[]; total: number };
+
+/** Filters of `GET /api/flow-runs` (newest first). */
+export type FlowRunSummaryFilters = { status?: RunStatus; apiId?: string; limit: number; offset: number };
 
 /** `GET /api/flows/{id}/curl`: a cURL command per step, in order. */
 export type FlowCurls = { steps: { curl: string }[] };

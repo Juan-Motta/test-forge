@@ -9,6 +9,7 @@ import {
   getApi,
   getFlowRun,
   listApis,
+  listAllFlowRuns,
   listFlowRuns,
   listFlows,
   runFlow,
@@ -16,7 +17,7 @@ import {
   updateFlow,
 } from "./api";
 import type { FlowPayload } from "./flow-draft";
-import type { Api, ApiChanges, Flow, FlowRun, RunInputs } from "./types";
+import type { Api, ApiChanges, Flow, FlowRun, FlowRunSummaryFilters, RunInputs } from "./types";
 
 // Revealed secret values are never stored here: see `useSecretReveal`.
 export const apisQueryKey = ["apis"] as const;
@@ -24,9 +25,10 @@ const apisListKey = [...apisQueryKey, "list"] as const;
 export const apiQueryKey = (id: string) => [...apisQueryKey, "item", id] as const;
 export const flowsQueryKey = ["flows"] as const;
 const flowsListKey = (apiId: string) => [...flowsQueryKey, "list", { apiId }] as const;
+const allFlowsKey = [...flowsQueryKey, "all"] as const;
 
-export function useApis() {
-  return useQuery({ queryKey: apisListKey, queryFn: ({ signal }) => listApis(signal) });
+export function useApis(options: { enabled?: boolean } = {}) {
+  return useQuery({ queryKey: apisListKey, queryFn: ({ signal }) => listApis(signal), enabled: options.enabled ?? true });
 }
 
 export function useApi(id: string | undefined) {
@@ -40,6 +42,11 @@ export function useApi(id: string | undefined) {
 /** The flows of one API, in the order the API lists them. */
 export function useApiFlows(apiId: string) {
   return useQuery({ queryKey: flowsListKey(apiId), queryFn: ({ signal }) => listFlows({ apiId }, signal) });
+}
+
+/** Every flow of every API, each with its API's name and its last run. */
+export function useAllFlows() {
+  return useQuery({ queryKey: allFlowsKey, queryFn: ({ signal }) => listFlows({}, signal) });
 }
 
 /** Seeds the API's cache and refreshes the list (and the flows, which show the API's name). */
@@ -108,11 +115,22 @@ export function useDeleteFlow() {
 export const flowRunsQueryKey = ["flow-runs"] as const;
 const flowRunsListKey = (flowId: string) => [...flowRunsQueryKey, "list", flowId] as const;
 const flowRunKey = (runId: string) => [...flowRunsQueryKey, "item", runId] as const;
+const allFlowRunsKey = (filters: FlowRunSummaryFilters) => [...flowRunsQueryKey, "all", filters] as const;
 /** How many runs the flow editor lists. */
 export const RECENT_RUNS = 10;
 
 export function useFlowRuns(flowId: string) {
   return useQuery({ queryKey: flowRunsListKey(flowId), queryFn: ({ signal }) => listFlowRuns(flowId, RECENT_RUNS, signal) });
+}
+
+/** Runs of every flow (summaries), newest first; `enabled: false` leaves them unasked. */
+export function useAllFlowRuns(filters: FlowRunSummaryFilters, options: { enabled?: boolean } = {}) {
+  return useQuery({
+    queryKey: allFlowRunsKey(filters),
+    queryFn: ({ signal }) => listAllFlowRuns(filters, signal),
+    enabled: options.enabled ?? true,
+    placeholderData: (previous) => previous,
+  });
 }
 
 export function useFlowRun(runId: string) {
@@ -122,7 +140,12 @@ export function useFlowRun(runId: string) {
 /** Seeds the new run's cache (its page opens next) and refreshes the flow's runs. */
 export function storedRun(queryClient: QueryClient, run: FlowRun) {
   queryClient.setQueryData(flowRunKey(run.id), run);
-  return queryClient.invalidateQueries({ queryKey: flowRunsListKey(run.flowId) });
+  return Promise.all([
+    queryClient.invalidateQueries({ queryKey: flowRunsListKey(run.flowId) }),
+    queryClient.invalidateQueries({ queryKey: [...flowRunsQueryKey, "all"] }),
+    // The flows page shows each flow's last run.
+    queryClient.invalidateQueries({ queryKey: allFlowsKey }),
+  ]);
 }
 
 export function useRunFlow() {
