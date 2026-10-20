@@ -42,8 +42,8 @@ Branch: `feat/api-flows` (from `main` at 0d666e6). Delivery: work-unit commits, 
 | T2 | S3, S4, S6, S10, S12–S16 | inline | done, verified, reviewed | 9664c0d, afcecda, see L9 |
 | T3 | S7, S8, S14 | inline | done, reviewed | 6b1ce88 |
 | T4 | S1, S2, S9 | delegated (context backstop) | done, verified, reviewed | a8ccdd8 |
-| T5 | S3–S5, S9, S12, S13 | delegated (context backstop) | done | 9c3e54d |
-| T6 | S5, S9, S10 | delegated (context backstop) | in progress | |
+| T5 | S3–S5, S9, S12, S13 | delegated (context backstop) | done, verified | 9c3e54d |
+| T6 | S5, S9, S10 | delegated (context backstop) | done, verified | 697d5ad, 040daf9 |
 
 - T1 Backend model and CRUD:
   - Tables `apis`, `api_flows` and `api_flow_agents`, migration 0017.
@@ -77,4 +77,6 @@ Route evidence: the units are sequential (T2 needs T1; T4–T6 need T1–T2), so
 - L11: T4 (writer delegated at the parent's context backstop): /apis table and /apis/[id] page with masked secrets and an eye toggle (fetch on click, component state only), Edit connection, flow rail, nav item. Parent added GroupMeta label props and the Sidebar order test. Frontend 886 passed, tsc and eslint clean. a8ccdd8. Verifier and the T5 writer were launched in parallel.
 - L12: T4 verifier: S1, S2, S9 and S10 pass, no blockers (reveal only on click, no cache/storage/URL/console leak, hidden after save or unmount). The whole branch exceeded the review budget, so the unreviewed slice from 9881c9d was reviewed alone (risk and reliability lenses, consent granted): approved and acknowledged. Its backend advisories were fixed in 2f5e51a: integer text bounded to 4000 digits, and 1e3 stays an integer. The frontend advisory (two eyes clicked at once) goes to T6.
 - L13: T5 flow editor (writer): `?flow=` and `?new=flow` on the API page; value-source chips; 422 errors mapped to their rows; Copy cURL; delete; agents picker. Frontend 911 passed, tsc and eslint clean. 9c3e54d. Choices recorded: the secret chip shows when the only placeholders are secrets; backend error messages appear verbatim; "From a step" uses the success (green) token because there is no teal token.
+- L14: T6 (writer): run form and run view on the API page (`?flow=&run=new|<id>`), recent runs, Run all (API page and table), the reveal hook's shared in-flight request with a pending set (review advisory, RED observed before the fix), and an API flows section in the EN/ES guide. 697d5ad (guide), 040daf9. The T5+T6 verifier found S3, S4, S5, S9, S10, S12 and S13 passing with no blockers. Advisories kept: the editor's Copy cURL uses the saved step order after an unsaved reorder; the eye shows current secret values, not those at run time. Frontend 932 passed; backend 1248 passed.
+- L15: The native review of the slice since fbe8666 (T5, T6, 2f5e51a; consent granted) could not start: lens_context_budget_exceeded (4069 lines). Review always ends at HEAD, so a smaller slice needs the user's decision.
 - Forecast: about 3,500 authored changed lines (backend ~1,600, frontend ~1,900), over the 400-line budget, so the delivery strategy is to be chosen before the first commit.
