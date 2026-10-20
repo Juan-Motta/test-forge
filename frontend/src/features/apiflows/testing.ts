@@ -1,6 +1,6 @@
 import { http, HttpResponse } from "msw/http";
 import { apiUrl, server } from "@/test/server";
-import type { Api, Flow } from "./types";
+import type { Api, Flow, FlowStep, NamedRef } from "./types";
 
 /** A stored API as `/api/apis` returns it (flow count and agents follow `mockApisApi`'s flows). */
 export function apiFixture(overrides: Partial<Api> = {}): Api {
@@ -84,7 +84,12 @@ const hintOf = (value: string) => (value.length >= 8 ? `••••${value.slic
  */
 export function mockApisApi(
   initial: Api[] = [],
-  options: { flows?: Flow[]; secrets?: Record<string, Record<string, string>> } = {},
+  options: {
+    flows?: Flow[];
+    secrets?: Record<string, Record<string, string>>;
+    /** Agents a flow can name in `agentIds` (their names come back in `agents`). */
+    agents?: NamedRef[];
+  } = {},
 ) {
   const state = {
     items: [...initial],
@@ -95,6 +100,7 @@ export function mockApisApi(
     requests: [] as RecordedRequest[],
   };
   let created = 0;
+  let createdFlows = 0;
   const record = async (request: Request) => {
     const text = await request.text();
     const body = text ? (JSON.parse(text) as unknown) : undefined;
@@ -114,6 +120,30 @@ export function mockApisApi(
     return problem
       ? HttpResponse.json({ detail: [{ type: "value_error", loc: ["body", "baseUrl"], msg: problem }] }, { status: 422 })
       : undefined;
+  };
+
+  const flowNotFound = () => HttpResponse.json({ detail: "Flow not found" }, { status: 404 });
+  const flowTaken = (apiId: unknown, name: unknown, except?: string) =>
+    state.flows.some((flow) => flow.apiId === apiId && flow.name === name && flow.id !== except);
+  const agentsOf = (ids: unknown) =>
+    ((ids as string[] | undefined) ?? []).map((id) => options.agents?.find((agent) => agent.id === id) ?? { id, name: id });
+  // Like the backend's reference check, for `{{saved.x}}` in query and header values.
+  const refused = (steps: FlowStep[] | undefined) => {
+    const saved = new Set<string>();
+    const detail: { type: string; loc: (string | number)[]; msg: string }[] = [];
+    (steps ?? []).forEach((step, n) => {
+      (["query", "headers"] as const).forEach((list) =>
+        step[list].forEach((row, j) => {
+          for (const match of row.value.matchAll(/\{\{\s*saved\.(\w+)\s*\}\}/g)) {
+            if (!saved.has(match[1])) {
+              detail.push({ type: "value_error", loc: ["body", "steps", n, list, j, "value"], msg: `no step saves '${match[1]}'` });
+            }
+          }
+        }),
+      );
+      step.saves.forEach((save) => saved.add(save.name));
+    });
+    return detail.length > 0 ? HttpResponse.json({ detail }, { status: 422 }) : undefined;
   };
 
   server.use(
@@ -185,6 +215,63 @@ export function mockApisApi(
       await record(request);
       const apiId = new URL(request.url).searchParams.get("apiId");
       return HttpResponse.json(state.flows.filter((flow) => !apiId || flow.apiId === apiId));
+    }),
+    http.post(apiUrl("/flows"), async ({ request }) => {
+      const body = await record(request);
+      const api = state.items.find((item) => item.id === body.apiId);
+      if (!api) return notFound();
+      if (flowTaken(body.apiId, body.name)) return HttpResponse.json({ detail: "Flow name already in use" }, { status: 409 });
+      const invalid = refused(body.steps as FlowStep[]);
+      if (invalid) return invalid;
+      const now = new Date().toISOString();
+      const flow = flowFixture({
+        id: `f-new-${(createdFlows += 1)}`,
+        apiId: api.id,
+        api: { id: api.id, name: api.name },
+        name: String(body.name),
+        description: String(body.description ?? ""),
+        inputs: (body.inputs as Flow["inputs"] | undefined) ?? [],
+        steps: body.steps as FlowStep[],
+        agents: agentsOf(body.agentIds),
+        createdAt: now,
+        updatedAt: now,
+      });
+      state.flows.push(flow);
+      return HttpResponse.json(flow, { status: 201 });
+    }),
+    http.patch(apiUrl("/flows/:id"), async ({ request, params }) => {
+      const id = String(params.id);
+      const body = await record(request);
+      const index = state.flows.findIndex((flow) => flow.id === id);
+      if (index < 0) return flowNotFound();
+      if (body.name !== undefined && flowTaken(state.flows[index].apiId, body.name, id)) {
+        return HttpResponse.json({ detail: "Flow name already in use" }, { status: 409 });
+      }
+      const invalid = refused(body.steps as FlowStep[] | undefined);
+      if (invalid) return invalid;
+      const { agentIds, ...rest } = body;
+      state.flows[index] = {
+        ...state.flows[index],
+        ...(rest as Partial<Flow>),
+        ...(agentIds === undefined ? {} : { agents: agentsOf(agentIds) }),
+        updatedAt: new Date(Date.now() + state.requests.length).toISOString(),
+      };
+      return HttpResponse.json(state.flows[index]);
+    }),
+    http.delete(apiUrl("/flows/:id"), async ({ request, params }) => {
+      await record(request);
+      if (!state.flows.some((flow) => flow.id === params.id)) return flowNotFound();
+      state.flows = state.flows.filter((flow) => flow.id !== params.id);
+      return new HttpResponse(null, { status: 204 });
+    }),
+    http.get(apiUrl("/flows/:id/curl"), async ({ request, params }) => {
+      await record(request);
+      const flow = state.flows.find((item) => item.id === params.id);
+      if (!flow) return flowNotFound();
+      const base = state.items.find((item) => item.id === flow.apiId)?.baseUrl ?? "";
+      return HttpResponse.json({
+        steps: flow.steps.map((step) => ({ curl: `curl -X ${step.method} '${base}${step.path}'` })),
+      });
     }),
   );
   return state;

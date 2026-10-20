@@ -1,8 +1,9 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
-import { createApi, deleteApi, getApi, listApis, listFlows, updateApi } from "./api";
-import type { Api, ApiChanges } from "./types";
+import { createApi, createFlow, deleteApi, deleteFlow, getApi, listApis, listFlows, updateApi, updateFlow } from "./api";
+import type { FlowPayload } from "./flow-draft";
+import type { Api, ApiChanges, Flow } from "./types";
 
 // Revealed secret values are never stored here: see `useSecretReveal`.
 export const apisQueryKey = ["apis"] as const;
@@ -59,4 +60,33 @@ export function useDeleteApi() {
       return queryClient.invalidateQueries({ queryKey: apisListKey });
     },
   });
+}
+
+/** A flow changes its API's flow count and agents, so both lists refresh. */
+function storedFlow(queryClient: QueryClient) {
+  return Promise.all([
+    queryClient.invalidateQueries({ queryKey: flowsQueryKey }),
+    queryClient.invalidateQueries({ queryKey: apisQueryKey }),
+  ]);
+}
+
+export function useCreateFlow() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: FlowPayload & { apiId: string }) => createFlow(input),
+    onSuccess: () => storedFlow(queryClient),
+  });
+}
+
+export function useUpdateFlow() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, changes }: { id: string; changes: Partial<FlowPayload> }) => updateFlow(id, changes),
+    onSuccess: () => storedFlow(queryClient),
+  });
+}
+
+export function useDeleteFlow() {
+  const queryClient = useQueryClient();
+  return useMutation({ mutationFn: (flow: Flow) => deleteFlow(flow.id), onSuccess: () => storedFlow(queryClient) });
 }

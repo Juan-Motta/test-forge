@@ -1,5 +1,6 @@
 import { apiFetch } from "@/lib/api";
-import type { Api, ApiChanges, Flow, NewApi, RevealedSecrets } from "./types";
+import type { FlowPayload } from "./flow-draft";
+import type { Api, ApiChanges, Flow, FlowCurls, NewApi, RevealedSecrets } from "./types";
 
 const APIS = "/apis";
 const api = (id: string) => `${APIS}/${encodeURIComponent(id)}`;
@@ -35,4 +36,24 @@ export function revealSecrets(id: string): Promise<RevealedSecrets> {
 export function listFlows(filters: { apiId?: string } = {}, signal?: AbortSignal): Promise<Flow[]> {
   const query = filters.apiId ? `?apiId=${encodeURIComponent(filters.apiId)}` : "";
   return apiFetch<Flow[]>(`/flows${query}`, { signal });
+}
+
+const flow = (id: string) => `/flows/${encodeURIComponent(id)}`;
+
+/** 409 when the name is taken within the API; 422 with a location per wrong field. */
+export function createFlow(input: FlowPayload & { apiId: string }): Promise<Flow> {
+  return apiFetch<Flow>("/flows", { method: "POST", body: input });
+}
+
+export function updateFlow(id: string, changes: Partial<FlowPayload>): Promise<Flow> {
+  return apiFetch<Flow>(flow(id), { method: "PATCH", body: changes });
+}
+
+export function deleteFlow(id: string): Promise<void> {
+  return apiFetch<void>(flow(id), { method: "DELETE" });
+}
+
+/** One cURL per step of the saved flow, with the API's secrets masked. */
+export function flowCurls(id: string): Promise<FlowCurls> {
+  return apiFetch<FlowCurls>(`${flow(id)}/curl`);
 }

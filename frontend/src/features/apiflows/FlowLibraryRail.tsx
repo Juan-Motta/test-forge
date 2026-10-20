@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { useT } from "@/lib/i18n";
 import { PlusIcon, SearchField, cn, focusRing } from "@/ui";
-import { apiHref, newFlowHref } from "./ApiTable";
+import { flowHref, newFlowHref } from "./ApiTable";
 import { MethodChip } from "./MethodChip";
 import type { Api, Flow } from "./types";
 
@@ -13,10 +13,12 @@ type FlowLibraryRailProps = {
   /** The API's flows; undefined while loading. */
   flows: Flow[] | undefined;
   failed: boolean;
+  /** The flow open in the editor, marked as the current page. */
+  selectedId?: string;
 };
 
 /** The API's flows beside the page: a filter, each flow with the methods of its steps, and New flow. */
-export function FlowLibraryRail({ api, flows, failed }: FlowLibraryRailProps) {
+export function FlowLibraryRail({ api, flows, failed, selectedId }: FlowLibraryRailProps) {
   const t = useT();
   const [query, setQuery] = useState("");
   const needle = query.trim().toLowerCase();
@@ -32,10 +34,14 @@ export function FlowLibraryRail({ api, flows, failed }: FlowLibraryRailProps) {
       <ul className="flex flex-col gap-0.5">
         {visible.map((flow) => (
           <li key={flow.id}>
-            {/* The flow view arrives in T5; the link already names the flow it opens. */}
             <Link
-              href={`${apiHref(api)}?flow=${encodeURIComponent(flow.id)}`}
-              className={cn("flex min-h-11 flex-col gap-1 rounded-lg px-3 py-2.5 text-fg hover:bg-active", focusRing)}
+              href={flowHref(api, flow.id)}
+              aria-current={flow.id === selectedId ? "page" : undefined}
+              className={cn(
+                "flex min-h-11 flex-col gap-1 rounded-lg px-3 py-2.5 text-fg hover:bg-active",
+                flow.id === selectedId && "bg-active",
+                focusRing,
+              )}
             >
               <span className="text-[13px] font-medium break-words">{flow.name}</span>
               <span className="flex flex-wrap gap-1">

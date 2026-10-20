@@ -78,3 +78,6 @@ export type Flow = {
   createdAt: string;
   updatedAt: string;
 };
+
+/** `GET /api/flows/{id}/curl`: a cURL command per step, in order. */
+export type FlowCurls = { steps: { curl: string }[] };

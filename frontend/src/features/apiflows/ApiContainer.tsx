@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { EditableTitle } from "@/features/scenarios/EditableTitle";
 import { GroupMeta } from "@/features/scenarios/GroupMeta";
@@ -12,14 +12,16 @@ import { Alert, ApiFlowsIcon, Button, Dialog, EmptyState, PencilIcon, PlusIcon, 
 import { ApiConnection } from "./ApiConnection";
 import { newFlowHref } from "./ApiTable";
 import { EditConnectionDialog } from "./EditConnectionDialog";
+import { FlowEditorContainer } from "./FlowEditorContainer";
 import { FlowLibraryRail } from "./FlowLibraryRail";
 import { useApi, useApiFlows, useDeleteApi } from "./queries";
-import type { Api } from "./types";
+import type { Api, Flow } from "./types";
 import { useApiEdits } from "./use-api-edits";
 
 /**
  * `/apis/[id]`: the API's name, description, connection and tags (each edited in place) over its
- * flows in the sidebar; until one is picked, a placeholder.
+ * flows in the sidebar; beside them the flow editor (`?flow=<id>`, or `?new=flow`), or until one
+ * is picked, a placeholder.
  */
 export function ApiContainer({ apiId }: { apiId: string }) {
   const t = useT();
@@ -56,6 +58,9 @@ export function ApiContainer({ apiId }: { apiId: string }) {
 function ApiPage({ api }: { api: Api }) {
   const t = useT();
   const router = useRouter();
+  const params = useSearchParams();
+  const flowId = params.get("flow") ?? undefined;
+  const creating = params.get("new") === "flow";
   const flows = useApiFlows(api.id);
   const remove = useDeleteApi();
   const edits = useApiEdits(api.id);
@@ -112,18 +117,13 @@ function ApiPage({ api }: { api: Api }) {
         }
       />
       <div className="grid items-start gap-5 min-[1340px]:grid-cols-[240px_minmax(0,1fr)]">
-        <FlowLibraryRail api={api} flows={flows.data} failed={flows.isError && flows.data === undefined} />
-        <EmptyState
-          icon={<ApiFlowsIcon size={22} />}
-          title={t("apis.pickTitle")}
-          description={flows.data && flows.data.length === 0 ? t("apis.pickEmpty") : t("apis.pickHint")}
-          action={
-            <Link href={newFlowHref(api)} className={buttonClasses(flows.data && flows.data.length > 0 ? "secondary" : "primary")}>
-              <PlusIcon size={16} />
-              {t("apis.newFlow")}
-            </Link>
-          }
+        <FlowLibraryRail
+          api={api}
+          flows={flows.data}
+          failed={flows.isError && flows.data === undefined}
+          selectedId={creating ? undefined : flowId}
         />
+        <FlowPane api={api} flows={flows.data} failed={flows.isError && flows.data === undefined} flowId={flowId} creating={creating} />
       </div>
 
       {editing ? <EditConnectionDialog api={api} onClose={() => setEditing(false)} /> : null}
@@ -146,5 +146,34 @@ function ApiPage({ api }: { api: Api }) {
         {remove.isError ? <Alert>{errorMessage(remove.error)}</Alert> : null}
       </Dialog>
     </div>
+  );
+}
+
+type FlowPaneProps = { api: Api; flows: Flow[] | undefined; failed: boolean; flowId?: string; creating: boolean };
+
+/** The main area: a new flow, the selected flow, or a placeholder until one is picked. */
+function FlowPane({ api, flows, failed, flowId, creating }: FlowPaneProps) {
+  const t = useT();
+  if (creating) return <FlowEditorContainer key="new" api={api} />;
+  if (flowId !== undefined) {
+    const flow = flows?.find((item) => item.id === flowId);
+    if (flow) return <FlowEditorContainer key={flow.id} api={api} flow={flow} />;
+    if (flows === undefined && !failed) return <Spinner label={t("flows.loading")} />;
+    if (flows !== undefined) {
+      return <EmptyState icon={<ApiFlowsIcon size={22} />} title={t("flows.notFound")} description={t("flows.notFoundHint")} />;
+    }
+  }
+  return (
+    <EmptyState
+      icon={<ApiFlowsIcon size={22} />}
+      title={t("apis.pickTitle")}
+      description={flows && flows.length === 0 ? t("apis.pickEmpty") : t("apis.pickHint")}
+      action={
+        <Link href={newFlowHref(api)} className={buttonClasses(flows && flows.length > 0 ? "secondary" : "primary")}>
+          <PlusIcon size={16} />
+          {t("apis.newFlow")}
+        </Link>
+      }
+    />
   );
 }

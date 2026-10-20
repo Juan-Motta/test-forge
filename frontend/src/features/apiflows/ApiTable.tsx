@@ -7,8 +7,10 @@ const HEAD = "border-b border-line px-2 py-2 align-bottom font-medium";
 const CELL = "border-b border-line-soft px-2 py-3 align-top";
 
 export const apiHref = (api: Pick<Api, "id">) => `/apis/${encodeURIComponent(api.id)}`;
-/** Where a new flow of the API starts (the flow editor arrives in T5). */
+/** Where a new flow of the API starts in the flow editor. */
 export const newFlowHref = (api: Pick<Api, "id">) => `${apiHref(api)}?new=flow`;
+/** One flow of the API, open in the flow editor. */
+export const flowHref = (api: Pick<Api, "id">, flowId: string) => `${apiHref(api)}?flow=${encodeURIComponent(flowId)}`;
 
 /**
  * One row per API: its name (opens it), description and tags; its base URL and the names of its

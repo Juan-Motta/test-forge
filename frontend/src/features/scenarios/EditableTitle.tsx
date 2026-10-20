@@ -12,13 +12,16 @@ type EditableTitleProps = {
   /** Applies a new name; resolves with why it was refused, or nothing when it was kept. */
   onCommit: (next: string) => Promise<string | undefined> | string | undefined;
   maxLength?: number;
+  /** "page" (default) for an `<h1>`; "section" for an `<h2>` inside the page. */
+  size?: "page" | "section";
 };
 
 /**
  * A page title with a pencil at its end: the pencil turns it into a field (Enter or leaving it
- * keeps the new name, Escape restores the old one). Rendered inside the page's `<h1>`.
+ * keeps the new name, Escape restores the old one). Rendered inside the page's `<h1>` (or a
+ * section's `<h2>` with `size="section"`).
  */
-export function EditableTitle({ value, placeholder, label, onCommit, maxLength = 160 }: EditableTitleProps) {
+export function EditableTitle({ value, placeholder, label, onCommit, maxLength = 160, size = "page" }: EditableTitleProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
   const [error, setError] = useState<string>();
@@ -84,7 +87,10 @@ export function EditableTitle({ value, placeholder, label, onCommit, maxLength =
           }}
           onKeyDown={onKeyDown}
           onBlur={() => void commit()}
-          className="w-full min-w-0 rounded-lg border border-field-border bg-field px-2 text-[28px] font-semibold tracking-[-0.02em] focus:outline-none focus-visible:ring-2 focus-visible:ring-evaluator/40"
+          className={cn(
+            "w-full min-w-0 rounded-lg border border-field-border bg-field px-2 font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-evaluator/40",
+            size === "page" ? "text-[28px] tracking-[-0.02em]" : "text-lg",
+          )}
         />
         {error ? (
           <span id={errorId} className="text-sm font-normal tracking-normal text-danger-fg">
