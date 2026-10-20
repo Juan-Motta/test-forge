@@ -383,7 +383,14 @@ def _hide(value: Any, secrets: dict[str, str]) -> Any:
 
 
 def _capped(body: Any) -> Any:
-    text = body if isinstance(body, str) else json.dumps(body)
+    """Small bodies as they came; a long one cut to text, indented when it is JSON so the part
+    kept still reads line by line."""
+    if isinstance(body, str):
+        text = body
+    else:
+        if len(json.dumps(body)) <= MAX_RECORDED_BODY_CHARS:
+            return body
+        text = json.dumps(body, indent=2, ensure_ascii=False)
     if len(text) <= MAX_RECORDED_BODY_CHARS:
         return body
     return (

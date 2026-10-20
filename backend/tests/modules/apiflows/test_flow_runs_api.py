@@ -517,3 +517,18 @@ async def test_flows_carry_their_last_run(user_client, shop):
     }
     assert (await user_client.get(f"/api/flows/{flow['id']}")).json()["lastRun"] == expected
     assert (await user_client.get("/api/flows")).json()[0]["lastRun"] == expected
+
+
+async def test_a_long_json_body_is_kept_indented_up_to_the_cap(user_client, app):
+    big = {"items": [{"id": n, "name": f"item {n}"} for n in range(5000)]}
+    app.state.flow_runner.transport = lambda: httpx.MockTransport(
+        lambda request: httpx.Response(200, json=big)
+    )
+    api = await make_api(user_client)
+    flow = await make_flow(
+        user_client, api["id"], inputs=[], steps=[{"method": "GET", "path": "/big"}]
+    )
+    body = (await run(user_client, flow["id"])).json()["steps"][0]["response"]["body"]
+    assert isinstance(body, str)
+    assert body.startswith('{\n  "items": [\n    {\n      "id": 0,')
+    assert body.endswith("more characters]")

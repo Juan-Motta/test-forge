@@ -35,7 +35,41 @@ export function textOf(value: unknown): string {
 export function prettyBody(body: unknown): { kind: "json" | "text"; text: string } | undefined {
   if (body === null || body === undefined || body === "") return undefined;
   if (typeof body === "object") return { kind: "json", text: JSON.stringify(body, null, 2) };
-  return { kind: "text", text: String(body) };
+  const text = String(body);
+  const trimmed = text.trimStart();
+  if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+    try {
+      return { kind: "json", text: JSON.stringify(JSON.parse(text), null, 2) };
+    } catch {
+      // A body cut short to be stored is still JSON to read, just not whole.
+      return { kind: "json", text };
+    }
+  }
+  return { kind: "text", text };
+}
+
+export type JsonToken = { kind: "key" | "string" | "number" | "literal" | "plain"; text: string };
+
+const JSON_TOKEN = /("(?:\\.|[^"\\])*")(\s*:)?|\b(?:true|false|null)\b|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?/g;
+
+/** JSON text split into keys, strings, numbers and literals (true, false, null), so each can be
+ * coloured. Works on JSON cut short too: whatever does not match stays plain. */
+export function jsonTokens(text: string): JsonToken[] {
+  const tokens: JsonToken[] = [];
+  let last = 0;
+  for (const match of text.matchAll(JSON_TOKEN)) {
+    const index = match.index ?? 0;
+    if (index > last) tokens.push({ kind: "plain", text: text.slice(last, index) });
+    if (match[1] !== undefined) {
+      tokens.push({ kind: match[2] ? "key" : "string", text: match[1] });
+      if (match[2]) tokens.push({ kind: "plain", text: match[2] });
+    } else {
+      tokens.push({ kind: /^[-\d]/.test(match[0]) ? "number" : "literal", text: match[0] });
+    }
+    last = index + match[0].length;
+  }
+  if (last < text.length) tokens.push({ kind: "plain", text: text.slice(last) });
+  return tokens;
 }
 
 type NumberFormat = (value: number, options?: Intl.NumberFormatOptions) => string;

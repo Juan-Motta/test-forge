@@ -22,13 +22,21 @@ import {
   type BadgeTone,
 } from "@/ui";
 import { MethodChip } from "./MethodChip";
-import { checkRule, formatBytes, formatDuration, pathOf, prettyBody, textOf } from "./run-view";
+import { checkRule, formatBytes, formatDuration, jsonTokens, pathOf, prettyBody, textOf, type JsonToken } from "./run-view";
 import { SecretText } from "./SecretText";
 import type { ApiHeader, FlowRun, StepRun, StepStatus } from "./types";
 
 const STATUS_TONE: Record<StepStatus, BadgeTone> = { passed: "success", failed: "danger", skipped: "muted" };
 const PANEL = "flex min-w-0 flex-col gap-3 rounded-xl border border-line bg-panel p-4";
-const PRE = "max-h-96 overflow-auto rounded-lg border border-line-soft bg-field p-3 font-mono text-xs leading-5 whitespace-pre-wrap break-all text-fg";
+const PRE = "max-h-96 overflow-auto rounded-lg border border-line-soft bg-field p-3 font-mono text-xs leading-5 whitespace-pre-wrap break-words text-fg";
+
+/** JSON colours: keys stand apart from the values they name. */
+const TOKEN_CLASS: Record<Exclude<JsonToken["kind"], "plain">, string> = {
+  key: "text-agent-fg",
+  string: "text-success-fg",
+  number: "text-evaluator-fg",
+  literal: "text-llm-fg",
+};
 
 function StatusIcon({ status, size = 14 }: { status: StepStatus; size?: number }) {
   if (status === "passed") return <CheckIcon size={size} className="text-success-fg" />;
@@ -220,9 +228,24 @@ function Body({ body, secrets, label }: { body: unknown; secrets: SecretView; la
   const t = useT();
   const pretty = prettyBody(body);
   if (!pretty) return <p className="text-xs text-dim">{t("flowRuns.noBody")}</p>;
+  if (pretty.kind === "text") {
+    return (
+      <pre aria-label={label} data-kind={pretty.kind} className={PRE}>
+        <SecretText text={pretty.text} {...secrets} />
+      </pre>
+    );
+  }
   return (
     <pre aria-label={label} data-kind={pretty.kind} className={PRE}>
-      <SecretText text={pretty.text} {...secrets} />
+      {jsonTokens(pretty.text).map((token, index) =>
+        token.kind === "plain" ? (
+          token.text
+        ) : (
+          <span key={index} data-token={token.kind} className={TOKEN_CLASS[token.kind]}>
+            {token.kind === "key" || token.kind === "string" ? <SecretText text={token.text} {...secrets} /> : token.text}
+          </span>
+        ),
+      )}
     </pre>
   );
 }

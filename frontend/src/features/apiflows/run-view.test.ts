@@ -3,6 +3,7 @@ import { ApiError } from "@/lib/api";
 import {
   checkRule,
   defaultStepIndex,
+  jsonTokens,
   formatBytes,
   formatDuration,
   initialRunValues,
@@ -94,5 +95,23 @@ describe("run view helpers", () => {
       message: "AI could not write the inputs (x)",
     });
     expect(runAllOutcome({ error: new ApiError(500, "boom") }).kind).toBe("error");
+  });
+});
+
+describe("JSON bodies", () => {
+  it("pretty-prints JSON that arrives as text, and keeps JSON cut short as it is", () => {
+    expect(prettyBody('{"a":1}')).toEqual({ kind: "json", text: '{\n  "a": 1\n}' });
+    expect(prettyBody('{"a": [1, 2… [99 more characters]')).toEqual({ kind: "json", text: '{"a": [1, 2… [99 more characters]' });
+    expect(prettyBody("plain words")).toEqual({ kind: "text", text: "plain words" });
+  });
+
+  it("tells keys from values", () => {
+    const tokens = jsonTokens('{\n  "name": "pikachu",\n  "id": 25,\n  "is_default": true,\n  "past": null,\n  "note": "a \\"quoted\\": word"\n}');
+    const of = (kind: string) => tokens.filter((token) => token.kind === kind).map((token) => token.text);
+    expect(of("key")).toEqual(['"name"', '"id"', '"is_default"', '"past"', '"note"']);
+    expect(of("string")).toEqual(['"pikachu"', '"a \\"quoted\\": word"']);
+    expect(of("number")).toEqual(["25"]);
+    expect(of("literal")).toEqual(["true", "null"]);
+    expect(tokens.map((token) => token.text).join("")).toBe('{\n  "name": "pikachu",\n  "id": 25,\n  "is_default": true,\n  "past": null,\n  "note": "a \\"quoted\\": word"\n}');
   });
 });
