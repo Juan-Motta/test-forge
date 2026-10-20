@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 import voice_eval.modules.agents.models  # noqa: F401 - registers tables on Base.metadata
 import voice_eval.modules.api_keys.models  # noqa: F401 - registers tables on Base.metadata
+import voice_eval.modules.apiflows.models  # noqa: F401 - registers tables on Base.metadata
 import voice_eval.modules.connections.models  # noqa: F401 - registers tables on Base.metadata
 import voice_eval.modules.judgements.models  # noqa: F401 - registers tables on Base.metadata
 import voice_eval.modules.pricing.models  # noqa: F401 - registers tables on Base.metadata

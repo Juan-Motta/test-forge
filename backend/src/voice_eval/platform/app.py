@@ -14,6 +14,7 @@ from sqlalchemy import text
 
 from voice_eval.modules.agents import api as agents_api
 from voice_eval.modules.api_keys import api as api_keys_api
+from voice_eval.modules.apiflows import api as apiflows_api
 from voice_eval.modules.connections import api as connections_api
 from voice_eval.modules.judgements import api as judgements_api
 from voice_eval.modules.judgements.coordinator import JudgementCoordinator
@@ -128,6 +129,8 @@ def create_app(
     protected.include_router(agents_api.router)
     protected.include_router(scenarios_api.router)
     protected.include_router(scenario_groups_api.router)
+    protected.include_router(apiflows_api.apis_router)
+    protected.include_router(apiflows_api.flows_router)
     protected.include_router(runs_api.router)
     protected.include_router(judgements_api.router)
     protected.include_router(stats_api.router)
