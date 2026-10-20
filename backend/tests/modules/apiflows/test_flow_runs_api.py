@@ -263,7 +263,7 @@ async def test_a_flow_as_curl_before_running_it(user_client):
         await user_client.get(f"/api/flows/{flow['id']}/curl", params={"reveal": "true"})
     ).json()["steps"]
     assert f"x-api-key: {SECRET}" in revealed[0]["curl"]
-    assert "q=%7B%7Binput.query%7D%7D" in revealed[1]["curl"]
+    assert "q={{input.query}}" in revealed[1]["curl"]
 
 
 async def test_runs_require_authentication(client):
@@ -273,3 +273,30 @@ async def test_runs_require_authentication(client):
     assert (await client.get(f"/api/flows/{some}/curl")).status_code == 401
     assert (await client.get(f"/api/flow-runs/{some}")).status_code == 401
     assert (await client.get(f"/api/flow-runs/{some}/steps/0/curl")).status_code == 401
+
+
+async def test_secrets_in_the_path_and_query_are_masked_or_revealed_in_curl(user_client, shop):
+    secret = "k&y/1 2"
+    api = await make_api(user_client, secrets={"api_key": SECRET, "q_key": secret})
+    steps = [
+        {
+            "method": "GET",
+            "path": "/keys/{{secret.q_key}}",
+            "query": [{"name": "key", "value": "{{secret.q_key}}"}],
+        }
+    ]
+    flow = await make_flow(user_client, api["id"], inputs=[], steps=steps)
+    result = (await run(user_client, flow["id"])).json()
+    sent = shop.requests[0]
+    assert sent.url.params["key"] == secret
+    assert result["steps"][0]["request"]["url"] == (
+        "https://api.shop.example/v1/keys/{{secret.q_key}}?key={{secret.q_key}}"
+    )
+    url = f"/api/flow-runs/{result['id']}/steps/0/curl"
+    masked = (await user_client.get(url)).json()["curl"]
+    assert "/keys/••••?key=••••" in masked
+    revealed = (await user_client.get(url, params={"reveal": "true"})).json()["curl"]
+    encoded = "k%26y%2F1%202"
+    assert f"/keys/{encoded}?key={encoded}" in revealed
+    preview = (await user_client.get(f"/api/flows/{flow['id']}/curl")).json()["steps"][0]
+    assert "/keys/••••?key=••••" in preview["curl"]

@@ -215,10 +215,12 @@ class _MissingValue(Exception):
     pass
 
 
-def _url(base_url: str, path: str, query: list[tuple[str, str]]) -> str:
-    # Placeholders may put any text in the path: keep it a path (no new query or fragment).
-    url = base_url.rstrip("/") + quote(path, safe="/:@!$&'()*+,;=-._~%")
-    return url + ("?" + urlencode(query) if query else "")
+def _url(base_url: str, path: str, query: list[tuple[str, str]], *, keep: bool) -> str:
+    """Placeholders may put any text in the path: it stays a path (no new query or fragment).
+    With `keep`, `{{…}}` placeholders stay readable so `curl` can fill them in later."""
+    braces = "{}" if keep else ""
+    url = base_url.rstrip("/") + quote(path, safe="/:@!$&'()*+,;=-._~%" + braces)
+    return url + ("?" + urlencode(query, safe=braces) if query else "")
 
 
 def _request(
@@ -233,7 +235,7 @@ def _request(
         all_headers.append(("Content-Type", "application/json"))
     return {
         "method": step.method.value,
-        "url": _url(base_url, ctx.text(step.path, keep_secrets=keep), query),
+        "url": _url(base_url, ctx.text(step.path, keep_secrets=keep), query, keep=keep),
         "headers": [{"name": name, "value": value} for name, value in all_headers],
         "body": body,
     }
@@ -464,7 +466,7 @@ def curl(
     """A shell command for a recorded request: secrets filled in when `secrets` is given,
     otherwise shown as their masked hints."""
 
-    def fill(value: Any) -> Any:
+    def fill(value: Any, *, in_url: bool = False) -> Any:
         if isinstance(value, str):
 
             def replace(match: Any) -> str:
@@ -472,7 +474,8 @@ def curl(
                     return match.group(0)
                 name = match.group(2)
                 if secrets is not None and name in secrets:
-                    return secrets[name]
+                    # In a URL the value is encoded as it was when the request was sent.
+                    return quote(secrets[name], safe="") if in_url else secrets[name]
                 return hints.get(name, "••••")
 
             return PLACEHOLDER.sub(replace, value)
@@ -482,7 +485,7 @@ def curl(
             return {key: fill(item) for key, item in value.items()}
         return value
 
-    parts = ["curl", "-X", request["method"], shlex.quote(fill(request["url"]))]
+    parts = ["curl", "-X", request["method"], shlex.quote(fill(request["url"], in_url=True))]
     lines = [" ".join(parts)]
     for header in request["headers"]:
         lines.append("-H " + shlex.quote(f"{header['name']}: {fill(header['value'])}"))
