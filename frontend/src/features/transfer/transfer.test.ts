@@ -13,6 +13,7 @@ describe("config transfer", () => {
 
   it("still reads files exported before the rename, tagged duet", () => {
     expect(parseTransfer('{"duet":"agent","version":1,"name":"Old"}', "agent")).toEqual({ ok: true, data: { name: "Old" } });
+    expect(parseTransfer('{"duet":"scenario","version":1}', "agent")).toEqual({ ok: false, error: "kind" });
   });
 
   it("names the file after the record", () => {
