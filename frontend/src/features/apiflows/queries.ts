@@ -1,9 +1,22 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
-import { createApi, createFlow, deleteApi, deleteFlow, getApi, listApis, listFlows, updateApi, updateFlow } from "./api";
+import {
+  createApi,
+  createFlow,
+  deleteApi,
+  deleteFlow,
+  getApi,
+  getFlowRun,
+  listApis,
+  listFlowRuns,
+  listFlows,
+  runFlow,
+  updateApi,
+  updateFlow,
+} from "./api";
 import type { FlowPayload } from "./flow-draft";
-import type { Api, ApiChanges, Flow } from "./types";
+import type { Api, ApiChanges, Flow, FlowRun, RunInputs } from "./types";
 
 // Revealed secret values are never stored here: see `useSecretReveal`.
 export const apisQueryKey = ["apis"] as const;
@@ -89,4 +102,33 @@ export function useUpdateFlow() {
 export function useDeleteFlow() {
   const queryClient = useQueryClient();
   return useMutation({ mutationFn: (flow: Flow) => deleteFlow(flow.id), onSuccess: () => storedFlow(queryClient) });
+}
+
+// Runs: a stored run never changes, so it is cached as it is; a new run refreshes its flow's list.
+export const flowRunsQueryKey = ["flow-runs"] as const;
+const flowRunsListKey = (flowId: string) => [...flowRunsQueryKey, "list", flowId] as const;
+const flowRunKey = (runId: string) => [...flowRunsQueryKey, "item", runId] as const;
+/** How many runs the flow editor lists. */
+export const RECENT_RUNS = 10;
+
+export function useFlowRuns(flowId: string) {
+  return useQuery({ queryKey: flowRunsListKey(flowId), queryFn: ({ signal }) => listFlowRuns(flowId, RECENT_RUNS, signal) });
+}
+
+export function useFlowRun(runId: string) {
+  return useQuery({ queryKey: flowRunKey(runId), queryFn: ({ signal }) => getFlowRun(runId, signal) });
+}
+
+/** Seeds the new run's cache (its page opens next) and refreshes the flow's runs. */
+export function storedRun(queryClient: QueryClient, run: FlowRun) {
+  queryClient.setQueryData(flowRunKey(run.id), run);
+  return queryClient.invalidateQueries({ queryKey: flowRunsListKey(run.flowId) });
+}
+
+export function useRunFlow() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ flowId, inputs }: { flowId: string; inputs: RunInputs }) => runFlow(flowId, inputs),
+    onSuccess: (run) => storedRun(queryClient, run),
+  });
 }

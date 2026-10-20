@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Fragment } from "react";
+import { Fragment, type ReactNode } from "react";
 import { EditableTitle } from "@/features/scenarios/EditableTitle";
 import { useT } from "@/lib/i18n";
 import { Alert, Button, PlayIcon, PlusIcon, Textarea, TrashIcon, buttonClasses } from "@/ui";
@@ -30,6 +30,8 @@ export type FlowEditorProps = {
   agents: NamedRef[] | undefined;
   agentsFailed: boolean;
   knownAgents: NamedRef[];
+  /** The flow's recent runs, under its header; undefined for a new flow. */
+  recentRuns?: ReactNode;
 };
 
 /** The flow editor: header, value-source legend, inputs, and the steps joined by arrows. */
@@ -105,6 +107,7 @@ export function FlowEditor(props: FlowEditorProps) {
             ) : null}
           </Alert>
         ) : null}
+        {props.recentRuns ? <div className="border-t border-line-soft pt-3">{props.recentRuns}</div> : null}
       </section>
 
       <SourceLegend />

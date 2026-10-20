@@ -23,7 +23,7 @@ export function ApiConnection({ api }: { api: Pick<Api, "id" | "baseUrl" | "secr
               name={secret.name}
               hint={secret.hint}
               value={reveal.shown[secret.name]}
-              pending={reveal.pending === secret.name}
+              pending={reveal.pending.has(secret.name)}
               onToggle={() => void reveal.toggle(secret.name)}
             />
           </li>

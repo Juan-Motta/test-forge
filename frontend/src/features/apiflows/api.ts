@@ -1,6 +1,6 @@
 import { apiFetch } from "@/lib/api";
 import type { FlowPayload } from "./flow-draft";
-import type { Api, ApiChanges, Flow, FlowCurls, NewApi, RevealedSecrets } from "./types";
+import type { Api, ApiChanges, Flow, FlowCurls, FlowRun, NewApi, RevealedSecrets, RunInputs } from "./types";
 
 const APIS = "/apis";
 const api = (id: string) => `${APIS}/${encodeURIComponent(id)}`;
@@ -56,4 +56,24 @@ export function deleteFlow(id: string): Promise<void> {
 /** One cURL per step of the saved flow, with the API's secrets masked. */
 export function flowCurls(id: string): Promise<FlowCurls> {
   return apiFetch<FlowCurls>(`${flow(id)}/curl`);
+}
+
+/** Runs the flow now (it may take minutes); 422 names a wrong input, 502 when AI could not write one. */
+export function runFlow(id: string, inputs: RunInputs): Promise<FlowRun> {
+  return apiFetch<FlowRun>(`${flow(id)}/runs`, { method: "POST", body: { inputs } });
+}
+
+/** The flow's latest runs, newest first. */
+export function listFlowRuns(id: string, limit: number, signal?: AbortSignal): Promise<FlowRun[]> {
+  return apiFetch<FlowRun[]>(`${flow(id)}/runs?limit=${limit}`, { signal });
+}
+
+export function getFlowRun(id: string, signal?: AbortSignal): Promise<FlowRun> {
+  return apiFetch<FlowRun>(`/flow-runs/${encodeURIComponent(id)}`, { signal });
+}
+
+/** The cURL of one step as it was sent: masked, or with the secrets in clear when `reveal`. */
+export function stepCurl(runId: string, index: number, reveal: boolean): Promise<{ curl: string }> {
+  const query = reveal ? "?reveal=true" : "";
+  return apiFetch<{ curl: string }>(`/flow-runs/${encodeURIComponent(runId)}/steps/${index}/curl${query}`);
 }

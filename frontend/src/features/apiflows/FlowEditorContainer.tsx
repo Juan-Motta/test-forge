@@ -7,11 +7,12 @@ import { ApiError } from "@/lib/api";
 import { localErrorMessage, useT } from "@/lib/i18n";
 import { Alert, Button, Dialog, useClipboard } from "@/ui";
 import { flowCurls } from "./api";
-import { apiHref, flowHref } from "./ApiTable";
+import { apiHref, flowHref, runHref } from "./ApiTable";
 import { draftOf, payloadOf, type FlowDraft } from "./flow-draft";
 import { flowErrors, isPlaced } from "./flow-errors";
 import { FlowEditor } from "./FlowEditor";
 import { useCreateFlow, useDeleteFlow, useUpdateFlow } from "./queries";
+import { RecentRuns } from "./RecentRuns";
 import type { Api, Flow } from "./types";
 
 /** Every row's key in order: it changes when a row is added, moved or removed. */
@@ -125,13 +126,13 @@ export function FlowEditorContainer({ api, flow }: { api: Pick<Api, "id">; flow?
         status={status ?? copyStatus}
         saving={create.isPending || update.isPending}
         onSave={() => void save()}
-        // T6 builds the run view behind `run=new`.
-        runHref={flow ? `${flowHref(api, flow.id)}&run=new` : undefined}
+        runHref={flow ? runHref(api, flow.id, "new") : undefined}
         onDelete={flow ? () => setDeleting(true) : undefined}
         onCopyCurl={flow ? (index) => void copyCurl(index) : undefined}
         agents={agents.data}
         agentsFailed={agents.isError && agents.data === undefined}
         knownAgents={flow?.agents ?? []}
+        recentRuns={flow ? <RecentRuns api={api} flowId={flow.id} /> : undefined}
       />
       {flow ? (
         <Dialog

@@ -73,8 +73,7 @@ describe("API flows catalog", () => {
     expect(within(row).getByText("2 flows")).toBeInTheDocument();
     expect(within(within(row).getByRole("list", { name: "Agents" })).getByText("Hotel booking assistant")).toBeInTheDocument();
     expect(within(row).getByRole("link", { name: "New flow in Shop API" })).toHaveAttribute("href", "/apis/api-shop?new=flow");
-    // One flow runs per call today: no Run all yet.
-    expect(within(row).queryByRole("button", { name: /run/i })).not.toBeInTheDocument();
+    expect(within(row).getByRole("button", { name: "Run all flows of Shop API" })).toBeInTheDocument();
 
     const crmRow = rowOf("CRM");
     expect(within(crmRow).getByText("1 flow")).toBeInTheDocument();

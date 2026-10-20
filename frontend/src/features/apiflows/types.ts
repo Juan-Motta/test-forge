@@ -81,3 +81,43 @@ export type Flow = {
 
 /** `GET /api/flows/{id}/curl`: a cURL command per step, in order. */
 export type FlowCurls = { steps: { curl: string }[] };
+
+/** Where a run's input value came from. */
+export type InputSource = "given" | "default" | "generated";
+
+export type RunStatus = "passed" | "failed";
+export type StepStatus = "passed" | "failed" | "skipped";
+
+/** A request as sent, with the API's secrets as `{{secret.<name>}}`. */
+export type SentRequest = { method: HttpMethod; url: string; headers: ApiHeader[]; body: unknown };
+
+export type ReceivedResponse = { status: number; headers: ApiHeader[]; body: unknown; sizeBytes: number };
+
+export type CheckResult = { check: FlowCheck; passed: boolean; actual: unknown };
+
+export type StepRun = {
+  index: number;
+  title: string;
+  status: StepStatus;
+  /** Null when the step was skipped, or failed before sending. */
+  request: SentRequest | null;
+  response: ReceivedResponse | null;
+  durationMs: number | null;
+  saved: Record<string, unknown>;
+  checks: CheckResult[];
+  error: string | null;
+};
+
+/** `POST /api/flows/{id}/runs`, `GET /api/flow-runs/{id}`: one run with its per-step trace. */
+export type FlowRun = {
+  id: string;
+  flowId: string;
+  status: RunStatus;
+  inputs: { name: string; value: unknown; source: InputSource }[];
+  steps: StepRun[];
+  durationMs: number;
+  createdAt: string;
+};
+
+/** Values by input name; an omitted input takes its default, or AI writes it. */
+export type RunInputs = Record<string, string | number | boolean | null>;

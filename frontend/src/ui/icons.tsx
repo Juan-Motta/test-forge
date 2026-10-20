@@ -117,6 +117,12 @@ export const CheckIcon = (p: IconProps) => (
   </Icon>
 );
 
+export const MinusIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M6 12h12" />
+  </Icon>
+);
+
 export const ChevronDownIcon = (p: IconProps) => (
   <Icon {...p}>
     <path d="m6 9 6 6 6-6" />

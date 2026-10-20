@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { useT } from "@/lib/i18n";
-import { Badge, KeyIcon, PlusIcon, cn, focusRing } from "@/ui";
+import { Badge, IconButton, KeyIcon, PlayIcon, PlusIcon, cn, focusRing } from "@/ui";
 import type { Api } from "./types";
 
 const HEAD = "border-b border-line px-2 py-2 align-bottom font-medium";
@@ -11,12 +11,15 @@ export const apiHref = (api: Pick<Api, "id">) => `/apis/${encodeURIComponent(api
 export const newFlowHref = (api: Pick<Api, "id">) => `${apiHref(api)}?new=flow`;
 /** One flow of the API, open in the flow editor. */
 export const flowHref = (api: Pick<Api, "id">, flowId: string) => `${apiHref(api)}?flow=${encodeURIComponent(flowId)}`;
+/** The run form of a flow (`run=new`), or one of its stored runs. */
+export const runHref = (api: Pick<Api, "id">, flowId: string, runId: string) =>
+  `${flowHref(api, flowId)}&run=${encodeURIComponent(runId)}`;
 
 /**
  * One row per API: its name (opens it), description and tags; its base URL and the names of its
  * secrets; how many flows it holds and of which agents; and quick actions.
  */
-export function ApiTable({ apis }: { apis: Api[] }) {
+export function ApiTable({ apis, onRunAll }: { apis: Api[]; onRunAll: (api: Api) => void }) {
   const t = useT();
   return (
     <div className="overflow-x-auto rounded-xl border border-line bg-panel px-3 py-2">
@@ -35,7 +38,7 @@ export function ApiTable({ apis }: { apis: Api[] }) {
             <th scope="col" className={cn(HEAD, "w-[18%]")}>
               {t("groups.column.agents")}
             </th>
-            <th scope="col" className={cn(HEAD, "w-[4rem] text-right")}>
+            <th scope="col" className={cn(HEAD, "w-[5.5rem] text-right")}>
               <span className="sr-only">{t("common.actions")}</span>
             </th>
           </tr>
@@ -95,8 +98,16 @@ export function ApiTable({ apis }: { apis: Api[] }) {
                 )}
               </td>
               <td className={CELL}>
-                {/* T6 adds "Run all" here: today the backend runs one flow per call. */}
                 <div className="flex items-center justify-end gap-1">
+                  {api.flowCount > 0 ? (
+                    <IconButton
+                      size="sm"
+                      label={t("runAll.buttonNamed", { name: api.name })}
+                      icon={<PlayIcon size={15} />}
+                      className="text-muted hover:text-fg"
+                      onClick={() => onRunAll(api)}
+                    />
+                  ) : null}
                   <Link
                     href={newFlowHref(api)}
                     aria-label={t("apis.newFlowIn", { name: api.name })}

@@ -9,6 +9,7 @@ import { useT } from "@/lib/i18n";
 import { Alert, ApiFlowsIcon, Button, EmptyState, Field, PlusIcon, SearchField, Select, Spinner } from "@/ui";
 import { ApiTable, apiHref } from "./ApiTable";
 import { NewApiDialog } from "./NewApiDialog";
+import { RunAllDialog } from "./RunAllDialog";
 import { useApis } from "./queries";
 import type { Api } from "./types";
 
@@ -40,6 +41,7 @@ export function ApisContainer() {
   const apis = useApis();
   const agents = useAgents();
   const [creating, setCreating] = useState(false);
+  const [runningAll, setRunningAll] = useState<Api>();
   const [filters, setFiltersState] = useState(NO_FILTERS);
   const [page, setPage] = useState(1);
   // Any filter change starts over on the first page.
@@ -150,7 +152,7 @@ export function ApisContainer() {
             </Button>
           </div>
         ) : (
-          <ApiTable apis={shown} />
+          <ApiTable apis={shown} onRunAll={setRunningAll} />
         )}
         {matching.length > 0 ? (
           <nav aria-label={t("common.pagination")} className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted">
@@ -192,6 +194,7 @@ export function ApisContainer() {
           }}
         />
       ) : null}
+      {runningAll ? <RunAllDialog api={runningAll} onClose={() => setRunningAll(undefined)} /> : null}
     </>
   );
 }

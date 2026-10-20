@@ -1,6 +1,6 @@
 import { http, HttpResponse } from "msw/http";
 import { apiUrl, server } from "@/test/server";
-import type { Api, Flow, FlowStep, NamedRef } from "./types";
+import type { Api, Flow, FlowRun, FlowStep, NamedRef, RunInputs, StepRun } from "./types";
 
 /** A stored API as `/api/apis` returns it (flow count and agents follow `mockApisApi`'s flows). */
 export function apiFixture(overrides: Partial<Api> = {}): Api {
@@ -58,7 +58,64 @@ export function flowFixture(overrides: Partial<Flow> = {}): Flow {
   };
 }
 
-export type RecordedRequest = { method: string; path: string; body: unknown };
+/** A stored run of `flowFixture()`: the token step passed, the search step failed its check. */
+export function runFixture(overrides: Partial<FlowRun> = {}): FlowRun {
+  const steps: StepRun[] = [
+    {
+      index: 0,
+      title: "Get a token",
+      status: "passed",
+      request: {
+        method: "POST",
+        url: "https://shop.example.com/v1/auth/token",
+        headers: [
+          { name: "Accept", value: "application/json" },
+          { name: "X-Key", value: "{{secret.apiKey}}" },
+        ],
+        body: { key: "{{secret.apiKey}}" },
+      },
+      response: {
+        status: 200,
+        headers: [{ name: "content-type", value: "application/json" }],
+        body: { access_token: "tok-1", expires_in: 3600 },
+        sizeBytes: 48,
+      },
+      durationMs: 120,
+      saved: { token: "tok-1" },
+      checks: [{ check: { type: "status", equals: 200 }, passed: true, actual: 200 }],
+      error: null,
+    },
+    {
+      index: 1,
+      title: "Search",
+      status: "failed",
+      request: {
+        method: "GET",
+        url: "https://shop.example.com/v1/products?q=shoes",
+        headers: [{ name: "Authorization", value: "Bearer tok-1" }],
+        body: null,
+      },
+      response: { status: 500, headers: [{ name: "content-type", value: "text/plain" }], body: "Internal error", sizeBytes: 14 },
+      durationMs: 80,
+      saved: {},
+      checks: [{ check: { type: "status", equals: 200 }, passed: false, actual: 500 }],
+      error: null,
+    },
+  ];
+  return {
+    id: "run-1",
+    flowId: "f-products",
+    status: "failed",
+    inputs: [{ name: "q", value: "shoes", source: "given" }],
+    steps,
+    durationMs: 2430,
+    createdAt: "2026-10-20T09:00:00Z",
+    ...overrides,
+  };
+}
+
+/** `query` is the search string (`?limit=10`), present only when the URL has one. */
+export type RecordedRequest = { method: string; path: string; query?: string; body: unknown };
 type Body = Record<string, unknown>;
 
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "host.docker.internal"]);
@@ -89,6 +146,13 @@ export function mockApisApi(
     secrets?: Record<string, Record<string, string>>;
     /** Agents a flow can name in `agentIds` (their names come back in `agents`). */
     agents?: NamedRef[];
+    /** Stored runs, newest first. */
+    runs?: FlowRun[];
+    /**
+     * What `POST /flows/{id}/runs` answers: a run (stored and returned with 201) or an error
+     * response. By default every step of the flow passes.
+     */
+    onRun?: (flow: Flow, inputs: RunInputs) => FlowRun | Response | Promise<FlowRun | Response>;
   } = {},
 ) {
   const state = {
@@ -98,13 +162,16 @@ export function mockApisApi(
       initial.map((item) => [item.id, { ...Object.fromEntries(item.secrets.map((s) => [s.name, `value-of-${s.name}`])), ...options.secrets?.[item.id] }]),
     ) as Record<string, Record<string, string>>,
     requests: [] as RecordedRequest[],
+    runs: [...(options.runs ?? [])],
   };
+  let createdRuns = 0;
   let created = 0;
   let createdFlows = 0;
   const record = async (request: Request) => {
     const text = await request.text();
     const body = text ? (JSON.parse(text) as unknown) : undefined;
-    state.requests.push({ method: request.method, path: new URL(request.url).pathname.replace(/^\/api/, ""), body });
+    const url = new URL(request.url);
+    state.requests.push({ method: request.method, path: url.pathname.replace(/^\/api/, ""), ...(url.search ? { query: url.search } : {}), body });
     return (body ?? {}) as Body;
   };
   const view = (item: Api): Api => {
@@ -271,6 +338,49 @@ export function mockApisApi(
       const base = state.items.find((item) => item.id === flow.apiId)?.baseUrl ?? "";
       return HttpResponse.json({
         steps: flow.steps.map((step) => ({ curl: `curl -X ${step.method} '${base}${step.path}'` })),
+      });
+    }),
+    http.post(apiUrl("/flows/:id/runs"), async ({ request, params }) => {
+      const body = await record(request);
+      const flow = state.flows.find((item) => item.id === params.id);
+      if (!flow) return flowNotFound();
+      const inputs = (body.inputs as RunInputs | undefined) ?? {};
+      const answer = options.onRun
+        ? await options.onRun(flow, inputs)
+        : runFixture({
+            flowId: flow.id,
+            status: "passed",
+            inputs: Object.entries(inputs).map(([name, value]) => ({ name, value, source: "given" as const })),
+            steps: runFixture().steps.slice(0, flow.steps.length).map((step) => ({ ...step, status: "passed" as const })),
+          });
+      if (answer instanceof Response) return answer;
+      const run = { ...answer, id: `run-new-${(createdRuns += 1)}`, flowId: flow.id };
+      state.runs.unshift(run);
+      return HttpResponse.json(run, { status: 201 });
+    }),
+    http.get(apiUrl("/flows/:id/runs"), async ({ request, params }) => {
+      await record(request);
+      const limit = Number(new URL(request.url).searchParams.get("limit") ?? 20);
+      return HttpResponse.json(state.runs.filter((run) => run.flowId === params.id).slice(0, limit));
+    }),
+    http.get(apiUrl("/flow-runs/:id"), async ({ request, params }) => {
+      await record(request);
+      const run = state.runs.find((item) => item.id === params.id);
+      return run ? HttpResponse.json(run) : HttpResponse.json({ detail: "Run not found" }, { status: 404 });
+    }),
+    http.get(apiUrl("/flow-runs/:id/steps/:index/curl"), async ({ request, params }) => {
+      await record(request);
+      const run = state.runs.find((item) => item.id === params.id);
+      const step = run?.steps[Number(params.index)];
+      if (!run || !step?.request) return HttpResponse.json({ detail: "Run not found" }, { status: 404 });
+      const reveal = new URL(request.url).searchParams.get("reveal") === "true";
+      const api = state.items.find((item) => state.flows.some((flow) => flow.id === run.flowId && flow.apiId === item.id));
+      const secrets = state.secrets[api?.id ?? ""] ?? {};
+      const curl = `curl -X ${step.request.method} '${step.request.url}'${step.request.headers.map((h) => ` -H '${h.name}: ${h.value}'`).join("")}`;
+      return HttpResponse.json({
+        curl: curl.replace(/\{\{\s*secret\.(\w+)\s*\}\}/g, (match, name: string) =>
+          reveal ? (secrets[name] ?? match) : hintOf(secrets[name] ?? ""),
+        ),
       });
     }),
   );

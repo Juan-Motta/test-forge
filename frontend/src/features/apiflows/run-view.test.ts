@@ -1,0 +1,98 @@
+import { describe, expect, it } from "vitest";
+import { ApiError } from "@/lib/api";
+import {
+  checkRule,
+  defaultStepIndex,
+  formatBytes,
+  formatDuration,
+  initialRunValues,
+  pathOf,
+  prettyBody,
+  runAllOutcome,
+  runInputsOf,
+  secretSegments,
+  textOf,
+} from "./run-view";
+import { runFixture } from "./testing";
+
+const number = (value: number, options?: Intl.NumberFormatOptions) => new Intl.NumberFormat("en", options).format(value);
+
+describe("run view helpers", () => {
+  it("opens on the first failed step, otherwise the last", () => {
+    expect(defaultStepIndex([{ status: "passed" }, { status: "failed" }, { status: "skipped" }])).toBe(1);
+    expect(defaultStepIndex([{ status: "passed" }, { status: "passed" }])).toBe(1);
+    expect(defaultStepIndex([])).toBe(0);
+  });
+
+  it("cuts text at the secret placeholders", () => {
+    expect(secretSegments("Bearer {{secret.apiKey}} and {{ secret.other }}")).toEqual([
+      { text: "Bearer " },
+      { secret: "apiKey" },
+      { text: " and " },
+      { secret: "other" },
+    ]);
+    expect(secretSegments("plain")).toEqual([{ text: "plain" }]);
+    expect(secretSegments("")).toEqual([]);
+  });
+
+  it("shows a body as pretty JSON for objects and arrays, as text otherwise", () => {
+    expect(prettyBody({ a: 1 })).toEqual({ kind: "json", text: '{\n  "a": 1\n}' });
+    expect(prettyBody([1])).toEqual({ kind: "json", text: "[\n  1\n]" });
+    expect(prettyBody("<html>")).toEqual({ kind: "text", text: "<html>" });
+    expect(prettyBody(42)).toEqual({ kind: "text", text: "42" });
+    expect(prettyBody(null)).toBeUndefined();
+    expect(prettyBody("")).toBeUndefined();
+    expect(textOf("x")).toBe("x");
+    expect(textOf({ a: true })).toBe('{"a":true}');
+  });
+
+  it("formats durations and sizes", () => {
+    expect(formatDuration(840, number)).toBe("840 ms");
+    expect(formatDuration(2430, number)).toBe("2.4 s");
+    expect(formatBytes(512, number)).toBe("512 B");
+    expect(formatBytes(1300, number)).toBe("1.3 KB");
+    expect(formatBytes(3 * 1024 * 1024, number)).toBe("3 MB");
+  });
+
+  it("writes each check's rule", () => {
+    expect(checkRule({ type: "status", equals: 200 })).toBe("status == 200");
+    expect(checkRule({ type: "duration", maxMs: 500 })).toBe("durationMs < 500");
+    expect(checkRule({ type: "path", path: "body.token", op: "exists", value: null })).toBe("body.token exists");
+    expect(checkRule({ type: "path", path: "body.total", op: ">", value: 0 })).toBe('body.total > 0');
+    expect(checkRule({ type: "path", path: "body.name", op: "==", value: "shoes" })).toBe('body.name == "shoes"');
+  });
+
+  it("keeps the path and query of a sent URL", () => {
+    expect(pathOf("https://shop.example.com/v1/products?q=shoes")).toBe("/v1/products?q=shoes");
+    expect(pathOf("not a url")).toBe("not a url");
+  });
+
+  it("types the run form's values and leaves out the empty ones", () => {
+    const inputs = [
+      { name: "q", type: "text" as const },
+      { name: "limit", type: "number" as const },
+      { name: "fresh", type: "boolean" as const },
+      { name: "empty", type: "text" as const },
+      { name: "odd", type: "number" as const },
+    ];
+    expect(runInputsOf(inputs, { q: " shoes ", limit: "10", fresh: "false", empty: "  ", odd: "ten" })).toEqual({
+      q: " shoes ",
+      limit: 10,
+      fresh: false,
+      odd: "ten",
+    });
+    expect(initialRunValues([{ name: "q", default: "shoes" }, { name: "x", default: null }])).toEqual({ q: "shoes", x: "" });
+  });
+
+  it("names how each flow of a Run all ended", () => {
+    const run = runFixture({ status: "passed" });
+    expect(runAllOutcome({ run })).toEqual({ kind: "passed", run });
+    expect(runAllOutcome({ run: runFixture() }).kind).toBe("failed");
+    expect(runAllOutcome({ error: new ApiError(422, "Some fields need attention.") }).kind).toBe("needsInputs");
+    expect(runAllOutcome({ error: new ApiError(502, "AI could not write the inputs (x)") })).toEqual({
+      kind: "aiUnavailable",
+      message: "AI could not write the inputs (x)",
+    });
+    expect(runAllOutcome({ error: new ApiError(500, "boom") }).kind).toBe("error");
+  });
+});

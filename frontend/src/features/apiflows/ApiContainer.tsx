@@ -8,20 +8,23 @@ import { GroupMeta } from "@/features/scenarios/GroupMeta";
 import { PageHeader } from "@/features/shell/PageHeader";
 import { ApiError, errorMessage } from "@/lib/api";
 import { useT } from "@/lib/i18n";
-import { Alert, ApiFlowsIcon, Button, Dialog, EmptyState, PencilIcon, PlusIcon, Spinner, buttonClasses } from "@/ui";
+import { Alert, ApiFlowsIcon, Button, Dialog, EmptyState, PencilIcon, PlayIcon, PlusIcon, Spinner, buttonClasses } from "@/ui";
 import { ApiConnection } from "./ApiConnection";
 import { newFlowHref } from "./ApiTable";
 import { EditConnectionDialog } from "./EditConnectionDialog";
 import { FlowEditorContainer } from "./FlowEditorContainer";
 import { FlowLibraryRail } from "./FlowLibraryRail";
 import { useApi, useApiFlows, useDeleteApi } from "./queries";
+import { RunAllDialog } from "./RunAllDialog";
+import { RunFormContainer } from "./RunForm";
+import { RunViewContainer } from "./RunViewContainer";
 import type { Api, Flow } from "./types";
 import { useApiEdits } from "./use-api-edits";
 
 /**
  * `/apis/[id]`: the API's name, description, connection and tags (each edited in place) over its
- * flows in the sidebar; beside them the flow editor (`?flow=<id>`, or `?new=flow`), or until one
- * is picked, a placeholder.
+ * flows in the sidebar; beside them the flow editor (`?flow=<id>`, or `?new=flow`), a flow's run
+ * form (`&run=new`) or one of its runs (`&run=<runId>`), or until one is picked, a placeholder.
  */
 export function ApiContainer({ apiId }: { apiId: string }) {
   const t = useT();
@@ -61,11 +64,13 @@ function ApiPage({ api }: { api: Api }) {
   const params = useSearchParams();
   const flowId = params.get("flow") ?? undefined;
   const creating = params.get("new") === "flow";
+  const runId = params.get("run") ?? undefined;
   const flows = useApiFlows(api.id);
   const remove = useDeleteApi();
   const edits = useApiEdits(api.id);
   const [deleting, setDeleting] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [runningAll, setRunningAll] = useState(false);
 
   async function confirmDelete() {
     try {
@@ -105,6 +110,11 @@ function ApiPage({ api }: { api: Api }) {
         }
         actions={
           <>
+            {api.flowCount > 0 ? (
+              <Button variant="secondary" icon={<PlayIcon size={14} />} onClick={() => setRunningAll(true)}>
+                {t("runAll.button")}
+              </Button>
+            ) : null}
             <Button variant="secondary" icon={<PencilIcon size={14} />} onClick={() => setEditing(true)}>
               {t("apis.editConnection")}
             </Button>
@@ -123,10 +133,11 @@ function ApiPage({ api }: { api: Api }) {
           failed={flows.isError && flows.data === undefined}
           selectedId={creating ? undefined : flowId}
         />
-        <FlowPane api={api} flows={flows.data} failed={flows.isError && flows.data === undefined} flowId={flowId} creating={creating} />
+        <FlowPane api={api} flows={flows.data} failed={flows.isError && flows.data === undefined} flowId={flowId} runId={runId} creating={creating} />
       </div>
 
       {editing ? <EditConnectionDialog api={api} onClose={() => setEditing(false)} /> : null}
+      {runningAll ? <RunAllDialog api={api} onClose={() => setRunningAll(false)} /> : null}
       <Dialog
         open={deleting}
         title={t("common.deleteTitle", { name: api.name })}
@@ -149,14 +160,16 @@ function ApiPage({ api }: { api: Api }) {
   );
 }
 
-type FlowPaneProps = { api: Api; flows: Flow[] | undefined; failed: boolean; flowId?: string; creating: boolean };
+type FlowPaneProps = { api: Api; flows: Flow[] | undefined; failed: boolean; flowId?: string; runId?: string; creating: boolean };
 
-/** The main area: a new flow, the selected flow, or a placeholder until one is picked. */
-function FlowPane({ api, flows, failed, flowId, creating }: FlowPaneProps) {
+/** The main area: a new flow, the selected flow, its run form or one of its runs, or a placeholder until one is picked. */
+function FlowPane({ api, flows, failed, flowId, runId, creating }: FlowPaneProps) {
   const t = useT();
   if (creating) return <FlowEditorContainer key="new" api={api} />;
   if (flowId !== undefined) {
     const flow = flows?.find((item) => item.id === flowId);
+    if (flow && runId === "new") return <RunFormContainer key={`${flow.id}-run`} api={api} flow={flow} />;
+    if (flow && runId !== undefined) return <RunViewContainer key={runId} api={api} flow={flow} runId={runId} />;
     if (flow) return <FlowEditorContainer key={flow.id} api={api} flow={flow} />;
     if (flows === undefined && !failed) return <Spinner label={t("flows.loading")} />;
     if (flows !== undefined) {
