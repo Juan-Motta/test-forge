@@ -7,14 +7,16 @@ holds a secret: whoever reads it fills them in again only on purpose (see `curl`
 """
 
 import asyncio
+import contextlib
 import json
 import math
+import re
 import shlex
 import time
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
-from urllib.parse import quote, urlencode
+from urllib.parse import quote, quote_plus, urlencode
 
 import httpx
 
@@ -90,13 +92,16 @@ def _typed(item: FlowInput, raw: Any, loc: list[Any]) -> Any:
             raise FlowInputError([_err(loc, "must be a number")])
         if isinstance(raw, int) or (isinstance(raw, float) and math.isfinite(raw)):
             return raw
+        text = str(raw).strip()
+        if re.fullmatch(r"[+-]?\d+", text):
+            return int(text)  # exact, however large
         try:
-            number = float(str(raw).strip())
+            number = float(text)
         except (ValueError, OverflowError):
             raise FlowInputError([_err(loc, "must be a number")]) from None
         if not math.isfinite(number):
             raise FlowInputError([_err(loc, "must be a finite number")])
-        return int(number) if number.is_integer() and "." not in str(raw) else number
+        return number
     if item.type is InputType.BOOLEAN:
         if isinstance(raw, bool):
             return raw
@@ -222,11 +227,14 @@ class _MissingValue(Exception):
     pass
 
 
+PATH_SAFE = "/:@!$&'()*+,;=-._~%"
+
+
 def _url(base_url: str, path: str, query: list[tuple[str, str]], *, keep: bool) -> str:
     """Placeholders may put any text in the path: it stays a path (no new query or fragment).
     With `keep`, `{{…}}` placeholders stay readable so `curl` can fill them in later."""
     braces = "{}" if keep else ""
-    url = base_url.rstrip("/") + quote(path, safe="/:@!$&'()*+,;=-._~%" + braces)
+    url = base_url.rstrip("/") + quote(path, safe=PATH_SAFE + braces)
     return url + ("?" + urlencode(query, safe=braces) if query else "")
 
 
@@ -264,7 +272,9 @@ def _read_path(response: dict[str, Any], path: str) -> tuple[bool, Any]:
         return False, None
     current: Any = response["body"]
     for i, part in enumerate(parts[1:], start=1):
-        if part == "length" and i == len(parts) - 1 and isinstance(current, list | str | dict):
+        is_last = i == len(parts) - 1
+        has_key = isinstance(current, dict) and part in current
+        if part == "length" and is_last and not has_key and isinstance(current, list | str | dict):
             return True, len(current)
         if isinstance(current, dict) and part in current:
             current = current[part]
@@ -497,13 +507,26 @@ def preview_requests(
     return [_request(step, base_url, headers, ctx, keep=True) for step in steps]
 
 
+def preview_inputs(declared: list[FlowInput], given: Mapping[str, Any]) -> dict[str, Any]:
+    """Given values (or defaults) in their input's type; what does not fit stays a placeholder."""
+    values: dict[str, Any] = {}
+    for item in declared:
+        raw = given.get(item.name)
+        raw = item.default if raw in (None, "") else raw
+        if raw in (None, ""):
+            continue
+        with contextlib.suppress(FlowInputError):
+            values[item.name] = _typed(item, raw, [])
+    return values
+
+
 def curl(
     request: dict[str, Any], secrets: Mapping[str, str] | None, hints: Mapping[str, str]
 ) -> str:
     """A shell command for a recorded request: secrets filled in when `secrets` is given,
     otherwise shown as their masked hints."""
 
-    def fill(value: Any, *, in_url: bool = False) -> Any:
+    def fill(value: Any, *, encode: Callable[[str], str] | None = None) -> Any:
         if isinstance(value, str):
 
             def replace(match: Any) -> str:
@@ -511,8 +534,7 @@ def curl(
                     return match.group(0)
                 name = match.group(2)
                 if secrets is not None and name in secrets:
-                    # In a URL the value is encoded as it was when the request was sent.
-                    return quote(secrets[name], safe="") if in_url else secrets[name]
+                    return encode(secrets[name]) if encode else secrets[name]
                 return hints.get(name, "••••")
 
             return PLACEHOLDER.sub(replace, value)
@@ -522,7 +544,12 @@ def curl(
             return {key: fill(item) for key, item in value.items()}
         return value
 
-    parts = ["curl", "-X", request["method"], shlex.quote(fill(request["url"], in_url=True))]
+    # In a URL a secret is encoded as it was when the request was sent: like the path, or like
+    # a query value. -g keeps curl from reading braces in the URL as glob patterns.
+    path, mark, query = request["url"].partition("?")
+    url = fill(path, encode=lambda v: quote(v, safe=PATH_SAFE)) + mark
+    url += fill(query, encode=lambda v: quote_plus(v))
+    parts = ["curl", "-g", "-X", request["method"], shlex.quote(url)]
     lines = [" ".join(parts)]
     for header in request["headers"]:
         lines.append("-H " + shlex.quote(f"{header['name']}: {fill(header['value'])}"))

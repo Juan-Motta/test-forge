@@ -21,6 +21,7 @@ from voice_eval.modules.apiflows.runner import (
     Generator,
     curl,
     needs_generation,
+    preview_inputs,
     preview_requests,
     resolve_inputs,
     run_flow,
@@ -220,8 +221,7 @@ async def flow_curls(
     domain = await service.get_flow(db, flow_id)
     flow = await db.get(FlowRecord, flow_id)
     assert flow is not None
-    values = {item.name: item.default for item in domain.inputs if item.default not in (None, "")}
-    values.update({k: v for k, v in inputs.items() if v not in (None, "")})
+    values = preview_inputs(domain.inputs, inputs)
     requests = preview_requests(
         base_url=flow.api.base_url,
         headers=[Header.model_validate(h) for h in flow.api.headers],

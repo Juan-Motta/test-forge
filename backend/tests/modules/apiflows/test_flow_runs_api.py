@@ -244,7 +244,7 @@ async def test_a_run_step_as_curl_masked_or_revealed(user_client, shop):
     url = f"/api/flow-runs/{result['id']}/steps/0/curl"
     masked = (await user_client.get(url)).json()["curl"]
     assert masked == (
-        "curl -X POST https://api.shop.example/v1/auth/token \\\n"
+        "curl -g -X POST https://api.shop.example/v1/auth/token \\\n"
         "  -H 'Accept: application/json' \\\n"
         "  -H 'x-api-key: ••••cdef' \\\n"
         "  -H 'Content-Type: application/json' \\\n"
@@ -306,8 +306,8 @@ async def test_secrets_in_the_path_and_query_are_masked_or_revealed_in_curl(user
     masked = (await user_client.get(url)).json()["curl"]
     assert "/keys/••••?key=••••" in masked
     revealed = (await user_client.get(url, params={"reveal": "true"})).json()["curl"]
-    encoded = "k%26y%2F1%202"
-    assert f"/keys/{encoded}?key={encoded}" in revealed
+    # The revealed command calls the very URL that was sent.
+    assert f"'{sent.url}'" in revealed
     preview = (await user_client.get(f"/api/flows/{flow['id']}/curl")).json()["steps"][0]
     assert "/keys/••••?key=••••" in preview["curl"]
 
@@ -415,3 +415,30 @@ async def test_accepts_a_huge_integer_input(user_client, shop):
     response = await run(user_client, flow["id"], inputs={"query": "x", "max_price": 10**400})
     assert response.status_code == 201, response.text
     assert shop.requests[1].url.params["max"] == str(10**400)
+
+
+async def test_integers_given_as_text_stay_exact(user_client, shop):
+    api = await make_api(user_client)
+    flow = await make_flow(user_client, api["id"])
+    big = "12345678901234567890"
+    result = (await run(user_client, flow["id"], inputs={"query": "x", "max_price": big})).json()
+    assert result["inputs"][1]["value"] == int(big)
+    assert shop.requests[1].url.params["max"] == big
+
+
+async def test_a_field_named_length_is_read_as_a_field(user_client, shop):
+    shop.items = {"length": 7}
+    api = await make_api(user_client)
+    steps = copy.deepcopy(STEPS)
+    steps[1]["checks"] = [{"type": "path", "path": "body.items.length", "op": "==", "value": 7}]
+    flow = await make_flow(user_client, api["id"], steps=steps)
+    result = (await run(user_client, flow["id"], inputs={"query": "x"})).json()
+    assert result["steps"][1]["checks"][0]["passed"] is True
+
+
+async def test_a_flow_preview_types_its_inputs_like_a_run(user_client):
+    api = await make_api(user_client)
+    steps = [{"method": "POST", "path": "/orders", "body": {"max": "{{input.max_price}}"}}]
+    flow = await make_flow(user_client, api["id"], inputs=INPUTS[1:], steps=steps)
+    preview = (await user_client.get(f"/api/flows/{flow['id']}/curl")).json()["steps"][0]
+    assert """--data-raw '{"max": 120}'""" in preview["curl"]
