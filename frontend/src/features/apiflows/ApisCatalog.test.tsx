@@ -277,7 +277,7 @@ describe("API connections", () => {
     expect(within(card("Headers")).queryByText("clientSecret")).not.toBeInTheDocument();
   });
 
-  it("turns a secret header plain: sends the typed value and removes its secret", async () => {
+  it("turns a secret header plain: sends the typed value and keeps its secret", async () => {
     const state = setup();
     window.history.replaceState(null, "", "/apis?api=api-shop");
     const { user } = await renderCatalog();
@@ -294,13 +294,12 @@ describe("API connections", () => {
           { name: "Accept", value: "application/json" },
           { name: "x-api-key", value: "plain-key" },
         ],
-        secrets: { x_api_key: null },
       },
     ]);
     expect(within(card("Headers")).getByRole("textbox", { name: "Header value 2" })).toHaveValue("plain-key");
   });
 
-  it("removes a secret header with its secret", async () => {
+  it("removes a secret header and keeps its secret as a variable", async () => {
     const state = setup();
     window.history.replaceState(null, "", "/apis?api=api-shop");
     const { user } = await renderCatalog();
@@ -309,7 +308,7 @@ describe("API connections", () => {
     await user.click(screen.getByRole("button", { name: "Save changes" }));
 
     expect(await screen.findByText("Saved Shop API.")).toBeInTheDocument();
-    expect(patches(state)).toEqual([{ headers: [{ name: "Accept", value: "application/json" }], secrets: { x_api_key: null } }]);
+    expect(patches(state)).toEqual([{ headers: [{ name: "Accept", value: "application/json" }] }]);
   });
 
   it("names a new secret header's secret after the header, with _2 when that name is taken", async () => {

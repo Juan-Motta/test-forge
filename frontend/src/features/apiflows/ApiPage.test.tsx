@@ -234,13 +234,13 @@ describe("API page", () => {
           { name: "x-api-key", value: "plain-key" },
           { name: "X-Client-Id", value: "{{secret.x_client_id}}" },
         ],
-        secrets: { x_api_key: null, x_client_id: "cid" },
+        secrets: { x_client_id: "cid" },
       },
     ]);
     expect(secretReads(state)).toHaveLength(1);
   });
 
-  it("removes a secret header with its secret from the dialog", async () => {
+  it("removes a secret header from the dialog, keeping its secret", async () => {
     const keyed = apiFixture({
       headers: [{ name: "x-api-key", value: "{{secret.x_api_key}}" }],
       secrets: [{ name: "x_api_key", hint: "••••7890" }],
@@ -254,7 +254,7 @@ describe("API page", () => {
     await user.click(within(dialog).getByRole("button", { name: "Save connection" }));
 
     await waitFor(() => expect(patches(state)).toHaveLength(1));
-    expect(patches(state)).toEqual([{ headers: [], secrets: { x_api_key: null } }]);
+    expect(patches(state)).toEqual([{ headers: [] }]);
   });
 
   it("sends headers only when they changed, and nothing when nothing changed", async () => {

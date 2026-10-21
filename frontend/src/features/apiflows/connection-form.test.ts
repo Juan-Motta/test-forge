@@ -53,11 +53,10 @@ describe("connectionPayload", () => {
     expect(connectionPayload(stored, form())).toEqual({ headers: stored.headers, secrets: {} });
   });
 
-  it("drops a removed header's secret only when the header had created it", () => {
+  it("never deletes a removed header's secret: a step may still use it, and it stays as a variable", () => {
     const rows = form();
     rows.headers = rows.headers.filter((row) => row.name === "Authorization");
-    // apiKey was not named after X-Key: a step may still use it, so it stays.
-    expect(connectionPayload(stored, rows).secrets).toEqual({ x_api_key: null });
+    expect(connectionPayload(stored, rows).secrets).toEqual({});
   });
 
   it("keeps the value typed for a secret variable named like a removed header's secret", () => {

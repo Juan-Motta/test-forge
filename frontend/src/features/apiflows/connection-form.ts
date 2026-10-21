@@ -28,7 +28,6 @@ export function rowKeys(prefix: string) {
 
 const MAX_NAME = 40;
 const EXACT_SECRET = /^\{\{secret\.([A-Za-z_][A-Za-z0-9_]{0,39})\}\}$/;
-const SECRET_REFS = /\{\{\s*secret\.([A-Za-z_][A-Za-z0-9_]*)\s*\}\}/g;
 
 /** The header value that sends the secret `name`. */
 export const secretRef = (name: string) => `{{secret.${name}}}`;
@@ -47,15 +46,6 @@ export function secretNameFor(header: string, taken: ReadonlySet<string> = new S
     name = base.slice(0, MAX_NAME - suffix.length) + suffix;
   }
   return name;
-}
-
-/** Whether `secret` is the one a secret header named `header` would have created. */
-function derivedFrom(header: string, secret: string): boolean {
-  const base = secretNameFor(header);
-  if (secret === base) return true;
-  const root = secret.replace(/_\d+$/, "");
-  if (root === secret) return false;
-  return root === base || (secret.length === MAX_NAME && base.startsWith(root));
 }
 
 /** The stored secrets a header sends as its whole value (`{{secret.name}}`): shown as secret headers. */
@@ -96,10 +86,9 @@ const filledHeaders = (rows: HeaderRow[]) =>
 
 /**
  * The headers and secret changes a connection form sends. A secret header sends its secret's
- * reference, plus its value when typed. A secret a stored secret header held is removed when no
- * header sends it any more and the header had created it (its name derives from the header's):
- * a secret named otherwise may be what a step's body uses, so it stays, as a secret variable.
- * Advanced secret variables send a typed value, or `null` when removed.
+ * reference, plus its value when typed. Removing a secret header (or turning it plain) never
+ * deletes its secret, since a step's body, query or path may still use it: it stays, listed as a
+ * secret variable. Advanced secret variables send a typed value, or `null` when removed.
  */
 export function connectionPayload(
   stored: StoredConnection,
@@ -119,15 +108,6 @@ export function connectionPayload(
     if (row.value) secrets[secret] = row.value;
     return { name, value: secretRef(secret) };
   });
-  const sent = new Set(headers.flatMap((header) => [...header.value.matchAll(SECRET_REFS)].map((match) => match[1])));
-  for (const header of stored.headers) {
-    const secret = EXACT_SECRET.exec(header.value)?.[1];
-    // A value typed for the same name (a header's key moved to a secret variable) wins.
-    const retyped = typeof secrets[secret ?? ""] === "string";
-    if (secret !== undefined && bound.has(secret) && !sent.has(secret) && !retyped && derivedFrom(header.name, secret)) {
-      secrets[secret] = null;
-    }
-  }
   return { headers, secrets };
 }
 
