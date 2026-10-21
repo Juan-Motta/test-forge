@@ -183,14 +183,25 @@ const refuse = (detail: ReturnType<typeof issue>[]) => HttpResponse.json({ detai
  * Like the backend: a name is a variable or a secret, never both (checked once every change of
  * the request is applied), and an API holds at most 30 variables and 10 secrets.
  */
-function connectionProblem(variables: Record<string, string>, secrets: Record<string, string>) {
-  if (Object.keys(secrets).length > MAX_SECRETS) return refuse([issue(["secrets"], `an API holds at most ${MAX_SECRETS} secrets`)]);
+function connectionProblem(
+  variables: Record<string, string>,
+  secrets: Record<string, string>,
+  sentVariables: Record<string, unknown> = {},
+) {
+  if (Object.keys(secrets).length > MAX_SECRETS) return refuse([issue(["body", "secrets"], `an API holds at most ${MAX_SECRETS} secrets`)]);
   if (Object.keys(variables).length > MAX_VARIABLES) {
-    return refuse([issue(["variables"], `an API holds at most ${MAX_VARIABLES} variables`)]);
+    return refuse([issue(["body", "variables"], `an API holds at most ${MAX_VARIABLES} variables`)]);
   }
+  // The error points at the field the request set: a new secret named like a variable is the secret's.
   const both = Object.keys(variables).filter((name) => name in secrets).sort();
   return both.length > 0
-    ? refuse(both.map((name) => issue(["body", "variables", name], `'${name}' is already a secret of this API`)))
+    ? refuse(
+        both.map((name) =>
+          name in sentVariables
+            ? issue(["body", "variables", name], `'${name}' is already a secret of this API`)
+            : issue(["body", "secrets", name], `'${name}' is already a variable of this API`),
+        ),
+      )
     : undefined;
 }
 
@@ -316,7 +327,7 @@ export function mockApisApi(
       if (refused) return refused;
       const variables = (body.variables as Record<string, string> | undefined) ?? {};
       const secrets = (body.secrets as Record<string, string> | undefined) ?? {};
-      const clash = connectionProblem(variables, secrets);
+      const clash = connectionProblem(variables, secrets, variables);
       if (clash) return clash;
       const now = new Date().toISOString();
       const item = apiFixture({
@@ -351,7 +362,7 @@ export function mockApisApi(
       // Secrets, then variables, then the checks, as one change: nothing is kept when refused.
       const nextSecrets = applied(state.secrets[id] ?? {}, secrets);
       const nextVariables = applied(state.items[index].variables, variables);
-      const problem = connectionProblem(nextVariables, nextSecrets);
+      const problem = connectionProblem(nextVariables, nextSecrets, variables ?? {});
       if (problem) return problem;
       state.secrets[id] = nextSecrets;
       state.items[index] = { ...state.items[index], ...rest, variables: nextVariables, updatedAt: new Date().toISOString() };

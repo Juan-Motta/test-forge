@@ -94,4 +94,9 @@ describe("variableErrors", () => {
       section: "an API holds at most 30 variables",
     });
   });
+
+  it("puts a clash reported on secrets on the row of that name too", () => {
+    const errors = { "secrets.tenant_id": "'tenant_id' is already a variable of this API" };
+    expect(variableErrors(errors, rows()).byName).toEqual({ tenant_id: "'tenant_id' is already a variable of this API" });
+  });
 });
