@@ -42,7 +42,8 @@ export function ApisContainer() {
   const formId = useId();
   const [requestedId, setRequestedId] = useState<string | null>(apiFromAddress);
   const [creating, setCreating] = useState(false);
-  const [deleting, setDeleting] = useState(false);
+  // A snapshot of the API being deleted, so the dialog keeps its name while the list refetches.
+  const [deleting, setDeleting] = useState<Api | undefined>(undefined);
   // Persistent polite live region: announces saves that otherwise only change the form.
   const [notice, setNotice] = useState("");
   // The open API's form holds unsaved edits: switching APIs (or leaving the page) asks first.
@@ -85,7 +86,7 @@ export function ApisContainer() {
 
   /** After a delete, open the API that took its place in the rail (the next one, else the previous). */
   function onDeleted(api: Api) {
-    setDeleting(false);
+    setDeleting(undefined);
     setNotice(t("common.deleted", { name: api.name }));
     select(deleteNext.current);
   }
@@ -182,7 +183,7 @@ export function ApisContainer() {
                 const index = list.findIndex((item) => item.id === selected.id);
                 const rest = list.filter((item) => item.id !== selected.id);
                 deleteNext.current = rest[Math.min(Math.max(index, 0), rest.length - 1)]?.id ?? null;
-                setDeleting(true);
+                setDeleting(selected);
               }}
             >
               {t("common.delete")}
@@ -219,7 +220,7 @@ export function ApisContainer() {
       {header ?? <PageHeader title={t("apis.connectionsTitle")} description={t("apis.description")} actions={addButton} />}
       {status}
       {body}
-      <DeleteApiDialog api={deleting ? selected : undefined} onClose={() => setDeleting(false)} onDeleted={onDeleted} />
+      <DeleteApiDialog api={deleting} onClose={() => setDeleting(undefined)} onDeleted={onDeleted} />
     </>
   );
 }

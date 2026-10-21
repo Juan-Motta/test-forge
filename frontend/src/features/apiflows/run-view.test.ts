@@ -110,6 +110,13 @@ describe("JSON bodies", () => {
       text: '{\n  "a": {\n    "b": "x, y: {z}"\n  },\n  "c": [],\n  "d": {},\n  "e": [\n    {\n      "f": "g\\"h"\n    }\n  ]\n… [5 more characters]',
     });
     expect(prettyBody("plain words")).toEqual({ kind: "text", text: "plain words" });
+    // Valid JSON text is indented as written: a big id and 1.0 stay exactly so.
+    expect(prettyBody('{"id": 12345678901234567890, "v": 1.0}')).toEqual({
+      kind: "json",
+      text: '{\n  "id": 12345678901234567890,\n  "v": 1.0\n}',
+    });
+    // A cut body the backend already indented is shown as stored.
+    expect(prettyBody('{\n  "a": 1,\n… [9 more characters]')).toEqual({ kind: "json", text: '{\n  "a": 1,\n… [9 more characters]' });
     // Text that only looks like JSON stays exactly as received.
     expect(prettyBody("{not json, a: b}")).toEqual({ kind: "text", text: "{not json, a: b}" });
   });

@@ -39,7 +39,9 @@ export function prettyBody(body: unknown): { kind: "json" | "text"; text: string
   const trimmed = text.trimStart();
   if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
     try {
-      return { kind: "json", text: JSON.stringify(JSON.parse(text), null, 2) };
+      JSON.parse(text);
+      // Indent the text as received rather than re-encoding it: big ids and number forms stay.
+      return { kind: "json", text: text.includes("\n") ? text : reindentJson(text) };
     } catch {
       // A body cut short to be stored is still JSON to read, just not whole: indent what is there.
       // Only a body the backend cut short is re-indented; other text stays exactly as received.
