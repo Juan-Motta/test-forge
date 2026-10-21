@@ -393,3 +393,35 @@ async def test_flows_may_use_variables_and_secrets_as_var(user_client):
     )
     assert unknown.status_code == 422
     assert unknown.json()["detail"][0]["msg"] == "the API has no variable named 'nope'"
+
+
+async def test_variable_and_secret_names_never_overlap_and_variables_are_capped(user_client):
+    both = await user_client.post("/api/apis", json={**API, "variables": {"api_key": "x"}})
+    assert both.status_code == 422
+    assert both.json()["detail"][0]["loc"] == ["body", "variables", "api_key"]
+    api = await make_api(user_client, variables={"tenant": "acme"})
+    secret_clash = await user_client.patch(
+        f"/api/apis/{api['id']}", json={"secrets": {"tenant": "s"}}
+    )
+    assert secret_clash.status_code == 422
+    assert secret_clash.json()["detail"] == [
+        {
+            "type": "value_error",
+            "loc": ["body", "secrets", "tenant"],
+            "msg": "'tenant' is already a variable of this API",
+        }
+    ]
+    # Moving a name from variable to secret in one request is fine.
+    moved = await user_client.patch(
+        f"/api/apis/{api['id']}",
+        json={"variables": {"tenant": None}, "secrets": {"tenant": "acme-secret"}},
+    )
+    assert moved.status_code == 200, moved.text
+    assert moved.json()["variables"] == {}
+    full = {f"v{n}": "x" for n in range(30)}
+    assert (
+        await user_client.patch(f"/api/apis/{api['id']}", json={"variables": full})
+    ).status_code == 200
+    over = await user_client.patch(f"/api/apis/{api['id']}", json={"variables": {"one_more": "x"}})
+    assert over.status_code == 422
+    assert over.json()["detail"][0]["msg"] == "an API holds at most 30 variables"

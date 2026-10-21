@@ -71,20 +71,19 @@ def _api(record: ApiRecord, flow_count: int = 0, agents: list[AgentRef] | None =
     )
 
 
-def _clash(variables: dict[str, Any], secrets: dict[str, Any]) -> None:
-    """A name is a variable or a secret, never both: `{{var.x}}` must mean one value."""
+def _clash(variables: dict[str, Any], secrets: dict[str, Any], sent: dict[str, Any]) -> None:
+    """A name is a variable or a secret, never both: `{{var.x}}` must mean one value. The error
+    points at the field the request set: a new secret named like a variable is the secret's."""
     both = sorted(set(variables) & set(secrets))
-    if both:
-        raise InvalidFlowInput(
-            [
-                {
-                    "type": "value_error",
-                    "loc": ["variables", name],
-                    "msg": f"{name!r} is already a secret of this API",
-                }
-                for name in both
-            ]
-        )
+    errors = []
+    for name in both:
+        if name in (sent.get("variables") or {}):
+            loc, msg = ["variables", name], f"{name!r} is already a secret of this API"
+        else:
+            loc, msg = ["secrets", name], f"{name!r} is already a variable of this API"
+        errors.append({"type": "value_error", "loc": loc, "msg": msg})
+    if errors:
+        raise InvalidFlowInput(errors)
 
 
 async def _with_counts(db: AsyncSession, records: list[ApiRecord]) -> list[Api]:
@@ -174,7 +173,7 @@ async def create_api(
         variables=dict(fields.get("variables") or {}),
         created_by=created_by,
     )
-    _clash(record.variables, fields.get("secrets") or {})
+    _clash(record.variables, fields.get("secrets") or {}, fields)
     _store_secrets(box, record, fields.get("secrets") or {})
     db.add(record)
     await _commit_api(db)
@@ -229,7 +228,7 @@ async def update_api(
                 ]
             )
         record.variables = variables
-    _clash(record.variables, record.secret_hints)
+    _clash(record.variables, record.secret_hints, changes)
     record.updated_at = func.now()
     await _commit_api(db)
     return await get_api(db, api_id)
