@@ -60,6 +60,13 @@ describe("connectionPayload", () => {
     expect(connectionPayload(stored, rows).secrets).toEqual({ x_api_key: null });
   });
 
+  it("keeps the value typed for a secret variable named like a removed header's secret", () => {
+    const rows = form();
+    rows.headers = rows.headers.filter((row) => row.name !== "x-api-key");
+    rows.secrets = [...rows.secrets, { key: "new", name: "x_api_key", value: "moved-to-body" }];
+    expect(connectionPayload(stored, rows).secrets).toEqual({ x_api_key: "moved-to-body" });
+  });
+
   it("keeps a secret another header still sends", () => {
     const rows = form();
     rows.headers = rows.headers.map((row) =>

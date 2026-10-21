@@ -122,7 +122,9 @@ export function connectionPayload(
   const sent = new Set(headers.flatMap((header) => [...header.value.matchAll(SECRET_REFS)].map((match) => match[1])));
   for (const header of stored.headers) {
     const secret = EXACT_SECRET.exec(header.value)?.[1];
-    if (secret !== undefined && bound.has(secret) && !sent.has(secret) && derivedFrom(header.name, secret)) {
+    // A value typed for the same name (a header's key moved to a secret variable) wins.
+    const retyped = typeof secrets[secret ?? ""] === "string";
+    if (secret !== undefined && bound.has(secret) && !sent.has(secret) && !retyped && derivedFrom(header.name, secret)) {
       secrets[secret] = null;
     }
   }
