@@ -5,6 +5,7 @@ import { ApiError, errorMessage } from "@/lib/api";
 import { localErrorMessage, useT } from "@/lib/i18n";
 import { Alert, ApiFlowsIcon, Button, EmptyState, Spinner, useClipboard } from "@/ui";
 import { stepCurl } from "./api";
+import { flowChain } from "./chain";
 import { flowHref, runHref } from "./links";
 import { useFlowRun } from "./queries";
 import { defaultStepIndex } from "./run-view";
@@ -74,6 +75,7 @@ function StoredRun({ api, flow, run }: { api: Pick<Api, "id" | "secrets">; flow:
       editHref={flowHref(api, flow.id)}
       againHref={runHref(api, flow.id, "new")}
       stepPaths={flow.steps.map((step) => step.path)}
+      chain={flowChain(flow.steps)}
       selected={selected}
       onSelect={(index) => {
         setSelected(index);

@@ -23,6 +23,7 @@ import {
   focusRing,
   type BadgeTone,
 } from "@/ui";
+import type { ChainLink } from "./chain";
 import { MethodChip } from "./MethodChip";
 import {
   checkRule,
@@ -67,6 +68,8 @@ type RunViewProps = {
   againHref: string;
   /** The path each flow step was written with, for steps that sent nothing. */
   stepPaths: string[];
+  /** Which saved values carry from one step to the next (from the flow's steps). */
+  chain: ChainLink[];
   selected: number;
   onSelect: (index: number) => void;
   secrets: SecretView;
@@ -135,6 +138,7 @@ export function RunView(props: RunViewProps) {
       </section>
 
       <StepsStrip run={run} stepPaths={props.stepPaths} selected={selected} onSelect={onSelect} />
+      {props.chain.length > 0 ? <ChainPanel run={run} chain={props.chain} secrets={secrets} onSelect={onSelect} /> : null}
 
       {step ? (
         <section aria-label={t("flowRuns.stepDetails", { n: step.index + 1, title: step.title })} className="flex flex-col gap-4">
@@ -169,6 +173,75 @@ export function RunView(props: RunViewProps) {
         </section>
       ) : null}
     </div>
+  );
+}
+
+/** What ties the steps together: each value a step saves from its response, its value in this
+ * run, and the later steps that send it. */
+function ChainPanel({
+  run,
+  chain,
+  secrets,
+  onSelect,
+}: {
+  run: FlowRun;
+  chain: ChainLink[];
+  secrets: SecretView;
+  onSelect: (index: number) => void;
+}) {
+  const t = useT();
+  const stepLink = (index: number, detail: string) => (
+    <button
+      type="button"
+      onClick={() => onSelect(index)}
+      className={cn("rounded font-sans text-agent-fg underline-offset-2 hover:underline", focusRing)}
+    >
+      {t("flowRuns.chain.step", { n: index + 1 })}
+      <span className="font-mono text-muted"> · {detail}</span>
+    </button>
+  );
+  return (
+    <Panel title={t("flowRuns.chain.title")}>
+      <p className="-mt-2 text-xs text-muted">{t("flowRuns.chain.hint")}</p>
+      <ul aria-label={t("flowRuns.chain.title")} className="flex flex-col gap-2">
+        {chain.map((link) => {
+          const saved = run.steps[link.from]?.saved ?? {};
+          const has = Object.prototype.hasOwnProperty.call(saved, link.name);
+          return (
+            <li
+              key={link.name}
+              className="flex flex-col gap-1.5 rounded-lg border border-line-soft bg-field px-3 py-2 text-xs sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-3"
+            >
+              <span className="flex min-w-0 items-center gap-2 font-mono">
+                <span className="font-semibold text-fg">{link.name}</span>
+                {has ? (
+                  <span className="max-w-[28ch] truncate text-success-fg" title={textOf(saved[link.name])}>
+                    = <SecretText text={textOf(saved[link.name])} {...secrets} />
+                  </span>
+                ) : (
+                  <span className="text-dim">{t("flowRuns.chain.notSaved")}</span>
+                )}
+              </span>
+              <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                {stepLink(link.from, link.path)}
+                <span aria-hidden="true" className="text-dim">
+                  →
+                </span>
+                {link.uses.length === 0 ? (
+                  <span className="text-dim">{t("flowRuns.chain.unused")}</span>
+                ) : (
+                  link.uses.map((use, index) => (
+                    <span key={index} className="inline-flex items-center gap-1">
+                      {stepLink(use.step, use.where === "path" ? t("flowRuns.chain.inPath") : `${use.where} ${use.name}`)}
+                    </span>
+                  ))
+                )}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </Panel>
   );
 }
 
