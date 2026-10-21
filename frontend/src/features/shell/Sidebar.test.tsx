@@ -28,6 +28,8 @@ describe("activeHref", () => {
     ["/", "/"],
     ["/runs", "/runs"],
     ["/runs/R-2291", "/runs"],
+    ["/runs/R-2291/report", "/runs"],
+    ["/flow-runs", "/flow-runs"],
     ["/settings", "/settings"],
     ["/settings/connections", "/settings"],
     ["/settings/connections/abc", "/settings"],
@@ -57,21 +59,33 @@ describe("Sidebar", () => {
     const nav = renderSidebar("/");
     const hrefs = nav.getAllByRole("link").map((link) => link.getAttribute("href"));
 
-    expect(hrefs.slice(0, 8)).toEqual(["/", "/live", "/runs", "/agents", "/scenarios", "/apis", "/flows", "/settings"]);
+    expect(hrefs.slice(0, 9)).toEqual([
+      "/",
+      "/live",
+      "/agents",
+      "/scenarios",
+      "/runs",
+      "/apis",
+      "/flows",
+      "/flow-runs",
+      "/settings",
+    ]);
+    // Runs & reports is no longer a section of its own.
+    expect(nav.queryByRole("link", { name: "Runs & reports" })).not.toBeInTheDocument();
     const agents = within(nav.getByRole("list", { name: "Agents" }));
-    expect(agents.getAllByRole("link").map((link) => link.textContent)).toEqual(["Connections", "Scenarios"]);
+    expect(agents.getAllByRole("link").map((link) => link.textContent)).toEqual(["Connections", "Scenarios", "Runs"]);
     const api = within(nav.getByRole("list", { name: "API" }));
-    expect(api.getAllByRole("link").map((link) => link.textContent)).toEqual(["Connections", "Flows"]);
+    expect(api.getAllByRole("link").map((link) => link.textContent)).toEqual(["Connections", "Flows", "Runs"]);
     expect(nav.queryByRole("link", { name: "API keys" })).not.toBeInTheDocument();
     expect(hrefs).not.toContain("/settings/connections");
   });
 
   it("marks only the current section with aria-current=page", () => {
-    const nav = renderSidebar("/runs");
+    const nav = renderSidebar("/live");
 
-    expect(nav.getByRole("link", { name: "Runs & reports" })).toHaveAttribute("aria-current", "page");
+    expect(nav.getByRole("link", { name: "Live sessions" })).toHaveAttribute("aria-current", "page");
     for (const link of nav.getAllByRole("link")) {
-      if (link.getAttribute("href") !== "/runs") expect(link).not.toHaveAttribute("aria-current");
+      if (link.getAttribute("href") !== "/live") expect(link).not.toHaveAttribute("aria-current");
     }
   });
 
@@ -82,6 +96,9 @@ describe("Sidebar", () => {
     ["/apis", "API", "/apis"],
     ["/apis/api-shop", "API", "/apis"],
     ["/flows", "API", "/flows"],
+    ["/runs", "Agents", "/runs"],
+    ["/runs/r-1", "Agents", "/runs"],
+    ["/flow-runs", "API", "/flow-runs"],
   ])("on %s opens the %s group and marks its page", (pathname, group, href) => {
     // Collapsed by the user elsewhere: the current page opens it anyway.
     window.localStorage.setItem(navGroupStorageKey(group === "Agents" ? "agents" : "api"), "closed");
@@ -92,6 +109,8 @@ describe("Sidebar", () => {
     const list = document.getElementById(button.getAttribute("aria-controls")!)!;
     const current = within(list).getAllByRole("link").filter((link) => link.getAttribute("aria-current") === "page");
     expect(current.map((link) => link.getAttribute("href"))).toEqual([href]);
+    // No other link of the sidebar is current.
+    expect(nav.getAllByRole("link").filter((link) => link.getAttribute("aria-current") === "page")).toHaveLength(1);
   });
 
   it("collapses and expands a group, and remembers the choice in this browser", async () => {
@@ -109,7 +128,7 @@ describe("Sidebar", () => {
     expect(nav.getByRole("button", { name: "Agents" })).toHaveAttribute("aria-expanded", "true");
     cleanup();
 
-    const again = renderSidebar("/runs");
+    const again = renderSidebar("/live");
     expect(again.getByRole("button", { name: "API" })).toHaveAttribute("aria-expanded", "false");
     await userEvent.click(again.getByRole("button", { name: "API" }));
     expect(again.getByRole("button", { name: "API" })).toHaveAttribute("aria-expanded", "true");
@@ -161,10 +180,14 @@ describe("Sidebar", () => {
     expect(nav.getByRole("button", { name: "Agentes" })).toBeInTheDocument();
     expect(nav.getByRole("button", { name: "API" })).toBeInTheDocument();
     const agents = within(nav.getByRole("list", { name: "Agentes" }));
-    expect(agents.getAllByRole("link").map((link) => link.textContent)).toEqual(["Conexiones", "Escenarios"]);
+    expect(agents.getAllByRole("link").map((link) => link.textContent)).toEqual(["Conexiones", "Escenarios", "Corridas"]);
     expect(within(nav.getByRole("list", { name: "API" })).getByRole("link", { name: "Flujos" })).toHaveAttribute(
       "href",
       "/flows",
+    );
+    expect(within(nav.getByRole("list", { name: "API" })).getByRole("link", { name: "Corridas" })).toHaveAttribute(
+      "href",
+      "/flow-runs",
     );
     expect(screen.queryByRole("radiogroup", { name: "Idioma" })).not.toBeInTheDocument();
   });

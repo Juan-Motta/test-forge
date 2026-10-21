@@ -196,7 +196,7 @@ export function GettingStartedEn() {
       <H2 id="read-the-report">8. Read the report</H2>
       <P>
         When the run ends, the judge scores it automatically. It usually takes a few minutes, and up to about 20 with
-        Langfuse (traces take a while to become available). Open the run from <Ui>Runs &amp; reports</Ui> to see:
+        Langfuse (traces take a while to become available). Open the run from <Ui>Agents</Ui> → <Ui>Runs</Ui> to see:
       </P>
       <Bullets>
         <li>The overall score, how many goals were met and the judge&apos;s summary.</li>

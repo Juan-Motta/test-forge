@@ -128,7 +128,8 @@ export function ModulesEn() {
 
       <Region id="runs-and-reports" title="Runs & reports">
         <P>
-          Every run ever made, with its transcript, timings and (for calls) audio. Filter by <Ui>Status</Ui>,{" "}
+          Every agent run ever made, with its transcript, timings and (for calls) audio, under <Ui>Agents</Ui> →{" "}
+          <Ui>Runs</Ui> in the sidebar. Filter by <Ui>Status</Ui>,{" "}
           <Ui>Scenario</Ui> or <Ui>Batch</Ui> (one launch), and switch between <Ui>Newest first</Ui> and{" "}
           <Ui>Oldest first</Ui> beside the filters; the filters and the order are kept in the URL, so a link or a reload
           shows the same list. To watch a launch as it runs, open <Ui>Live sessions</Ui>.
@@ -229,6 +230,8 @@ export function ModulesEn() {
           <Ui>API</Ui> holds a base URL, headers every call sends, and named secrets (an API key, a password), stored sealed. A{" "}
           <Ui>flow</Ui> is one or more calls in order: for example, get a token with the API key, then search products with
           that token. The page lists the APIs; open one to see its flows in the sidebar and its connection above them.
+          Every run of every flow is listed under <Ui>API</Ui> → <Ui>Runs</Ui>, filtered by status and API; open one to see
+          its steps.
         </P>
         <Table
           caption="Where each value of a step comes from"

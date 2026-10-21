@@ -133,7 +133,8 @@ export function ModulesEs() {
 
       <Region id="runs-and-reports" title="Corridas y reportes">
         <P>
-          Todas las corridas hechas, con su transcripción, sus tiempos y (en las llamadas) su audio. Filtra por{" "}
+          Todas las corridas de agentes, con su transcripción, sus tiempos y (en las llamadas) su audio, en{" "}
+          <Ui>Agentes</Ui> → <Ui>Corridas</Ui> de la barra lateral. Filtra por{" "}
           <Ui>Estado</Ui>, <Ui>Escenario</Ui> o <Ui>Lote</Ui> (un lanzamiento), y alterna entre{" "}
           <Ui>Más recientes primero</Ui> y <Ui>Más antiguas primero</Ui> junto a los filtros; los filtros y el orden se
           guardan en la URL, así que un enlace o una recarga muestran la misma lista. Para ver un lanzamiento mientras corre,
@@ -241,7 +242,8 @@ export function ModulesEs() {
           scripts. Una <Ui>API</Ui> tiene una URL base, encabezados que envía cada llamada y secretos con nombre (una clave de
           API, una contraseña), guardados sellados. Un <Ui>flujo</Ui> es una o más llamadas en orden: por ejemplo, obtener un
           token con la clave de API y luego buscar productos con ese token. La página lista las APIs; abre una para ver sus
-          flujos en la barra lateral y su conexión arriba.
+          flujos en la barra lateral y su conexión arriba. Todas las corridas de todos los flujos están en <Ui>API</Ui> →{" "}
+          <Ui>Corridas</Ui>, filtradas por estado y API; abre una para ver sus pasos.
         </P>
         <Table
           caption="De dónde sale cada valor de un paso"

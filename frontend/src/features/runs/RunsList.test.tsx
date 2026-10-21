@@ -1,9 +1,11 @@
 import { QueryClientProvider } from "@tanstack/react-query";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { http, HttpResponse } from "msw/http";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { mockScenariosApi, scenarioFixture } from "@/features/scenarios/testing";
 import { renderWithClient } from "@/test/render";
+import { apiUrl, server } from "@/test/server";
 import { RunsContainer } from "./RunsContainer";
 import { batchFixture, mockRunsApi, runFixture } from "./testing";
 
@@ -58,6 +60,31 @@ describe("Runs list", () => {
     nav.push.mockReset();
     nav.replace.mockReset();
     nav.search = "";
+  });
+
+  it("lists only agent runs: no Type filter, and API flow runs are never asked for", async () => {
+    scenarios();
+    mockRunsApi([done, failed]);
+    const flowRunRequests: string[] = [];
+    server.use(
+      http.get(apiUrl("/flow-runs"), ({ request }) => {
+        flowRunRequests.push(request.url);
+        return HttpResponse.json({ items: [], total: 0 });
+      }),
+    );
+    // An old link with the removed type parameter still shows agent runs.
+    nav.search = "type=flows";
+    renderWithClient(<RunsContainer />);
+
+    const table = await screen.findByRole("table", { name: "Runs" });
+    expect(within(table).getAllByRole("row").slice(1).map((row) => within(row).getAllByRole("link")[0].getAttribute("href"))).toEqual([
+      "/runs/r-2",
+      "/runs/r-1",
+    ]);
+    expect(screen.queryByRole("combobox", { name: "Type" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "API" })).not.toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Scenario" })).toBeInTheDocument();
+    expect(flowRunRequests).toEqual([]);
   });
 
   it("lists runs newest first with their scenario, agent, duration and status", async () => {

@@ -201,7 +201,7 @@ export function GettingStartedEs() {
       <H2 id="read-the-report">8. Lee el reporte</H2>
       <P>
         Cuando termina la corrida, el juez la califica automáticamente. Suele tardar unos minutos, y hasta unos 20 con Langfuse
-        (las trazas tardan en estar disponibles). Abre la corrida desde <Ui>Corridas y reportes</Ui> para ver:
+        (las trazas tardan en estar disponibles). Abre la corrida desde <Ui>Agentes</Ui> → <Ui>Corridas</Ui> para ver:
       </P>
       <Bullets>
         <li>La puntuación general, cuántos objetivos se cumplieron y el resumen del juez.</li>

@@ -223,6 +223,25 @@ describe("AppShell", () => {
     expect(primary.getByRole("link", { name: "Scenarios" })).not.toHaveAttribute("aria-current");
   });
 
+  it.each([
+    ["/runs/r-1", "Agents", "/runs"],
+    ["/flow-runs", "API", "/flow-runs"],
+  ])("on %s opens the %s group and marks its Runs current", async (pathname, group, href) => {
+    signedIn();
+    nav.pathname = pathname;
+    renderWithClient(
+      <AppShell>
+        <p>content</p>
+      </AppShell>,
+    );
+    const primary = within(screen.getByRole("navigation", { name: "Primary" }));
+    expect(primary.getByRole("button", { name: group })).toHaveAttribute("aria-expanded", "true");
+    const runs = within(primary.getByRole("list", { name: group })).getByRole("link", { name: "Runs" });
+    expect(runs).toHaveAttribute("href", href);
+    expect(runs).toHaveAttribute("aria-current", "page");
+    expect(primary.getAllByRole("link").filter((link) => link.getAttribute("aria-current") === "page")).toEqual([runs]);
+  });
+
   it("toggles a group inside the mobile drawer without closing it", async () => {
     signedIn();
     window.localStorage.clear();
