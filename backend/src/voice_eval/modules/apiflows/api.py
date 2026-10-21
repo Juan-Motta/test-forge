@@ -346,6 +346,8 @@ async def create_api(body: CreateApiIn, principal: CurrentPrincipal, db: Db, box
         created = await service.create_api(db, box, fields=dict(body), created_by=principal.user.id)
     except ApiNameTaken:
         raise HTTPException(status.HTTP_409_CONFLICT, "API name already in use") from None
+    except InvalidFlowInput as exc:
+        raise _invalid(exc) from None
     return ApiOut.of(created)
 
 
