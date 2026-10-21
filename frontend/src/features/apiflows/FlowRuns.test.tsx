@@ -205,17 +205,14 @@ describe("run view", () => {
     expect(body.textContent).toBe('{\n  "access_token": "tok-1",\n  "expires_in": 3600\n}');
   });
 
-  it("shows what chains the steps: the saved token, its value and where the next step sends it", async () => {
-    const { user } = await renderRun();
-    const chain = screen.getByRole("region", { name: "How the steps chain" });
-    const link = within(within(chain).getByRole("list")).getByRole("listitem");
-    expect(link).toHaveTextContent("token");
-    expect(link).toHaveTextContent("= tok-1");
-    expect(link).toHaveTextContent("Step 1 · body.access_token");
-    expect(link).toHaveTextContent("Step 2 · header Authorization");
-
-    await user.click(within(link).getByRole("button", { name: /Step 1/ }));
-    expect(screen.getByRole("region", { name: "Step 1: Get a token" })).toBeInTheDocument();
+  it("draws the steps as boxes joined by a line carrying the values passed on", async () => {
+    await renderRun();
+    const steps = screen.getByRole("list", { name: "Steps of the run" });
+    expect(within(steps).getByRole("button", { name: "Step 1: Get a token, Passed" })).toHaveTextContent("saves token");
+    const line = within(steps).getByRole("listitem", { name: "Values passed to step 2" });
+    const chip = within(line).getByRole("listitem");
+    expect(chip).toHaveTextContent("token= tok-1");
+    expect(chip).toHaveAttribute("title", "From step 1 (body.access_token), sent as header Authorization");
   });
 
   it("says when the run does not exist", async () => {

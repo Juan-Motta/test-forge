@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { flowChain } from "./chain";
+import { flowChain, incoming } from "./chain";
 import type { FlowStep } from "./types";
 
 const step = (overrides: Partial<FlowStep>): FlowStep => ({
@@ -43,5 +43,18 @@ describe("flowChain", () => {
       { name: "unused", from: 0, path: "status", uses: [] },
       { name: "user_id", from: 1, path: "body.id", uses: [{ step: 2, where: "query", name: "id" }] },
     ]);
+  });
+
+  it("credits a use to the latest earlier saver, and ignores uses in the saving step or before it", () => {
+    const chain = flowChain([
+      step({ headers: [{ name: "X", value: "{{saved.token}}" }], saves: [{ name: "token", path: "body.a" }] }),
+      step({ saves: [{ name: "token", path: "body.b" }] }),
+      step({ headers: [{ name: "Authorization", value: "{{saved.token}}" }] }),
+    ]);
+    expect(chain.map((link) => [link.from, link.uses.map((use) => use.step)])).toEqual([
+      [0, []],
+      [1, [2]],
+    ]);
+    expect(incoming(chain, 2).map((entry) => entry.link.from)).toEqual([1]);
   });
 });

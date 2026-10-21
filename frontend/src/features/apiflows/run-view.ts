@@ -42,10 +42,10 @@ export function prettyBody(body: unknown): { kind: "json" | "text"; text: string
       return { kind: "json", text: JSON.stringify(JSON.parse(text), null, 2) };
     } catch {
       // A body cut short to be stored is still JSON to read, just not whole: indent what is there.
-      if (text.includes("\n")) return { kind: "json", text };
+      // Only a body the backend cut short is re-indented; other text stays exactly as received.
       const cut = /… \[\d+ more characters\]$/.exec(text);
-      const json = cut ? text.slice(0, cut.index) : text;
-      return { kind: "json", text: reindentJson(json) + (cut ? `\n${cut[0]}` : "") };
+      if (!cut || text.includes("\n")) return { kind: cut ? "json" : "text", text };
+      return { kind: "json", text: `${reindentJson(text.slice(0, cut.index))}\n${cut[0]}` };
     }
   }
   return { kind: "text", text };

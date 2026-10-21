@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useState, type FormEvent } from "react";
 import { formErrorView } from "@/lib/api";
+import { confirmLeave } from "@/lib/navigation/unsaved-changes";
 import { localizeFormError, useT } from "@/lib/i18n";
 import { Alert, Button, Card, Field, Input, Textarea } from "@/ui";
 import { MAX_SECRETS, fieldError, headersOf, rowKeys, rowsProblem, secretsOf, type PairRow } from "./connection-form";
@@ -112,7 +113,7 @@ export function NewApiForm({
           error={fieldError(errors, "headers")}
         />
         <div className="flex flex-wrap justify-end gap-3">
-          <Button variant="ghost" onClick={onClose}>
+          <Button variant="ghost" onClick={() => (!dirty || confirmLeave()) && onClose()}>
             {t("common.cancel")}
           </Button>
           <Button type="submit" loading={create.isPending}>

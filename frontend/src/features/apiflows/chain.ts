@@ -36,7 +36,18 @@ export function flowChain(steps: FlowStep[]): ChainLink[] {
     step.saves.forEach((save) => links.push({ name: save.name, from: index, path: save.path, uses: [] })),
   );
   steps.forEach((step, index) => {
-    for (const { name, use } of usesIn(step, index)) links.find((link) => link.name === name)?.uses.push(use);
+    for (const { name, use } of usesIn(step, index)) {
+      // The value a step sends is the latest one saved before it (a refreshed token wins).
+      const saver = links.filter((link) => link.name === name && link.from < index).at(-1);
+      saver?.uses.push(use);
+    }
   });
   return links;
+}
+
+/** The links a step receives: values saved by earlier steps that this step sends. */
+export function incoming(chain: ChainLink[], step: number): { link: ChainLink; uses: ChainUse[] }[] {
+  return chain
+    .map((link) => ({ link, uses: link.uses.filter((use) => use.step === step) }))
+    .filter((entry) => entry.uses.length > 0);
 }

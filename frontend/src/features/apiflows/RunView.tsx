@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useId, useState, type ReactNode } from "react";
+import { Fragment, useId, useState, type ReactNode } from "react";
 import { useFormat, useT } from "@/lib/i18n";
 import {
   Alert,
@@ -23,7 +23,7 @@ import {
   focusRing,
   type BadgeTone,
 } from "@/ui";
-import type { ChainLink } from "./chain";
+import { incoming, type ChainLink } from "./chain";
 import { MethodChip } from "./MethodChip";
 import {
   checkRule,
@@ -137,8 +137,14 @@ export function RunView(props: RunViewProps) {
         ) : null}
       </section>
 
-      <StepsStrip run={run} stepPaths={props.stepPaths} selected={selected} onSelect={onSelect} />
-      {props.chain.length > 0 ? <ChainPanel run={run} chain={props.chain} secrets={secrets} onSelect={onSelect} /> : null}
+      <StepsStrip
+        run={run}
+        stepPaths={props.stepPaths}
+        selected={selected}
+        onSelect={onSelect}
+        chain={props.chain}
+        secrets={secrets}
+      />
 
       {step ? (
         <section aria-label={t("flowRuns.stepDetails", { n: step.index + 1, title: step.title })} className="flex flex-col gap-4">
@@ -176,107 +182,96 @@ export function RunView(props: RunViewProps) {
   );
 }
 
-/** What ties the steps together: each value a step saves from its response, its value in this
- * run, and the later steps that send it. */
-function ChainPanel({
+/** The run as a diagram: a box per call, joined by a line that carries the values the next call
+ * receives from earlier ones (name = value, with where it came from and where it goes on hover). */
+function StepsStrip({
   run,
+  stepPaths,
+  selected,
+  onSelect,
   chain,
   secrets,
-  onSelect,
-}: {
-  run: FlowRun;
-  chain: ChainLink[];
-  secrets: SecretView;
-  onSelect: (index: number) => void;
-}) {
-  const t = useT();
-  const stepLink = (index: number, detail: string) => (
-    <button
-      type="button"
-      onClick={() => onSelect(index)}
-      className={cn("rounded font-sans text-agent-fg underline-offset-2 hover:underline", focusRing)}
-    >
-      {t("flowRuns.chain.step", { n: index + 1 })}
-      <span className="font-mono text-muted"> · {detail}</span>
-    </button>
-  );
-  return (
-    <Panel title={t("flowRuns.chain.title")}>
-      <p className="-mt-2 text-xs text-muted">{t("flowRuns.chain.hint")}</p>
-      <ul aria-label={t("flowRuns.chain.title")} className="flex flex-col gap-2">
-        {chain.map((link) => {
-          const saved = run.steps[link.from]?.saved ?? {};
-          const has = Object.prototype.hasOwnProperty.call(saved, link.name);
-          return (
-            <li
-              key={link.name}
-              className="flex flex-col gap-1.5 rounded-lg border border-line-soft bg-field px-3 py-2 text-xs sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-3"
-            >
-              <span className="flex min-w-0 items-center gap-2 font-mono">
-                <span className="font-semibold text-fg">{link.name}</span>
-                {has ? (
-                  <span className="max-w-[28ch] truncate text-success-fg" title={textOf(saved[link.name])}>
-                    = <SecretText text={textOf(saved[link.name])} {...secrets} />
-                  </span>
-                ) : (
-                  <span className="text-dim">{t("flowRuns.chain.notSaved")}</span>
-                )}
-              </span>
-              <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                {stepLink(link.from, link.path)}
-                <span aria-hidden="true" className="text-dim">
-                  →
-                </span>
-                {link.uses.length === 0 ? (
-                  <span className="text-dim">{t("flowRuns.chain.unused")}</span>
-                ) : (
-                  link.uses.map((use, index) => (
-                    <span key={index} className="inline-flex items-center gap-1">
-                      {stepLink(use.step, use.where === "path" ? t("flowRuns.chain.inPath") : `${use.where} ${use.name}`)}
-                    </span>
-                  ))
-                )}
-              </span>
-            </li>
-          );
-        })}
-      </ul>
-    </Panel>
-  );
-}
-
-function StepsStrip({ run, stepPaths, selected, onSelect }: Pick<RunViewProps, "run" | "stepPaths" | "selected" | "onSelect">) {
+}: Pick<RunViewProps, "run" | "stepPaths" | "selected" | "onSelect" | "chain"> & { secrets: SecretView }) {
   const t = useT();
   const format = useFormat();
   return (
-    <ol aria-label={t("flowRuns.steps")} className="flex gap-2 overflow-x-auto pb-1">
+    <ol aria-label={t("flowRuns.steps")} className="flex flex-col overflow-x-auto pb-1 md:flex-row md:items-stretch">
       {run.steps.map((step, index) => {
         const path = step.request ? pathOf(step.request.url) : (stepPaths[index] ?? "");
         const facts = [step.response ? String(step.response.status) : null, step.durationMs === null ? null : formatDuration(step.durationMs, format.number)]
           .filter(Boolean)
           .join(" · ");
+        const received = incoming(chain, index);
+        const saves = chain.filter((link) => link.from === index);
         return (
-          <li key={step.index} className="min-w-[11rem] flex-1">
-            <button
-              type="button"
-              aria-pressed={index === selected}
-              aria-label={t("flowRuns.step", { n: step.index + 1, title: step.title, status: t(`flowRuns.status.${step.status}`) })}
-              onClick={() => onSelect(index)}
-              className={cn(
-                "flex h-full w-full flex-col gap-1.5 rounded-xl border bg-panel px-3 py-2.5 text-left hover:bg-active",
-                index === selected ? "border-evaluator" : "border-line",
-                focusRing,
-              )}
-            >
-              <span className="flex items-center gap-1.5">
-                <StatusIcon status={step.status} />
-                {step.request ? <MethodChip method={step.request.method} /> : null}
-                <span className="truncate text-xs text-muted">{step.title}</span>
-              </span>
-              <span className="truncate font-mono text-xs text-fg">{path}</span>
-              {facts ? <span className="font-mono text-[11px] text-dim">{facts}</span> : null}
-            </button>
-          </li>
+          <Fragment key={step.index}>
+            {index > 0 ? (
+              <li
+                aria-label={t("flowRuns.chain.into", { n: step.index + 1 })}
+                className="relative flex min-h-10 shrink-0 items-center justify-center px-3 py-2 md:min-w-[8.5rem] md:py-0"
+              >
+                <span aria-hidden="true" className="absolute inset-y-0 left-1/2 w-px bg-line-strong md:inset-x-0 md:top-1/2 md:bottom-auto md:left-0 md:h-px md:w-auto" />
+                <span aria-hidden="true" className="absolute bottom-0 left-1/2 -translate-x-1/2 text-[10px] leading-none text-dim md:top-1/2 md:right-0 md:bottom-auto md:left-auto md:-translate-y-1/2 md:translate-x-0">
+                  <span className="md:hidden">▼</span>
+                  <span className="hidden md:inline">▶</span>
+                </span>
+                {received.length > 0 ? (
+                  <ul className="relative flex max-w-full flex-col items-center gap-1">
+                    {received.map(({ link, uses }) => {
+                      const saved = run.steps[link.from]?.saved ?? {};
+                      const has = Object.prototype.hasOwnProperty.call(saved, link.name);
+                      const where = uses
+                        .map((use) => (use.where === "path" ? t("flowRuns.chain.inPath") : `${use.where} ${use.name}`))
+                        .join(", ");
+                      return (
+                        <li
+                          key={`${link.from}-${link.name}`}
+                          title={t("flowRuns.chain.tooltip", { from: link.from + 1, path: link.path, where })}
+                          className="flex max-w-[16rem] items-center gap-1 rounded-full border border-agent/40 bg-panel px-2 py-0.5 font-mono text-[11px]"
+                        >
+                          <span className="font-semibold text-agent-fg">{link.name}</span>
+                          {has ? (
+                            <span className="truncate text-success-fg">
+                              = <SecretText text={textOf(saved[link.name])} {...secrets} />
+                            </span>
+                          ) : (
+                            <span className="text-dim">{t("flowRuns.chain.notSaved")}</span>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                ) : null}
+              </li>
+            ) : null}
+            <li className="min-w-[11rem] flex-1">
+              <button
+                type="button"
+                aria-pressed={index === selected}
+                aria-label={t("flowRuns.step", { n: step.index + 1, title: step.title, status: t(`flowRuns.status.${step.status}`) })}
+                onClick={() => onSelect(index)}
+                className={cn(
+                  "flex h-full w-full flex-col gap-1.5 rounded-xl border bg-panel px-3 py-2.5 text-left hover:bg-active",
+                  index === selected ? "border-evaluator" : "border-line",
+                  focusRing,
+                )}
+              >
+                <span className="flex items-center gap-1.5">
+                  <StatusIcon status={step.status} />
+                  <span className="text-xs font-semibold text-fg">{step.index + 1}</span>
+                  {step.request ? <MethodChip method={step.request.method} /> : null}
+                  <span className="truncate text-xs text-muted">{step.title}</span>
+                </span>
+                <span className="truncate font-mono text-xs text-fg">{path}</span>
+                {facts ? <span className="font-mono text-[11px] text-dim">{facts}</span> : null}
+                {saves.length > 0 ? (
+                  <span className="truncate font-mono text-[11px] text-dim">
+                    {t("flowRuns.chain.saves")} {saves.map((link) => link.name).join(", ")}
+                  </span>
+                ) : null}
+              </button>
+            </li>
+          </Fragment>
         );
       })}
     </ol>

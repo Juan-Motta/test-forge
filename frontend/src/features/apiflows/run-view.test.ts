@@ -110,6 +110,8 @@ describe("JSON bodies", () => {
       text: '{\n  "a": {\n    "b": "x, y: {z}"\n  },\n  "c": [],\n  "d": {},\n  "e": [\n    {\n      "f": "g\\"h"\n    }\n  ]\n… [5 more characters]',
     });
     expect(prettyBody("plain words")).toEqual({ kind: "text", text: "plain words" });
+    // Text that only looks like JSON stays exactly as received.
+    expect(prettyBody("{not json, a: b}")).toEqual({ kind: "text", text: "{not json, a: b}" });
   });
 
   it("tells keys from values", () => {
