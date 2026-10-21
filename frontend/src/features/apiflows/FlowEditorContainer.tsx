@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useAgents } from "@/features/agents/queries";
 import { ApiError } from "@/lib/api";
 import { localErrorMessage, useT } from "@/lib/i18n";
@@ -26,8 +26,9 @@ const keysOf = (draft: FlowDraft) =>
  * The flow editor's state: a working copy saved whole (POST for a new flow, PATCH for a stored
  * one), backend errors mapped to their rows, Copy cURL of the saved flow, and delete.
  */
-export function FlowEditorContainer({ api, flow }: { api: Pick<Api, "id">; flow?: Flow }) {
+export function FlowEditorContainer({ api, flow }: { api: Pick<Api, "id" | "secrets">; flow?: Flow }) {
   const t = useT();
+  const secrets = useMemo(() => new Set(api.secrets.map((secret) => secret.name)), [api.secrets]);
   const router = useRouter();
   const agents = useAgents();
   const create = useCreateFlow();
@@ -119,6 +120,7 @@ export function FlowEditorContainer({ api, flow }: { api: Pick<Api, "id">; flow?
     <>
       <FlowEditor
         draft={draft}
+        secrets={secrets}
         onChange={change}
         errors={errors}
         formErrors={formErrors}

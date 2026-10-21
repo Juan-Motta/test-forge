@@ -240,10 +240,13 @@ export function ModulesEs() {
       <Region id="api-flows" title="Flujos de API">
         <P>
           Llamadas guardadas a las APIs que usan tus agentes, para que personas y agentes las reutilicen sin escribir
-          scripts. Una <Ui>API</Ui> tiene una URL base y los encabezados que envía cada llamada. Activa el interruptor{" "}
-          <Ui>Secreto</Ui> de un encabezado para una clave de API: su valor se guarda sellado y se muestra oculto. Los demás
-          secretos con nombre, como una contraseña que un paso envía en su cuerpo, su consulta o su ruta, van en{" "}
-          <Ui>Variables secretas (avanzado)</Ui> y se usan como <Code>{"{{secret.name}}"}</Code>. Un <Ui>flujo</Ui> es una o más llamadas en orden: por ejemplo, obtener un
+          scripts. Una <Ui>API</Ui> tiene una URL base y sus <Ui>Variables</Ui>: valores con nombre que cualquier paso usa como{" "}
+          <Code>{"{{var.name}}"}</Code> en un encabezado, la consulta, el cuerpo o la ruta, como un ID de cliente o una versión
+          de la API. Activa el interruptor <Ui>Secreto</Ui> de una variable para una clave de API o una contraseña: estos
+          secretos con nombre se guardan sellados y se muestran ocultos (<Code>{"{{secret.name}}"}</Code> también sigue
+          funcionando). Los <Ui>Encabezados por defecto</Ui> son opcionales y van en cada llamada, como <Code>Accept</Code>; un
+          encabezado que solo necesitan algunos pasos, como un token de inicio de sesión, va en esos pasos, por ejemplo{" "}
+          <Code>{"Authorization: Bearer {{saved.token}}"}</Code> después del paso de inicio de sesión. Un <Ui>flujo</Ui> es una o más llamadas en orden: por ejemplo, obtener un
           token con la clave de API y luego buscar productos con ese token. En <Ui>API</Ui> → <Ui>Conexiones</Ui> están las APIs a la
           izquierda y se edita la abierta a la derecha, como la conexión de un agente; <Ui>API</Ui> → <Ui>Flujos</Ui> lista
           todos los flujos, y al abrir uno ves sus pasos. Todas las corridas de todos los flujos están en <Ui>API</Ui> →{" "}
@@ -255,7 +258,14 @@ export function ModulesEs() {
           rows={[
             ["Fijo", "Texto tal cual, se envía como está escrito."],
             ["Entrada del flujo", <>Un valor que se da al ejecutar el flujo: <Code>{"{{input.name}}"}</Code>.</>],
-            ["Secreto de la API", <>Uno de los secretos de la API: <Code>{"{{secret.name}}"}</Code>. Oculto en corridas y cURLs.</>],
+            ["Variable de conexión", <>Una variable normal de la API: <Code>{"{{var.name}}"}</Code>.</>],
+            [
+              "Secreto de la API",
+              <>
+                Uno de los secretos de la API: <Code>{"{{var.name}}"}</Code> o <Code>{"{{secret.name}}"}</Code>. Oculto en corridas
+                y cURLs.
+              </>,
+            ],
             ["De un paso", <>Un valor que un paso anterior guardó de su respuesta: <Code>{"{{saved.name}}"}</Code>.</>],
             ["Generado por IA", "Una entrada que la IA escribe a partir de su descripción cuando la corrida no da valor y no tiene valor por defecto."],
           ]}

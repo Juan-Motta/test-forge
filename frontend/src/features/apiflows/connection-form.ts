@@ -2,23 +2,28 @@ import type { ApiChanges, ApiHeader, ApiSecret } from "./types";
 
 /** An API holds at most this many secrets (the backend refuses more). */
 export const MAX_SECRETS = 10;
+/** An API holds at most this many plain variables (the backend refuses more). */
+export const MAX_VARIABLES = 30;
 
-/** One name/value row of a form; `locked` marks a stored secret (its name is fixed, its value unknown). */
-export type PairRow = { key: string; name: string; value: string; locked?: boolean };
+/** A name steps can use as `{{var.<name>}}`, like the backend's. */
+export const VARIABLE_NAME = /^[A-Za-z_][A-Za-z0-9_]{0,39}$/;
+
+/** One default header of the form: a plain template every step sends. */
+export type HeaderRow = { key: string; name: string; value: string };
 
 /**
- * One header of the form. A secret header is sent as `{{secret.<name>}}` and its value is stored
- * sealed: `stored` names the secret it already holds (its `value` then replaces it only when
- * typed); without `stored`, saving creates a secret named after the header from `value`.
- * A stored secret header turned off keeps `stored`, so saving can drop the secret.
+ * One connection variable of the form. `secret` is its Secret switch. `stored` marks one the API
+ * already holds (its name is then fixed) and whether it is stored as a secret. A stored secret
+ * still secret keeps its value unless one is typed (`value` replaces it); any other row sends
+ * its `value` as typed.
  */
-export type HeaderRow = { key: string; name: string; value: string; secret: boolean; stored?: string };
+export type VariableRow = { key: string; name: string; value: string; secret: boolean; stored?: { secret: boolean } };
 
-/** What a connection holds on the server: plain headers and the secrets' names and hints. */
-export type StoredConnection = { headers: ApiHeader[]; secrets: ApiSecret[] };
+/** What a connection holds on the server: default headers, plain variables, and the secrets' names and hints. */
+export type StoredConnection = { headers: ApiHeader[]; variables: Record<string, string>; secrets: ApiSecret[] };
 
-/** The connection as typed: its headers and the secret variables of the advanced section. */
-export type ConnectionForm = { headers: HeaderRow[]; secrets: PairRow[] };
+/** The connection as typed: its default headers and its variables, plain or secret. */
+export type ConnectionForm = { headers: HeaderRow[]; variables: VariableRow[] };
 
 /** Gives each new row a key unique within the form. */
 export function rowKeys(prefix: string) {
@@ -26,151 +31,109 @@ export function rowKeys(prefix: string) {
   return () => `${prefix}-${(next += 1)}`;
 }
 
-const MAX_NAME = 40;
-const EXACT_SECRET = /^\{\{secret\.([A-Za-z_][A-Za-z0-9_]{0,39})\}\}$/;
-
-/** The header value that sends the secret `name`. */
-export const secretRef = (name: string) => `{{secret.${name}}}`;
-
-/**
- * The secret name a header's value is stored under: the header name lowercased, every other
- * character `_`, `_` first when it starts with a digit, at most 40 characters, and `_2`, `_3`…
- * when the name is already taken.
- */
-export function secretNameFor(header: string, taken: ReadonlySet<string> = new Set()): string {
-  let base = header.trim().toLowerCase().replace(/[^a-z0-9]/g, "_") || "_";
-  if (/^[0-9]/.test(base)) base = `_${base}`;
-  let name = base.slice(0, MAX_NAME);
-  for (let n = 2; taken.has(name); n += 1) {
-    const suffix = `_${n}`;
-    name = base.slice(0, MAX_NAME - suffix.length) + suffix;
-  }
-  return name;
-}
-
-/** The stored secrets a header sends as its whole value (`{{secret.name}}`): shown as secret headers. */
-export function headerSecrets(stored: StoredConnection): Set<string> {
-  const names = new Set(stored.secrets.map((secret) => secret.name));
-  const bound = new Set<string>();
-  for (const header of stored.headers) {
-    const name = EXACT_SECRET.exec(header.value)?.[1];
-    if (name !== undefined && names.has(name)) bound.add(name);
-  }
-  return bound;
-}
-
-/**
- * The form's rows for a stored connection: a header whose value is exactly a stored secret is a
- * secret header; any other header (`Bearer {{secret.token}}` too) is plain, as stored. Secrets no
- * header sends as its whole value are the advanced section's secret variables.
- */
+/** The form's rows for a stored connection: its headers as stored, its plain variables, then its secrets. */
 export function connectionRows(stored: StoredConnection, nextKey: () => string): ConnectionForm {
-  const bound = headerSecrets(stored);
-  const headers = stored.headers.map((header): HeaderRow => {
-    const name = EXACT_SECRET.exec(header.value)?.[1];
-    return name !== undefined && bound.has(name)
-      ? { key: nextKey(), name: header.name, value: "", secret: true, stored: name }
-      : { key: nextKey(), name: header.name, value: header.value, secret: false };
-  });
-  const secrets = stored.secrets
-    .filter((secret) => !bound.has(secret.name))
-    .map((secret): PairRow => ({ key: nextKey(), name: secret.name, value: "", locked: true }));
-  return { headers, secrets };
+  const headers = stored.headers.map((header): HeaderRow => ({ key: nextKey(), name: header.name, value: header.value }));
+  const variables = [
+    ...Object.entries(stored.variables).map(
+      ([name, value]): VariableRow => ({ key: nextKey(), name, value, secret: false, stored: { secret: false } }),
+    ),
+    ...stored.secrets.map(
+      (secret): VariableRow => ({ key: nextKey(), name: secret.name, value: "", secret: true, stored: { secret: true } }),
+    ),
+  ];
+  return { headers, variables };
 }
 
-/** Rows with a name or a value: a fully blank row is ignored. */
-const filled = (rows: PairRow[]) => rows.filter((row) => row.name.trim() || row.value);
-/** Header rows that count: a name, a value, or a stored secret. */
-const filledHeaders = (rows: HeaderRow[]) =>
-  rows.filter((row) => row.name.trim() || row.value || (row.secret && row.stored));
+/** A new, empty plain variable. */
+export const newVariable = (key: string): VariableRow => ({ key, name: "", value: "", secret: false });
+
+/** Header rows with a name or a value: a fully blank row is ignored. */
+const filledHeaders = (rows: HeaderRow[]) => rows.filter((row) => row.name.trim() || row.value);
+/** Variable rows that count: stored ones, and new ones with a name or a value. */
+const filledVariables = (rows: VariableRow[]) => rows.filter((row) => row.stored || row.name.trim() || row.value);
+const nameOf = (row: VariableRow) => (row.stored ? row.name : row.name.trim());
+/** Whether saving needs a typed value: a new or moved secret, and a stored secret turned plain. */
+const needsValue = (row: VariableRow) => (row.secret ? !row.stored?.secret : Boolean(row.stored?.secret));
 
 /**
- * The headers and secret changes a connection form sends. A secret header sends its secret's
- * reference, plus its value when typed. Removing a secret header (or turning it plain) never
- * deletes its secret, since a step's body, query or path may still use it: it stays, listed as a
- * secret variable. Advanced secret variables send a typed value, or `null` when removed.
+ * The variable and secret changes a form sends: `null` for one removed (or moved to the other
+ * kind), a value for one new, edited, replaced or moved. A stored secret left as it is is never
+ * sent back, nor is a plain variable whose value did not change.
  */
-export function connectionPayload(
+export function variableChanges(
   stored: StoredConnection,
-  form: ConnectionForm,
-): { headers: ApiHeader[]; secrets: Record<string, string | null> } {
-  const bound = headerSecrets(stored);
-  const secrets = secretChanges(
-    stored.secrets.filter((secret) => !bound.has(secret.name)),
-    form.secrets,
-  );
-  const taken = new Set([...stored.secrets.map((secret) => secret.name), ...filled(form.secrets).map((row) => row.name.trim())]);
-  const headers = filledHeaders(form.headers).map((row): ApiHeader => {
-    const name = row.name.trim();
-    if (!row.secret) return { name, value: row.value };
-    const secret = row.stored ?? secretNameFor(name, taken);
-    taken.add(secret);
-    if (row.value) secrets[secret] = row.value;
-    return { name, value: secretRef(secret) };
-  });
-  return { headers, secrets };
-}
-
-/** How many secrets the API would hold, counting new rows still blank (each will need one). */
-export function secretCount(stored: StoredConnection, form: ConnectionForm): number {
-  const names = new Set(stored.secrets.map((secret) => secret.name));
-  for (const [name, value] of Object.entries(connectionPayload(stored, form).secrets)) {
-    if (value === null) names.delete(name);
-    else names.add(name);
+  rows: VariableRow[],
+): { variables: Record<string, string | null>; secrets: Record<string, string | null> } {
+  const variables: Record<string, string | null> = {};
+  const secrets: Record<string, string | null> = {};
+  const kept = filledVariables(rows);
+  const keptPlain = new Set(kept.filter((row) => row.stored && !row.stored.secret).map(nameOf));
+  const keptSecret = new Set(kept.filter((row) => row.stored?.secret).map(nameOf));
+  for (const name of Object.keys(stored.variables)) if (!keptPlain.has(name)) variables[name] = null;
+  for (const secret of stored.secrets) if (!keptSecret.has(secret.name)) secrets[secret.name] = null;
+  for (const row of kept) {
+    const name = nameOf(row);
+    if (row.secret) {
+      if (row.stored && !row.stored.secret) variables[name] = null;
+      if (row.value || !row.stored?.secret) secrets[name] = row.value;
+    } else {
+      if (row.stored?.secret) secrets[name] = null;
+      if (!row.stored || row.stored.secret || stored.variables[name] !== row.value) variables[name] = row.value;
+    }
   }
-  const blank =
-    form.secrets.filter((row) => !row.locked && !row.value).length +
-    form.headers.filter((row) => row.secret && !row.stored && !row.value).length;
-  return names.size + blank;
+  return { variables, secrets };
 }
 
-/** A new API's headers and secrets, as created. */
-export function newConnection(form: ConnectionForm): { headers: ApiHeader[]; secrets: Record<string, string> } {
-  const { headers, secrets } = connectionPayload({ headers: [], secrets: [] }, form);
-  const values = Object.entries(secrets).filter((entry): entry is [string, string] => entry[1] !== null);
-  return { headers, secrets: Object.fromEntries(values) };
+/** The default headers a form sends: plain templates, trimmed names. */
+export function headersPayload(rows: HeaderRow[]): ApiHeader[] {
+  return filledHeaders(rows).map((row) => ({ name: row.name.trim(), value: row.value }));
 }
 
-/** Why the secret variables cannot be saved: a value without a name, a repeated name, or a new secret without a value. */
-export function rowsProblem(rows: PairRow[], reserved: Iterable<string> = []): "name" | "duplicate" | "value" | undefined {
-  const kept = filled(rows);
-  if (kept.some((row) => !row.name.trim())) return "name";
-  const names = [...rows.filter((row) => row.locked).map((row) => row.name), ...reserved];
-  names.push(...kept.filter((row) => !row.locked).map((row) => row.name.trim()));
+/** How many plain variables and secrets the form holds (every row counts, blank new ones too). */
+export function variableCounts(rows: VariableRow[]): { plain: number; secret: number } {
+  const secret = rows.filter((row) => row.secret).length;
+  return { plain: rows.length - secret, secret };
+}
+
+/** A new API's headers, variables and secrets, as created. */
+export function newConnection(form: ConnectionForm): {
+  headers: ApiHeader[];
+  variables: Record<string, string>;
+  secrets: Record<string, string>;
+} {
+  const variables: Record<string, string> = {};
+  const secrets: Record<string, string> = {};
+  for (const row of filledVariables(form.variables)) (row.secret ? secrets : variables)[nameOf(row)] = row.value;
+  return { headers: headersPayload(form.headers), variables, secrets };
+}
+
+/**
+ * Why the variables cannot be saved: one without a name, a name steps cannot use, a repeated
+ * name, or no value where one is needed (a new secret, a plain value made secret, a secret made plain).
+ */
+export function variablesProblem(rows: VariableRow[]): "name" | "pattern" | "duplicate" | "value" | undefined {
+  const kept = filledVariables(rows);
+  if (kept.some((row) => !nameOf(row))) return "name";
+  if (kept.some((row) => !row.stored && !VARIABLE_NAME.test(nameOf(row)))) return "pattern";
+  const names = kept.map(nameOf);
   if (new Set(names).size !== names.length) return "duplicate";
-  if (kept.some((row) => !row.locked && !row.value)) return "value";
+  if (kept.some((row) => needsValue(row) && !row.value)) return "value";
   return undefined;
 }
 
-/** Why the headers cannot be saved: one without a name, a repeated name, or a new secret header without a value. */
-export function headersProblem(rows: HeaderRow[]): "name" | "duplicate" | "value" | undefined {
+/** Why the default headers cannot be saved: one without a name, or a repeated name. */
+export function headersProblem(rows: HeaderRow[]): "name" | "duplicate" | undefined {
   const kept = filledHeaders(rows);
   if (kept.some((row) => !row.name.trim())) return "name";
   const names = kept.map((row) => row.name.trim().toLowerCase());
   if (new Set(names).size !== names.length) return "duplicate";
-  if (kept.some((row) => row.secret && !row.stored && !row.value)) return "value";
   return undefined;
 }
 
-/**
- * The problems of a connection form, by field (`headers`, `secrets`), as message keys' suffixes.
- * A new secret variable may not take the name of a secret a header holds.
- */
+/** The problems of a connection form, by section (`headers`, `variables`), as message keys' suffixes. */
 export function connectionProblems(form: ConnectionForm) {
-  const reserved = form.headers.flatMap((row) => (row.secret && row.stored ? [row.stored] : []));
-  return { headers: headersProblem(form.headers), secrets: rowsProblem(form.secrets, reserved) };
-}
-
-/**
- * What an edit changes in the secret variables: a typed value for a kept or new one, `null` for
- * one that was removed; untouched secrets are left out (their values are never sent back).
- */
-export function secretChanges(stored: ApiSecret[], rows: PairRow[]): Record<string, string | null> {
-  const changes: Record<string, string | null> = {};
-  const kept = new Set(rows.filter((row) => row.locked).map((row) => row.name));
-  for (const secret of stored) if (!kept.has(secret.name)) changes[secret.name] = null;
-  for (const row of filled(rows)) if (row.value) changes[row.name.trim()] = row.value;
-  return changes;
+  return { headers: headersProblem(form.headers), variables: variablesProblem(form.variables) };
 }
 
 /** The connection part of a PATCH: only what differs from the stored API. */
@@ -181,16 +144,41 @@ export function connectionChanges(
   const changes: ApiChanges = {};
   const baseUrl = form.baseUrl.trim();
   if (baseUrl !== stored.baseUrl) changes.baseUrl = baseUrl;
-  const { headers, secrets } = connectionPayload(stored, form);
+  const headers = headersPayload(form.headers);
   if (JSON.stringify(headers) !== JSON.stringify(stored.headers)) changes.headers = headers;
+  const { variables, secrets } = variableChanges(stored, form.variables);
+  if (Object.keys(variables).length > 0) changes.variables = variables;
   if (Object.keys(secrets).length > 0) changes.secrets = secrets;
   return changes;
 }
+
+/** Whether new variable rows hold anything typed (an unsaved edit a PATCH would not show yet). */
+export const typedNewVariables = (rows: VariableRow[]) => rows.some((row) => !row.stored && (row.name.trim() || row.value));
 
 /** The first field error whose path starts with `prefix` (`headers.0.name` belongs to `headers`). */
 export function fieldError(errors: Record<string, string>, prefix: string): string | undefined {
   const key = Object.keys(errors).find((name) => name === prefix || name.startsWith(`${prefix}.`));
   return key === undefined ? undefined : errors[key];
+}
+
+/**
+ * The server's errors of the variables: by row name (`variables.<name>…` or `secrets.<name>…`),
+ * and the rest for the whole section (a limit, or a name no row holds any more).
+ */
+export function variableErrors(
+  errors: Record<string, string>,
+  rows: VariableRow[],
+): { byName: Record<string, string>; section?: string } {
+  const names = new Set(rows.map(nameOf).filter(Boolean));
+  const byName: Record<string, string> = {};
+  let section: string | undefined;
+  for (const [key, message] of Object.entries(errors)) {
+    const [field, name] = key.split(".");
+    if (field !== "variables" && field !== "secrets") continue;
+    if (name !== undefined && names.has(name)) byName[name] ??= message;
+    else section ??= message;
+  }
+  return { byName, section };
 }
 
 /** Tags typed as one comma-separated line: trimmed, blanks dropped, each kept once. */

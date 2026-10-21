@@ -228,9 +228,12 @@ export function ModulesEn() {
       <Region id="api-flows" title="API flows">
         <P>
           Saved calls to the APIs your agents use, so people and agents can reuse them instead of writing scripts. An{" "}
-          <Ui>API</Ui> holds a base URL and the headers every call sends. Turn on a header&apos;s <Ui>Secret</Ui> switch for an
-          API key: its value is stored sealed and shown masked. Other named secrets, such as a password a step sends in its
-          body, query or path, go under <Ui>Secret variables (advanced)</Ui>, used as <Code>{"{{secret.name}}"}</Code>. A{" "}
+          <Ui>API</Ui> holds a base URL and its <Ui>Variables</Ui>: named values any step uses as{" "}
+          <Code>{"{{var.name}}"}</Code> in a header, the query, the body or the path, such as a tenant ID or an API version.
+          Turn on a variable&apos;s <Ui>Secret</Ui> switch for an API key or a password: these named secrets are stored sealed
+          and shown masked (<Code>{"{{secret.name}}"}</Code> still works too). <Ui>Default headers</Ui> are optional and go on
+          every call, like <Code>Accept</Code>; a header only some steps need, like a login token, goes on those steps
+          instead, for example <Code>{"Authorization: Bearer {{saved.token}}"}</Code> after the login step. A{" "}
           <Ui>flow</Ui> is one or more calls in order: for example, get a token with the API key, then search products with
           that token. <Ui>API</Ui> → <Ui>Connections</Ui> lists the APIs on the left and edits the open one on the right, like
           an agent&apos;s connection; <Ui>API</Ui> → <Ui>Flows</Ui> lists every flow, and opening one shows its steps.
@@ -243,7 +246,14 @@ export function ModulesEn() {
           rows={[
             ["Fixed", "Plain text, sent as written."],
             ["Flow input", <>A value given when the flow runs: <Code>{"{{input.name}}"}</Code>.</>],
-            ["API secret", <>One of the API&apos;s secrets: <Code>{"{{secret.name}}"}</Code>. Masked in runs and cURLs.</>],
+            ["Connection variable", <>A plain variable of the API: <Code>{"{{var.name}}"}</Code>.</>],
+            [
+              "API secret",
+              <>
+                One of the API&apos;s secrets: <Code>{"{{var.name}}"}</Code> or <Code>{"{{secret.name}}"}</Code>. Masked in runs and
+                cURLs.
+              </>,
+            ],
             ["From a step", <>A value an earlier step saved from its response: <Code>{"{{saved.name}}"}</Code>.</>],
             ["AI generated", "An input AI writes from its description when the run gives no value and it has no default."],
           ]}

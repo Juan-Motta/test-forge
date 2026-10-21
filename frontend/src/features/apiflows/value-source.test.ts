@@ -19,6 +19,15 @@ describe("valueSource", () => {
     expect(valueSource("Key {{secret.apiKey}}", inputs)).toBe("secret");
   });
 
+  it("calls {{var.x}} a connection variable, or an API secret when x is one of the API's secrets", () => {
+    const secrets = new Set(["password"]);
+    expect(valueSource("{{var.tenant_id}}", inputs, secrets)).toBe("variable");
+    expect(valueSource("v{{ var.api_version }}", inputs)).toBe("variable");
+    expect(valueSource("{{var.password}}", inputs, secrets)).toBe("secret");
+    expect(valueSource("{{var.tenant_id}}:{{var.password}}", inputs, secrets)).toBe("secret");
+    expect(valueSource("{{input.limit}} {{var.tenant_id}}", inputs, secrets)).toBe("input");
+  });
+
   it("calls a value with a saved value from a step, even beside other sources", () => {
     expect(valueSource("Bearer {{saved.token}}", inputs)).toBe("saved");
     expect(valueSource("{{input.query}}-{{saved.token}}", inputs)).toBe("saved");

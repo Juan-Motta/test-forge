@@ -2,7 +2,7 @@
 
 export type NamedRef = { id: string; name: string };
 
-/** A plain header every step of the API's flows sends. */
+/** A header: a default one every step of the API's flows sends, or one of a step. */
 export type ApiHeader = { name: string; value: string };
 
 /** A secret as listed: its name and a masked hint (the value is revealed only on request). */
@@ -15,6 +15,8 @@ export type Api = {
   tags: string[];
   baseUrl: string;
   headers: ApiHeader[];
+  /** Plain connection variables by name; steps use them (and secrets) as `{{var.<name>}}`. */
+  variables: Record<string, string>;
   secrets: ApiSecret[];
   flowCount: number;
   /** Agents linked to at least one of its flows. */
@@ -29,12 +31,17 @@ export type NewApi = {
   tags?: string[];
   baseUrl: string;
   headers?: ApiHeader[];
+  /** Plain values by name. A name is a variable or a secret, never both. */
+  variables?: Record<string, string>;
   /** Values by name; sealed at rest by the backend. */
   secrets?: Record<string, string>;
 };
 
-/** A partial update; in `secrets` a value sets that secret and `null` removes it. */
-export type ApiChanges = Partial<Omit<NewApi, "secrets">> & { secrets?: Record<string, string | null> };
+/** A partial update; in `variables` and `secrets` a value sets that name and `null` removes it. */
+export type ApiChanges = Partial<Omit<NewApi, "secrets" | "variables">> & {
+  variables?: Record<string, string | null>;
+  secrets?: Record<string, string | null>;
+};
 
 /** `GET /api/apis/{id}/secrets`: every secret of the API, by name, in clear. */
 export type RevealedSecrets = { secrets: Record<string, string> };

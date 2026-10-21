@@ -14,6 +14,8 @@ import type { NamedRef } from "./types";
 
 export type FlowEditorProps = {
   draft: FlowDraft;
+  /** The names of the API's secrets: `{{var.name}}` of one is an API secret, not a plain variable. */
+  secrets: ReadonlySet<string>;
   onChange: (draft: FlowDraft) => void;
   /** Errors by editor row (see `flow-errors.ts`), plus the ones no row shows. */
   errors: Record<string, string>;
@@ -122,6 +124,7 @@ export function FlowEditor(props: FlowEditorProps) {
               count={draft.steps.length}
               step={step}
               inputs={draft.inputs}
+              secrets={props.secrets}
               errors={errors}
               onChange={(next) => setStep(index, next)}
               onMove={(delta) => set({ steps: moved(draft.steps, index, delta) })}

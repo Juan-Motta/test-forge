@@ -4,10 +4,11 @@ import { useT } from "@/lib/i18n";
 import { cn } from "@/ui";
 import { VALUE_SOURCES, type ValueSource } from "./value-source";
 
-/** Fixed and flow inputs gray, secrets amber, saved values teal, AI values purple. */
+/** Fixed values, flow inputs and connection variables gray, secrets amber, saved values teal, AI values purple. */
 const STYLES: Record<ValueSource, string> = {
   fixed: "bg-chip text-muted",
   input: "bg-chip text-muted",
+  variable: "bg-chip text-muted",
   secret: "bg-evaluator/15 text-evaluator-fg",
   saved: "bg-success/15 text-success-fg",
   generated: "bg-llm/15 text-llm-fg",

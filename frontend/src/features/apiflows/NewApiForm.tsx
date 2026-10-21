@@ -6,22 +6,22 @@ import { confirmLeave } from "@/lib/navigation/unsaved-changes";
 import { localizeFormError, useT } from "@/lib/i18n";
 import { Alert, Button, Card, Field, Input, Textarea } from "@/ui";
 import {
-  MAX_SECRETS,
   connectionProblems,
   fieldError,
   newConnection,
+  newVariable,
   rowKeys,
-  secretCount,
+  variableErrors,
   type HeaderRow,
-  type PairRow,
+  type VariableRow,
 } from "./connection-form";
+import { ConnectionVariables } from "./ConnectionVariables";
 import { HeaderRows } from "./HeaderRows";
 import { useCreateApi } from "./queries";
-import { SecretVariables } from "./SecretVariables";
 import type { Api } from "./types";
 
-/** "New API", in the page beside the rail: name, description, base URL, headers (each plain or
- * secret) and, under "advanced", the secret variables steps use. Mounted only while open. */
+/** "New API", in the page beside the rail: name, description, base URL, the variables steps use
+ * as `{{var.name}}` (each plain or secret) and the default headers. Mounted only while open. */
 export function NewApiForm({
   onClose,
   onCreated,
@@ -40,10 +40,9 @@ export function NewApiForm({
   const [description, setDescription] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
   const [headers, setHeaders] = useState<HeaderRow[]>([]);
-  const [secrets, setSecrets] = useState<PairRow[]>([]);
+  const [variables, setVariables] = useState<VariableRow[]>([]);
   const [local, setLocal] = useState<Record<string, string>>({});
-  const canAddSecret = secretCount({ headers: [], secrets: [] }, { headers, secrets }) < MAX_SECRETS;
-  const dirty = Boolean(name || description || baseUrl || secrets.length || headers.length);
+  const dirty = Boolean(name || description || baseUrl || variables.length || headers.length);
   useEffect(() => {
     onDirtyChange?.(dirty);
   }, [dirty, onDirtyChange]);
@@ -51,14 +50,15 @@ export function NewApiForm({
 
   const view = create.isError ? localizeFormError(t, create.error, formErrorView(create.error, t("apis.error.taken"))) : undefined;
   const errors = { ...view?.fieldErrors, ...local };
+  const variableErrorsView = variableErrors(view?.fieldErrors ?? {}, variables);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
     const problems: Record<string, string> = {};
     if (!name.trim()) problems.name = t("apis.error.name");
     if (!baseUrl.trim()) problems.baseUrl = t("apis.error.baseUrl");
-    const rows = connectionProblems({ headers, secrets });
-    if (rows.secrets) problems.secrets = t(`apis.error.rows.${rows.secrets}`);
+    const rows = connectionProblems({ headers, variables });
+    if (rows.variables) problems.variables = t(`apis.error.rows.${rows.variables}`);
     if (rows.headers) problems.headers = t(`apis.error.rows.${rows.headers}`);
     setLocal(problems);
     if (Object.keys(problems).length > 0) return;
@@ -68,7 +68,7 @@ export function NewApiForm({
         name: name.trim(),
         description: description.trim(),
         baseUrl: baseUrl.trim(),
-        ...newConnection({ headers, secrets }),
+        ...newConnection({ headers, variables }),
       });
       onCreated(api);
     } catch {
@@ -106,22 +106,21 @@ export function NewApiForm({
             />
           )}
         </Field>
+        <ConnectionVariables
+          rows={variables}
+          onChange={setVariables}
+          onAdd={() => setVariables((rows) => [...rows, newVariable(nextKey())])}
+          error={local.variables ?? variableErrorsView.section}
+          rowErrors={variableErrorsView.byName}
+          hint={t("apis.variablesHint")}
+          hints={{}}
+        />
         <HeaderRows
           rows={headers}
           onChange={setHeaders}
-          onAdd={() => setHeaders((rows) => [...rows, { key: nextKey(), name: "", value: "", secret: false }])}
+          onAdd={() => setHeaders((rows) => [...rows, { key: nextKey(), name: "", value: "" }])}
           error={fieldError(errors, "headers")}
           hint={t("apis.headersHint")}
-          hints={{}}
-          canAddSecret={canAddSecret}
-        />
-        <SecretVariables
-          rows={secrets}
-          onChange={setSecrets}
-          onAdd={() => setSecrets((rows) => [...rows, { key: nextKey(), name: "", value: "" }])}
-          error={fieldError(errors, "secrets")}
-          hints={{}}
-          canAdd={canAddSecret}
         />
         <div className="flex flex-wrap justify-end gap-3">
           <Button variant="ghost" onClick={() => (!dirty || confirmLeave()) && onClose()}>

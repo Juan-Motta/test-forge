@@ -1,76 +1,97 @@
 import { describe, expect, it } from "vitest";
-import { connectionPayload, connectionRows, rowKeys, secretNameFor, type ConnectionForm, type StoredConnection } from "./connection-form";
+import {
+  connectionRows,
+  rowKeys,
+  variableChanges,
+  variableErrors,
+  variablesProblem,
+  type StoredConnection,
+  type VariableRow,
+} from "./connection-form";
 
 const stored: StoredConnection = {
-  headers: [
-    { name: "x-api-key", value: "{{secret.x_api_key}}" },
-    { name: "X-Key", value: "{{secret.apiKey}}" },
-    { name: "Authorization", value: "Bearer {{secret.token}}" },
-  ],
+  headers: [{ name: "x-api-key", value: "{{secret.x_api_key}}" }],
+  variables: { tenant_id: "acme", api_version: "2" },
   secrets: [
     { name: "x_api_key", hint: "••••1" },
-    { name: "apiKey", hint: "••••2" },
-    { name: "token", hint: "••••3" },
-    { name: "password", hint: "••••4" },
+    { name: "password", hint: "••••2" },
   ],
 };
-
-describe("secretNameFor", () => {
-  it("lowercases the header name and turns every other character into _", () => {
-    expect(secretNameFor("X-Api-Key")).toBe("x_api_key");
-    expect(secretNameFor("Ocp-Apim-Subscription.Key")).toBe("ocp_apim_subscription_key");
-  });
-
-  it("starts with _ when the header starts with a digit, and keeps at most 40 characters", () => {
-    expect(secretNameFor("3scale-key")).toBe("_3scale_key");
-    expect(secretNameFor("a".repeat(50))).toBe("a".repeat(40));
-  });
-
-  it("adds _2, _3 when the name is taken, still within 40 characters", () => {
-    expect(secretNameFor("token", new Set(["token"]))).toBe("token_2");
-    expect(secretNameFor("token", new Set(["token", "token_2"]))).toBe("token_3");
-    expect(secretNameFor("a".repeat(50), new Set(["a".repeat(40)]))).toBe(`${"a".repeat(38)}_2`);
-  });
-});
+const rows = () => connectionRows(stored, rowKeys("t")).variables;
+const edit = (all: VariableRow[], name: string, change: Partial<VariableRow>) =>
+  all.map((row) => (row.name === name ? { ...row, ...change } : row));
 
 describe("connectionRows", () => {
-  it("shows a header whose whole value is a stored secret as a secret header, and the rest as plain", () => {
-    const rows = connectionRows(stored, rowKeys("t"));
-    expect(rows.headers.map(({ name, value, secret, stored: held }) => ({ name, value, secret, held }))).toEqual([
-      { name: "x-api-key", value: "", secret: true, held: "x_api_key" },
-      { name: "X-Key", value: "", secret: true, held: "apiKey" },
-      { name: "Authorization", value: "Bearer {{secret.token}}", secret: false, held: undefined },
+  it("keeps every header plain, as stored, and lists plain variables then secrets", () => {
+    const form = connectionRows(stored, rowKeys("t"));
+    expect(form.headers.map(({ name, value }) => ({ name, value }))).toEqual(stored.headers);
+    expect(form.variables.map(({ name, value, secret }) => ({ name, value, secret }))).toEqual([
+      { name: "tenant_id", value: "acme", secret: false },
+      { name: "api_version", value: "2", secret: false },
+      { name: "x_api_key", value: "", secret: true },
+      { name: "password", value: "", secret: true },
     ]);
-    // Secrets no header sends as its whole value are secret variables.
-    expect(rows.secrets.map((row) => row.name)).toEqual(["token", "password"]);
   });
 });
 
-describe("connectionPayload", () => {
-  const form = (): ConnectionForm => connectionRows(stored, rowKeys("t"));
-
-  it("sends nothing new for an untouched form", () => {
-    expect(connectionPayload(stored, form())).toEqual({ headers: stored.headers, secrets: {} });
+describe("variableChanges", () => {
+  it("sends nothing for untouched rows", () => {
+    expect(variableChanges(stored, rows())).toEqual({ variables: {}, secrets: {} });
   });
 
-  it("never deletes a removed header's secret: a step may still use it, and it stays as a variable", () => {
-    const rows = form();
-    rows.headers = rows.headers.filter((row) => row.name === "Authorization");
-    expect(connectionPayload(stored, rows).secrets).toEqual({});
-  });
-
-  it("keeps the value typed for a secret variable named like a removed header's secret", () => {
-    const rows = form();
-    rows.headers = rows.headers.filter((row) => row.name !== "x-api-key");
-    rows.secrets = [...rows.secrets, { key: "new", name: "x_api_key", value: "moved-to-body" }];
-    expect(connectionPayload(stored, rows).secrets).toEqual({ x_api_key: "moved-to-body" });
-  });
-
-  it("keeps a secret another header still sends", () => {
-    const rows = form();
-    rows.headers = rows.headers.map((row) =>
-      row.name === "x-api-key" ? { ...row, secret: false, value: "{{secret.x_api_key}}-plain" } : row,
+  it("sends an edited plain value, a replaced secret, and null for removed ones", () => {
+    const changed = edit(edit(rows(), "tenant_id", { value: "globex" }), "x_api_key", { value: "new" }).filter(
+      (row) => row.name !== "api_version" && row.name !== "password",
     );
-    expect(connectionPayload(stored, rows).secrets).toEqual({});
+    expect(variableChanges(stored, changed)).toEqual({
+      variables: { tenant_id: "globex", api_version: null },
+      secrets: { x_api_key: "new", password: null },
+    });
+  });
+
+  it("moves a variable between plain and secret with both keys", () => {
+    expect(variableChanges(stored, edit(rows(), "tenant_id", { secret: true }))).toEqual({
+      variables: { tenant_id: null },
+      secrets: { tenant_id: "acme" },
+    });
+    expect(variableChanges(stored, edit(rows(), "password", { secret: false, value: "visible" }))).toEqual({
+      variables: { password: "visible" },
+      secrets: { password: null },
+    });
+  });
+
+  it("re-adds a removed name as the other kind", () => {
+    const changed = [...rows().filter((row) => row.name !== "tenant_id"), { key: "n", name: "tenant_id", value: "s", secret: true }];
+    expect(variableChanges(stored, changed)).toEqual({ variables: { tenant_id: null }, secrets: { tenant_id: "s" } });
+  });
+});
+
+describe("variablesProblem", () => {
+  it("asks for a name steps can use, once", () => {
+    expect(variablesProblem([{ key: "a", name: "", value: "v", secret: false }])).toBe("name");
+    expect(variablesProblem([{ key: "a", name: "2fa", value: "v", secret: false }])).toBe("pattern");
+    expect(variablesProblem([...rows(), { key: "a", name: "password", value: "v", secret: false }])).toBe("duplicate");
+  });
+
+  it("asks for a value where one is needed", () => {
+    expect(variablesProblem([{ key: "a", name: "token", value: "", secret: true }])).toBe("value");
+    expect(variablesProblem(edit(rows(), "password", { secret: false }))).toBe("value");
+    expect(variablesProblem(edit(rows(), "tenant_id", { secret: true, value: "" }))).toBe("value");
+    // A stored secret kept secret keeps its value; a plain value may be empty.
+    expect(variablesProblem([...rows(), { key: "a", name: "empty", value: "", secret: false }])).toBeUndefined();
+  });
+});
+
+describe("variableErrors", () => {
+  it("puts an error on the row it names, and the rest on the section", () => {
+    const errors = {
+      "variables.tenant_id": "'tenant_id' is already a secret of this API",
+      variables: "an API holds at most 30 variables",
+      name: "Taken",
+    };
+    expect(variableErrors(errors, rows())).toEqual({
+      byName: { tenant_id: "'tenant_id' is already a secret of this API" },
+      section: "an API holds at most 30 variables",
+    });
   });
 });

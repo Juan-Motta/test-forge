@@ -5,18 +5,19 @@ import type { FieldErrors } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { Alert, Card, Field, Input, Textarea } from "@/ui";
 import {
-  MAX_SECRETS,
   apiChanges,
   connectionProblems,
   connectionRows,
   fieldError,
+  newVariable,
   rowKeys,
-  secretCount,
+  typedNewVariables,
+  variableErrors,
   type HeaderRow,
-  type PairRow,
+  type VariableRow,
 } from "./connection-form";
+import { ConnectionVariables } from "./ConnectionVariables";
 import { HeaderRows } from "./HeaderRows";
-import { SecretVariables } from "./SecretVariables";
 import type { Api, ApiChanges } from "./types";
 import { useSecretReveal } from "./use-secret-reveal";
 
@@ -36,8 +37,8 @@ type ApiFormProps = {
 
 /**
  * The open API's details on `/apis`, edited in place in cards: its name, description, tags and
- * base URL; its headers, each plain or secret (revealed one at a time, replaced or removed), with
- * the secret variables steps use in a collapsed advanced section.
+ * base URL; its variables, each plain or secret (revealed one at a time, replaced or removed),
+ * which steps use as `{{var.name}}`; and the default headers every step sends.
  * Keyed by the caller per API and per save, so it always starts from what is stored, and a
  * revealed value never outlives a save or a switch to another API.
  */
@@ -51,15 +52,14 @@ export function ApiForm({ api, formId, onSubmit, error, serverFieldErrors, onDir
   const [baseUrl, setBaseUrl] = useState(api.baseUrl);
   const [initial] = useState(() => connectionRows(api, nextKey));
   const [headers, setHeaders] = useState<HeaderRow[]>(initial.headers);
-  // Stored secret variables still kept, each with the new value typed (empty leaves it as it is), then new ones.
-  const [secrets, setSecrets] = useState<PairRow[]>(initial.secrets);
+  // Stored variables still kept (a stored secret's value empty unless replaced), then new ones.
+  const [variables, setVariables] = useState<VariableRow[]>(initial.variables);
   const [local, setLocal] = useState<Record<string, string>>({});
 
   const errors = { ...serverFieldErrors, ...local };
-  const form = { name, description, tags, baseUrl, headers, secrets };
-  const typedAdded = secrets.some((row) => !row.locked && (row.name.trim() || row.value));
-  const dirty = Object.keys(apiChanges(api, form)).length > 0 || typedAdded;
-  const canAddSecret = secretCount(api, form) < MAX_SECRETS;
+  const form = { name, description, tags, baseUrl, headers, variables };
+  const dirty = Object.keys(apiChanges(api, form)).length > 0 || typedNewVariables(variables);
+  const variableErrorsView = variableErrors(serverFieldErrors ?? {}, variables);
 
   const dirtyHandler = useRef(onDirtyChange);
   useEffect(() => {
@@ -77,7 +77,7 @@ export function ApiForm({ api, formId, onSubmit, error, serverFieldErrors, onDir
     if (!name.trim()) problems.name = t("apis.error.name");
     if (!baseUrl.trim()) problems.baseUrl = t("apis.error.baseUrl");
     const rows = connectionProblems(form);
-    if (rows.secrets) problems.secrets = t(`apis.error.rows.${rows.secrets}`);
+    if (rows.variables) problems.variables = t(`apis.error.rows.${rows.variables}`);
     if (rows.headers) problems.headers = t(`apis.error.rows.${rows.headers}`);
     setLocal(problems);
     if (Object.keys(problems).length > 0) return;
@@ -115,31 +115,32 @@ export function ApiForm({ api, formId, onSubmit, error, serverFieldErrors, onDir
         </Field>
       </SectionCard>
 
-      <SectionCard title={t("apis.field.headers")} subtitle={t("apis.headersHint")}>
-        <HeaderRows
-          rows={headers}
-          onChange={setHeaders}
-          onAdd={() => setHeaders((rows) => [...rows, { key: nextKey(), name: "", value: "", secret: false }])}
-          error={fieldError(errors, "headers")}
+      <SectionCard title={t("apis.variables")} subtitle={t("apis.variablesHint")}>
+        <ConnectionVariables
+          rows={variables}
+          onChange={setVariables}
+          onAdd={() => setVariables((rows) => [...rows, newVariable(nextKey())])}
+          error={local.variables ?? variableErrorsView.section}
+          rowErrors={variableErrorsView.byName}
           legendSrOnly
           hints={hints}
           reveal={reveal}
-          canAddSecret={canAddSecret}
-        />
-        <SecretVariables
-          rows={secrets}
-          onChange={setSecrets}
-          onAdd={() => setSecrets((rows) => [...rows, { key: nextKey(), name: "", value: "" }])}
-          error={fieldError(errors, "secrets")}
-          hints={hints}
-          reveal={reveal}
-          canAdd={canAddSecret}
         />
         {reveal.error ? (
           <p role="alert" className="text-xs text-danger-fg">
             {t("apis.revealFailed", { error: reveal.error })}
           </p>
         ) : null}
+      </SectionCard>
+
+      <SectionCard title={t("apis.field.headers")} subtitle={t("apis.headersHint")}>
+        <HeaderRows
+          rows={headers}
+          onChange={setHeaders}
+          onAdd={() => setHeaders((rows) => [...rows, { key: nextKey(), name: "", value: "" }])}
+          error={fieldError(errors, "headers")}
+          legendSrOnly
+        />
       </SectionCard>
     </form>
   );

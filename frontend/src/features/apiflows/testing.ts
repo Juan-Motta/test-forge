@@ -11,6 +11,7 @@ export function apiFixture(overrides: Partial<Api> = {}): Api {
     tags: ["shop"],
     baseUrl: "https://shop.example.com/v1",
     headers: [{ name: "Accept", value: "application/json" }],
+    variables: {},
     secrets: [{ name: "apiKey", hint: "••••7890" }],
     flowCount: 0,
     agents: [],
@@ -171,11 +172,44 @@ function baseUrlProblem(value: unknown): string | undefined {
   }
 }
 
+const MAX_VARIABLES = 30;
+const MAX_SECRETS = 10;
+
+/** One 422 issue, as FastAPI writes it. */
+const issue = (loc: (string | number)[], msg: string) => ({ type: "value_error", loc, msg });
+const refuse = (detail: ReturnType<typeof issue>[]) => HttpResponse.json({ detail }, { status: 422 });
+
+/**
+ * Like the backend: a name is a variable or a secret, never both (checked once every change of
+ * the request is applied), and an API holds at most 30 variables and 10 secrets.
+ */
+function connectionProblem(variables: Record<string, string>, secrets: Record<string, string>) {
+  if (Object.keys(secrets).length > MAX_SECRETS) return refuse([issue(["secrets"], `an API holds at most ${MAX_SECRETS} secrets`)]);
+  if (Object.keys(variables).length > MAX_VARIABLES) {
+    return refuse([issue(["variables"], `an API holds at most ${MAX_VARIABLES} variables`)]);
+  }
+  const both = Object.keys(variables).filter((name) => name in secrets).sort();
+  return both.length > 0
+    ? refuse(both.map((name) => issue(["body", "variables", name], `'${name}' is already a secret of this API`)))
+    : undefined;
+}
+
+/** Applies `{name: value | null}` changes: a value sets that name, `null` removes it. */
+function applied(current: Record<string, string>, changes: Record<string, string | null> | undefined) {
+  const next = { ...current };
+  for (const [name, value] of Object.entries(changes ?? {})) {
+    if (value === null) delete next[name];
+    else next[name] = value;
+  }
+  return next;
+}
+
 /** Like the backend: a mask and, for values of 8+ characters, the last 4. */
 const hintOf = (value: string) => (value.length >= 8 ? `••••${value.slice(-4)}` : "••••");
 
 /**
- * In-memory backend for `/api/apis` and `/api/flows`: 404/409/422 like the backend, secrets kept
+ * In-memory backend for `/api/apis` and `/api/flows`: 404/409/422 like the backend (a name both a
+ * variable and a secret, too many of either, an unknown `{{var.x}}`), secrets kept
  * in clear only here (`secrets`, by API id) and masked in every response, and every request
  * recorded (reads too, so tests can assert when the secrets were fetched).
  */
@@ -234,8 +268,10 @@ export function mockApisApi(
     state.flows.some((flow) => flow.apiId === apiId && flow.name === name && flow.id !== except);
   const agentsOf = (ids: unknown) =>
     ((ids as string[] | undefined) ?? []).map((id) => options.agents?.find((agent) => agent.id === id) ?? { id, name: id });
-  // Like the backend's reference check, for `{{saved.x}}` in query and header values.
-  const refused = (steps: FlowStep[] | undefined) => {
+  // Like the backend's reference checks, for `{{saved.x}}` and `{{var.x}}` in query and header values.
+  const refused = (steps: FlowStep[] | undefined, apiId: unknown) => {
+    const api = state.items.find((item) => item.id === apiId);
+    const known = new Set([...Object.keys(api?.variables ?? {}), ...Object.keys(state.secrets[String(apiId)] ?? {})]);
     const saved = new Set<string>();
     const detail: { type: string; loc: (string | number)[]; msg: string }[] = [];
     (steps ?? []).forEach((step, n) => {
@@ -244,6 +280,11 @@ export function mockApisApi(
           for (const match of row.value.matchAll(/\{\{\s*saved\.(\w+)\s*\}\}/g)) {
             if (!saved.has(match[1])) {
               detail.push({ type: "value_error", loc: ["body", "steps", n, list, j, "value"], msg: `no step saves '${match[1]}'` });
+            }
+          }
+          for (const match of row.value.matchAll(/\{\{\s*var\.(\w+)\s*\}\}/g)) {
+            if (!known.has(match[1])) {
+              detail.push(issue(["body", "steps", n, list, j, "value"], `the API has no variable named '${match[1]}'`));
             }
           }
         }),
@@ -273,6 +314,10 @@ export function mockApisApi(
       if (taken(body.name)) return HttpResponse.json({ detail: "API name already in use" }, { status: 409 });
       const refused = invalid(body);
       if (refused) return refused;
+      const variables = (body.variables as Record<string, string> | undefined) ?? {};
+      const secrets = (body.secrets as Record<string, string> | undefined) ?? {};
+      const clash = connectionProblem(variables, secrets);
+      if (clash) return clash;
       const now = new Date().toISOString();
       const item = apiFixture({
         id: `api-new-${(created += 1)}`,
@@ -281,11 +326,12 @@ export function mockApisApi(
         tags: (body.tags as string[] | undefined) ?? [],
         baseUrl: String(body.baseUrl),
         headers: (body.headers as Api["headers"] | undefined) ?? [],
+        variables,
         createdAt: now,
         updatedAt: now,
       });
       state.items.push(item);
-      state.secrets[item.id] = { ...((body.secrets as Record<string, string> | undefined) ?? {}) };
+      state.secrets[item.id] = { ...secrets };
       return HttpResponse.json(view(item), { status: 201 });
     }),
     http.patch(apiUrl("/apis/:id"), async ({ request, params }) => {
@@ -298,12 +344,17 @@ export function mockApisApi(
       }
       const refused = invalid(body);
       if (refused) return refused;
-      const { secrets, ...rest } = body as Partial<Api> & { secrets?: Record<string, string | null> };
-      for (const [name, value] of Object.entries(secrets ?? {})) {
-        if (value === null) delete state.secrets[id][name];
-        else state.secrets[id][name] = value;
-      }
-      state.items[index] = { ...state.items[index], ...rest, updatedAt: new Date().toISOString() };
+      const { secrets, variables, ...rest } = body as Omit<Partial<Api>, "variables"> & {
+        secrets?: Record<string, string | null>;
+        variables?: Record<string, string | null>;
+      };
+      // Secrets, then variables, then the checks, as one change: nothing is kept when refused.
+      const nextSecrets = applied(state.secrets[id] ?? {}, secrets);
+      const nextVariables = applied(state.items[index].variables, variables);
+      const problem = connectionProblem(nextVariables, nextSecrets);
+      if (problem) return problem;
+      state.secrets[id] = nextSecrets;
+      state.items[index] = { ...state.items[index], ...rest, variables: nextVariables, updatedAt: new Date().toISOString() };
       return HttpResponse.json(view(state.items[index]));
     }),
     http.delete(apiUrl("/apis/:id"), async ({ request, params }) => {
@@ -328,7 +379,7 @@ export function mockApisApi(
       const api = state.items.find((item) => item.id === body.apiId);
       if (!api) return notFound();
       if (flowTaken(body.apiId, body.name)) return HttpResponse.json({ detail: "Flow name already in use" }, { status: 409 });
-      const invalid = refused(body.steps as FlowStep[]);
+      const invalid = refused(body.steps as FlowStep[], api.id);
       if (invalid) return invalid;
       const now = new Date().toISOString();
       const flow = flowFixture({
@@ -354,7 +405,7 @@ export function mockApisApi(
       if (body.name !== undefined && flowTaken(state.flows[index].apiId, body.name, id)) {
         return HttpResponse.json({ detail: "Flow name already in use" }, { status: 409 });
       }
-      const invalid = refused(body.steps as FlowStep[] | undefined);
+      const invalid = refused(body.steps as FlowStep[] | undefined, state.flows[index].apiId);
       if (invalid) return invalid;
       const { agentIds, ...rest } = body;
       state.flows[index] = {

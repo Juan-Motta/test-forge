@@ -96,6 +96,8 @@ type StepCardProps = {
   step: StepDraft;
   /** The flow's inputs, to tell the values AI writes from the plain ones. */
   inputs: InputDraft[];
+  /** The names of the API's secrets, to tell a secret `{{var.name}}` from a plain one. */
+  secrets: ReadonlySet<string>;
   /** The flow's errors by row (`steps.<n>…`). */
   errors: Record<string, string>;
   onChange: (step: StepDraft) => void;
@@ -106,7 +108,7 @@ type StepCardProps = {
 };
 
 /** One request of the flow: method, path and title; query, headers and JSON body; what it saves and checks. */
-export function StepCard({ index, count, step, inputs, errors, onChange, onMove, onRemove, onCopyCurl }: StepCardProps) {
+export function StepCard({ index, count, step, inputs, secrets, errors, onChange, onMove, onRemove, onCopyCurl }: StepCardProps) {
   const t = useT();
   const n = index + 1;
   const at = (field: string) => errors[`steps.${index}.${field}`];
@@ -143,7 +145,7 @@ export function StepCard({ index, count, step, inputs, errors, onChange, onMove,
             onChange={(event) => change({ value: event.target.value })}
             {...described}
           />
-          <SourceChip source={valueSource(row.value, sourceInputs)} />
+          <SourceChip source={valueSource(row.value, sourceInputs, secrets)} />
         </>
       )}
     />

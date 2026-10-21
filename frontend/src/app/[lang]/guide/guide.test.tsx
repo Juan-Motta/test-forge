@@ -295,9 +295,9 @@ describe("Guide in Spanish", () => {
       heading: "API flows",
       figure: /Example run of a flow/,
       facts: [
-        /An API holds a base URL.*named secrets/,
+        /An API holds a base URL and its Variables.*\{\{var\.name\}\}.*named secrets.*Default headers are optional/,
         /A flow is one or more calls in order/,
-        /Fixed.*Flow input.*API secret.*From a step.*AI generated/,
+        /Fixed.*Flow input.*Connection variable.*API secret.*From a step.*AI generated/,
         /Run flow opens a small form.*leave an AI input empty and AI writes it/,
         /opens on the first failed step/,
         /fetched only when you click it and hidden again/,
@@ -310,9 +310,9 @@ describe("Guide in Spanish", () => {
       heading: "Flujos de API",
       figure: /Ejemplo de una corrida de un flujo/,
       facts: [
-        /Una API tiene una URL base.*secretos con nombre/,
+        /Una API tiene una URL base y sus Variables.*\{\{var\.name\}\}.*secretos con nombre.*Encabezados por defecto son opcionales/,
         /Un flujo es una o más llamadas en orden/,
-        /Fijo.*Entrada del flujo.*Secreto de la API.*De un paso.*Generado por IA/,
+        /Fijo.*Entrada del flujo.*Variable de conexión.*Secreto de la API.*De un paso.*Generado por IA/,
         /Ejecutar flujo abre un formulario pequeño.*deja vacía una entrada de IA y la IA la escribe/,
         /Abre en el primer paso fallido/,
         /se piden solo cuando haces clic y se ocultan otra vez/,

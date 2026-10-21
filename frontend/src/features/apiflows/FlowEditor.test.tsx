@@ -12,7 +12,7 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(nav.search),
 }));
 
-const shop = apiFixture();
+const shop = apiFixture({ variables: { tenant_id: "acme" } });
 const concierge = { id: "a-concierge", name: "Concierge" };
 const hotel = { id: "a-hotel", name: "Hotel booking assistant" };
 const search = flowFixture({
@@ -26,6 +26,8 @@ search.steps[1].query = [
 search.steps[1].headers = [
   { name: "Authorization", value: "Bearer {{saved.token}}" },
   { name: "X-Key", value: "{{secret.apiKey}}" },
+  { name: "X-Tenant", value: "{{var.tenant_id}}" },
+  { name: "X-Api-Key", value: "{{var.apiKey}}" },
 ];
 const other = flowFixture({ id: "f-orders", name: "List orders" });
 
@@ -64,7 +66,7 @@ describe("flow editor", () => {
     expect(screen.getByRole("heading", { level: 2, name: /Search products/ })).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "Flow description" })).toHaveValue(flowFixture().description);
     expect(screen.getByRole("link", { name: "Run flow" })).toHaveAttribute("href", "/apis/api-shop?flow=f-products&run=new");
-    expect(screen.getByText("Use {{input.name}}, {{secret.name}} or {{saved.name}} in any value.")).toBeInTheDocument();
+    expect(screen.getByText("Use {{input.name}}, {{var.name}} or {{saved.name}} in any value.")).toBeInTheDocument();
     expect(within(step(1)).getByRole("combobox", { name: "Method of step 1" })).toHaveValue("POST");
     expect(within(step(1)).getByRole("textbox", { name: "Path of step 1" })).toHaveValue("/auth/token");
     expect(within(step(1)).getByRole("textbox", { name: "JSON body of step 1" })).toHaveValue('{\n  "key": "{{secret.apiKey}}"\n}');
@@ -82,19 +84,24 @@ describe("flow editor", () => {
     expect(within(legend).getAllByRole("listitem").map((item) => item.textContent)).toEqual([
       "Fixed",
       "Flow input",
+      "Connection variable",
       "API secret",
       "From a step",
       "AI generated",
     ]);
     expect(within(legend).getByText("API secret")).toHaveAttribute("title", expect.stringContaining("{{secret.name}}"));
+    expect(within(legend).getByText("Connection variable")).toHaveAttribute("title", expect.stringContaining("{{var.name}}"));
 
     const chip = (row: string) =>
-      within(within(step(2)).getByRole("group", { name: row })).getByText(/^(Fixed|Flow input|API secret|From a step|AI generated)$/)
+      within(within(step(2)).getByRole("group", { name: row })).getByText(/^(Fixed|Flow input|Connection variable|API secret|From a step|AI generated)$/)
         .textContent;
     expect(chip("Step 2 query 1")).toBe("AI generated");
     expect(chip("Step 2 query 2")).toBe("Fixed");
     expect(chip("Step 2 header 1")).toBe("From a step");
     expect(chip("Step 2 header 2")).toBe("API secret");
+    // {{var.x}}: a plain variable of the connection, or an API secret when x is one of its secrets.
+    expect(chip("Step 2 header 3")).toBe("Connection variable");
+    expect(chip("Step 2 header 4")).toBe("API secret");
 
     // Without "AI writes it from", the same value is a plain input.
     const user = userEvent.setup({ delay: null });
