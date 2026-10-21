@@ -5,7 +5,7 @@ import { Bullets, Callout, Code, GuideLink, P, Region, Table, Ui } from "@/featu
 const MODULES = [
   ["overview", "Overview"],
   ["live-sessions", "Live sessions"],
-  ["runs-and-reports", "Runs & reports"],
+  ["runs-and-reports", "Runs"],
   ["scenarios", "Scenarios"],
   ["api-flows", "API flows"],
   ["agents", "Agents"],
@@ -28,8 +28,9 @@ export function ModulesEn() {
   return (
     <>
       <P>
-        The sidebar of the app lists the main modules; Connections, API keys and Model prices are reached from{" "}
-        <Ui>Settings</Ui>, which also holds your theme and language. This page explains each one: what it is for, what you will
+        The sidebar of the app holds the <Ui>Overview</Ui> and two groups: <Ui>Agents</Ui> (Connections, Scenarios, Live
+        sessions and Runs) and <Ui>API</Ui> (Connections, Flows and Runs). Provider connections, API keys and Model prices
+        are reached from <Ui>Settings</Ui>, which also holds your theme and language. This page explains each one: what it is for, what you will
         find there, and a few tips. Jump to one:
       </P>
       <nav aria-label="Modules on this page">
@@ -126,7 +127,7 @@ export function ModulesEn() {
         </Tips>
       </Region>
 
-      <Region id="runs-and-reports" title="Runs & reports">
+      <Region id="runs-and-reports" title="Runs">
         <P>
           Every agent run ever made, with its transcript, timings and (for calls) audio, under <Ui>Agents</Ui> →{" "}
           <Ui>Runs</Ui> in the sidebar. Filter by <Ui>Status</Ui>,{" "}
@@ -231,7 +232,8 @@ export function ModulesEn() {
           API key: its value is stored sealed and shown masked. Other named secrets, such as a password a step sends in its
           body, query or path, go under <Ui>Secret variables (advanced)</Ui>, used as <Code>{"{{secret.name}}"}</Code>. A{" "}
           <Ui>flow</Ui> is one or more calls in order: for example, get a token with the API key, then search products with
-          that token. The page lists the APIs; open one to see its flows in the sidebar and its connection above them.
+          that token. <Ui>API</Ui> → <Ui>Connections</Ui> lists the APIs on the left and edits the open one on the right, like
+          an agent&apos;s connection; <Ui>API</Ui> → <Ui>Flows</Ui> lists every flow, and opening one shows its steps.
           Every run of every flow is listed under <Ui>API</Ui> → <Ui>Runs</Ui>, filtered by status and API; open one to see
           its steps.
         </P>
@@ -248,10 +250,11 @@ export function ModulesEn() {
         />
         <P>
           <Ui>Run flow</Ui> opens a small form, one field per input, filled with its default; leave an AI input empty and AI
-          writes it. The run then shows each step as a strip: passed, failed or skipped, with its method, path, status and
-          time. It opens on the first failed step, with its request, its response (JSON shown pretty), its checks with the
-          actual value, and the values it saved. <Ui>Run all</Ui>, on an API and in its row of the table, runs every flow
-          once with no inputs and lists how each ended.
+          writes it. The run then shows the calls as boxes (passed, failed or skipped, with method, path, status and
+          time) joined by lines that carry the values one call passes to the next, as <Code>name = value</Code>. It opens on
+          the first failed step, with its request, its response (JSON indented and coloured, with a copy button and a
+          search), its checks with the actual value, and the values it saved. <Ui>Run all</Ui>, on an API&apos;s page, runs
+          every flow once with no inputs and lists how each ended.
         </P>
         <ApiFlowRunMockup locale="en" />
         <Tips>

@@ -166,7 +166,7 @@ describe("Guide content", () => {
     expect(screen.getAllByText(/text agent/i).length).toBeGreaterThan(0);
     expect(screen.getByText("Follow and listen automatically")).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 2, name: "Model prices" })).toBeInTheDocument();
-    expect(screen.getByText(/The sidebar of the app lists the main modules/)).toHaveTextContent(/Settings/);
+    expect(screen.getByText(/The sidebar of the app holds the/)).toHaveTextContent(/Settings/);
     modules.unmount();
 
     const scoring = await show(ScoringPage);

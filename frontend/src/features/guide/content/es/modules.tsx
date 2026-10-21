@@ -6,7 +6,7 @@ import { Bullets, Callout, Code, GuideLink, P, Region, Table, Ui } from "@/featu
 const MODULES = [
   ["overview", "Resumen"],
   ["live-sessions", "Sesiones en vivo"],
-  ["runs-and-reports", "Corridas y reportes"],
+  ["runs-and-reports", "Corridas"],
   ["scenarios", "Escenarios"],
   ["api-flows", "Flujos de API"],
   ["agents", "Agentes"],
@@ -29,8 +29,9 @@ export function ModulesEs() {
   return (
     <>
       <P>
-        La barra lateral de la app lista los módulos principales; a Conexiones, Claves de API y Precios de modelos se llega
-        desde <Ui>Configuración</Ui>, donde también están tu tema y tu idioma. Esta página explica cada uno: para qué sirve, qué
+        La barra lateral de la app tiene el <Ui>Resumen</Ui> y dos grupos: <Ui>Agentes</Ui> (Conexiones, Escenarios, Sesiones
+        en vivo y Corridas) y <Ui>API</Ui> (Conexiones, Flujos y Corridas). A las conexiones de proveedores, las Claves de API
+        y los Precios de modelos se llega desde <Ui>Configuración</Ui>, donde también están tu tema y tu idioma. Esta página explica cada uno: para qué sirve, qué
         vas a encontrar ahí y algunos consejos. Ve directo a uno:
       </P>
       <nav aria-label="Módulos en esta página">
@@ -131,7 +132,7 @@ export function ModulesEs() {
         </Tips>
       </Region>
 
-      <Region id="runs-and-reports" title="Corridas y reportes">
+      <Region id="runs-and-reports" title="Corridas">
         <P>
           Todas las corridas de agentes, con su transcripción, sus tiempos y (en las llamadas) su audio, en{" "}
           <Ui>Agentes</Ui> → <Ui>Corridas</Ui> de la barra lateral. Filtra por{" "}
@@ -243,8 +244,9 @@ export function ModulesEs() {
           <Ui>Secreto</Ui> de un encabezado para una clave de API: su valor se guarda sellado y se muestra oculto. Los demás
           secretos con nombre, como una contraseña que un paso envía en su cuerpo, su consulta o su ruta, van en{" "}
           <Ui>Variables secretas (avanzado)</Ui> y se usan como <Code>{"{{secret.name}}"}</Code>. Un <Ui>flujo</Ui> es una o más llamadas en orden: por ejemplo, obtener un
-          token con la clave de API y luego buscar productos con ese token. La página lista las APIs; abre una para ver sus
-          flujos en la barra lateral y su conexión arriba. Todas las corridas de todos los flujos están en <Ui>API</Ui> →{" "}
+          token con la clave de API y luego buscar productos con ese token. En <Ui>API</Ui> → <Ui>Conexiones</Ui> están las APIs a la
+          izquierda y se edita la abierta a la derecha, como la conexión de un agente; <Ui>API</Ui> → <Ui>Flujos</Ui> lista
+          todos los flujos, y al abrir uno ves sus pasos. Todas las corridas de todos los flujos están en <Ui>API</Ui> →{" "}
           <Ui>Corridas</Ui>, filtradas por estado y API; abre una para ver sus pasos.
         </P>
         <Table
@@ -260,10 +262,11 @@ export function ModulesEs() {
         />
         <P>
           <Ui>Ejecutar flujo</Ui> abre un formulario pequeño, un campo por entrada, con su valor por defecto; deja vacía una
-          entrada de IA y la IA la escribe. La corrida muestra cada paso en una franja: aprobado, fallido u omitido, con su
-          método, ruta, estado y tiempo. Abre en el primer paso fallido, con su solicitud, su respuesta (el JSON se muestra
-          ordenado), sus verificaciones con el valor real y los valores que guardó. <Ui>Ejecutar todos</Ui>, en una API y en su
-          fila de la tabla, ejecuta cada flujo una vez sin entradas y muestra cómo terminó cada uno.
+          entrada de IA y la IA la escribe. La corrida muestra las llamadas como cajas (aprobada, fallida u omitida, con
+          método, ruta, estado y tiempo) unidas por líneas que llevan los valores que una llamada pasa a la siguiente, como{" "}
+          <Code>nombre = valor</Code>. Abre en el primer paso fallido, con su solicitud, su respuesta (el JSON indentado y con
+          colores, con un botón para copiar y un buscador), sus verificaciones con el valor real y los valores que guardó.{" "}
+          <Ui>Ejecutar todos</Ui>, en la página de una API, ejecuta cada flujo una vez sin entradas y muestra cómo terminó cada uno.
         </P>
         <ApiFlowRunMockup locale="es" />
         <Tips>
