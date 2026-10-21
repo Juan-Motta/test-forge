@@ -67,10 +67,11 @@ export function FlowEditorContainer({ api, flow }: { api: Pick<Api, "id" | "secr
   }
 
   async function save() {
-    const { payload, invalidBodies } = payloadOf(draft);
+    const { payload, invalidBodies, emptyQueries } = payloadOf(draft);
     const local: Record<string, string> = {};
     if (!payload.name) local.name = t("flows.error.name");
     for (const index of invalidBodies) local[`steps.${index}.body`] = t("flows.error.json");
+    for (const index of emptyQueries) local[`steps.${index}.body`] = t("flows.error.gqlQuery");
     setErrors(local);
     setFormErrors([]);
     setAlert(undefined);

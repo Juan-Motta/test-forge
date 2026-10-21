@@ -200,14 +200,17 @@ function checkOf(check: CheckDraft): FlowCheck {
 }
 
 /**
- * The request body for a save, or the steps whose JSON body does not parse. Rows are sent as
+ * The request body for a save, the steps whose JSON body (or GraphQL variables) does not parse,
+ * and the GraphQL steps with no query. Rows are sent as
  * they are (blank ones included) so the backend's error locations match the editor's rows.
  */
-export function payloadOf(draft: FlowDraft): { payload: FlowPayload; invalidBodies: number[] } {
+export function payloadOf(draft: FlowDraft): { payload: FlowPayload; invalidBodies: number[]; emptyQueries: number[] } {
   const invalidBodies: number[] = [];
+  const emptyQueries: number[] = [];
   const steps = draft.steps.map((step, index): FlowStep => {
     let body: unknown = null;
     if (step.bodyMode === "graphql") {
+      if (!step.gqlQuery.trim()) emptyQueries.push(index);
       body = { query: step.gqlQuery };
       if (step.gqlVariables.trim()) {
         try {
@@ -249,6 +252,7 @@ export function payloadOf(draft: FlowDraft): { payload: FlowPayload; invalidBodi
       agentIds: draft.agentIds,
     },
     invalidBodies,
+    emptyQueries,
   };
 }
 

@@ -71,6 +71,14 @@ describe("flow draft", () => {
     expect(invalidBodies).toEqual([1]);
   });
 
+  it("names the GraphQL steps without a query instead of sending an empty one", () => {
+    const draft = draftOf();
+    draft.steps = [withBodyMode({ ...newStep(), method: "PUT", body: '{"name": "x"}' }, "graphql")];
+    const { emptyQueries, invalidBodies } = payloadOf(draft);
+    expect(emptyQueries).toEqual([0]);
+    expect(invalidBodies).toEqual([]);
+  });
+
   it("switches a step between JSON and GraphQL without losing what was typed", () => {
     const json = { ...newStep(), body: '{"query": "{ me { id } }", "variables": {"a": 1}}' };
     const graphql = withBodyMode(json, "graphql");

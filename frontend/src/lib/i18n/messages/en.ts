@@ -1404,6 +1404,7 @@ export const en = {
   "flows.addCheck": "Add check",
   "flows.error.name": "Enter a name.",
   "flows.error.json": "Enter valid JSON, or leave it empty for no body.",
+  "flows.error.gqlQuery": "Write the GraphQL query, or switch the body back to JSON.",
   "flowRuns.formTitle": "Run {name}",
   "flowRuns.formHint": "Each field starts with the input's default. Empty fields take their default.",
   "flowRuns.noInputs": "This flow has no inputs: it runs as it is.",

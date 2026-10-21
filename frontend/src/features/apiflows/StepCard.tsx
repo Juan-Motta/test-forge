@@ -120,6 +120,8 @@ export function StepCard({ index, count, step, inputs, secrets, errors, onChange
   const sourceInputs = inputs.map((input) => ({ name: input.name.trim(), generate: input.generate.trim() || null }));
   const headerErrors = [at("method"), at("path"), at("title"), errors[`steps.${index}`]].filter(Boolean);
   const bodyError = at("body");
+  // In GraphQL mode a body error belongs to the query while it is empty, else to the variables.
+  const queryError = bodyError && step.bodyMode === "graphql" && !step.gqlQuery.trim();
 
   const pairs = (list: "query" | "headers") => (
     <RowList<PairDraft>
@@ -235,6 +237,8 @@ export function StepCard({ index, count, step, inputs, secrets, errors, onChange
               mono
               rows={6}
               aria-label={t("flows.gqlQueryOf", { n })}
+              aria-invalid={queryError ? true : undefined}
+              aria-describedby={queryError ? `${step.key}-body-error` : undefined}
               placeholder={"query($id: ID!) {\n  user(id: $id) { id name }\n}"}
               value={step.gqlQuery}
               onChange={(event) => update({ gqlQuery: event.target.value })}
@@ -244,8 +248,8 @@ export function StepCard({ index, count, step, inputs, secrets, errors, onChange
               rows={step.gqlVariables ? 4 : 2}
               aria-label={t("flows.gqlVariablesOf", { n })}
               placeholder={t("flows.gqlVariablesPlaceholder")}
-              aria-invalid={bodyError ? true : undefined}
-              aria-describedby={bodyError ? `${step.key}-body-error` : undefined}
+              aria-invalid={bodyError && !queryError ? true : undefined}
+              aria-describedby={bodyError && !queryError ? `${step.key}-body-error` : undefined}
               value={step.gqlVariables}
               onChange={(event) => update({ gqlVariables: event.target.value })}
             />

@@ -1378,6 +1378,7 @@ export const es: Messages = {
   "flows.addCheck": "Agregar verificación",
   "flows.error.name": "Escribe un nombre.",
   "flows.error.json": "Escribe un JSON válido, o déjalo vacío para no enviar cuerpo.",
+  "flows.error.gqlQuery": "Escribe la consulta GraphQL, o vuelve a poner el cuerpo en JSON.",
   "flowRuns.formTitle": "Ejecutar {name}",
   "flowRuns.formHint": "Cada campo empieza con el valor por defecto de la entrada. Los campos vacíos toman su valor por defecto.",
   "flowRuns.noInputs": "Este flujo no tiene entradas: se ejecuta tal como está.",

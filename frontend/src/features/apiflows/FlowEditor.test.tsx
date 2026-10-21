@@ -197,6 +197,8 @@ describe("flow editor", () => {
     const { user } = await renderFlow();
     const second = within(step(2));
     await user.click(second.getByRole("radio", { name: "GraphQL" }));
+    await user.click(second.getByRole("textbox", { name: "GraphQL query of step 2" }));
+    await user.paste("{ me { id } }");
     const variables = second.getByRole("textbox", { name: "GraphQL variables of step 2" });
     await user.click(variables);
     await user.paste("{ q: 1");
@@ -204,6 +206,18 @@ describe("flow editor", () => {
 
     expect(variables).toHaveAttribute("aria-invalid", "true");
     expect(variables).toHaveAccessibleDescription("Enter valid JSON, or leave it empty for no body.");
+    expect(writes(state, "PATCH")).toEqual([]);
+  });
+
+  it("asks for the GraphQL query instead of replacing the body with an empty one", async () => {
+    const state = setup();
+    const { user } = await renderFlow();
+    await user.click(within(step(1)).getByRole("radio", { name: "GraphQL" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    const query = within(step(1)).getByRole("textbox", { name: "GraphQL query of step 1" });
+    expect(query).toHaveAttribute("aria-invalid", "true");
+    expect(query).toHaveAccessibleDescription("Write the GraphQL query, or switch the body back to JSON.");
     expect(writes(state, "PATCH")).toEqual([]);
   });
 
