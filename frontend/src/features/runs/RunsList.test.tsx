@@ -306,7 +306,7 @@ describe("Runs list in Spanish", () => {
     renderWithClient(<RunsContainer />, { locale: "es" });
 
     const table = await screen.findByRole("table", { name: "Corridas" });
-    expect(screen.getByRole("heading", { level: 1, name: "Corridas y reportes" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "Corridas" })).toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "Estado" })).toBeInTheDocument();
     expect(within(table).getByRole("columnheader", { name: "Escenario" })).toBeInTheDocument();
     const row = rowOf(table, "r-2");

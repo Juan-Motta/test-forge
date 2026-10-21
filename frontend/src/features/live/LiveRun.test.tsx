@@ -56,8 +56,8 @@ describe("Live run", () => {
     renderWithClient(<LiveRunContainer runId="r-1" />);
 
     const breadcrumb = screen.getByRole("navigation", { name: "Breadcrumb" });
-    expect(breadcrumb).toHaveTextContent(/^Runs & reports \/ Run r-1$/);
-    expect(within(breadcrumb).getByRole("link", { name: "Runs & reports" })).toHaveAttribute("href", "/runs");
+    expect(breadcrumb).toHaveTextContent(/^Runs \/ Run r-1$/);
+    expect(within(breadcrumb).getByRole("link", { name: "Runs" })).toHaveAttribute("href", "/runs");
     expect(within(breadcrumb).getByRole("link", { name: "Run r-1" })).toHaveAttribute("href", "/runs/r-1");
     await screen.findByRole("heading", { name: "Booking with date change" });
   });

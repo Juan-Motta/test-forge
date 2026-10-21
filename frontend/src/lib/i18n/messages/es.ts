@@ -28,7 +28,7 @@ export const es: Messages = {
   "nav.primary": "Principal",
   "nav.overview": "Resumen",
   "nav.live": "Sesiones en vivo",
-  "nav.runs": "Corridas y reportes",
+  "nav.runs": "Corridas",
   "nav.scenarios": "Escenarios",
   "nav.apis": "Flujos de API",
   "nav.agents": "Agentes",

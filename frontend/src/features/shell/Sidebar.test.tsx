@@ -61,9 +61,9 @@ describe("Sidebar", () => {
 
     expect(hrefs.slice(0, 9)).toEqual([
       "/",
-      "/live",
       "/agents",
       "/scenarios",
+      "/live",
       "/runs",
       "/apis",
       "/flows",
@@ -73,7 +73,7 @@ describe("Sidebar", () => {
     // Runs & reports is no longer a section of its own.
     expect(nav.queryByRole("link", { name: "Runs & reports" })).not.toBeInTheDocument();
     const agents = within(nav.getByRole("list", { name: "Agents" }));
-    expect(agents.getAllByRole("link").map((link) => link.textContent)).toEqual(["Connections", "Scenarios", "Runs"]);
+    expect(agents.getAllByRole("link").map((link) => link.textContent)).toEqual(["Connections", "Scenarios", "Live sessions", "Runs"]);
     const api = within(nav.getByRole("list", { name: "API" }));
     expect(api.getAllByRole("link").map((link) => link.textContent)).toEqual(["Connections", "Flows", "Runs"]);
     expect(nav.queryByRole("link", { name: "API keys" })).not.toBeInTheDocument();
@@ -180,7 +180,7 @@ describe("Sidebar", () => {
     expect(nav.getByRole("button", { name: "Agentes" })).toBeInTheDocument();
     expect(nav.getByRole("button", { name: "API" })).toBeInTheDocument();
     const agents = within(nav.getByRole("list", { name: "Agentes" }));
-    expect(agents.getAllByRole("link").map((link) => link.textContent)).toEqual(["Conexiones", "Escenarios", "Corridas"]);
+    expect(agents.getAllByRole("link").map((link) => link.textContent)).toEqual(["Conexiones", "Escenarios", "Sesiones en vivo", "Corridas"]);
     expect(within(nav.getByRole("list", { name: "API" })).getByRole("link", { name: "Flujos" })).toHaveAttribute(
       "href",
       "/flows",

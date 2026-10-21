@@ -3,7 +3,6 @@ import type { MessageKey } from "@/lib/i18n";
 import {
   AgentsIcon,
   ApiFlowsIcon,
-  LiveIcon,
   OverviewIcon,
   SettingsIcon,
 } from "@/ui";
@@ -33,7 +32,6 @@ export function isNavGroup(entry: NavEntry): entry is NavGroup {
 
 export const NAV_PRIMARY: NavEntry[] = [
   { href: "/", label: "nav.overview", icon: OverviewIcon },
-  { href: "/live", label: "nav.live", icon: LiveIcon },
   {
     id: "agents",
     label: "nav.agents",
@@ -41,6 +39,8 @@ export const NAV_PRIMARY: NavEntry[] = [
     items: [
       { href: "/agents", label: "nav.connections" },
       { href: "/scenarios", label: "nav.scenarios" },
+      // Calls in progress; its badge counts them.
+      { href: "/live", label: "nav.live" },
       // Agent runs and their reports (`/runs/<id>`).
       { href: "/runs", label: "nav.groupRuns" },
     ],

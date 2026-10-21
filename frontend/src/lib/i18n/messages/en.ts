@@ -30,7 +30,7 @@ export const en = {
   "nav.primary": "Primary",
   "nav.overview": "Overview",
   "nav.live": "Live sessions",
-  "nav.runs": "Runs & reports",
+  "nav.runs": "Runs",
   "nav.scenarios": "Scenarios",
   "nav.apis": "API flows",
   "nav.agents": "Agents",
