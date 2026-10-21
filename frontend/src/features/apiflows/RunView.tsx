@@ -29,6 +29,7 @@ import {
   formatBytes,
   formatDuration,
   jsonTokens,
+  matchOffsets,
   pathOf,
   prettyBody,
   secretSegments,
@@ -335,7 +336,7 @@ function ResponsePanel({ step, secrets }: { step: StepRun; secrets: SecretView }
   const response = step.response;
   const [query, setQuery] = useState("");
   const copyText = response ? bodyCopyText(response.body, secrets) : "";
-  const matches = query && copyText ? countMatches(copyText, query) : 0;
+  const matches = query && response ? countMatches(response.body, query) : 0;
   return (
     <Panel
       title={t("flowRuns.response")}
@@ -392,12 +393,15 @@ function ResponsePanel({ step, secrets }: { step: StepRun; secrets: SecretView }
   );
 }
 
-function countMatches(text: string, query: string): number {
-  const lower = text.toLowerCase();
-  const needle = query.toLowerCase();
-  let count = 0;
-  for (let at = lower.indexOf(needle); at !== -1; at = lower.indexOf(needle, at + needle.length)) count += 1;
-  return count;
+/** How many marks the body shows for `query`: matches are found inside each piece of text the
+ * body renders (a JSON token, the text around a secret), the same way the marks are placed. */
+function countMatches(body: unknown, query: string): number {
+  const pretty = prettyBody(body);
+  if (!pretty || !query) return 0;
+  const pieces = pretty.kind === "json" ? jsonTokens(pretty.text).map((token) => token.text) : [pretty.text];
+  return pieces
+    .flatMap((piece) => secretSegments(piece))
+    .reduce((sum, segment) => sum + ("text" in segment ? matchOffsets(segment.text, query).length : 0), 0);
 }
 
 function ChecksPanel({ step, secrets }: { step: StepRun; secrets: SecretView }) {

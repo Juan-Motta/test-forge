@@ -101,7 +101,14 @@ describe("run view helpers", () => {
 describe("JSON bodies", () => {
   it("pretty-prints JSON that arrives as text, and keeps JSON cut short as it is", () => {
     expect(prettyBody('{"a":1}')).toEqual({ kind: "json", text: '{\n  "a": 1\n}' });
-    expect(prettyBody('{"a": [1, 2… [99 more characters]')).toEqual({ kind: "json", text: '{"a": [1, 2… [99 more characters]' });
+    expect(prettyBody('{"a": [1, 2… [99 more characters]')).toEqual({
+      kind: "json",
+      text: '{\n  "a": [\n    1,\n    2\n… [99 more characters]',
+    });
+    expect(prettyBody('{"a": {"b": "x, y: {z}"}, "c": [], "d": {}, "e": [{"f": "g\\"h"}]… [5 more characters]')).toEqual({
+      kind: "json",
+      text: '{\n  "a": {\n    "b": "x, y: {z}"\n  },\n  "c": [],\n  "d": {},\n  "e": [\n    {\n      "f": "g\\"h"\n    }\n  ]\n… [5 more characters]',
+    });
     expect(prettyBody("plain words")).toEqual({ kind: "text", text: "plain words" });
   });
 

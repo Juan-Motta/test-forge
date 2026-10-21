@@ -2,7 +2,7 @@
 
 import { Fragment } from "react";
 import { useT } from "@/lib/i18n";
-import { secretSegments } from "./run-view";
+import { matchOffsets, secretSegments } from "./run-view";
 
 type SecretTextProps = {
   text: string;
@@ -17,18 +17,16 @@ type SecretTextProps = {
 /** `text` with every case-insensitive occurrence of `query` wrapped in a mark. */
 export function Highlighted({ text, query }: { text: string; query?: string }) {
   if (!query) return <>{text}</>;
-  const lower = text.toLowerCase();
-  const needle = query.toLowerCase();
   const parts = [];
   let from = 0;
-  for (let at = lower.indexOf(needle); at !== -1; at = lower.indexOf(needle, from)) {
+  for (const at of matchOffsets(text, query)) {
     if (at > from) parts.push(text.slice(from, at));
     parts.push(
       <mark key={at} data-match className="rounded-sm bg-evaluator/30 text-inherit">
-        {text.slice(at, at + needle.length)}
+        {text.slice(at, at + query.length)}
       </mark>,
     );
-    from = at + needle.length;
+    from = at + query.length;
   }
   if (from < text.length) parts.push(text.slice(from));
   return <>{parts.map((part, index) => (typeof part === "string" ? <Fragment key={`t${index}`}>{part}</Fragment> : part))}</>;

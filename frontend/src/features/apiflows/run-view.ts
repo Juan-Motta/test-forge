@@ -41,11 +41,73 @@ export function prettyBody(body: unknown): { kind: "json" | "text"; text: string
     try {
       return { kind: "json", text: JSON.stringify(JSON.parse(text), null, 2) };
     } catch {
-      // A body cut short to be stored is still JSON to read, just not whole.
-      return { kind: "json", text };
+      // A body cut short to be stored is still JSON to read, just not whole: indent what is there.
+      if (text.includes("\n")) return { kind: "json", text };
+      const cut = /… \[\d+ more characters\]$/.exec(text);
+      const json = cut ? text.slice(0, cut.index) : text;
+      return { kind: "json", text: reindentJson(json) + (cut ? `\n${cut[0]}` : "") };
     }
   }
   return { kind: "text", text };
+}
+
+/** Indents JSON text that may be cut short (so it cannot be parsed): a line per member, two
+ * spaces per level, strings left as they are. */
+export function reindentJson(text: string): string {
+  let out = "";
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  const newline = () => "\n" + "  ".repeat(Math.max(depth, 0));
+  for (let i = 0; i < text.length; i += 1) {
+    const char = text[i];
+    if (inString) {
+      out += char;
+      if (escaped) escaped = false;
+      else if (char === "\\") escaped = true;
+      else if (char === '"') inString = false;
+      continue;
+    }
+    if (char === '"') {
+      inString = true;
+      out += char;
+    } else if (char === "{" || char === "[") {
+      const close = char === "{" ? "}" : "]";
+      let next = i + 1;
+      while (text[next] === " ") next += 1;
+      if (text[next] === close) {
+        out += char + close;
+        i = next;
+      } else {
+        depth += 1;
+        out += char + newline();
+      }
+    } else if (char === "}" || char === "]") {
+      depth -= 1;
+      out += newline() + char;
+    } else if (char === ",") {
+      out += "," + newline();
+      while (text[i + 1] === " ") i += 1;
+    } else if (char === ":") {
+      out += ": ";
+      while (text[i + 1] === " ") i += 1;
+    } else if (char !== "\n") {
+      out += char;
+    }
+  }
+  return out;
+}
+
+/** Where `query` occurs in `text`, ignoring case: start offsets in `text` itself. */
+export function matchOffsets(text: string, query: string): number[] {
+  if (!query) return [];
+  const lower = text.toLowerCase();
+  const needle = query.toLowerCase();
+  // Lowercasing that changes lengths (like İ) would shift offsets: match the case as written.
+  const [hay, find] = lower.length === text.length && needle.length === query.length ? [lower, needle] : [text, query];
+  const offsets: number[] = [];
+  for (let at = hay.indexOf(find); at !== -1; at = hay.indexOf(find, at + find.length)) offsets.push(at);
+  return offsets;
 }
 
 export type JsonToken = { kind: "key" | "string" | "number" | "literal" | "plain"; text: string };
