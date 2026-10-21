@@ -631,6 +631,15 @@ scripts, and so the flows document how the API works. Read them before calling a
 - `{{saved.<name>}}`: a value an earlier step saved (`saves: [{"name": "token", "path":
   "body.access_token"}]`). Paths are `status`, `headers.<name>` or `body.a.0.b`.
 
+Checks are `{"type": "status", "equals": 200}`, `{"type": "duration", "maxMs": 500}` and
+`{"type": "path", "path": "body.items.length", "op": ">", "value": 0}`, where `op` is `exists`,
+`absent` (no value), `==`, `!=`, `>`, `>=`, `<` or `<=`.
+
+**GraphQL** is a `POST` whose JSON body is `{"query": "...", "variables": {...}}`; put
+placeholders in `variables`, not in the query text. A GraphQL API answers `200` even when the
+query fails, so check `{"type": "path", "path": "body.errors", "op": "absent"}` as well as the
+status.
+
 A body string that is exactly one placeholder keeps the value's type (a `number` input stays a
 number). Inputs have a `type` (`text`, `number`, `boolean`), an optional `default`, and an
 optional `generate`: a description from which AI writes a value when none is given.

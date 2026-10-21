@@ -163,6 +163,50 @@ describe("flow editor", () => {
     expect(await within(library).findByRole("link", { name: /Find products/ })).toBeInTheDocument();
   });
 
+  it("writes a GraphQL body as a query and its variables, and checks that no errors came back", async () => {
+    const state = setup();
+    const { user } = await renderFlow();
+    const second = within(step(2));
+
+    await user.click(second.getByRole("radio", { name: "GraphQL" }));
+    // A GraphQL call is a POST.
+    expect(second.getByRole("combobox", { name: "Method of step 2" })).toHaveValue("POST");
+    await user.click(second.getByRole("textbox", { name: "GraphQL query of step 2" }));
+    await user.paste("query($q: String!) { products(q: $q) { id } }");
+    await user.click(second.getByRole("textbox", { name: "GraphQL variables of step 2" }));
+    await user.paste('{"q": "{{input.q}}"}');
+    await user.click(second.getByRole("button", { name: "Add check" }));
+    await user.selectOptions(second.getByRole("combobox", { name: "Step 2 check type 1" }), "path");
+    await user.type(second.getByRole("textbox", { name: "Step 2 check path 1" }), "body.errors");
+    await user.selectOptions(second.getByRole("combobox", { name: "Step 2 check operator 1" }), "absent");
+    expect(second.queryByRole("textbox", { name: "Step 2 check value 1" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(await screen.findByText(/^Saved /)).toBeInTheDocument();
+    const [saved] = writes(state, "PATCH");
+    expect((saved.body as { steps: unknown[] }).steps[1]).toEqual({
+      ...search.steps[1],
+      method: "POST",
+      body: { query: "query($q: String!) { products(q: $q) { id } }", variables: { q: "{{input.q}}" } },
+      checks: [{ type: "path", path: "body.errors", op: "absent", value: null }],
+    });
+  });
+
+  it("refuses GraphQL variables that are not JSON before sending anything", async () => {
+    const state = setup();
+    const { user } = await renderFlow();
+    const second = within(step(2));
+    await user.click(second.getByRole("radio", { name: "GraphQL" }));
+    const variables = second.getByRole("textbox", { name: "GraphQL variables of step 2" });
+    await user.click(variables);
+    await user.paste("{ q: 1");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(variables).toHaveAttribute("aria-invalid", "true");
+    expect(variables).toHaveAccessibleDescription("Enter valid JSON, or leave it empty for no body.");
+    expect(writes(state, "PATCH")).toEqual([]);
+  });
+
   it("refuses a body that is not JSON before sending anything", async () => {
     const state = setup();
     const { user } = await renderFlow();

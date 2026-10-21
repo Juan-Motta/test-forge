@@ -269,6 +269,11 @@ export function ModulesEn() {
         <ApiFlowRunMockup locale="en" />
         <Tips>
           <li>
+            For a GraphQL API, switch a step&apos;s body to <Ui>GraphQL</Ui>: write the query, and its variables as JSON (put the{" "}
+            <Code>{"{{input.name}}"}</Code> values there, not in the query). GraphQL answers 200 even when the query fails, so
+            add the check <Code>body.errors absent</Code>.
+          </li>
+          <li>
             Secrets show as <Code>apiKey ••••7890</Code>. The eye (<Ui>Show secrets</Ui>) shows the values; they are fetched
             only when you click it and hidden again when you click it again or leave the page.
           </li>

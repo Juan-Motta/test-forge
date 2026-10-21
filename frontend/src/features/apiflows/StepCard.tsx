@@ -11,6 +11,7 @@ import {
   IconButton,
   Input,
   PlusIcon,
+  SegmentedControl,
   Select,
   Textarea,
   TrashIcon,
@@ -21,6 +22,9 @@ import {
   newCheck,
   newPair,
   newSave,
+  valueless,
+  withBodyMode,
+  type BodyMode,
   type CheckDraft,
   type CheckType,
   type InputDraft,
@@ -213,20 +217,52 @@ export function StepCard({ index, count, step, inputs, secrets, errors, onChange
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <label htmlFor={`${step.key}-body`} className="text-xs font-medium text-muted">
-          {t("flows.body")}
-        </label>
-        <Textarea
-          id={`${step.key}-body`}
-          mono
-          rows={step.body ? 5 : 2}
-          aria-label={t("flows.bodyOf", { n })}
-          placeholder={t("flows.bodyPlaceholder")}
-          aria-invalid={bodyError ? true : undefined}
-          aria-describedby={bodyError ? `${step.key}-body-error` : undefined}
-          value={step.body}
-          onChange={(event) => update({ body: event.target.value })}
-        />
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="text-xs font-medium text-muted">{t("flows.body")}</span>
+          <SegmentedControl<BodyMode>
+            label={t("flows.bodyMode", { n })}
+            options={[
+              { value: "json", label: "JSON" },
+              { value: "graphql", label: "GraphQL" },
+            ]}
+            value={step.bodyMode}
+            onChange={(mode) => onChange(withBodyMode(step, mode))}
+          />
+        </div>
+        {step.bodyMode === "graphql" ? (
+          <>
+            <Textarea
+              mono
+              rows={6}
+              aria-label={t("flows.gqlQueryOf", { n })}
+              placeholder={"query($id: ID!) {\n  user(id: $id) { id name }\n}"}
+              value={step.gqlQuery}
+              onChange={(event) => update({ gqlQuery: event.target.value })}
+            />
+            <Textarea
+              mono
+              rows={step.gqlVariables ? 4 : 2}
+              aria-label={t("flows.gqlVariablesOf", { n })}
+              placeholder={t("flows.gqlVariablesPlaceholder")}
+              aria-invalid={bodyError ? true : undefined}
+              aria-describedby={bodyError ? `${step.key}-body-error` : undefined}
+              value={step.gqlVariables}
+              onChange={(event) => update({ gqlVariables: event.target.value })}
+            />
+          </>
+        ) : (
+          <Textarea
+            id={`${step.key}-body`}
+            mono
+            rows={step.body ? 5 : 2}
+            aria-label={t("flows.bodyOf", { n })}
+            placeholder={t("flows.bodyPlaceholder")}
+            aria-invalid={bodyError ? true : undefined}
+            aria-describedby={bodyError ? `${step.key}-body-error` : undefined}
+            value={step.body}
+            onChange={(event) => update({ body: event.target.value })}
+          />
+        )}
         {bodyError ? (
           <p id={`${step.key}-body-error`} className="text-xs text-danger-fg">
             {bodyError}
@@ -334,7 +370,7 @@ export function StepCard({ index, count, step, inputs, secrets, errors, onChange
                       ))}
                     </Select>
                   </div>
-                  {check.op === "exists" ? null : (
+                  {valueless(check.op) ? null : (
                     <Input
                       mono
                       className="w-[7rem] shrink-0"

@@ -59,6 +59,7 @@ describe("run view helpers", () => {
     expect(checkRule({ type: "status", equals: 200 })).toBe("status == 200");
     expect(checkRule({ type: "duration", maxMs: 500 })).toBe("durationMs < 500");
     expect(checkRule({ type: "path", path: "body.token", op: "exists", value: null })).toBe("body.token exists");
+    expect(checkRule({ type: "path", path: "body.errors", op: "absent", value: null })).toBe("body.errors absent");
     expect(checkRule({ type: "path", path: "body.total", op: ">", value: 0 })).toBe('body.total > 0');
     expect(checkRule({ type: "path", path: "body.name", op: "==", value: "shoes" })).toBe('body.name == "shoes"');
   });

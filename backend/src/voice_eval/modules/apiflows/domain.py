@@ -126,6 +126,8 @@ class Save(DomainModel):
 
 class Operator(StrEnum):
     EXISTS = "exists"
+    # The path is missing: `body.errors absent` for a GraphQL call, which answers 200 on failure.
+    ABSENT = "absent"
     EQ = "=="
     NE = "!="
     GT = ">"
@@ -149,7 +151,7 @@ class PathCheck(DomainModel):
 
     @model_validator(mode="after")
     def _value_needed(self) -> "PathCheck":
-        if self.op != Operator.EXISTS and self.value is None:
+        if self.op not in (Operator.EXISTS, Operator.ABSENT) and self.value is None:
             raise ValueError(f"a value is required for {self.op.value}")
         return self
 

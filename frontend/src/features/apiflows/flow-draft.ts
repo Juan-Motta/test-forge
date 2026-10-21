@@ -15,6 +15,7 @@ export type InputDraft = {
   generate: string;
 };
 export type CheckType = FlowCheck["type"];
+export type BodyMode = "json" | "graphql";
 /** One shape for every check type, so switching the type keeps what was typed. */
 export type CheckDraft = { key: string; type: CheckType; equals: string; path: string; op: string; value: string; maxMs: string };
 export type StepDraft = {
@@ -26,6 +27,11 @@ export type StepDraft = {
   headers: PairDraft[];
   /** JSON text; empty means no body. */
   body: string;
+  /** How the body is edited: as JSON, or as a GraphQL query and its variables. */
+  bodyMode: BodyMode;
+  /** The GraphQL query and its variables (JSON text; empty means none), in GraphQL mode. */
+  gqlQuery: string;
+  gqlVariables: string;
   saves: SaveDraft[];
   checks: CheckDraft[];
 };
@@ -47,7 +53,9 @@ export type FlowPayload = {
 };
 
 export const METHODS: readonly HttpMethod[] = ["GET", "POST", "PUT", "PATCH", "DELETE"];
-export const CHECK_OPS = ["exists", "==", "!=", ">", ">=", "<", "<="] as const;
+export const CHECK_OPS = ["exists", "absent", "==", "!=", ">", ">=", "<", "<="] as const;
+/** Operators that read no value: whether the path is there or not. */
+export const valueless = (op: string) => op === "exists" || op === "absent";
 
 let sequence = 0;
 /** A key unique within the page. */
@@ -81,6 +89,9 @@ export const newStep = (): StepDraft => ({
   query: [],
   headers: [],
   body: "",
+  bodyMode: "json",
+  gqlQuery: "",
+  gqlVariables: "",
   saves: [],
   checks: [],
 });
@@ -113,12 +124,61 @@ export function draftOf(flow?: Flow): FlowDraft {
       path: step.path,
       query: step.query.map((row) => ({ key: nextKey(), ...row })),
       headers: step.headers.map((row) => ({ key: nextKey(), ...row })),
-      body: step.body === null || step.body === undefined ? "" : JSON.stringify(step.body, null, 2),
+      ...bodyDraft(step.body),
       saves: step.saves.map((row) => ({ key: nextKey(), ...row })),
       checks: step.checks.map(checkDraft),
     })),
     agentIds: flow.agents.map((agent) => agent.id),
   };
+}
+
+/** A GraphQL request body, `{query, variables?}` and nothing else; undefined for any other body. */
+function graphqlOf(body: unknown): { query: string; variables?: unknown } | undefined {
+  if (typeof body !== "object" || body === null || Array.isArray(body)) return undefined;
+  const { query, variables, ...rest } = body as Record<string, unknown>;
+  if (typeof query !== "string" || Object.keys(rest).length > 0) return undefined;
+  if (variables !== undefined && (typeof variables !== "object" || variables === null || Array.isArray(variables))) return undefined;
+  return { query, variables };
+}
+
+const gqlFields = (graphql: { query: string; variables?: unknown } | undefined) => ({
+  gqlQuery: graphql?.query ?? "",
+  gqlVariables: graphql?.variables === undefined ? "" : JSON.stringify(graphql.variables, null, 2),
+});
+
+/** A stored body as the editor shows it: a GraphQL request in GraphQL mode, anything else as JSON. */
+function bodyDraft(body: unknown): Pick<StepDraft, "body" | "bodyMode" | "gqlQuery" | "gqlVariables"> {
+  const text = body === null || body === undefined ? "" : JSON.stringify(body, null, 2);
+  const graphql = graphqlOf(body);
+  return { body: text, bodyMode: graphql ? "graphql" : "json", ...gqlFields(graphql) };
+}
+
+/** The JSON text of a GraphQL body; variables that do not parse yet are kept as typed. */
+function graphqlText(step: StepDraft): string {
+  const query = `  "query": ${JSON.stringify(step.gqlQuery)}`;
+  if (!step.gqlVariables.trim()) return `{\n${query}\n}`;
+  return `{\n${query},\n  "variables": ${step.gqlVariables.trim()}\n}`;
+}
+
+/**
+ * A step's body edited the other way. To GraphQL, a body that is already a GraphQL request fills
+ * the query and variables, and a GET becomes a POST; to JSON, the query and variables become the
+ * JSON text.
+ */
+export function withBodyMode(step: StepDraft, mode: BodyMode): StepDraft {
+  if (mode === step.bodyMode) return step;
+  if (mode === "json") {
+    // Nothing typed as GraphQL: the JSON body is left as it was.
+    if (!step.gqlQuery.trim() && !step.gqlVariables.trim()) return { ...step, bodyMode: "json" };
+    return { ...step, bodyMode: "json", body: graphqlText(step) };
+  }
+  let parsed: unknown;
+  try {
+    parsed = step.body.trim() ? JSON.parse(step.body) : undefined;
+  } catch {
+    parsed = undefined;
+  }
+  return { ...step, bodyMode: "graphql", method: step.method === "GET" ? "POST" : step.method, ...gqlFields(graphqlOf(parsed)) };
 }
 
 /** A whole number as a number; anything else as typed, so the backend names what is wrong. */
@@ -136,7 +196,7 @@ export function checkValue(text: string): string | number | boolean | null {
 function checkOf(check: CheckDraft): FlowCheck {
   if (check.type === "status") return { type: "status", equals: whole(check.equals) };
   if (check.type === "duration") return { type: "duration", maxMs: whole(check.maxMs) };
-  return { type: "path", path: check.path.trim(), op: check.op, value: check.op === "exists" ? null : checkValue(check.value) };
+  return { type: "path", path: check.path.trim(), op: check.op, value: valueless(check.op) ? null : checkValue(check.value) };
 }
 
 /**
@@ -147,7 +207,16 @@ export function payloadOf(draft: FlowDraft): { payload: FlowPayload; invalidBodi
   const invalidBodies: number[] = [];
   const steps = draft.steps.map((step, index): FlowStep => {
     let body: unknown = null;
-    if (step.body.trim()) {
+    if (step.bodyMode === "graphql") {
+      body = { query: step.gqlQuery };
+      if (step.gqlVariables.trim()) {
+        try {
+          body = { query: step.gqlQuery, variables: JSON.parse(step.gqlVariables) };
+        } catch {
+          invalidBodies.push(index);
+        }
+      }
+    } else if (step.body.trim()) {
       try {
         body = JSON.parse(step.body);
       } catch {

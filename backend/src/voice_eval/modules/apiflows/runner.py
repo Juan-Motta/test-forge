@@ -323,11 +323,12 @@ def _check(check: Any, response: dict[str, Any], duration_ms: int) -> dict[str, 
     else:
         assert isinstance(check, PathCheck)
         found, actual = _read_path(response, check.path)
-        passed = (
-            found
-            if check.op is Operator.EXISTS
-            else found and _compare(check.op, actual, check.value)
-        )
+        if check.op is Operator.EXISTS:
+            passed = found
+        elif check.op is Operator.ABSENT:
+            passed = not found
+        else:
+            passed = found and _compare(check.op, actual, check.value)
     return {
         "check": check.model_dump(mode="json", by_alias=True),
         "passed": passed,

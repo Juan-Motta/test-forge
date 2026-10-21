@@ -281,6 +281,11 @@ export function ModulesEs() {
         <ApiFlowRunMockup locale="es" />
         <Tips>
           <li>
+            Para una API GraphQL, cambia el cuerpo del paso a <Ui>GraphQL</Ui>: escribe la consulta y sus variables en JSON (los
+            valores <Code>{"{{input.name}}"}</Code> van ahí, no en la consulta). GraphQL responde 200 aunque la consulta falle,
+            así que agrega la comprobación <Code>body.errors absent</Code>.
+          </li>
+          <li>
             Los secretos se ven como <Code>apiKey ••••7890</Code>. El ojo (<Ui>Mostrar secretos</Ui>) muestra los valores: se
             piden solo cuando haces clic y se ocultan otra vez al volver a hacer clic o al salir de la página.
           </li>

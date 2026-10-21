@@ -323,6 +323,22 @@ async def test_check_values_never_store_a_secret(user_client, shop):
     assert SECRET not in response.text
 
 
+async def test_an_absent_check_passes_only_when_the_path_is_missing(user_client, shop):
+    # GraphQL answers 200 with `errors` when a query fails: `body.errors absent` catches it.
+    api = await make_api(user_client)
+    steps = copy.deepcopy(STEPS[:1])
+    steps[0]["checks"] = [
+        {"type": "path", "path": "body.errors", "op": "absent"},
+        {"type": "path", "path": "body.key", "op": "absent"},
+    ]
+    flow = await make_flow(user_client, api["id"], inputs=[], steps=steps)
+    result = (await run(user_client, flow["id"])).json()
+    missing, present = result["steps"][0]["checks"]
+    assert (missing["passed"], missing["check"]["op"]) == (True, "absent")
+    assert present["passed"] is False
+    assert result["status"] == "failed"
+
+
 async def test_refuses_numbers_that_are_not_finite(user_client, shop):
     api = await make_api(user_client)
     flow = await make_flow(user_client, api["id"])

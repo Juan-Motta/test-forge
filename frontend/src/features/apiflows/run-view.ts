@@ -153,7 +153,7 @@ export function formatBytes(bytes: number, number: NumberFormat): string {
 export function checkRule(check: FlowCheck): string {
   if (check.type === "status") return `status == ${check.equals}`;
   if (check.type === "duration") return `durationMs < ${check.maxMs}`;
-  if (check.op === "exists") return `${check.path} exists`;
+  if (check.op === "exists" || check.op === "absent") return `${check.path} ${check.op}`;
   return `${check.path} ${check.op} ${JSON.stringify(check.value)}`;
 }
 
