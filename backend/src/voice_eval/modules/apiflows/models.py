@@ -52,6 +52,10 @@ class ApiRecord(Base):
     headers: Mapped[list[dict[str, Any]]] = mapped_column(
         JSONB, default=list, server_default=text("'[]'::jsonb")
     )
+    # Plain connection variables, {name: value}; steps use them (and secrets) as {{var.<name>}}.
+    variables: Mapped[dict[str, str]] = mapped_column(
+        JSONB, default=dict, server_default=text("'{}'::jsonb")
+    )
     # All secrets sealed together (owner: this API); hints are shown instead of the values.
     secrets_ciphertext: Mapped[str | None] = mapped_column(Text)
     secret_hints: Mapped[dict[str, str]] = mapped_column(

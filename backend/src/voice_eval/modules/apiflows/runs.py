@@ -138,6 +138,7 @@ class FlowRunner:
                 steps=domain.steps,
                 inputs=resolved,
                 client=client,
+                variables=dict(api.variables),
             )
         record = FlowRunRecord(
             id=uuid.uuid4(),
@@ -281,6 +282,8 @@ async def flow_curls(
         headers=[Header.model_validate(h) for h in flow.api.headers],
         steps=domain.steps,
         inputs=values,
+        variables=dict(flow.api.variables),
+        secret_names=set(flow.api.secret_hints),
     )
     secrets, hints = await _secrets_for(db, box, flow.api_id, reveal)
     return [curl(request, secrets, hints) for request in requests]

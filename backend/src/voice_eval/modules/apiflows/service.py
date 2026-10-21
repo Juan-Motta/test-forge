@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from voice_eval.modules.agents.models import AgentRecord
 from voice_eval.modules.apiflows.domain import (
     MAX_SECRETS,
+    MAX_VARIABLES,
     AgentRef,
     Api,
     ApiNameTaken,
@@ -66,7 +67,24 @@ def _api(record: ApiRecord, flow_count: int = 0, agents: list[AgentRef] | None =
         updated_at=record.updated_at,
         flow_count=flow_count,
         agents=agents or [],
+        variables=dict(sorted(record.variables.items())),
     )
+
+
+def _clash(variables: dict[str, Any], secrets: dict[str, Any]) -> None:
+    """A name is a variable or a secret, never both: `{{var.x}}` must mean one value."""
+    both = sorted(set(variables) & set(secrets))
+    if both:
+        raise InvalidFlowInput(
+            [
+                {
+                    "type": "value_error",
+                    "loc": ["variables", name],
+                    "msg": f"{name!r} is already a secret of this API",
+                }
+                for name in both
+            ]
+        )
 
 
 async def _with_counts(db: AsyncSession, records: list[ApiRecord]) -> list[Api]:
@@ -153,8 +171,10 @@ async def create_api(
         tags=fields.get("tags", []),
         base_url=fields["base_url"],
         headers=[header.model_dump() for header in fields.get("headers", [])],
+        variables=dict(fields.get("variables") or {}),
         created_by=created_by,
     )
+    _clash(record.variables, fields.get("secrets") or {})
     _store_secrets(box, record, fields.get("secrets") or {})
     db.add(record)
     await _commit_api(db)
@@ -191,6 +211,25 @@ async def update_api(
                 ]
             )
         _store_secrets(box, record, secrets)
+    if "variables" in changes:
+        variables = dict(record.variables)
+        for name, value in changes["variables"].items():
+            if value is None:
+                variables.pop(name, None)
+            else:
+                variables[name] = value
+        if len(variables) > MAX_VARIABLES:
+            raise InvalidFlowInput(
+                [
+                    {
+                        "type": "value_error",
+                        "loc": ["variables"],
+                        "msg": f"an API holds at most {MAX_VARIABLES} variables",
+                    }
+                ]
+            )
+        record.variables = variables
+    _clash(record.variables, record.secret_hints)
     record.updated_at = func.now()
     await _commit_api(db)
     return await get_api(db, api_id)
@@ -286,7 +325,7 @@ async def get_flow(db: AsyncSession, flow_id: uuid.UUID) -> Flow:
 async def _validate(
     db: AsyncSession, api: ApiRecord, inputs: list[FlowInput], steps: list[Step], agent_ids: Any
 ) -> list[uuid.UUID] | None:
-    errors = check_flow(inputs, steps, set(api.secret_hints))
+    errors = check_flow(inputs, steps, set(api.secret_hints), set(api.variables))
     agents: list[uuid.UUID] | None = None
     if agent_ids is not None:
         agents = list(dict.fromkeys(agent_ids))

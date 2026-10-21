@@ -609,12 +609,12 @@ progress.
 Humans save the calls they make to an API as **flows**, so you can reuse them instead of writing
 scripts, and so the flows document how the API works. Read them before calling an API yourself.
 
-- **API** (`/api/apis`): `name`, `description`, `tags`, `baseUrl`, `headers` every step sends,
-  and named **secrets** (an API key, a password). A header value may be a placeholder, like
-  `{"name": "x-api-key", "value": "{{secret.x_api_key}}"}`: that is how an API key is kept sealed
-  and sent on every call. Responses show secrets as
-  `{"name", "hint"}` only; `GET /api/apis/{apiId}/secrets` returns them in clear. Ask for them
-  only when you must use one outside a flow, and never print them.
+- **API** (`/api/apis`): `name`, `description`, `tags`, `baseUrl`, `headers` every step sends
+  (use them only for what really goes on every call, like `Accept`), plain `variables`
+  (`{"tenant": "acme"}`) and named **secrets** (an API key, a password). A name is a variable or a
+  secret, not both. Responses show secrets as `{"name", "hint"}` only;
+  `GET /api/apis/{apiId}/secrets` returns them in clear. Ask for them only when you must use one
+  outside a flow, and never print them.
 - **Flow** (`/api/flows`): `name`, `description` (what it is for), typed `inputs` and ordered
   `steps`, plus `agentIds`: the agents it is meant for.
 
@@ -626,7 +626,8 @@ scripts, and so the flows document how the API works. Read them before calling a
 `checks`. Text in a step may contain placeholders:
 
 - `{{input.<name>}}`: a flow input;
-- `{{secret.<name>}}`: one of the API's secrets;
+- `{{var.<name>}}`: one of the API's variables or secrets (a secret stays sealed in records);
+- `{{secret.<name>}}`: one of the API's secrets (the older form, still accepted);
 - `{{saved.<name>}}`: a value an earlier step saved (`saves: [{"name": "token", "path":
   "body.access_token"}]`). Paths are `status`, `headers.<name>` or `body.a.0.b`.
 

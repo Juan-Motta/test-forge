@@ -182,14 +182,24 @@ def placeholder(source: str, name: str) -> str:
 
 class _Context:
     def __init__(
-        self, inputs: dict[str, Any], secrets: dict[str, str], *, lenient: bool = False
+        self,
+        inputs: dict[str, Any],
+        secrets: dict[str, str],
+        *,
+        lenient: bool = False,
+        variables: dict[str, str] | None = None,
+        secret_names: set[str] | None = None,
     ) -> None:
-        self.values = {"input": inputs, "secret": secrets, "saved": {}}
+        self.values = {"input": inputs, "secret": secrets, "saved": {}, "var": variables or {}}
+        # `{{var.x}}` names a secret when the API holds one so named (kept sealed in records).
+        self.secret_names = set(secrets) | (secret_names or set())
         # Previews keep a placeholder that has no value yet instead of failing.
         self.lenient = lenient
 
     def lookup(self, source: str, name: str, *, keep_secrets: bool) -> tuple[bool, Any]:
         """(found, value); with `keep_secrets` a secret stays its own placeholder."""
+        if source == "var" and name in self.secret_names:
+            source = "secret"
         if source == "secret" and keep_secrets:
             return True, placeholder("secret", name)
         table = self.values.get(source, {})
@@ -423,8 +433,9 @@ async def run_flow(
     steps: list[Step],
     inputs: list[ResolvedInput],
     client: httpx.AsyncClient,
+    variables: dict[str, str] | None = None,
 ) -> RunOutcome:
-    ctx = _Context({item.name: item.value for item in inputs}, secrets)
+    ctx = _Context({item.name: item.value for item in inputs}, secrets, variables=variables)
     records: list[StepRecord] = []
     started = time.monotonic()
     failed = False
@@ -507,11 +518,17 @@ def _transport_error(exc: Exception) -> str:
 
 
 def preview_requests(
-    *, base_url: str, headers: list[Header], steps: list[Step], inputs: dict[str, Any]
+    *,
+    base_url: str,
+    headers: list[Header],
+    steps: list[Step],
+    inputs: dict[str, Any],
+    variables: dict[str, str] | None = None,
+    secret_names: set[str] | None = None,
 ) -> list[dict[str, Any]]:
-    """Each step's request as far as it is known before a run: given inputs filled in, saved
-    values and secrets left as placeholders."""
-    ctx = _Context(inputs, {}, lenient=True)
+    """Each step's request as far as it is known before a run: given inputs and variables filled
+    in, saved values and secrets left as placeholders."""
+    ctx = _Context(inputs, {}, lenient=True, variables=variables, secret_names=secret_names)
     return [_request(step, base_url, headers, ctx, keep=True) for step in steps]
 
 

@@ -244,7 +244,7 @@ async def test_creates_lists_and_reads_flows(user_client):
         (
             [{**STEPS[0], "path": "/x/{{env.home}}"}],
             ["body", "steps", 0, "path"],
-            "unknown placeholder source 'env'; use input, secret or saved",
+            "unknown placeholder source 'env'; use input, var, secret or saved",
         ),
         (
             [STEPS[0], {**STEPS[0], "path": "/again"}],
@@ -345,3 +345,51 @@ async def test_deleting_an_agent_unlinks_it_from_flows(user_client):
     flow = await make_flow(user_client, api["id"], agentIds=[agent])
     assert (await user_client.delete(f"/api/agents/{agent}")).status_code == 204
     assert (await user_client.get(f"/api/flows/{flow['id']}")).json()["agents"] == []
+
+
+async def test_holds_plain_variables_next_to_secrets(user_client):
+    api = await make_api(user_client, variables={"tenant": "acme", "version": "2"})
+    assert api["variables"] == {"tenant": "acme", "version": "2"}
+    updated = await user_client.patch(
+        f"/api/apis/{api['id']}", json={"variables": {"version": None, "region": "eu"}}
+    )
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["variables"] == {"region": "eu", "tenant": "acme"}
+    # A name is a variable or a secret, never both.
+    clash = await user_client.patch(f"/api/apis/{api['id']}", json={"variables": {"api_key": "x"}})
+    assert clash.status_code == 422
+    assert clash.json()["detail"] == [
+        {
+            "type": "value_error",
+            "loc": ["body", "variables", "api_key"],
+            "msg": "'api_key' is already a secret of this API",
+        }
+    ]
+    assert SECRET not in clash.text
+
+
+async def test_flows_may_use_variables_and_secrets_as_var(user_client):
+    api = await make_api(user_client, variables={"tenant": "acme"})
+    ok = await user_client.post(
+        "/api/flows",
+        json=flow_body(
+            api["id"],
+            inputs=[],
+            steps=[
+                {
+                    "method": "GET",
+                    "path": "/t/{{var.tenant}}",
+                    "headers": [{"name": "k", "value": "{{var.api_key}}"}],
+                }
+            ],
+        ),
+    )
+    assert ok.status_code == 201, ok.text
+    unknown = await user_client.post(
+        "/api/flows",
+        json=flow_body(
+            api["id"], name="Other", inputs=[], steps=[{"method": "GET", "path": "/{{var.nope}}"}]
+        ),
+    )
+    assert unknown.status_code == 422
+    assert unknown.json()["detail"][0]["msg"] == "the API has no variable named 'nope'"

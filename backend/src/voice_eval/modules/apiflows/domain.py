@@ -57,7 +57,9 @@ RESPONSE_PATH = r"^(status|headers\.[A-Za-z0-9-]{1,100}|body(\.[A-Za-z0-9_$-]{1,
 PLACEHOLDER = re.compile(r"\{\{\s*([A-Za-z_]+)\.([A-Za-z_][A-Za-z0-9_]*)\s*\}\}")
 # A check reads the response like a save, and may end in `.length`; status has its own check.
 CHECK_PATH = r"^(headers\.[A-Za-z0-9-]{1,100}|body(\.[A-Za-z0-9_$-]{1,100}){0,21})$"
-SOURCES = ("input", "secret", "saved")
+SOURCES = ("input", "secret", "saved", "var")
+MAX_VARIABLES = 30
+MAX_VARIABLE_LENGTH = 4096
 
 
 def _text(max_length: int, *, min_length: int = 0, pattern: str | None = None) -> Any:
@@ -213,7 +215,10 @@ def template_texts(step: Step) -> list[tuple[list[str | int], str]]:
 
 
 def check_flow(
-    inputs: list[FlowInput], steps: list[Step], secrets: set[str]
+    inputs: list[FlowInput],
+    steps: list[Step],
+    secrets: set[str],
+    variables: set[str] = frozenset(),
 ) -> list[dict[str, Any]]:
     """Reference errors as `{type, loc, msg}` items: duplicate names, unknown inputs or secrets,
     and saved values used before (or without) the step that saves them."""
@@ -237,17 +242,25 @@ def check_flow(
     for n, step in enumerate(steps):
         for loc, text in template_texts(step):
             for source, name in placeholders(text):
-                msg = _reference_problem(source, name, n, set(names), secrets, saved_by)
+                msg = _reference_problem(source, name, n, set(names), secrets, saved_by, variables)
                 if msg:
                     errors.append(_error(["steps", n, *loc], msg))
     return errors
 
 
 def _reference_problem(
-    source: str, name: str, step: int, inputs: set[str], secrets: set[str], saved_by: dict[str, int]
+    source: str,
+    name: str,
+    step: int,
+    inputs: set[str],
+    secrets: set[str],
+    saved_by: dict[str, int],
+    variables: set[str] = frozenset(),
 ) -> str:
     if source not in SOURCES:
-        return f"unknown placeholder source {source!r}; use input, secret or saved"
+        return f"unknown placeholder source {source!r}; use input, var, secret or saved"
+    if source == "var" and name not in variables and name not in secrets:
+        return f"the API has no variable named {name!r}"
     if source == "input" and name not in inputs:
         return f"unknown input {name!r}"
     if source == "secret" and name not in secrets:
@@ -299,6 +312,7 @@ class Api:
     created_at: datetime
     updated_at: datetime
     flow_count: int = 0
+    variables: dict[str, str] = field(default_factory=dict)
     agents: list[AgentRef] = field(default_factory=list)
 
 

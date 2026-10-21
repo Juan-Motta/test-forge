@@ -17,6 +17,8 @@ from voice_eval.modules.apiflows.domain import (
     MAX_HEADERS,
     MAX_SECRET_LENGTH,
     MAX_SECRETS,
+    MAX_VARIABLE_LENGTH,
+    MAX_VARIABLES,
     AgentRef,
     Api,
     ApiNameTaken,
@@ -49,6 +51,7 @@ Db = Annotated[AsyncSession, Depends(get_db_session)]
 Box = Annotated[SecretBox, Depends(app_secret_box)]
 CurrentPrincipal = Annotated[Principal, Depends(current_principal)]
 SecretValue = Annotated[str, StringConstraints(min_length=1, max_length=MAX_SECRET_LENGTH)]
+VariableValue = Annotated[str, StringConstraints(max_length=MAX_VARIABLE_LENGTH)]
 Headers = Annotated[list[Header], Field(max_length=MAX_HEADERS)]
 
 API_EXAMPLE = {
@@ -124,6 +127,9 @@ class ApiOut(DomainModel):
     tags: list[str]
     base_url: str
     headers: list[Header]
+    variables: dict[str, str] = Field(
+        description="Plain connection variables by name; steps use them as {{var.<name>}}."
+    )
     secrets: list[SecretOut] = Field(
         description="Names and masked hints only; GET /api/apis/{apiId}/secrets reveals values."
     )
@@ -141,6 +147,7 @@ class ApiOut(DomainModel):
             tags=api.tags,
             base_url=api.base_url,
             headers=api.headers,
+            variables=api.variables,
             secrets=[SecretOut(name=s.name, hint=s.hint) for s in api.secrets],
             flow_count=api.flow_count,
             agents=[AgentRefOut.of(agent) for agent in api.agents],
@@ -176,10 +183,17 @@ class CreateApiIn(DomainModel):
         description="https://…, or http:// to localhost, 127.0.0.1 or host.docker.internal. "
         "No query string; steps add their path to it."
     )
-    headers: Headers = Field(default=[], description="Plain headers every step sends.")
+    headers: Headers = Field(
+        default=[], description="Headers every step sends (templates, like the steps' own)."
+    )
+    variables: Annotated[dict[Identifier, VariableValue], Field(max_length=MAX_VARIABLES)] = Field(
+        default={},
+        description="Plain connection variables. Steps use them as {{var.<name>}}.",
+    )
     secrets: Annotated[dict[Identifier, SecretValue], Field(max_length=MAX_SECRETS)] = Field(
         default={},
-        description="Named secrets, sealed at rest. Steps use them as {{secret.<name>}}.",
+        description="Named secrets, sealed at rest. Steps use them as {{var.<name>}} "
+        "(or {{secret.<name>}}). A name is a variable or a secret, not both.",
     )
 
     _check_base_url = field_validator("base_url")(_base_url)
@@ -198,13 +212,16 @@ class UpdateApiIn(DomainModel):
     tags: Tags | None = None
     base_url: str | None = None
     headers: Headers | None = None
+    variables: (
+        Annotated[dict[Identifier, VariableValue | None], Field(max_length=MAX_VARIABLES)] | None
+    ) = Field(default=None, description="Sets the named variables; null removes one; others stay.")
     secrets: (
         Annotated[dict[Identifier, SecretValue | None], Field(max_length=MAX_SECRETS)] | None
     ) = Field(default=None, description="Sets the named secrets; null removes one; others stay.")
 
-    _not_null = field_validator("name", "description", "tags", "base_url", "headers", "secrets")(
-        _not_null
-    )
+    _not_null = field_validator(
+        "name", "description", "tags", "base_url", "headers", "variables", "secrets"
+    )(_not_null)
     _check_base_url = field_validator("base_url")(_base_url)
     _unique_tags = field_validator("tags")(unique_tags)
 

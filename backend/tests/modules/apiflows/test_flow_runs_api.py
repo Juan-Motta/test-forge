@@ -532,3 +532,26 @@ async def test_a_long_json_body_is_kept_indented_up_to_the_cap(user_client, app)
     assert isinstance(body, str)
     assert body.startswith('{\n  "items": [\n    {\n      "id": 0,')
     assert body.endswith("more characters]")
+
+
+async def test_a_run_fills_variables_and_keeps_var_secrets_sealed(user_client, shop):
+    api = await make_api(user_client, variables={"region": "eu"})
+    steps = [
+        {
+            "method": "GET",
+            "path": "/regions/{{var.region}}",
+            "headers": [{"name": "x-api-key", "value": "{{var.api_key}}"}],
+        }
+    ]
+    flow = await make_flow(user_client, api["id"], inputs=[], steps=steps)
+    result = (await run(user_client, flow["id"])).json()
+    sent = shop.requests[0]
+    assert sent.url.path == "/v1/regions/eu"
+    assert sent.headers["x-api-key"] == SECRET
+    request = result["steps"][0]["request"]
+    assert request["url"].endswith("/regions/eu")
+    assert {"name": "x-api-key", "value": "{{secret.api_key}}"} in request["headers"]
+    assert SECRET not in json.dumps(result)
+    preview = (await user_client.get(f"/api/flows/{flow['id']}/curl")).json()["steps"][0]["curl"]
+    assert "/regions/eu" in preview
+    assert "x-api-key: ••••cdef" in preview
