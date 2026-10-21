@@ -11,8 +11,8 @@ browser ──► 127.0.0.1:${FRONTEND_PORT:-3000}
               │
               ▼
             edge (NGINX, fixed address EDGE_IPV4 on the compose network)
-              ├── /api/, /api ──► backend:8000 (FastAPI) ──► db:5432 (PostgreSQL)
-              └── everything else ──► frontend:3000 (Next.js)
+              ├── /api/, /api ──► testforge-backend:8000 (FastAPI) ──► db:5432 (PostgreSQL)
+              └── everything else ──► testforge-frontend:3000 (Next.js)
 ```
 
 ## Prerequisites

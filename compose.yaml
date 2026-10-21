@@ -64,7 +64,13 @@ services:
       - runs-data:/data/runs
     security_opt:
       - no-new-privileges:true
-    networks: [platform]
+    networks:
+      platform:
+        # A project-unique name for the edge's upstream (edge/nginx.conf). On Dokploy the edge
+        # also sits on the shared dokploy-network, where the bare `backend` could resolve to
+        # another project's container; the alias cannot.
+        aliases:
+          - testforge-backend
 
   frontend:
     build:
@@ -79,7 +85,13 @@ services:
         condition: service_healthy
     security_opt:
       - no-new-privileges:true
-    networks: [platform]
+    networks:
+      platform:
+        # A project-unique name for the edge's upstream (edge/nginx.conf). On Dokploy the edge
+        # also sits on the shared dokploy-network, where the bare `frontend` could resolve to
+        # another project's container; the alias cannot.
+        aliases:
+          - testforge-frontend
 
   edge:
     build:
