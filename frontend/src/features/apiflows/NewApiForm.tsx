@@ -5,13 +5,23 @@ import { formErrorView } from "@/lib/api";
 import { confirmLeave } from "@/lib/navigation/unsaved-changes";
 import { localizeFormError, useT } from "@/lib/i18n";
 import { Alert, Button, Card, Field, Input, Textarea } from "@/ui";
-import { MAX_SECRETS, fieldError, headersOf, rowKeys, rowsProblem, secretsOf, type PairRow } from "./connection-form";
-import { PairRows } from "./PairRows";
+import {
+  MAX_SECRETS,
+  connectionProblems,
+  fieldError,
+  newConnection,
+  rowKeys,
+  secretCount,
+  type HeaderRow,
+  type PairRow,
+} from "./connection-form";
+import { HeaderRows } from "./HeaderRows";
 import { useCreateApi } from "./queries";
+import { SecretVariables } from "./SecretVariables";
 import type { Api } from "./types";
 
-/** "New API", in the page beside the rail: name, description, base URL, secrets and plain
- * headers. Mounted only while open. */
+/** "New API", in the page beside the rail: name, description, base URL, headers (each plain or
+ * secret) and, under "advanced", the secret variables steps use. Mounted only while open. */
 export function NewApiForm({
   onClose,
   onCreated,
@@ -29,9 +39,10 @@ export function NewApiForm({
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
+  const [headers, setHeaders] = useState<HeaderRow[]>([]);
   const [secrets, setSecrets] = useState<PairRow[]>([]);
-  const [headers, setHeaders] = useState<PairRow[]>([]);
   const [local, setLocal] = useState<Record<string, string>>({});
+  const canAddSecret = secretCount({ headers: [], secrets: [] }, { headers, secrets }) < MAX_SECRETS;
   const dirty = Boolean(name || description || baseUrl || secrets.length || headers.length);
   useEffect(() => {
     onDirtyChange?.(dirty);
@@ -46,10 +57,9 @@ export function NewApiForm({
     const problems: Record<string, string> = {};
     if (!name.trim()) problems.name = t("apis.error.name");
     if (!baseUrl.trim()) problems.baseUrl = t("apis.error.baseUrl");
-    const secretProblem = rowsProblem(secrets, "secret");
-    if (secretProblem) problems.secrets = t(`apis.error.rows.${secretProblem}`);
-    const headerProblem = rowsProblem(headers, "header");
-    if (headerProblem) problems.headers = t(`apis.error.rows.${headerProblem}`);
+    const rows = connectionProblems({ headers, secrets });
+    if (rows.secrets) problems.secrets = t(`apis.error.rows.${rows.secrets}`);
+    if (rows.headers) problems.headers = t(`apis.error.rows.${rows.headers}`);
     setLocal(problems);
     if (Object.keys(problems).length > 0) return;
     create.reset();
@@ -58,8 +68,7 @@ export function NewApiForm({
         name: name.trim(),
         description: description.trim(),
         baseUrl: baseUrl.trim(),
-        headers: headersOf(headers),
-        secrets: secretsOf(secrets),
+        ...newConnection({ headers, secrets }),
       });
       onCreated(api);
     } catch {
@@ -97,20 +106,22 @@ export function NewApiForm({
             />
           )}
         </Field>
-        <PairRows
-          kind="secret"
+        <HeaderRows
+          rows={headers}
+          onChange={setHeaders}
+          onAdd={() => setHeaders((rows) => [...rows, { key: nextKey(), name: "", value: "", secret: false }])}
+          error={fieldError(errors, "headers")}
+          hint={t("apis.headersHint")}
+          hints={{}}
+          canAddSecret={canAddSecret}
+        />
+        <SecretVariables
           rows={secrets}
           onChange={setSecrets}
           onAdd={() => setSecrets((rows) => [...rows, { key: nextKey(), name: "", value: "" }])}
           error={fieldError(errors, "secrets")}
-          max={MAX_SECRETS}
-        />
-        <PairRows
-          kind="header"
-          rows={headers}
-          onChange={setHeaders}
-          onAdd={() => setHeaders((rows) => [...rows, { key: nextKey(), name: "", value: "" }])}
-          error={fieldError(errors, "headers")}
+          hints={{}}
+          canAdd={canAddSecret}
         />
         <div className="flex flex-wrap justify-end gap-3">
           <Button variant="ghost" onClick={() => (!dirty || confirmLeave()) && onClose()}>

@@ -239,8 +239,10 @@ export function ModulesEs() {
       <Region id="api-flows" title="Flujos de API">
         <P>
           Llamadas guardadas a las APIs que usan tus agentes, para que personas y agentes las reutilicen sin escribir
-          scripts. Una <Ui>API</Ui> tiene una URL base, encabezados que envía cada llamada y secretos con nombre (una clave de
-          API, una contraseña), guardados sellados. Un <Ui>flujo</Ui> es una o más llamadas en orden: por ejemplo, obtener un
+          scripts. Una <Ui>API</Ui> tiene una URL base y los encabezados que envía cada llamada. Activa el interruptor{" "}
+          <Ui>Secreto</Ui> de un encabezado para una clave de API: su valor se guarda sellado y se muestra oculto. Los demás
+          secretos con nombre, como una contraseña que un paso envía en su cuerpo, su consulta o su ruta, van en{" "}
+          <Ui>Variables secretas (avanzado)</Ui> y se usan como <Code>{"{{secret.name}}"}</Code>. Un <Ui>flujo</Ui> es una o más llamadas en orden: por ejemplo, obtener un
           token con la clave de API y luego buscar productos con ese token. La página lista las APIs; abre una para ver sus
           flujos en la barra lateral y su conexión arriba. Todas las corridas de todos los flujos están en <Ui>API</Ui> →{" "}
           <Ui>Corridas</Ui>, filtradas por estado y API; abre una para ver sus pasos.

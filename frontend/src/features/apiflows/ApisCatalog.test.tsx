@@ -9,8 +9,12 @@ import { apiFixture, flowFixture, mockApisApi } from "./testing";
 
 const shop = apiFixture({
   tags: ["shop", "nightly"],
+  headers: [
+    { name: "Accept", value: "application/json" },
+    { name: "x-api-key", value: "{{secret.x_api_key}}" },
+  ],
   secrets: [
-    { name: "apiKey", hint: "••••7890" },
+    { name: "x_api_key", hint: "••••7890" },
     { name: "clientSecret", hint: "••••" },
   ],
 });
@@ -28,7 +32,7 @@ const products = flowFixture({
 });
 const orders = flowFixture({ id: "f-orders", name: "List orders" });
 const customers = flowFixture({ id: "f-crm", apiId: "api-crm", api: { id: "api-crm", name: "CRM" }, name: "Find a customer" });
-const secrets = { "api-shop": { apiKey: "sk-live-1234567890", clientSecret: "abc" }, "api-crm": { token: "crm-token-value" } };
+const secrets = { "api-shop": { x_api_key: "sk-live-1234567890", clientSecret: "abc" }, "api-crm": { token: "crm-token-value" } };
 
 function setup(apis = [shop, crm], flows = [products, orders, customers]) {
   return mockApisApi(apis, { flows, secrets });
@@ -47,6 +51,11 @@ const secretReads = (state: ReturnType<typeof setup>) => state.requests.filter((
 const patches = (state: ReturnType<typeof setup>) =>
   state.requests.filter((request) => request.method === "PATCH").map((request) => request.body);
 const card = (name: string) => screen.getByRole("region", { name });
+const advanced = () => within(card("Headers")).getByRole("button", { name: /Secret variables \(advanced\)/ });
+async function openAdvanced(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(advanced());
+  return card("Headers");
+}
 
 afterEach(() => {
   window.history.replaceState(null, "", "/");
@@ -92,18 +101,24 @@ describe("API connections", () => {
     expect(within(connection).getByRole("textbox", { name: "Base URL" })).toHaveValue("https://shop.example.com/v1");
     expect(within(connection).getByRole("textbox", { name: "Tags" })).toHaveValue("shop, nightly");
 
-    const stored = within(card("Secrets")).getByRole("list", { name: "Stored secrets" });
-    expect(within(stored).getByText("apiKey")).toBeInTheDocument();
-    expect(within(stored).getByText("••••7890")).toBeInTheDocument();
-    expect(within(stored).getByText("clientSecret")).toBeInTheDocument();
-    expect(within(stored).getByRole("button", { name: "Show apiKey" })).toHaveAttribute("aria-pressed", "false");
-    expect(within(stored).getByLabelText("New value of apiKey")).toHaveAttribute("type", "password");
-    expect(within(stored).getByRole("button", { name: "Remove the secret clientSecret" })).toBeInTheDocument();
-    expect(screen.queryByText("sk-live-1234567890")).not.toBeInTheDocument();
-
+    // No Secrets card: a secret header sits with the headers, masked, with its eye.
+    expect(screen.queryByRole("region", { name: "Secrets" })).not.toBeInTheDocument();
     const headers = card("Headers");
     expect(within(headers).getByRole("textbox", { name: "Header name 1" })).toHaveValue("Accept");
     expect(within(headers).getByRole("textbox", { name: "Header value 1" })).toHaveValue("application/json");
+    expect(within(headers).getByRole("switch", { name: "Keep the header Accept secret" })).not.toBeChecked();
+    expect(within(headers).getByRole("textbox", { name: "Header name 2" })).toHaveValue("x-api-key");
+    expect(within(headers).getByRole("switch", { name: "Keep the header x-api-key secret" })).toBeChecked();
+    expect(within(headers).getByText("••••7890")).toBeInTheDocument();
+    expect(within(headers).getByRole("button", { name: "Show x_api_key" })).toHaveAttribute("aria-pressed", "false");
+    const replace = within(headers).getByLabelText("New value of x_api_key");
+    expect(replace).toHaveAttribute("type", "password");
+    expect(replace).toHaveAttribute("placeholder", "Replace value");
+    expect(within(headers).queryByText("{{secret.x_api_key}}")).not.toBeInTheDocument();
+    expect(screen.queryByText("sk-live-1234567890")).not.toBeInTheDocument();
+    // A secret no header sends waits in the collapsed advanced section.
+    expect(advanced()).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("clientSecret")).not.toBeInTheDocument();
 
     // No flows here: they live on API → Flows.
     expect(screen.queryByRole("region", { name: "Flows" })).not.toBeInTheDocument();
@@ -112,17 +127,45 @@ describe("API connections", () => {
     expect(secretReads(state)).toEqual([]);
   });
 
-  it("reveals a secret with its eye and hides it again", async () => {
+  it("reveals a secret header with its eye, and hides it again by the eye or by turning the header plain", async () => {
     const state = setup();
     window.history.replaceState(null, "", "/apis?api=api-shop");
     const { user } = await renderCatalog();
 
-    const stored = within(card("Secrets")).getByRole("list", { name: "Stored secrets" });
-    await user.click(within(stored).getByRole("button", { name: "Show apiKey" }));
-    expect(await within(stored).findByText("sk-live-1234567890")).toBeInTheDocument();
+    const headers = card("Headers");
+    await user.click(within(headers).getByRole("button", { name: "Show x_api_key" }));
+    expect(await within(headers).findByText("sk-live-1234567890")).toBeInTheDocument();
     expect(secretReads(state)).toHaveLength(1);
-    await user.click(within(stored).getByRole("button", { name: "Hide apiKey" }));
+    await user.click(within(headers).getByRole("button", { name: "Hide x_api_key" }));
     expect(screen.queryByText("sk-live-1234567890")).not.toBeInTheDocument();
+
+    await user.click(within(headers).getByRole("button", { name: "Show x_api_key" }));
+    expect(await within(headers).findByText("sk-live-1234567890")).toBeInTheDocument();
+    const toggle = within(headers).getByRole("switch", { name: "Keep the header x-api-key secret" });
+    await user.click(toggle);
+    // Turned plain: the value field starts empty, never with the secret's value.
+    expect(within(headers).getByRole("textbox", { name: "Header value 2" })).toHaveValue("");
+    expect(screen.queryByText("sk-live-1234567890")).not.toBeInTheDocument();
+    await user.click(toggle);
+    expect(within(headers).getByRole("button", { name: "Show x_api_key" })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.queryByText("sk-live-1234567890")).not.toBeInTheDocument();
+  });
+
+  it("reveals a secret variable of the advanced section with its eye", async () => {
+    const state = setup();
+    window.history.replaceState(null, "", "/apis?api=api-shop");
+    const { user } = await renderCatalog();
+
+    const section = await openAdvanced(user);
+    expect(advanced()).toHaveAttribute("aria-expanded", "true");
+    expect(within(section).getByText("Use as {{secret.name}} in a step's body, query or path.")).toBeInTheDocument();
+    const stored = within(section).getByRole("list", { name: "Stored secrets" });
+    expect(within(stored).getByText("clientSecret")).toBeInTheDocument();
+    expect(within(stored).queryByText("x_api_key")).not.toBeInTheDocument();
+    expect(secretReads(state)).toEqual([]);
+    await user.click(within(stored).getByRole("button", { name: "Show clientSecret" }));
+    expect(await within(stored).findByText("abc")).toBeInTheDocument();
+    expect(secretReads(state)).toHaveLength(1);
   });
 
   it("filters the rail by name, URL, description or tag", async () => {
@@ -183,14 +226,14 @@ describe("API connections", () => {
     window.history.replaceState(null, "", "/apis?api=api-shop");
     const { user, rail } = await renderCatalog();
 
-    await user.click(within(card("Secrets")).getByRole("button", { name: "Show apiKey" }));
+    await user.click(within(card("Headers")).getByRole("button", { name: "Show x_api_key" }));
     expect(await screen.findByText("sk-live-1234567890")).toBeInTheDocument();
     expect(secretReads(state)).toHaveLength(1);
 
     await user.click(within(rail).getByRole("button", { name: /CRM/ }));
     expect(screen.queryByText("sk-live-1234567890")).not.toBeInTheDocument();
     await user.click(within(rail).getByRole("button", { name: /Shop API/ }));
-    expect(within(card("Secrets")).getByRole("button", { name: "Show apiKey" })).toHaveAttribute("aria-pressed", "false");
+    expect(within(card("Headers")).getByRole("button", { name: "Show x_api_key" })).toHaveAttribute("aria-pressed", "false");
     expect(screen.queryByText("sk-live-1234567890")).not.toBeInTheDocument();
     // Switching fetched nothing more.
     expect(secretReads(state)).toHaveLength(1);
@@ -201,7 +244,7 @@ describe("API connections", () => {
     window.history.replaceState(null, "", "/apis?api=api-shop");
     const { user } = await renderCatalog();
 
-    await user.click(within(card("Secrets")).getByRole("button", { name: "Show apiKey" }));
+    await user.click(within(card("Headers")).getByRole("button", { name: "Show x_api_key" }));
     expect(await screen.findByText("sk-live-1234567890")).toBeInTheDocument();
     const baseUrl = within(card("Connection")).getByRole("textbox", { name: "Base URL" });
     await user.clear(baseUrl);
@@ -213,24 +256,122 @@ describe("API connections", () => {
     // The form starts again from what is stored: the new URL, and every secret hidden.
     expect(within(card("Connection")).getByRole("textbox", { name: "Base URL" })).toHaveValue("https://shop.example.com/v2");
     expect(screen.queryByText("sk-live-1234567890")).not.toBeInTheDocument();
-    expect(within(card("Secrets")).getByRole("button", { name: "Show apiKey" })).toHaveAttribute("aria-pressed", "false");
+    expect(within(card("Headers")).getByRole("button", { name: "Show x_api_key" })).toHaveAttribute("aria-pressed", "false");
   });
 
-  it("replaces one secret and removes another in one PATCH", async () => {
+  it("replaces a secret header's value and removes a secret variable in one PATCH", async () => {
     const state = setup();
     window.history.replaceState(null, "", "/apis?api=api-shop");
     const { user } = await renderCatalog();
 
-    const secrets = card("Secrets");
-    await user.type(within(secrets).getByLabelText("New value of apiKey"), "new");
-    await user.click(within(secrets).getByRole("button", { name: "Remove the secret clientSecret" }));
+    await user.type(within(card("Headers")).getByLabelText("New value of x_api_key"), "new");
+    const section = await openAdvanced(user);
+    await user.click(within(section).getByRole("button", { name: "Remove the secret clientSecret" }));
     await user.click(screen.getByRole("button", { name: "Save changes" }));
 
     expect(await screen.findByText("Saved Shop API.")).toBeInTheDocument();
-    expect(patches(state)).toEqual([{ secrets: { apiKey: "new", clientSecret: null } }]);
-    const stored = within(card("Secrets")).getByRole("list", { name: "Stored secrets" });
-    expect(within(stored).queryByText("clientSecret")).not.toBeInTheDocument();
-    expect(within(stored).getByLabelText("New value of apiKey")).toHaveValue("");
+    // The header still sends the same secret, so only the secrets change.
+    expect(patches(state)).toEqual([{ secrets: { x_api_key: "new", clientSecret: null } }]);
+    expect(within(card("Headers")).getByLabelText("New value of x_api_key")).toHaveValue("");
+    await openAdvanced(user);
+    expect(within(card("Headers")).queryByText("clientSecret")).not.toBeInTheDocument();
+  });
+
+  it("turns a secret header plain: sends the typed value and removes its secret", async () => {
+    const state = setup();
+    window.history.replaceState(null, "", "/apis?api=api-shop");
+    const { user } = await renderCatalog();
+
+    const headers = card("Headers");
+    await user.click(within(headers).getByRole("switch", { name: "Keep the header x-api-key secret" }));
+    await user.type(within(headers).getByRole("textbox", { name: "Header value 2" }), "plain-key");
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(await screen.findByText("Saved Shop API.")).toBeInTheDocument();
+    expect(patches(state)).toEqual([
+      {
+        headers: [
+          { name: "Accept", value: "application/json" },
+          { name: "x-api-key", value: "plain-key" },
+        ],
+        secrets: { x_api_key: null },
+      },
+    ]);
+    expect(within(card("Headers")).getByRole("textbox", { name: "Header value 2" })).toHaveValue("plain-key");
+  });
+
+  it("removes a secret header with its secret", async () => {
+    const state = setup();
+    window.history.replaceState(null, "", "/apis?api=api-shop");
+    const { user } = await renderCatalog();
+
+    await user.click(within(card("Headers")).getByRole("button", { name: "Remove the header x-api-key" }));
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(await screen.findByText("Saved Shop API.")).toBeInTheDocument();
+    expect(patches(state)).toEqual([{ headers: [{ name: "Accept", value: "application/json" }], secrets: { x_api_key: null } }]);
+  });
+
+  it("names a new secret header's secret after the header, with _2 when that name is taken", async () => {
+    const state = setup();
+    window.history.replaceState(null, "", "/apis?api=api-crm");
+    const { user } = await renderCatalog();
+
+    const headers = card("Headers");
+    await user.click(within(headers).getByRole("button", { name: "Add header" }));
+    await user.type(within(headers).getByRole("textbox", { name: "Header name 2" }), "Token");
+    await user.click(within(headers).getByRole("switch", { name: "Keep the header Token secret" }));
+    const value = within(headers).getByLabelText("Header value 2");
+    expect(value).toHaveAttribute("type", "password");
+    await user.type(value, "t-2");
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(await screen.findByText("Saved CRM.")).toBeInTheDocument();
+    expect(patches(state)).toEqual([
+      {
+        headers: [
+          { name: "Accept", value: "application/json" },
+          { name: "Token", value: "{{secret.token_2}}" },
+        ],
+        secrets: { token_2: "t-2" },
+      },
+    ]);
+    // Saved, it shows as a secret header with its masked hint.
+    const saved = card("Headers");
+    expect(within(saved).getByRole("switch", { name: "Keep the header Token secret" })).toBeChecked();
+    expect(within(saved).getByRole("button", { name: "Show token_2" })).toBeInTheDocument();
+  });
+
+  it("asks for the value of a new secret header before sending anything", async () => {
+    const state = setup();
+    window.history.replaceState(null, "", "/apis?api=api-crm");
+    const { user } = await renderCatalog();
+
+    const headers = card("Headers");
+    await user.click(within(headers).getByRole("button", { name: "Add header" }));
+    await user.type(within(headers).getByRole("textbox", { name: "Header name 2" }), "x-api-key");
+    await user.click(within(headers).getByRole("switch", { name: "Keep the header x-api-key secret" }));
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(await within(headers).findByText("Enter a value for each new secret.")).toBeInTheDocument();
+    expect(patches(state)).toEqual([]);
+  });
+
+  it("keeps a header that mixes text and a secret plain, with its placeholder visible", async () => {
+    const bearer = { ...crm, headers: [{ name: "Authorization", value: "Bearer {{secret.token}}" }] };
+    const state = setup([shop, bearer]);
+    window.history.replaceState(null, "", "/apis?api=api-crm");
+    const { user } = await renderCatalog();
+
+    const headers = card("Headers");
+    expect(within(headers).getByRole("textbox", { name: "Header value 1" })).toHaveValue("Bearer {{secret.token}}");
+    expect(within(headers).getByRole("switch", { name: "Keep the header Authorization secret" })).not.toBeChecked();
+    // Its secret stays reachable as a secret variable.
+    const section = await openAdvanced(user);
+    expect(within(within(section).getByRole("list", { name: "Stored secrets" })).getByText("token")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(await screen.findByText("No changes to save.")).toBeInTheDocument();
+    expect(patches(state)).toEqual([]);
   });
 
   it("adds a secret and a header, edits name, description and tags, and sends only those", async () => {
@@ -246,14 +387,13 @@ describe("API connections", () => {
     const tags = within(connection).getByRole("textbox", { name: "Tags" });
     await user.clear(tags);
     await user.type(tags, "shop, demo, shop,");
-    const secrets = card("Secrets");
-    await user.click(within(secrets).getByRole("button", { name: "Add secret" }));
-    await user.type(within(secrets).getByRole("textbox", { name: "Secret name 1" }), "token");
-    await user.type(within(secrets).getByLabelText("Secret value 1"), "t0k3n");
-    const headers = card("Headers");
+    const headers = await openAdvanced(user);
+    await user.click(within(headers).getByRole("button", { name: "Add secret" }));
+    await user.type(within(headers).getByRole("textbox", { name: "Secret name 1" }), "token");
+    await user.type(within(headers).getByLabelText("Secret value 1"), "t0k3n");
     await user.click(within(headers).getByRole("button", { name: "Add header" }));
-    await user.type(within(headers).getByRole("textbox", { name: "Header name 2" }), "X-Env");
-    await user.type(within(headers).getByRole("textbox", { name: "Header value 2" }), "test");
+    await user.type(within(headers).getByRole("textbox", { name: "Header name 3" }), "X-Env");
+    await user.type(within(headers).getByRole("textbox", { name: "Header value 3" }), "test");
     await user.click(screen.getByRole("button", { name: "Save changes" }));
 
     await waitFor(() => expect(railItems(rail)).toEqual(["CRM", "Shop"]));
@@ -264,6 +404,7 @@ describe("API connections", () => {
         tags: ["shop", "demo"],
         headers: [
           { name: "Accept", value: "application/json" },
+          { name: "x-api-key", value: "{{secret.x_api_key}}" },
           { name: "X-Env", value: "test" },
         ],
         secrets: { token: "t0k3n" },
@@ -428,7 +569,38 @@ describe("API connections", () => {
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("CRM");
   });
 
-  it("creates an API with its secrets and headers, then opens it", async () => {
+  it("creates an API with a secret header: its value as a secret, the header sending it", async () => {
+    const state = setup();
+    const { user, rail } = await renderCatalog();
+
+    await user.click(within(rail).getByRole("button", { name: "New API" }));
+    const form = screen.getByRole("region", { name: "New API" });
+    await user.type(within(form).getByRole("textbox", { name: "Name" }), "Billing");
+    await user.type(within(form).getByRole("textbox", { name: "Base URL" }), "https://billing.example.com");
+    await user.click(within(form).getByRole("button", { name: "Add header" }));
+    await user.type(within(form).getByRole("textbox", { name: "Header name 1" }), "x-api-key");
+    await user.click(within(form).getByRole("switch", { name: "Keep the header x-api-key secret" }));
+    await user.type(within(form).getByLabelText("Header value 1"), "v");
+    await user.click(within(form).getByRole("button", { name: "Create API" }));
+
+    await waitFor(() => expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Billing"));
+    expect(state.requests.filter((request) => request.method === "POST").map((request) => request.body)).toEqual([
+      {
+        name: "Billing",
+        description: "",
+        baseUrl: "https://billing.example.com",
+        headers: [{ name: "x-api-key", value: "{{secret.x_api_key}}" }],
+        secrets: { x_api_key: "v" },
+      },
+    ]);
+    // Opened, the header shows as a secret header: masked, with its eye, nothing fetched.
+    const headers = card("Headers");
+    expect(within(headers).getByRole("switch", { name: "Keep the header x-api-key secret" })).toBeChecked();
+    expect(within(headers).getByRole("button", { name: "Show x_api_key" })).toHaveAttribute("aria-pressed", "false");
+    expect(secretReads(state)).toEqual([]);
+  });
+
+  it("creates an API with its secret variables and headers, then opens it", async () => {
     const state = setup();
     const { user, rail } = await renderCatalog();
 
@@ -439,6 +611,7 @@ describe("API connections", () => {
     await user.type(within(dialog).getByRole("textbox", { name: "Name" }), "Billing");
     await user.type(within(dialog).getByRole("textbox", { name: "Description" }), "Invoices.");
     await user.type(within(dialog).getByRole("textbox", { name: "Base URL" }), "https://billing.example.com");
+    await user.click(within(dialog).getByRole("button", { name: /Secret variables \(advanced\)/ }));
     await user.click(within(dialog).getByRole("button", { name: "Add secret" }));
     await user.type(within(dialog).getByRole("textbox", { name: "Secret name 1" }), "token");
     const value = within(dialog).getByLabelText("Secret value 1");

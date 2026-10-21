@@ -163,6 +163,11 @@ describe("API page", () => {
     const dialog = screen.getByRole("dialog", { name: "Edit connection" });
     const baseUrl = within(dialog).getByRole("textbox", { name: "Base URL" });
     expect(baseUrl).toHaveValue("https://shop.example.com/v1");
+    // No header sends them, so they are secret variables, collapsed until opened.
+    const advanced = within(dialog).getByRole("button", { name: /Secret variables \(advanced\)/ });
+    expect(advanced).toHaveAttribute("aria-expanded", "false");
+    expect(within(dialog).queryByLabelText("New value of apiKey")).not.toBeInTheDocument();
+    await user.click(advanced);
     // Stored secrets start empty: their values never come back to the form.
     const apiKey = within(dialog).getByLabelText("New value of apiKey");
     expect(apiKey).toHaveValue("");
@@ -174,8 +179,8 @@ describe("API page", () => {
     await user.type(apiKey, "sk-new-0000");
     await user.click(within(dialog).getByRole("button", { name: "Remove the secret clientSecret" }));
     await user.click(within(dialog).getByRole("button", { name: "Add secret" }));
-    await user.type(within(dialog).getByRole("textbox", { name: "Secret name 2" }), "webhook");
-    await user.type(within(dialog).getByLabelText("Secret value 2"), "wh-1");
+    await user.type(within(dialog).getByRole("textbox", { name: "Secret name 1" }), "webhook");
+    await user.type(within(dialog).getByLabelText("Secret value 1"), "wh-1");
     await user.click(within(dialog).getByRole("button", { name: "Save connection" }));
 
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Edit connection" })).not.toBeInTheDocument());
@@ -187,6 +192,69 @@ describe("API page", () => {
     expect(within(connection).getByRole("button", { name: "Show webhook" })).toBeInTheDocument();
     expect(within(connection).queryByRole("button", { name: "Show clientSecret" })).not.toBeInTheDocument();
     expect(secretReads(state)).toEqual([]);
+  });
+
+  it("edits a secret header in the dialog like on the APIs page", async () => {
+    const keyed = apiFixture({
+      headers: [
+        { name: "Accept", value: "application/json" },
+        { name: "x-api-key", value: "{{secret.x_api_key}}" },
+      ],
+      secrets: [{ name: "x_api_key", hint: "••••7890" }],
+    });
+    const state = mockApisApi([keyed], { flows: [], secrets: { "api-shop": { x_api_key: "sk-live-1234567890" } } });
+    const { user } = await renderApi();
+
+    await user.click(screen.getByRole("button", { name: "Edit connection" }));
+    const dialog = screen.getByRole("dialog", { name: "Edit connection" });
+    expect(within(dialog).getByRole("textbox", { name: "Header name 2" })).toHaveValue("x-api-key");
+    expect(within(dialog).getByRole("switch", { name: "Keep the header x-api-key secret" })).toBeChecked();
+    expect(within(dialog).getByText("••••7890")).toBeInTheDocument();
+    expect(within(dialog).getByLabelText("New value of x_api_key")).toHaveAttribute("type", "password");
+    expect(secretReads(state)).toEqual([]);
+    await user.click(within(dialog).getByRole("button", { name: "Show x_api_key" }));
+    expect(await within(dialog).findByText("sk-live-1234567890")).toBeInTheDocument();
+    expect(secretReads(state)).toHaveLength(1);
+
+    // Turned plain, with a new secret header beside it.
+    await user.click(within(dialog).getByRole("switch", { name: "Keep the header x-api-key secret" }));
+    expect(within(dialog).queryByText("sk-live-1234567890")).not.toBeInTheDocument();
+    await user.type(within(dialog).getByRole("textbox", { name: "Header value 2" }), "plain-key");
+    await user.click(within(dialog).getByRole("button", { name: "Add header" }));
+    await user.type(within(dialog).getByRole("textbox", { name: "Header name 3" }), "X-Client-Id");
+    await user.click(within(dialog).getByRole("switch", { name: "Keep the header X-Client-Id secret" }));
+    await user.type(within(dialog).getByLabelText("Header value 3"), "cid");
+    await user.click(within(dialog).getByRole("button", { name: "Save connection" }));
+
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Edit connection" })).not.toBeInTheDocument());
+    expect(patches(state)).toEqual([
+      {
+        headers: [
+          { name: "Accept", value: "application/json" },
+          { name: "x-api-key", value: "plain-key" },
+          { name: "X-Client-Id", value: "{{secret.x_client_id}}" },
+        ],
+        secrets: { x_api_key: null, x_client_id: "cid" },
+      },
+    ]);
+    expect(secretReads(state)).toHaveLength(1);
+  });
+
+  it("removes a secret header with its secret from the dialog", async () => {
+    const keyed = apiFixture({
+      headers: [{ name: "x-api-key", value: "{{secret.x_api_key}}" }],
+      secrets: [{ name: "x_api_key", hint: "••••7890" }],
+    });
+    const state = mockApisApi([keyed], { flows: [] });
+    const { user } = await renderApi();
+
+    await user.click(screen.getByRole("button", { name: "Edit connection" }));
+    const dialog = screen.getByRole("dialog", { name: "Edit connection" });
+    await user.click(within(dialog).getByRole("button", { name: "Remove the header x-api-key" }));
+    await user.click(within(dialog).getByRole("button", { name: "Save connection" }));
+
+    await waitFor(() => expect(patches(state)).toHaveLength(1));
+    expect(patches(state)).toEqual([{ headers: [], secrets: { x_api_key: null } }]);
   });
 
   it("sends headers only when they changed, and nothing when nothing changed", async () => {

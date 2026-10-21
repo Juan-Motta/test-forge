@@ -36,6 +36,7 @@ export function useSecretReveal(apiId: string) {
     return inFlight.current;
   }
 
+  /** Forgets the values of these secrets (an eye turned off, a row turned plain or removed). */
   function hide(names: string[]) {
     setError(undefined);
     setShown((current) => {
@@ -83,5 +84,7 @@ export function useSecretReveal(apiId: string) {
     else await reveal(names.filter((name) => !(name in shown)));
   }
 
-  return { shown, pending, error, toggle, toggleAll };
+  return { shown, pending, error, toggle, toggleAll, hide };
 }
+
+export type SecretReveal = ReturnType<typeof useSecretReveal>;

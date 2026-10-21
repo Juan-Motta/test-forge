@@ -227,7 +227,9 @@ export function ModulesEn() {
       <Region id="api-flows" title="API flows">
         <P>
           Saved calls to the APIs your agents use, so people and agents can reuse them instead of writing scripts. An{" "}
-          <Ui>API</Ui> holds a base URL, headers every call sends, and named secrets (an API key, a password), stored sealed. A{" "}
+          <Ui>API</Ui> holds a base URL and the headers every call sends. Turn on a header&apos;s <Ui>Secret</Ui> switch for an
+          API key: its value is stored sealed and shown masked. Other named secrets, such as a password a step sends in its
+          body, query or path, go under <Ui>Secret variables (advanced)</Ui>, used as <Code>{"{{secret.name}}"}</Code>. A{" "}
           <Ui>flow</Ui> is one or more calls in order: for example, get a token with the API key, then search products with
           that token. The page lists the APIs; open one to see its flows in the sidebar and its connection above them.
           Every run of every flow is listed under <Ui>API</Ui> → <Ui>Runs</Ui>, filtered by status and API; open one to see

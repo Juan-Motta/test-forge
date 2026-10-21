@@ -3,10 +3,20 @@
 import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from "react";
 import type { FieldErrors } from "@/lib/api";
 import { useT } from "@/lib/i18n";
-import { Alert, Button, Card, Field, Input, PasswordInput, Textarea } from "@/ui";
-import { MAX_SECRETS, apiChanges, fieldError, rowKeys, rowsProblem, type PairRow } from "./connection-form";
-import { PairRows } from "./PairRows";
-import { SecretChip } from "./SecretChip";
+import { Alert, Card, Field, Input, Textarea } from "@/ui";
+import {
+  MAX_SECRETS,
+  apiChanges,
+  connectionProblems,
+  connectionRows,
+  fieldError,
+  rowKeys,
+  secretCount,
+  type HeaderRow,
+  type PairRow,
+} from "./connection-form";
+import { HeaderRows } from "./HeaderRows";
+import { SecretVariables } from "./SecretVariables";
 import type { Api, ApiChanges } from "./types";
 import { useSecretReveal } from "./use-secret-reveal";
 
@@ -26,7 +36,8 @@ type ApiFormProps = {
 
 /**
  * The open API's details on `/apis`, edited in place in cards: its name, description, tags and
- * base URL; its secrets (revealed one at a time, replaced, removed or added); its plain headers.
+ * base URL; its headers, each plain or secret (revealed one at a time, replaced or removed), with
+ * the secret variables steps use in a collapsed advanced section.
  * Keyed by the caller per API and per save, so it always starts from what is stored, and a
  * revealed value never outlives a save or a switch to another API.
  */
@@ -38,18 +49,17 @@ export function ApiForm({ api, formId, onSubmit, error, serverFieldErrors, onDir
   const [description, setDescription] = useState(api.description);
   const [tags, setTags] = useState(api.tags.join(", "));
   const [baseUrl, setBaseUrl] = useState(api.baseUrl);
-  const [headers, setHeaders] = useState<PairRow[]>(() => api.headers.map((header) => ({ key: nextKey(), ...header })));
-  // Stored secrets still kept, each with the new value typed (empty leaves it as it is).
-  const [stored, setStored] = useState<PairRow[]>(() =>
-    api.secrets.map((secret) => ({ key: nextKey(), name: secret.name, value: "", locked: true })),
-  );
-  const [added, setAdded] = useState<PairRow[]>([]);
+  const [initial] = useState(() => connectionRows(api, nextKey));
+  const [headers, setHeaders] = useState<HeaderRow[]>(initial.headers);
+  // Stored secret variables still kept, each with the new value typed (empty leaves it as it is), then new ones.
+  const [secrets, setSecrets] = useState<PairRow[]>(initial.secrets);
   const [local, setLocal] = useState<Record<string, string>>({});
 
   const errors = { ...serverFieldErrors, ...local };
-  const secrets = [...stored, ...added];
   const form = { name, description, tags, baseUrl, headers, secrets };
-  const dirty = Object.keys(apiChanges(api, form)).length > 0 || added.some((row) => row.name.trim() || row.value);
+  const typedAdded = secrets.some((row) => !row.locked && (row.name.trim() || row.value));
+  const dirty = Object.keys(apiChanges(api, form)).length > 0 || typedAdded;
+  const canAddSecret = secretCount(api, form) < MAX_SECRETS;
 
   const dirtyHandler = useRef(onDirtyChange);
   useEffect(() => {
@@ -66,18 +76,15 @@ export function ApiForm({ api, formId, onSubmit, error, serverFieldErrors, onDir
     const problems: Record<string, string> = {};
     if (!name.trim()) problems.name = t("apis.error.name");
     if (!baseUrl.trim()) problems.baseUrl = t("apis.error.baseUrl");
-    const secretProblem = rowsProblem(secrets, "secret");
-    if (secretProblem) problems.secrets = t(`apis.error.rows.${secretProblem}`);
-    const headerProblem = rowsProblem(headers, "header");
-    if (headerProblem) problems.headers = t(`apis.error.rows.${headerProblem}`);
+    const rows = connectionProblems(form);
+    if (rows.secrets) problems.secrets = t(`apis.error.rows.${rows.secrets}`);
+    if (rows.headers) problems.headers = t(`apis.error.rows.${rows.headers}`);
     setLocal(problems);
     if (Object.keys(problems).length > 0) return;
     onSubmit(apiChanges(api, form));
   }
 
-  const setStoredValue = (key: string, value: string) =>
-    setStored((rows) => rows.map((row) => (row.key === key ? { ...row, value } : row)));
-  const hints = new Map(api.secrets.map((secret) => [secret.name, secret.hint]));
+  const hints = Object.fromEntries(api.secrets.map((secret) => [secret.name, secret.hint]));
 
   return (
     <form id={formId} noValidate aria-label={t("apis.settings")} onSubmit={submit} className="flex flex-col gap-4">
@@ -108,70 +115,31 @@ export function ApiForm({ api, formId, onSubmit, error, serverFieldErrors, onDir
         </Field>
       </SectionCard>
 
-      <SectionCard title={t("apis.field.secrets")} subtitle={t("apis.secretsHint")}>
-        {stored.length > 0 ? (
-          <ul aria-label={t("apis.storedSecrets")} className="flex flex-col gap-2">
-            {stored.map((row) => (
-              <li
-                key={row.key}
-                className="grid items-center gap-2 sm:grid-cols-[minmax(0,2fr)_minmax(0,3fr)_auto]"
-              >
-                <span className="min-w-0">
-                  <SecretChip
-                    name={row.name}
-                    hint={hints.get(row.name) ?? ""}
-                    value={reveal.shown[row.name]}
-                    pending={reveal.pending.has(row.name)}
-                    onToggle={() => void reveal.toggle(row.name)}
-                  />
-                </span>
-                <PasswordInput
-                  mono
-                  aria-label={t("apis.secretNewValue", { name: row.name })}
-                  subject={t("apis.secretNewValue", { name: row.name })}
-                  autoComplete="new-password"
-                  placeholder={t("apis.replaceValue")}
-                  value={row.value}
-                  onChange={(event) => setStoredValue(row.key, event.target.value)}
-                />
-                <Button
-                  variant="ghost"
-                  aria-label={t("apis.removeSecret", { name: row.name })}
-                  onClick={() => setStored((rows) => rows.filter((item) => item.key !== row.key))}
-                >
-                  {t("apis.remove")}
-                </Button>
-              </li>
-            ))}
-          </ul>
-        ) : null}
+      <SectionCard title={t("apis.field.headers")} subtitle={t("apis.headersHint")}>
+        <HeaderRows
+          rows={headers}
+          onChange={setHeaders}
+          onAdd={() => setHeaders((rows) => [...rows, { key: nextKey(), name: "", value: "", secret: false }])}
+          error={fieldError(errors, "headers")}
+          legendSrOnly
+          hints={hints}
+          reveal={reveal}
+          canAddSecret={canAddSecret}
+        />
+        <SecretVariables
+          rows={secrets}
+          onChange={setSecrets}
+          onAdd={() => setSecrets((rows) => [...rows, { key: nextKey(), name: "", value: "" }])}
+          error={fieldError(errors, "secrets")}
+          hints={hints}
+          reveal={reveal}
+          canAdd={canAddSecret}
+        />
         {reveal.error ? (
           <p role="alert" className="text-xs text-danger-fg">
             {t("apis.revealFailed", { error: reveal.error })}
           </p>
         ) : null}
-        <PairRows
-          kind="secret"
-          rows={added}
-          onChange={setAdded}
-          onAdd={() => setAdded((rows) => [...rows, { key: nextKey(), name: "", value: "" }])}
-          error={fieldError(errors, "secrets")}
-          max={MAX_SECRETS - stored.length}
-          legend={t("apis.newSecrets")}
-          legendSrOnly={added.length === 0}
-          emptyText={stored.length > 0 ? null : undefined}
-        />
-      </SectionCard>
-
-      <SectionCard title={t("apis.field.headers")} subtitle={t("apis.headersHint")}>
-        <PairRows
-          kind="header"
-          rows={headers}
-          onChange={setHeaders}
-          onAdd={() => setHeaders((rows) => [...rows, { key: nextKey(), name: "", value: "" }])}
-          error={fieldError(errors, "headers")}
-          legendSrOnly
-        />
       </SectionCard>
     </form>
   );
