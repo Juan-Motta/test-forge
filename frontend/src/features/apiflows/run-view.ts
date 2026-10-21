@@ -41,20 +41,20 @@ export function prettyBody(body: unknown): { kind: "json" | "text"; text: string
     try {
       JSON.parse(text);
       // Indent the text as received rather than re-encoding it: big ids and number forms stay.
-      return { kind: "json", text: text.includes("\n") ? text : reindentJson(text) };
+      return { kind: "json", text: reindentJson(text) };
     } catch {
       // A body cut short to be stored is still JSON to read, just not whole: indent what is there.
       // Only a body the backend cut short is re-indented; other text stays exactly as received.
       const cut = /… \[\d+ more characters\]$/.exec(text);
-      if (!cut || text.includes("\n")) return { kind: cut ? "json" : "text", text };
-      return { kind: "json", text: `${reindentJson(text.slice(0, cut.index))}\n${cut[0]}` };
+      if (!cut) return { kind: "text", text };
+      return { kind: "json", text: `${reindentJson(text.slice(0, cut.index)).trimEnd()}\n${cut[0]}` };
     }
   }
   return { kind: "text", text };
 }
 
-/** Indents JSON text that may be cut short (so it cannot be parsed): a line per member, two
- * spaces per level, strings left as they are. */
+/** Indents JSON text, whole or cut short (so it cannot be parsed): a line per member, two spaces
+ * per level; whitespace between tokens is replaced, strings are left as they are. */
 export function reindentJson(text: string): string {
   let out = "";
   let depth = 0;
@@ -76,7 +76,7 @@ export function reindentJson(text: string): string {
     } else if (char === "{" || char === "[") {
       const close = char === "{" ? "}" : "]";
       let next = i + 1;
-      while (text[next] === " ") next += 1;
+      while (/\s/.test(text[next] ?? "")) next += 1;
       if (text[next] === close) {
         out += char + close;
         i = next;
@@ -89,11 +89,9 @@ export function reindentJson(text: string): string {
       out += newline() + char;
     } else if (char === ",") {
       out += "," + newline();
-      while (text[i + 1] === " ") i += 1;
     } else if (char === ":") {
       out += ": ";
-      while (text[i + 1] === " ") i += 1;
-    } else if (char !== "\n") {
+    } else if (!/\s/.test(char)) {
       out += char;
     }
   }

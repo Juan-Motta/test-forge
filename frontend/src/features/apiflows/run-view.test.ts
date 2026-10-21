@@ -115,8 +115,11 @@ describe("JSON bodies", () => {
       kind: "json",
       text: '{\n  "id": 12345678901234567890,\n  "v": 1.0\n}',
     });
-    // A cut body the backend already indented is shown as stored.
+    // A cut body the backend already indented keeps the same layout.
     expect(prettyBody('{\n  "a": 1,\n… [9 more characters]')).toEqual({ kind: "json", text: '{\n  "a": 1,\n… [9 more characters]' });
+    // Compact JSON with a trailing newline, or only partly broken into lines, is indented too.
+    expect(prettyBody('{"a":1,"b":[2]}\n')).toEqual({ kind: "json", text: '{\n  "a": 1,\n  "b": [\n    2\n  ]\n}' });
+    expect(prettyBody('{"a": 1,\n"b": {"c": "x y"}}')).toEqual({ kind: "json", text: '{\n  "a": 1,\n  "b": {\n    "c": "x y"\n  }\n}' });
     // Text that only looks like JSON stays exactly as received.
     expect(prettyBody("{not json, a: b}")).toEqual({ kind: "text", text: "{not json, a: b}" });
   });
