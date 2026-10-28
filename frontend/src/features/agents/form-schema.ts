@@ -27,6 +27,7 @@ export type AgentFormValues = {
   baseUrl: string;
   channelId: string;
   userId: string;
+  sessionUrl: string;
   textMode: TextMode;
   auth: TextAuth;
   apiKey: string;
@@ -43,6 +44,7 @@ export const AGENT_FIELDS = [
   "baseUrl",
   "channelId",
   "userId",
+  "sessionUrl",
   "textMode",
   "auth",
   "apiKey",
@@ -103,6 +105,18 @@ export function baseUrlProblem(t: Translator, value: string, kind: AgentKind = "
   return undefined;
 }
 
+/** A relay agent's session URL: `https://` (or `http://` to a local host) on the WebSocket URL's host. */
+export function sessionUrlProblem(t: Translator, value: string, baseUrl: string): string | undefined {
+  if (value.length > MAX_URL) return t("agents.url.tooLong");
+  const url = parseUrl(value);
+  if (typeof url === "string") return t(`agents.url.${url}`);
+  const local = url.protocol === "http:" && LOCAL_HOSTS.has(url.hostname);
+  if (url.protocol !== "https:" && !local) return t("agents.url.scheme", { scheme: "https://" });
+  const base = parseUrl(baseUrl);
+  if (typeof base !== "string" && base.hostname !== url.hostname) return t("agents.error.sessionUrlHost");
+  return undefined;
+}
+
 /** An HTTP(S) origin: scheme, host and optional port only. */
 export function originProblem(t: Translator, value: string): string | undefined {
   if (value.length > MAX_ORIGIN) return t("common.maxChars", { max: MAX_ORIGIN });
@@ -133,6 +147,7 @@ export function agentFormSchema(t: Translator, hasStoredKey = false) {
       baseUrl: z.string().trim(),
       channelId: z.string().trim(),
       userId: z.string().trim(),
+      sessionUrl: z.string().trim(),
       textMode: z.enum(TEXT_MODES),
       auth: z.enum(TEXT_AUTHS),
       apiKey: z.string().trim().max(MAX_API_KEY, t("common.maxChars", { max: MAX_API_KEY })),
@@ -148,11 +163,18 @@ export function agentFormSchema(t: Translator, hasStoredKey = false) {
         const url = baseUrlProblem(t, values.baseUrl, values.kind);
         if (url) issue("baseUrl", url);
       }
-      if (!values.channelId) issue("channelId", t("agents.error.channelId"));
+      // A relay agent has no channel or user: only the Vivi protocols address them.
+      const relay = !text && values.protocol === "relay";
+      if (relay) {
+        const session = values.sessionUrl ? sessionUrlProblem(t, values.sessionUrl, values.baseUrl) : undefined;
+        if (session) issue("sessionUrl", session);
+      } else if (!values.channelId) issue("channelId", t("agents.error.channelId"));
       else if (values.channelId.length > MAX_CHANNEL_ID) issue("channelId", t("common.maxChars", { max: MAX_CHANNEL_ID }));
       else if (text && !UUID.test(values.channelId)) issue("channelId", t("agents.error.channelUuid"));
       else if (!CHANNEL_ID.test(values.channelId)) issue("channelId", t("agents.error.channelChars"));
-      if (!text) {
+      if (relay) {
+        // Nothing more: the session URL is checked above.
+      } else if (!text) {
         if (!values.userId) issue("userId", t("agents.error.userId"));
         else if (values.userId.length > MAX_USER_ID) issue("userId", t("common.maxChars", { max: MAX_USER_ID }));
         else if (!PRINTABLE.test(values.userId)) issue("userId", t("agents.error.printable"));
@@ -173,6 +195,7 @@ export function initialValues(agent?: Agent): AgentFormValues {
     baseUrl: agent?.baseUrl ?? "",
     channelId: agent?.channelId ?? "",
     userId: agent?.userId ?? "",
+    sessionUrl: agent?.sessionUrl ?? "",
     textMode: agent?.textMode ?? "stream",
     auth: agent?.auth ?? "none",
     apiKey: "",
@@ -191,8 +214,13 @@ export function toNewAgent(values: AgentFormValues): NewAgent {
     origin: values.origin.trim() || null,
     langfuseConnectionId: values.langfuseConnectionId || null,
   };
+  if (values.kind === "voice" && values.protocol === "relay") {
+    const { channelId, ...rest } = common;
+    void channelId;
+    return { ...rest, kind: "voice", protocol: "relay", userId: null, sessionUrl: values.sessionUrl.trim() || null };
+  }
   if (values.kind === "voice") {
-    return { ...common, kind: "voice", protocol: values.protocol, userId: values.userId.trim() };
+    return { ...common, kind: "voice", protocol: values.protocol, userId: values.userId.trim(), sessionUrl: null };
   }
   const apiKey = values.auth === "api_key" ? values.apiKey.trim() : "";
   return { ...common, kind: "text", textMode: values.textMode, auth: values.auth, ...(apiKey ? { apiKey } : {}) };

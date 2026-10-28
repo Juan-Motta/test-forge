@@ -127,8 +127,57 @@ describe("text agents", () => {
       baseUrl: "wss://agent.example.com/ws",
       channelId: "hotel-dev",
       userId: "user|KSG|42",
+      sessionUrl: null,
       origin: null,
       langfuseConnectionId: null,
     });
+  });
+});
+
+describe("relay agents", () => {
+  const relayValues = (overrides: Partial<ReturnType<typeof initialValues>> = {}) => ({
+    ...initialValues(),
+    name: "Portfolio voice",
+    protocol: "relay" as const,
+    baseUrl: "wss://agent.raaw.dev/api/voice",
+    sessionUrl: "https://agent.raaw.dev/api/sessions",
+    origin: "https://raaw.dev",
+    ...overrides,
+  });
+  const problems = (values: ReturnType<typeof initialValues>) => {
+    const result = agentFormSchema(t).safeParse(values);
+    return result.success ? {} : Object.fromEntries(result.error.issues.map((issue) => [issue.path.join("."), issue.message]));
+  };
+
+  it("needs no channel or user, and an optional https session URL on the agent's host", () => {
+    expect(problems(relayValues())).toEqual({});
+    expect(problems(relayValues({ sessionUrl: "" }))).toEqual({});
+    expect(problems(relayValues({ sessionUrl: "wss://agent.raaw.dev/api/sessions" }))).toEqual({
+      sessionUrl: "URL must use https://.",
+    });
+    expect(problems(relayValues({ sessionUrl: "https://other.example.com/sessions" }))).toEqual({
+      sessionUrl: "Use the same host as the WebSocket URL.",
+    });
+  });
+
+  it("creates without a channel or user, with the session URL", () => {
+    expect(toNewAgent(relayValues({ channelId: "left-over", userId: "left-over" }))).toEqual({
+      name: "Portfolio voice",
+      context: "",
+      kind: "voice",
+      protocol: "relay",
+      baseUrl: "wss://agent.raaw.dev/api/voice",
+      userId: null,
+      sessionUrl: "https://agent.raaw.dev/api/sessions",
+      origin: "https://raaw.dev",
+      langfuseConnectionId: null,
+    });
+    expect(toNewAgent(relayValues({ sessionUrl: " " }))).toMatchObject({ sessionUrl: null });
+  });
+
+  it("clears the session URL when the agent moves to a Vivi protocol", () => {
+    const relay = agentFixture({ protocol: "relay", channelId: "", userId: null, sessionUrl: "https://agent.example.com/s" });
+    const values = { ...initialValues(relay), protocol: "live" as const, channelId: "c-1", userId: "u-1" };
+    expect(toChanges(relay, values)).toEqual({ protocol: "live", channelId: "c-1", userId: "u-1", sessionUrl: null });
   });
 });

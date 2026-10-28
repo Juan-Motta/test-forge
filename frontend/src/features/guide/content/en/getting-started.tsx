@@ -92,6 +92,8 @@ export function GettingStartedEn() {
         </Step>
         <Step title="Leave Protocol on Auto-detect.">
           TestForge works out on each run which voice protocol your agent speaks. Pick one only to skip that check.
+          For a voice agent outside Vivi that speaks a simple JSON audio relay, pick <Ui>Relay (JSON audio)</Ui>: it needs
+          no Channel ID or User ID, and an optional <Ui>Session URL</Ui> where each run creates its session first.
         </Step>
         <Step title="Optionally link a Langfuse connection, then Create agent.">
           With Langfuse linked, the judge also reads the agent&apos;s traces for each call.

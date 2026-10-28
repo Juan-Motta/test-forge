@@ -94,6 +94,8 @@ export function GettingStartedEs() {
         </Step>
         <Step title="Deja Protocolo en Detección automática.">
           TestForge averigua en cada corrida qué protocolo de voz habla tu agente. Elige uno solo para omitir esa comprobación.
+          Para un agente de voz fuera de Vivi que habla un relay de audio JSON, elige <Ui>Relay (audio JSON)</Ui>: no necesita
+          ID de canal ni ID de usuario, y acepta una <Ui>URL de sesión</Ui> opcional donde cada corrida crea su sesión primero.
         </Step>
         <Step title="Opcionalmente, vincula una conexión de Langfuse y luego presiona Crear agente.">
           Con Langfuse vinculado, el juez también lee las trazas del agente de cada llamada.

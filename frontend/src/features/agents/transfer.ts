@@ -16,6 +16,7 @@ export function agentToText(agent: Agent, langfuseConnections: readonly Named[])
     baseUrl: agent.baseUrl,
     channelId: agent.channelId,
     ...(voice ? { protocol: agent.protocol, userId: agent.userId } : { textMode: agent.textMode, auth: agent.auth }),
+    ...(agent.sessionUrl ? { sessionUrl: agent.sessionUrl } : {}),
     origin: agent.origin,
     langfuseConnection: langfuse,
   });
@@ -41,6 +42,7 @@ export function agentFromText(t: Translator, text: string, langfuseConnections: 
     baseUrl: read.string(data.baseUrl) ?? "",
     channelId: read.string(data.channelId) ?? "",
     userId: read.string(data.userId) ?? "",
+    sessionUrl: read.string(data.sessionUrl) ?? "",
     textMode: read.oneOf(TEXT_MODES, data.textMode) ?? base.textMode,
     auth: read.oneOf(TEXT_AUTHS, data.auth) ?? base.auth,
     origin: read.string(data.origin) ?? "",

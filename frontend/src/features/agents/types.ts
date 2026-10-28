@@ -1,5 +1,5 @@
 /** Wire protocols the backend accepts (`AgentProtocol`). */
-export const AGENT_PROTOCOLS = ["auto", "live", "realtime"] as const;
+export const AGENT_PROTOCOLS = ["auto", "live", "realtime", "relay"] as const;
 export type AgentProtocol = (typeof AGENT_PROTOCOLS)[number];
 
 /** `voice`: a realtime WebSocket agent. `text`: a chat agent behind Vivi's channel API. Fixed at creation. */
@@ -25,8 +25,10 @@ export type Agent = {
   protocol: AgentProtocol;
   baseUrl: string;
   channelId: string;
-  /** Voice agents only (`null` for text agents). */
+  /** Voice agents only (`null` for text and relay agents). */
   userId: string | null;
+  /** Relay agents only: each run first POSTs here to create its session. */
+  sessionUrl: string | null;
   /** Text agents only. */
   textMode: TextMode | null;
   auth: TextAuth | null;
@@ -43,12 +45,19 @@ type AgentCommon = {
   name: string;
   context: string;
   baseUrl: string;
-  channelId: string;
+  /** Not sent for a relay agent, which has none. */
+  channelId?: string;
   origin: string | null;
   langfuseConnectionId: string | null;
 };
 
-export type NewVoiceAgent = AgentCommon & { kind: "voice"; protocol: AgentProtocol; userId: string };
+export type NewVoiceAgent = AgentCommon & {
+  kind: "voice";
+  protocol: AgentProtocol;
+  /** `null` for a relay agent. */
+  userId: string | null;
+  sessionUrl: string | null;
+};
 export type NewTextAgent = AgentCommon & {
   kind: "text";
   textMode: TextMode;
@@ -76,7 +85,7 @@ export type AgentConnectionTest = {
   reachable: boolean;
   /** Voice: connect plus ready; text: the whole reply; when reachable. */
   latencyMs: number | null;
-  /** `live` or `realtime`, once detected; always null for text agents. */
+  /** `live` or `realtime` once detected, or `relay`; always null for text agents. */
   protocol: string | null;
   log: ConnectionLogLine[];
 };

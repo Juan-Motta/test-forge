@@ -30,6 +30,45 @@ async function openEdit(name = "Hotel booking assistant") {
 const saveChanges = () => screen.getByRole("button", { name: "Save changes" });
 
 describe("Create agent", () => {
+  it("creates a relay agent with a session URL and no channel or user", async () => {
+    mockConnectionsApi([]);
+    const api = mockAgentsApi([]);
+    const { user, dialog } = await openCreate();
+
+    await user.type(within(dialog).getByLabelText("Name"), "Portfolio voice");
+    await user.selectOptions(within(dialog).getByLabelText("Protocol"), "Relay (JSON audio)");
+    expect(within(dialog).queryByLabelText("Channel ID")).not.toBeInTheDocument();
+    expect(within(dialog).queryByLabelText("User ID")).not.toBeInTheDocument();
+    await user.type(within(dialog).getByLabelText("WebSocket URL"), "wss://agent.raaw.dev/api/voice");
+    const sessionUrl = within(dialog).getByLabelText("Session URL (optional)");
+    await user.type(sessionUrl, "https://elsewhere.dev/api/sessions");
+    await user.click(within(dialog).getByRole("button", { name: "Create agent" }));
+    expect(await within(dialog).findByText("Use the same host as the WebSocket URL.")).toBeInTheDocument();
+    expect(api.requests).toEqual([]);
+
+    await user.clear(sessionUrl);
+    await user.type(sessionUrl, "https://agent.raaw.dev/api/sessions");
+    await user.click(within(dialog).getByRole("button", { name: "Create agent" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(api.requests).toEqual([
+      {
+        method: "POST",
+        path: "/agents",
+        body: {
+          name: "Portfolio voice",
+          context: "",
+          kind: "voice",
+          protocol: "relay",
+          baseUrl: "wss://agent.raaw.dev/api/voice",
+          userId: null,
+          sessionUrl: "https://agent.raaw.dev/api/sessions",
+          origin: null,
+          langfuseConnectionId: null,
+        },
+      },
+    ]);
+  });
+
   it("creates an agent with the camelCase payload and shows it in the list", async () => {
     mockConnectionsApi([connectionFixture({ id: "c-lf", name: "Traces", kind: "langfuse" })]);
     const api = mockAgentsApi([]);
@@ -61,6 +100,7 @@ describe("Create agent", () => {
           baseUrl: "wss://agent.example.com/ws/",
           channelId: "hotel-dev",
           userId: "user|KSG|42",
+          sessionUrl: null,
           origin: null,
           langfuseConnectionId: "c-lf",
         },
@@ -295,6 +335,7 @@ describe("Import from cURL", () => {
           baseUrl: "wss://api-dev-95a8b1f8-0925-4b65-a078-75c0473d54d7.vivi.bot",
           channelId: "2a8204d3-bd82-4799-a8e8-8e669f318fec",
           userId: "waad|KSG|def6b5db-b7ad-4888-bcb3-6ce1c16e2ead",
+          sessionUrl: null,
           origin: "https://portal-dev-95a8b1f8-0925-4b65-a078-75c0473d54d7.vivi.bot",
           langfuseConnectionId: null,
         },

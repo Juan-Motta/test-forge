@@ -127,6 +127,9 @@ export function AgentForm({
   const textMode = useWatch({ control, name: "textMode" });
   const auth = useWatch({ control, name: "auth" });
   const text = kind === "text";
+  const protocol = useWatch({ control, name: "protocol" });
+  // A relay agent has no channel or user; it may create its sessions at a session URL instead.
+  const relay = !text && protocol === "relay";
   // A stored key is never shown; "Replace" opens an empty field for a new one.
   const [replacingKey, setReplacingKey] = useState(false);
 
@@ -469,6 +472,22 @@ export function AgentForm({
     </div>
   );
 
+  const sessionUrlField = (
+    <Field label={t("agents.field.sessionUrl")} hint={t("agents.field.sessionUrlHint")} error={fieldError("sessionUrl")}>
+      {(control) => (
+        <Input
+          mono
+          inputMode="url"
+          autoComplete="off"
+          spellCheck={false}
+          placeholder="https://agent.example.com/api/sessions"
+          {...control}
+          {...registerField("sessionUrl")}
+        />
+      )}
+    </Field>
+  );
+
   const originField = (label: string) => (
     <Field
       label={label}
@@ -554,6 +573,12 @@ export function AgentForm({
         >
           {importBlock}
           {baseUrlField}
+          {relay ? (
+            <>
+              {sessionUrlField}
+              <p className="text-xs text-muted">{t("agents.relayHint")}</p>
+            </>
+          ) : (
           <ParamsTable
             fixed={
               text
@@ -564,6 +589,7 @@ export function AgentForm({
                   ]
             }
           />
+          )}
           {text ? (
             <>
               {textModeField}
@@ -632,20 +658,24 @@ export function AgentForm({
         </p>
         {text ? null : protocolField}
         {baseUrlField}
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field
-            label={t("agents.field.channelId")}
-            hint={text ? t("agents.field.channelIdHint") : undefined}
-            error={fieldError("channelId")}
-          >
-            {(control) => <Input mono autoComplete="off" spellCheck={false} {...control} {...registerField("channelId")} />}
-          </Field>
-          {text ? null : (
-            <Field label={t("agents.field.userId")} error={fieldError("userId")}>
-              {(control) => <Input mono autoComplete="off" spellCheck={false} {...control} {...registerField("userId")} />}
+        {relay ? sessionUrlField : null}
+        {relay ? <p className="text-xs text-muted">{t("agents.relayHint")}</p> : null}
+        {relay ? null : (
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field
+              label={t("agents.field.channelId")}
+              hint={text ? t("agents.field.channelIdHint") : undefined}
+              error={fieldError("channelId")}
+            >
+              {(control) => <Input mono autoComplete="off" spellCheck={false} {...control} {...registerField("channelId")} />}
             </Field>
-          )}
-        </div>
+            {text ? null : (
+              <Field label={t("agents.field.userId")} error={fieldError("userId")}>
+                {(control) => <Input mono autoComplete="off" spellCheck={false} {...control} {...registerField("userId")} />}
+              </Field>
+            )}
+          </div>
+        )}
         {text ? textModeField : null}
         {text ? authField : null}
         {originField(t("agents.field.origin"))}
