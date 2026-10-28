@@ -69,6 +69,16 @@ class Run:
     judge_usage: dict[str, Any] | None = None  # the judge's usage over every judgement attempt
 
     @property
+    def langfuse_session_id(self) -> str:
+        """The Langfuse `sessionId` of the run's traces: the run's thread id, except for a relay
+        agent, whose session is the one it reported (created by its session URL)."""
+        summary = self.summary if isinstance(self.summary, dict) else {}
+        session = summary.get("session_id")
+        if summary.get("protocol") == "relay" and isinstance(session, str) and session:
+            return session
+        return self.thread_id
+
+    @property
     def caller_usage(self) -> dict[str, Any] | None:
         """The evaluator's caller usage of the summary (None for runs before usage capture)."""
         usage = self.summary.get("usage") if isinstance(self.summary, dict) else None

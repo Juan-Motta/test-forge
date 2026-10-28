@@ -8,6 +8,7 @@ from sqlalchemy import update
 
 from voice_eval.modules.connections.langfuse_links import (
     LangfuseLinks,
+    session_url,
     thread_traces_url,
     trace_url,
 )
@@ -145,3 +146,10 @@ async def test_the_cache_holds_no_secret(app, user_client):
     resolved = await resolve(app, links, connection_id)
     assert SECRET not in repr(resolved)
     assert SECRET not in repr(links.__dict__)
+
+
+def test_session_url_opens_the_langfuse_session():
+    assert (
+        session_url("https://lf.example/", "proj-1", "s a/b")
+        == "https://lf.example/project/proj-1/sessions/s%20a%2Fb"
+    )

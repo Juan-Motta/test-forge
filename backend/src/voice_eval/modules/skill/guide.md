@@ -163,7 +163,8 @@ Usually a human has already configured connections, agents and scenarios: list t
   optional `sessionUrl` (`https://`, on the same host as `baseUrl`) each run first POSTs `{}`
   there and uses the `session_id` it answers; without one the run's thread id is the session id.
   The agent never speaks first and its turns end on silence; interruptions and text caller turns
-  are not supported.
+  are not supported. Its Langfuse traces are read by the standard Langfuse `sessionId`, equal to
+  the agent's own session id (a run's `summary.sessionId`), not by the run's `threadId`.
 
   ```json
   {

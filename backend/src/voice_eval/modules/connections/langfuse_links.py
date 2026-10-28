@@ -55,6 +55,14 @@ def thread_traces_url(host: str, project_id: str, thread_id: str) -> str:
     )
 
 
+def session_url(host: str, project_id: str, session_id: str) -> str:
+    """Langfuse's page of one session (the standard `sessionId` of its traces)."""
+    return (
+        f"{host.rstrip('/')}/project/{quote(project_id, safe='')}"
+        f"/sessions/{quote(session_id, safe='')}"
+    )
+
+
 def trace_url(host: str, trace_id: str) -> str:
     """One trace; Langfuse redirects `/trace/{id}` into the trace's project."""
     return f"{host.rstrip('/')}/trace/{quote(trace_id, safe='')}"

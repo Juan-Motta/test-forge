@@ -84,6 +84,20 @@ async def test_traces_are_polled_until_stable_then_judged(app, harness, tmp_path
     assert "It is 120 dollars." in prompt and "llm-1" in prompt
 
 
+async def test_a_relay_run_reads_the_traces_of_the_agent_s_own_session(app, harness, tmp_path):
+    # A relay agent's session is the one its session URL answered, not the run's thread id.
+    out = tmp_path / "run"
+    write_artifacts(out)
+    summary = {"protocol": "relay", "session_id": "agent-session-1"}
+    run_id = await insert_run(app.state.sessionmaker, artifacts_dir=out, summary=summary)
+    harness.reader = ScriptedReader([observation(0)], [observation(0)])
+
+    row = await judge(app, run_id)
+
+    assert row.status == "completed"
+    assert {call["session_id"] for call in harness.reader.calls} == {"agent-session-1"}
+
+
 async def test_an_agent_without_langfuse_is_judged_without_traces(app, harness, tmp_path):
     out = tmp_path / "run"
     write_artifacts(out)

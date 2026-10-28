@@ -23,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from voice_eval.modules.connections.langfuse_links import (
     LangfuseLinks,
     default_links,
+    session_url,
     thread_traces_url,
     trace_url,
 )
@@ -535,6 +536,16 @@ async def get_trace(
     return trace
 
 
+def _traces_link(host: str, project_id: str | None, run: Run) -> str | None:
+    """Every trace of the run. Vivi agents tag each turn's trace with `metadata.thread_id`; any
+    other agent (relay) is found by the standard Langfuse session of its own conversation."""
+    if not project_id or not run.thread_id:
+        return None
+    if run.langfuse_session_id != run.thread_id:
+        return session_url(host, project_id, run.langfuse_session_id)
+    return thread_traces_url(host, project_id, run.thread_id)
+
+
 async def _langfuse_links(
     db: AsyncSession,
     run: Run,
@@ -554,11 +565,7 @@ async def _langfuse_links(
         return None
     trace_id = next((row["traceId"] for row in trace["observations"] if row["traceId"]), None)
     return {
-        "thread_traces_url": (
-            thread_traces_url(project.host, project.project_id, run.thread_id)
-            if project.project_id and run.thread_id
-            else None
-        ),
+        "thread_traces_url": _traces_link(project.host, project.project_id, run),
         "trace_url": trace_url(project.host, trace_id) if trace_id else None,
     }
 

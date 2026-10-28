@@ -523,7 +523,9 @@ class JudgementCoordinator:
         while True:
             try:
                 async with self._slots:
-                    observations = await reader.fetch_session(run.thread_id, start=start, end=end)
+                    observations = await reader.fetch_session(
+                        run.langfuse_session_id, start=start, end=end
+                    )
                 error = None
             except TraceFetchError as exc:
                 error = str(exc)  # retried on the next poll; kept only if it persists
@@ -544,7 +546,9 @@ class JudgementCoordinator:
         if error is not None:
             return [], FETCH_FAILED_NOTE.format(error=error)
         minutes = max(0, round((self.now() - ended).total_seconds() / 60))
-        return [], (f"No Langfuse traces found for session {run.thread_id} within {minutes} min.")
+        return [], (
+            f"No Langfuse traces found for session {run.langfuse_session_id} within {minutes} min."
+        )
 
     async def _save_observations(self, artifacts: Path, observations: list[dict]) -> None:
         def write() -> None:
