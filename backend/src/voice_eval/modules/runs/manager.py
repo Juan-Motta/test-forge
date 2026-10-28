@@ -471,11 +471,16 @@ def run_target_spec(
     return TargetSpec(
         base_url=dial_base_url(agent["base_url"], local_target_host),
         channel_id=agent["channel_id"],
-        user_id=agent["user_id"],
+        user_id=agent["user_id"] or "",  # a relay agent has none
         thread_id=thread_id,
         origin=agent["origin"],
         protocol=agent["protocol"],
+        session_url=_dial(agent.get("session_url"), local_target_host),
     )
+
+
+def _dial(url: str | None, local_target_host: str | None) -> str | None:
+    return None if url is None else dial_base_url(url, local_target_host)
 
 
 def ignored_voice_settings(snapshot: dict[str, Any]) -> tuple[str, ...]:

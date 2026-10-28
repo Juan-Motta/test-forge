@@ -232,3 +232,66 @@ async def test_an_unreadable_close_code_does_not_raise(
     body = (await user_client.post(f"/api/agents/{agent_id}/test")).json()
     assert body["reachable"] is True
     assert body["log"][-1] == {"ok": True, "message": "Closed"}
+
+
+@pytest.fixture
+async def relay_server():
+    """A relay that answers `ready`, or an `error` for the session id `gone`."""
+    from websockets.asyncio.server import serve
+
+    async def handler(ws):
+        if "session_id=gone" in ws.request.path:
+            await ws.send(json.dumps({"type": "error", "message": "Session not found or ended"}))
+            await ws.close()
+            return
+        await ws.send(json.dumps({"type": "ready"}))
+        async for message in ws:
+            if json.loads(message)["type"] == "stop":
+                await ws.send(json.dumps({"type": "closed", "reason": "stopped"}))
+                await ws.close()
+
+    async with serve(handler, "127.0.0.1", 0) as server:
+        yield f"ws://127.0.0.1:{server.sockets[0].getsockname()[1]}/api/voice"
+
+
+async def test_a_relay_agent_is_reachable(user_client, relay_server):
+    agent_id = await agent_for(
+        user_client, relay_server, protocol="relay", channelId=None, userId=None
+    )
+    body = (await user_client.post(f"/api/agents/{agent_id}/test")).json()
+    assert (body["reachable"], body["protocol"]) == (True, "relay")
+    assert messages(body)[0].startswith("Dialing ws://127.0.0.1:")
+    assert all(line["ok"] for line in body["log"])
+
+
+async def test_a_relay_error_before_ready_is_unreachable(user_client, relay_server, monkeypatch):
+    monkeypatch.setattr(connection_check, "TEST_THREAD_ID", "gone")
+    agent_id = await agent_for(
+        user_client, relay_server, protocol="relay", channelId=None, userId=None
+    )
+    body = (await user_client.post(f"/api/agents/{agent_id}/test")).json()
+    assert body["reachable"] is False
+    assert messages(body)[-1] == "The agent answered with an error: Session not found or ended"
+
+
+async def test_a_relay_session_url_that_fails_is_unreachable(
+    user_client, relay_server, monkeypatch
+):
+    async def refuse(session_url, origin):
+        raise connection_check.SessionCreateError("the session URL answered 429")
+
+    monkeypatch.setattr("voice_eval.targets.detect.create_session", refuse)
+    agent_id = await agent_for(
+        user_client,
+        relay_server,
+        protocol="relay",
+        channelId=None,
+        userId=None,
+        sessionUrl="http://127.0.0.1/api/sessions",
+    )
+    body = (await user_client.post(f"/api/agents/{agent_id}/test")).json()
+    assert body["reachable"] is False
+    assert messages(body) == [
+        "Creating a session at http://127.0.0.1/api/sessions",
+        "Could not create the session: the session URL answered 429",
+    ]

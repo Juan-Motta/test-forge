@@ -357,8 +357,9 @@ def build_parser() -> argparse.ArgumentParser:
         description="Hold a scripted conversation with a Vivi voice agent (Live or legacy).",
     )
     p.add_argument("--base-url", required=True, help="e.g. wss://<host>")
-    p.add_argument("--channel-id", required=True)
-    p.add_argument("--user-id", required=True)
+    p.add_argument("--channel-id", default="", help="required unless --protocol relay")
+    p.add_argument("--user-id", default="", help="required unless --protocol relay")
+    p.add_argument("--session-url", help="relay only: POSTed first to create the session")
     p.add_argument("--thread-id", help="defaults to a fresh UUID4 (also the Langfuse session id)")
     p.add_argument("--origin", help="optional Origin header")
     p.add_argument(
@@ -366,7 +367,8 @@ def build_parser() -> argparse.ArgumentParser:
         choices=PROTOCOLS,
         default="auto",
         help="target protocol; auto detects it from the first server frame (default); "
-        "live/realtime fail fast if the server speaks the other protocol",
+        "live/realtime fail fast if the server speaks the other protocol; relay (a simple "
+        "JSON audio relay) is never detected",
     )
     p.add_argument(
         "--say",
@@ -446,7 +448,7 @@ def validate_utterances(specs: list[tuple[str, str]], protocol: str) -> str | No
     for kind, value in specs:
         if kind in flags and not value.strip():
             return f"{flags[kind]} caller turns must not be empty"
-    if protocol == "live" and any(kind == "text" for kind, _ in specs):
+    if protocol in ("live", "relay") and any(kind == "text" for kind, _ in specs):
         return "--text caller turns need the legacy realtime protocol"
     return None
 
@@ -477,6 +479,15 @@ async def amain(argv: list[str] | None = None, synthesizer: SpeechSynthesizer | 
     if error := validate_utterances(args.utterances, args.protocol):
         print(f"error: {error}", file=sys.stderr)
         return 2
+    if args.protocol != "relay" and not (args.channel_id and args.user_id):
+        print(
+            "error: --channel-id and --user-id are required unless --protocol relay",
+            file=sys.stderr,
+        )
+        return 2
+    if args.session_url and args.protocol != "relay":
+        print("error: --session-url applies only to --protocol relay", file=sys.stderr)
+        return 2
     try:
         if synthesizer is None and args.tts_connection:
             from voice_eval.modules.connections.runtime import synthesizer_for_ref
@@ -495,6 +506,7 @@ async def amain(argv: list[str] | None = None, synthesizer: SpeechSynthesizer | 
         args.user_id,
         origin=args.origin,
         protocol=args.protocol,
+        session_url=args.session_url,
         **({"thread_id": args.thread_id} if args.thread_id else {}),
     )
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")

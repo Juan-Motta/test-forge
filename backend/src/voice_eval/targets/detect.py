@@ -10,12 +10,13 @@ from websockets.exceptions import ConnectionClosed
 
 from voice_eval.ports.target import TargetSession
 from voice_eval.targets.connection import decode_frame, open_socket, realtime_url
+from voice_eval.targets.relay import RelayClient, create_session, relay_url
 from voice_eval.targets.vivi_live import ViviLiveClient
 from voice_eval.targets.vivi_realtime import ViviRealtimeClient
 
-ProtocolName = Literal["auto", "live", "realtime"]
+ProtocolName = Literal["auto", "live", "realtime", "relay"]
 DetectedProtocol = Literal["live", "realtime"]
-PROTOCOLS: tuple[ProtocolName, ...] = ("auto", "live", "realtime")
+PROTOCOLS: tuple[ProtocolName, ...] = ("auto", "live", "realtime", "relay")
 MAX_DETECT_FRAMES = 10
 
 
@@ -31,6 +32,8 @@ class TargetSpec:
     thread_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     origin: str | None = None
     protocol: ProtocolName = "auto"
+    # Relay only: created first with a POST, it gives the session id (else the thread id is).
+    session_url: str | None = None
 
 
 async def open_target(spec: TargetSpec, detect_timeout_s: float = 15) -> TargetSession:
@@ -39,6 +42,8 @@ async def open_target(spec: TargetSpec, detect_timeout_s: float = 15) -> TargetS
     A forced `spec.protocol` is checked against that frame and fails fast on a mismatch: each
     server closes the session on the other protocol's client events, so guessing is never safe.
     """
+    if spec.protocol == "relay":
+        return await open_relay(spec)
     url = realtime_url(spec.base_url, spec.channel_id, spec.user_id, spec.thread_id)
     ws = await open_socket(url, spec.origin)
     try:
@@ -51,6 +56,19 @@ async def open_target(spec: TargetSpec, detect_timeout_s: float = 15) -> TargetS
         await ws.close()
         raise
     return attach_session(spec, ws, protocol, pending)
+
+
+async def open_relay(spec: TargetSpec) -> RelayClient:
+    """A relay session: created at `spec.session_url` first when there is one, then dialled.
+
+    The relay sends no identifying frame, so it is never detected: the agent chooses it.
+    """
+    session_id = spec.thread_id
+    if spec.session_url:
+        session_id = await create_session(spec.session_url, spec.origin)
+    client = RelayClient(spec.base_url, spec.channel_id, spec.user_id, session_id, spec.origin)
+    client.attach(await open_socket(relay_url(spec.base_url, session_id), spec.origin))
+    return client
 
 
 def check_forced_protocol(

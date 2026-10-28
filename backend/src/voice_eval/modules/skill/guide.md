@@ -152,9 +152,28 @@ Usually a human has already configured connections, agents and scenarios: list t
   accepted only for local hosts: `localhost`, `127.0.0.1` and `host.docker.internal`. When the
   backend runs in Docker and the agent runs on the developer's machine, `localhost` agents are
   dialed through `host.docker.internal` automatically.
-- `protocol`: `auto` (detect, default), `live` or `realtime`. `channelId` allows only
+- `protocol`: `auto` (detect, default), `live`, `realtime` or `relay`. `channelId` allows only
   `A-Z a-z 0-9 . _ ~ -`. `origin` is an `http(s)` origin (scheme, host, port), sent when the
   agent checks it.
+- `relay` is for a voice agent outside Vivi that speaks a simple JSON relay, never detected:
+  the caller sends `{"type": "audio", "audio": "<base64 PCM16 mono 24 kHz>"}` and
+  `{"type": "stop"}`; the agent sends `ready`, `audio`, `agent_transcript` (`delta`) /
+  `agent_done` (`text`), `user_transcript` / `user_done`, `interrupted`, `error` and `closed`.
+  It needs no `channelId` or `userId`. The socket is `{baseUrl}?session_id=<id>`: with an
+  optional `sessionUrl` (`https://`, on the same host as `baseUrl`) each run first POSTs `{}`
+  there and uses the `session_id` it answers; without one the run's thread id is the session id.
+  The agent never speaks first and its turns end on silence; interruptions and text caller turns
+  are not supported.
+
+  ```json
+  {
+    "name": "Portfolio voice",
+    "protocol": "relay",
+    "baseUrl": "wss://agent.example.com/api/voice",
+    "sessionUrl": "https://agent.example.com/api/sessions",
+    "origin": "https://example.com"
+  }
+  ```
 - `409` when the name is taken; `DELETE /api/agents/{agentId}` answers `409` while scenarios use
   the agent.
 - Text agents (`"kind": "text"`, fixed at creation) chat over the Vivi channel API
@@ -177,12 +196,12 @@ Usually a human has already configured connections, agents and scenarios: list t
   `textMode` is `stream` (default) or `invoke` (needed when the agent has a response schema);
   `auth` is `none` (default, e.g. WEB channels) or `api_key` (API channels), which requires
   `apiKey`. The key is write-only: responses carry only `hasApiKey` and `apiKeyHint`; send a new
-  `apiKey` to replace it, or `"auth": "none"` to remove it. `userId` and `protocol` apply only to
-  voice agents; `textMode`, `auth` and `apiKey` only to text agents.
+  `apiKey` to replace it, or `"auth": "none"` to remove it. `userId`, `sessionUrl` and
+  `protocol` apply only to voice agents; `textMode`, `auth` and `apiKey` only to text agents.
 - Check that the agent answers (ask first): `POST /api/agents/{agentId}/test` opens its
   WebSocket like a run does, waits until the session is ready (8 seconds at most), then closes
   it; no audio is sent. It answers `200` with `reachable`, `latencyMs` (connect + ready),
-  `protocol` (`live` or `realtime`, once detected) and `log`, a list of `{ok, message}` steps;
+  `protocol` (`live` or `realtime` once detected, or `relay`) and `log`, a list of `{ok, message}` steps;
   an unreachable agent has `reachable: false` and a failing last step. For a text agent it sends
   one short message ("Hello, this is a connection test.") in a fresh conversation and waits for
   the whole reply (this reaches the agent, which answers it); `latencyMs` is the reply time and

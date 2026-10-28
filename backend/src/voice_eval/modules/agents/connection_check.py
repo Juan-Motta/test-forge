@@ -21,8 +21,8 @@ from urllib.parse import urlsplit, urlunsplit
 import httpx
 from websockets.exceptions import ConnectionClosed, InvalidHandshake, InvalidStatus, InvalidURI
 
-from voice_eval.modules.agents.domain import Agent, AgentKind, TextMode
-from voice_eval.ports.target import Ready, ServerEvent, TargetSession
+from voice_eval.modules.agents.domain import Agent, AgentKind, AgentProtocol, TextMode
+from voice_eval.ports.target import Ready, ServerError, ServerEvent, TargetSession
 from voice_eval.ports.text_target import TextTargetError, collect
 from voice_eval.runner.common import close_session
 from voice_eval.targets.connection import dial_base_url, open_socket, realtime_url
@@ -31,8 +31,10 @@ from voice_eval.targets.detect import (
     TargetSpec,
     attach_session,
     detect_protocol,
+    open_relay,
 )
 from voice_eval.targets.http_chat import HttpChatTarget
+from voice_eval.targets.relay import SessionCreateError, relay_url
 
 log = logging.getLogger(__name__)
 
@@ -94,6 +96,8 @@ async def _drain(events: AsyncIterator[ServerEvent]) -> None:
 
 async def check_connection(agent: Agent, *, local_target_host: str | None) -> ConnectionCheck:
     """Open, wait for readiness (at most `READY_TIMEOUT_S` in all), close. Never raises."""
+    if agent.protocol == AgentProtocol.RELAY:
+        return await _check_relay(agent, local_target_host=local_target_host)
     check = ConnectionCheck()
     spec = TargetSpec(
         base_url=dial_base_url(agent.base_url, local_target_host),
@@ -154,6 +158,62 @@ async def check_connection(agent: Agent, *, local_target_host: str | None) -> Co
         return check
     except Exception as exc:
         log.info("agent connection test failed (%s)", type(exc).__name__)
+        check.step(_failure(exc), ok=False)
+        await _disconnect(session)
+        return check
+    if ready is None:
+        check.step("The agent closed the connection before the session was ready", ok=False)
+        await _disconnect(session)
+        return check
+    check.latency_ms = round((time.monotonic() - started) * 1000)
+    check.reachable = True
+    check.step(f"Session ready in {check.latency_ms} ms")
+    await _close(check, session, events)
+    return check
+
+
+async def _check_relay(agent: Agent, *, local_target_host: str | None) -> ConnectionCheck:
+    """A relay agent: create the session (when it has a session URL), dial, wait for `ready`."""
+    check = ConnectionCheck(protocol=AgentProtocol.RELAY.value)
+    session_url = agent.session_url and dial_base_url(agent.session_url, local_target_host)
+    spec = TargetSpec(
+        base_url=dial_base_url(agent.base_url, local_target_host),
+        channel_id=agent.channel_id,
+        user_id="",
+        thread_id=TEST_THREAD_ID,
+        origin=agent.origin,
+        protocol="relay",
+        session_url=session_url,
+    )
+    if session_url:
+        check.step(f"Creating a session at {_safe_url(session_url)}")
+    else:
+        check.step(f"Dialing {_safe_url(relay_url(spec.base_url, TEST_THREAD_ID))}")
+    started = time.monotonic()
+    session: TargetSession | None = None
+    try:
+        async with asyncio.timeout(READY_TIMEOUT_S):
+            session = await open_relay(spec)
+            check.step(f"Connected in {round((time.monotonic() - started) * 1000)} ms")
+            events = session.events()
+            ready: Ready | None = None
+            async for event in events:
+                if isinstance(event, ServerError):
+                    check.step(f"The agent answered with an error: {event.message}", ok=False)
+                    await _disconnect(session)
+                    return check
+                if isinstance(event, Ready):
+                    ready = event
+                    break
+    except TimeoutError:
+        check.step(f"The session was not ready within {_seconds(READY_TIMEOUT_S)} s", ok=False)
+        await _disconnect(session)
+        return check
+    except SessionCreateError as exc:
+        check.step(f"Could not create the session: {exc}", ok=False)
+        return check
+    except Exception as exc:
+        log.info("relay agent connection test failed (%s)", type(exc).__name__)
         check.step(_failure(exc), ok=False)
         await _disconnect(session)
         return check

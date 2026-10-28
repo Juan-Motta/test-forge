@@ -212,6 +212,7 @@ def snapshot(plan: RunPlan) -> dict[str, Any]:
             "channel_id": agent.channel_id,
             "user_id": agent.user_id,
             "origin": agent.origin,
+            "session_url": agent.session_url,
             "text_mode": agent.text_mode.value if agent.text_mode else None,
             "auth": agent.auth.value if agent.auth else None,
             "has_api_key": agent.has_api_key,

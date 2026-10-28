@@ -27,6 +27,7 @@ from voice_eval.modules.agents.domain import (
     TextAuth,
     TextMode,
     check_base_url,
+    check_session_url,
     check_text_channel_id,
 )
 from voice_eval.modules.agents.models import NAME_UNIQUE_CONSTRAINT, AgentRecord
@@ -49,6 +50,7 @@ WRITABLE = frozenset(
         "channel_id",
         "user_id",
         "origin",
+        "session_url",
         "langfuse_connection_id",
         "text_mode",
         "auth",
@@ -107,8 +109,24 @@ def _kind_errors(
         except InvalidAgentInput as exc:
             errors += exc.errors
     if kind == AgentKind.VOICE:
-        if state.get("user_id") is None:
-            errors.append(_error("userId", "required for voice agents"))
+        if state.get("protocol") == AgentProtocol.RELAY:
+            if state.get("session_url") is not None and (
+                "session_url" in changed or "base_url" in changed
+            ):
+                try:
+                    changed["session_url"] = check_session_url(
+                        state["session_url"], changed.get("base_url", state.get("base_url", ""))
+                    )
+                except InvalidAgentInput as exc:
+                    errors += exc.errors
+        else:
+            # Only the Vivi protocols address a channel and a user.
+            if not state.get("channel_id"):
+                errors.append(_error("channelId", "required unless the protocol is relay"))
+            if state.get("user_id") is None:
+                errors.append(_error("userId", "required unless the protocol is relay"))
+            if state.get("session_url") is not None:
+                errors.append(_error("sessionUrl", "applies only to relay agents"))
         for key, loc in (("text_mode", "textMode"), ("auth", "auth")):
             if state.get(key) is not None:
                 errors.append(_error(loc, "applies only to text agents"))
@@ -117,6 +135,8 @@ def _kind_errors(
         return errors
     if state.get("user_id") is not None:
         errors.append(_error("userId", "applies only to voice agents"))
+    if state.get("session_url") is not None:
+        errors.append(_error("sessionUrl", "applies only to relay agents"))
     if state.get("protocol") not in (None, AgentProtocol.AUTO):
         errors.append(_error("protocol", "applies only to voice agents"))
     if "channel_id" in changed:
@@ -220,6 +240,7 @@ async def create_agent(
         fields["text_mode"] = fields.get("text_mode") or TextMode.STREAM
         fields["auth"] = fields.get("auth") or TextAuth.NONE
     fields["protocol"] = fields.get("protocol") or AgentProtocol.AUTO
+    fields["channel_id"] = fields.get("channel_id") or ""  # a relay agent has none
     await _validate(db, fields, kind=kind, state=fields, api_key=api_key)
     await _ensure_name_free(db, fields["name"])
     record = AgentRecord(id=uuid.uuid4(), created_by=created_by, kind=kind.value, **fields)

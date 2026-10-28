@@ -71,6 +71,7 @@ UserId = Annotated[
 Origin = Annotated[
     str, StringConstraints(max_length=MAX_ORIGIN_LENGTH), AfterValidator(check_origin)
 ]
+SessionUrl = Annotated[str, StringConstraints(max_length=MAX_URL_LENGTH + 64)]  # by service
 ApiKey = Annotated[SecretStr, Field(min_length=1, max_length=MAX_API_KEY_LENGTH)]
 
 
@@ -90,7 +91,8 @@ class AgentOut(CamelModel):
     protocol: AgentProtocol
     base_url: str
     channel_id: str
-    user_id: str | None  # voice agents only
+    user_id: str | None  # voice agents only, except relay ones
+    session_url: str | None  # relay agents only
     text_mode: TextMode | None  # text agents only
     auth: TextAuth | None  # text agents only
     has_api_key: bool  # the key itself is write-only
@@ -111,6 +113,7 @@ class AgentOut(CamelModel):
             base_url=agent.base_url,
             channel_id=agent.channel_id,
             user_id=agent.user_id,
+            session_url=agent.session_url,
             text_mode=agent.text_mode,
             auth=agent.auth,
             has_api_key=agent.has_api_key,
@@ -123,17 +126,19 @@ class AgentOut(CamelModel):
 
 
 class CreateIn(StrictCamelModel):
-    """`kind` decides the other fields: voice agents need `userId` (`protocol` defaults to
-    `auto`); text agents take `textMode` (default `stream`), `auth` (default `none`) and, with
-    `auth: api_key`, the write-only `apiKey`."""
+    """`kind` decides the other fields. Voice agents need `channelId` and `userId` (`protocol`
+    defaults to `auto`), except `relay` ones, which may give a `sessionUrl` instead. Text agents
+    take `textMode` (default `stream`), `auth` (default `none`) and, with `auth: api_key`, the
+    write-only `apiKey`."""
 
     name: Name
     kind: AgentKind = AgentKind.VOICE
     context: Context = ""
     protocol: AgentProtocol | None = None
     base_url: BaseUrl
-    channel_id: ChannelId
+    channel_id: ChannelId | None = None
     user_id: UserId | None = None
+    session_url: SessionUrl | None = None
     text_mode: TextMode | None = None
     auth: TextAuth | None = None
     api_key: ApiKey | None = None
@@ -153,6 +158,7 @@ class UpdateIn(StrictCamelModel):
     base_url: BaseUrl | None = None
     channel_id: ChannelId | None = None
     user_id: UserId | None = None
+    session_url: SessionUrl | None = None
     text_mode: TextMode | None = None
     auth: TextAuth | None = None
     api_key: ApiKey | None = None
@@ -175,7 +181,7 @@ class ConnectionLogLineOut(CamelModel):
 class ConnectionTestOut(CamelModel):
     reachable: bool  # voice: the session became ready; text: the test message was answered
     latency_ms: int | None  # voice: connect + ready; text: the whole reply; when reachable
-    protocol: str | None  # voice: "live" or "realtime", once detected; text: always null
+    protocol: str | None  # voice: "live", "realtime" or "relay" once known; text: always null
     log: list[ConnectionLogLineOut]
 
 

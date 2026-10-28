@@ -32,9 +32,12 @@ TEXT_MODES_SQL = _sql_values(TextMode)
 TEXT_AUTHS_SQL = _sql_values(TextAuth)
 # Each kind has exactly its own settings; a sealed API key exists exactly when auth is api_key.
 KIND_CONFIG_SQL = (
-    "(kind = 'voice' AND user_id IS NOT NULL AND text_mode IS NULL AND auth IS NULL) OR "
+    "(kind = 'voice' AND (user_id IS NOT NULL OR protocol = 'relay') AND text_mode IS NULL "
+    "AND auth IS NULL) OR "
     "(kind = 'text' AND user_id IS NULL AND text_mode IS NOT NULL AND auth IS NOT NULL)"
 )
+# Only a relay agent creates its sessions first.
+SESSION_URL_SQL = "session_url IS NULL OR protocol = 'relay'"
 API_KEY_SQL = "(coalesce(auth, 'none') = 'api_key') = (auth_ciphertext IS NOT NULL)"
 NAME_UNIQUE_CONSTRAINT = "uq_agents_name"  # from the metadata naming convention
 
@@ -49,6 +52,7 @@ class AgentRecord(Base):
         CheckConstraint(f"auth IN ({TEXT_AUTHS_SQL})", name="auth_known"),
         CheckConstraint(KIND_CONFIG_SQL, name="kind_config"),
         CheckConstraint(API_KEY_SQL, name="api_key_matches_auth"),
+        CheckConstraint(SESSION_URL_SQL, name="session_url_relay_only"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
@@ -59,6 +63,7 @@ class AgentRecord(Base):
     channel_id: Mapped[str] = mapped_column(String(MAX_CHANNEL_ID_LENGTH))
     user_id: Mapped[str | None] = mapped_column(String(MAX_USER_ID_LENGTH))
     origin: Mapped[str | None] = mapped_column(String(MAX_ORIGIN_LENGTH))
+    session_url: Mapped[str | None] = mapped_column(String(MAX_URL_LENGTH))
     langfuse_connection_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("provider_connections.id", ondelete="SET NULL")
     )
@@ -93,4 +98,5 @@ class AgentRecord(Base):
             auth=TextAuth(self.auth) if self.auth else None,
             has_api_key=self.auth_ciphertext is not None,
             api_key_hint=self.auth_hint if self.auth_ciphertext is not None else None,
+            session_url=self.session_url,
         )

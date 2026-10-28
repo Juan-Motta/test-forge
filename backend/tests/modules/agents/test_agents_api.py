@@ -23,6 +23,7 @@ FIELDS = {
     "baseUrl",
     "channelId",
     "userId",
+    "sessionUrl",
     "origin",
     "langfuseConnectionId",
     "kind",
@@ -253,3 +254,65 @@ async def test_delete(user_client, db):
     assert (await user_client.get(f"/api/agents/{body['id']}")).status_code == 404
     async with db() as session:
         assert await session.scalar(select(AgentRecord.id)) is None
+
+
+RELAY = {
+    "name": "Portfolio voice",
+    "protocol": "relay",
+    "baseUrl": "wss://agent.raaw.dev/api/voice",
+    "sessionUrl": "https://agent.raaw.dev/api/sessions",
+    "origin": "https://raaw.dev",
+}
+
+
+async def test_a_relay_agent_needs_no_channel_or_user(user_client):
+    response = await user_client.post("/api/agents", json=RELAY)
+    assert response.status_code == 201, response.text
+    agent = response.json()
+    assert (agent["protocol"], agent["channelId"], agent["userId"]) == ("relay", "", None)
+    assert agent["sessionUrl"] == "https://agent.raaw.dev/api/sessions"
+    # Switching away from relay needs what the Vivi protocols use, and drops the session URL.
+    patch = await user_client.patch(f"/api/agents/{agent['id']}", json={"protocol": "live"})
+    assert patch.status_code == 422
+    assert sorted(locs(patch)) == [
+        ["body", "channelId"],
+        ["body", "sessionUrl"],
+        ["body", "userId"],
+    ]
+    fixed = await user_client.patch(
+        f"/api/agents/{agent['id']}",
+        json={"protocol": "live", "channelId": "c-1", "userId": "u-1", "sessionUrl": None},
+    )
+    assert fixed.status_code == 200, fixed.text
+    assert fixed.json()["sessionUrl"] is None
+
+
+async def test_a_relay_agent_may_skip_the_session_url(user_client):
+    body = {key: value for key, value in RELAY.items() if key != "sessionUrl"}
+    response = await user_client.post("/api/agents", json=body)
+    assert response.status_code == 201, response.text
+    assert response.json()["sessionUrl"] is None
+
+
+@pytest.mark.parametrize(
+    ("overrides", "message"),
+    [
+        ({"sessionUrl": "wss://agent.raaw.dev/api/sessions"}, "URL must use https"),
+        ({"sessionUrl": "https://other.example.com/sessions"}, "same host as the base URL"),
+        ({"sessionUrl": "https://agent.raaw.dev/api/sessions?x=1"}, "query string"),
+    ],
+)
+async def test_the_session_url_is_https_on_the_agent_host(user_client, overrides, message):
+    response = await user_client.post("/api/agents", json={**RELAY, **overrides})
+    assert response.status_code == 422
+    [error] = response.json()["detail"]
+    assert error["loc"] == ["body", "sessionUrl"]
+    assert message in error["msg"]
+
+
+async def test_the_session_url_is_only_for_relay_agents(user_client):
+    response = await user_client.post(
+        "/api/agents", json={**AGENT, "sessionUrl": "https://agents.example.com/sessions"}
+    )
+    assert response.status_code == 422
+    assert locs(response) == [["body", "sessionUrl"]]

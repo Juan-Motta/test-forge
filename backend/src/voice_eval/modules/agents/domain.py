@@ -50,6 +50,8 @@ class AgentProtocol(StrEnum):
     AUTO = "auto"
     LIVE = "live"
     REALTIME = "realtime"
+    # A simple JSON audio relay (targets/relay.py): never detected, and without a channel or user.
+    RELAY = "relay"
 
 
 @dataclass(frozen=True)
@@ -70,6 +72,7 @@ class Agent:
     auth: TextAuth | None = None  # text agents only
     has_api_key: bool = False
     api_key_hint: str | None = None
+    session_url: str | None = None  # relay agents only: where each run creates its session
 
 
 class AgentNotFound(Exception):
@@ -144,6 +147,29 @@ def check_base_url(value: str, kind: AgentKind = AgentKind.VOICE) -> str:
     return value.rstrip("/")
 
 
+def check_session_url(value: str, base_url: str) -> str:
+    """A relay agent's session URL: `https://` (or `http://` to a local host) on the host of
+    its base URL, so a run reaches nothing its socket could not. Raises `InvalidAgentInput`."""
+    value = value.strip()
+    try:
+        if len(value) > MAX_URL_LENGTH:
+            raise ValueError("URL is too long")
+        parts, host = _split(value)
+        local_plain = parts.scheme == "http" and host.lower() in LOCAL_HOSTS
+        if parts.scheme != "https" and not local_plain:
+            raise ValueError(
+                "URL must use https (http:// is accepted only for localhost, 127.0.0.1 and "
+                "host.docker.internal)"
+            )
+        if host.lower() != (urlsplit(base_url).hostname or "").lower():
+            raise ValueError("URL must be on the same host as the base URL")
+    except ValueError as exc:
+        raise InvalidAgentInput(
+            [{"type": "value_error", "loc": ["sessionUrl"], "msg": str(exc)}]
+        ) from None
+    return value
+
+
 def check_origin(value: str) -> str:
     """An HTTP(S) origin: scheme, host and optional port only. Raises ValueError."""
     value = value.strip()
@@ -171,14 +197,16 @@ def check_user_id(value: str) -> str:
 
 def target_spec(agent: Agent, *, thread_id: str | None = None) -> TargetSpec:
     """The probe target for one run of voice `agent`: a fresh threadId unless one is given."""
-    if agent.kind != AgentKind.VOICE or agent.user_id is None:
+    relay = agent.protocol == AgentProtocol.RELAY
+    if agent.kind != AgentKind.VOICE or (agent.user_id is None and not relay):
         raise ValueError("only voice agents have a voice target")
     fields: dict[str, Any] = {} if thread_id is None else {"thread_id": thread_id}
     return TargetSpec(
         base_url=agent.base_url,
         channel_id=agent.channel_id,
-        user_id=agent.user_id,
+        user_id=agent.user_id or "",
         origin=agent.origin,
         protocol=agent.protocol.value,
+        session_url=agent.session_url,
         **fields,
     )
