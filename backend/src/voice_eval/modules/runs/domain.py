@@ -46,6 +46,15 @@ ACTIVE_RUN_STATUSES = frozenset({RunStatus.QUEUED, RunStatus.CONNECTING, RunStat
 ACTIVE_BATCH_STATUSES = frozenset({BatchStatus.QUEUED, BatchStatus.RUNNING})
 
 
+def langfuse_session_id(summary: Any, thread_id: str) -> str:
+    """The session a relay run reported (`summary.session_id`), else the run's thread id."""
+    if isinstance(summary, dict) and summary.get("protocol") == "relay":
+        session = summary.get("session_id")
+        if isinstance(session, str) and session:
+            return session
+    return thread_id
+
+
 @dataclass(frozen=True)
 class Run:
     id: uuid.UUID
@@ -69,14 +78,15 @@ class Run:
     judge_usage: dict[str, Any] | None = None  # the judge's usage over every judgement attempt
 
     @property
+    def relay(self) -> bool:
+        """Whether the run called a relay agent (a voice agent outside Vivi)."""
+        return isinstance(self.summary, dict) and self.summary.get("protocol") == "relay"
+
+    @property
     def langfuse_session_id(self) -> str:
         """The Langfuse `sessionId` of the run's traces: the run's thread id, except for a relay
         agent, whose session is the one it reported (created by its session URL)."""
-        summary = self.summary if isinstance(self.summary, dict) else {}
-        session = summary.get("session_id")
-        if summary.get("protocol") == "relay" and isinstance(session, str) and session:
-            return session
-        return self.thread_id
+        return langfuse_session_id(self.summary, self.thread_id)
 
     @property
     def caller_usage(self) -> dict[str, Any] | None:

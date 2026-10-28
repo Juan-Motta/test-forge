@@ -536,12 +536,12 @@ async def get_trace(
     return trace
 
 
-def _traces_link(host: str, project_id: str | None, run: Run) -> str | None:
-    """Every trace of the run. Vivi agents tag each turn's trace with `metadata.thread_id`; any
-    other agent (relay) is found by the standard Langfuse session of its own conversation."""
+def traces_link(host: str, project_id: str | None, run: Run) -> str | None:
+    """Every trace of the run. Vivi agents tag each turn's trace with `metadata.thread_id`; a
+    relay agent is found by the standard Langfuse session of its own conversation."""
     if not project_id or not run.thread_id:
         return None
-    if run.langfuse_session_id != run.thread_id:
+    if run.relay:
         return session_url(host, project_id, run.langfuse_session_id)
     return thread_traces_url(host, project_id, run.thread_id)
 
@@ -565,7 +565,7 @@ async def _langfuse_links(
         return None
     trace_id = next((row["traceId"] for row in trace["observations"] if row["traceId"]), None)
     return {
-        "thread_traces_url": _traces_link(project.host, project.project_id, run),
+        "thread_traces_url": traces_link(project.host, project.project_id, run),
         "trace_url": trace_url(project.host, trace_id) if trace_id else None,
     }
 
