@@ -316,3 +316,28 @@ async def test_the_session_url_is_only_for_relay_agents(user_client):
     )
     assert response.status_code == 422
     assert locs(response) == [["body", "sessionUrl"]]
+
+
+@pytest.mark.parametrize(
+    ("body", "message"),
+    [
+        (
+            {k: v for k, v in AGENT.items() if k != "channelId"},
+            "required unless the protocol is relay",
+        ),
+        (
+            {
+                "name": "Chat",
+                "kind": "text",
+                "baseUrl": "https://vivi.example.com/api",
+                "textMode": "stream",
+            },
+            "must be a UUID",
+        ),
+    ],
+)
+async def test_a_missing_channel_is_reported_on_channel_id(user_client, body, message):
+    response = await user_client.post("/api/agents", json=body)
+    assert response.status_code == 422
+    [error] = [e for e in response.json()["detail"] if e["loc"] == ["body", "channelId"]]
+    assert message in error["msg"]
